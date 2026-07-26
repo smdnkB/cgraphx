@@ -53,7 +53,7 @@ description: 基于 write-unit-test-spec 产出的测试规格文档 + 已有实
 
 ### 3. 读已有实现代码
 
-根据测试规格描述的被测目标,在代码库定位已有实现(用 `codegraph_explore` MCP / `cgraphx query` CLI / grep / Read):
+根据测试规格描述的被测目标,在代码库定位已有实现(用 grep / Read):
 - 读函数签名、参数、返回值、抛错行为、依赖关系
 - 如果测试规格里的某个场景**代码里还没实现**:
   - 对应测试用 `it.skip` + `// TODO: 实现提供后填实` 占位

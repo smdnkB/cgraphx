@@ -46,7 +46,7 @@ description: 产出「需求工作量汇报」文档,用于内部对账 / 甲方
 ### Step 1 · 读需求 + 查代码核实交付物
 
 1. 读需求文档 / spec / plan,理清这个需求做了什么。
-2. **用 cgraphx 核实代码**(优先 `codegraph_explore` MCP,没有就用 `cgraphx explore` CLI,再没有就 grep/read):
+2. **用 grep / read 核实代码**:
    - 核实每一项交付物**真实存在**:接口、实现类、新建文件、MDA 常量、配置、外部对接。
    - **识别 plan / 需求文档与实际代码的出入**(方法名变没变?URL 对不对?响应结构是平铺还是嵌套?映射表准不准?批量查询方式?)。这些出入既是核实,也是隐性工时的来源(纠正它们花了时间)。
 3. 核实跨服务契约:依赖的下游服务方法是否真按预期返回(返回键、分支逻辑)。
@@ -115,7 +115,7 @@ description: 产出「需求工作量汇报」文档,用于内部对账 / 甲方
 
 - **需求目录**:`docs/features/<feature-id>/`。先定位用户给的 feature 目录。
 - **文件命名**:`<前缀>-需求工作量.md`。**前缀沿用该需求目录里已有文件的命名前缀**(如 `CRM-req74442-电渠批量违约金试算接口`),保持族内一致。保存到该需求目录根下(不进 plan/ 子目录)。
-- **查代码**:优先 cgraphx(`codegraph_explore` MCP 或 `cgraphx explore` CLI);跨服务契约定要分别核实每个服务。cgraphx 不存在才回退 grep/read。
+- **查代码**:用 grep / Read;跨服务契约定要分别核实每个服务。
 - **元信息表日期**:用当天日期(会话上下文里的 currentDate)。
 - **术语对齐**:用 CLAUDE.md 和 docs/knowledge/ 里的项目术语(prodInst / offer / bizCode / atom / @Center 等),别自造。
 

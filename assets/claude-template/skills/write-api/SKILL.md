@@ -27,14 +27,13 @@ description: 基于需求生成 bruno 测试接口(.bru + 测试规格 + 环境�
 - 写 PRD / spec / plan → 用 `/write-prd` / `/write-spec` / `/write-plan`
 - 写 HTML 接口文档 → 用 `/write-api-doc`
 - 探索陌生项目 → 用 `/code-impact-init`
-- 查代码调用关系 → 用 `/cgraphx` 或 `codegraph_explore` MCP
+- 查代码调用关系 → 用 grep / Read
 
 ## 与既有 skill 边界
 
 | skill | 关系 | 说明 |
 |---|---|---|
 | `run-api-test` | 下游 + 独立 | 消费本 skill 产的 .bru + 测试规格跑测试;本 skill 不调它,跑测试由用户显式触发;同一份 .bru 可被多次 run-api-test 复用 |
-| `cgraphx` / `codegraph_explore` | 复用 | S1 定位 handler、S3 提取参数定义时调用 |
 | `db-query` | 复用 | S3 查真实测试数据;DB 副作用核实由 `/run-api-test` R4 做 |
 | `write-api-doc` | 独立并列 | 不互相调用;本 skill 产 .bru + 测试规格,write-api-doc 产 HTML 接口文档 |
 | `implementation` / `subagent-implement` | 上游 | 编码阶段,跑完触发本 skill |
@@ -44,7 +43,6 @@ description: 基于需求生成 bruno 测试接口(.bru + 测试规格 + 环境�
 
 - feature 编码已完成(`/implementation` 或 `/subagent-implement` 跑完)
 - `docs/features/<feature-id>/<文件前缀>-spec.md` 存在(S1 优先级 2 要用)
-- 项目已接入 cgraphx 索引(S3 定位 handler)—— 未接入则 S3 降级,见 `references/ai-prompts.md` § 降级处理
 - 项目已配置 db-query profile(S3 查真实数据)—— 未配置则 S3 降级
 
 ## feature-id 与文件前缀规则

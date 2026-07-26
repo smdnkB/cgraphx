@@ -42,7 +42,7 @@ Plan 可以包含具体文件、模块、接口、表、测试命令和任务依
 这些工具可作为上下文补充:
 - `code-impact-api` — 查 docs/knowledge/ 历史决策、业务概念、项目经验
 - `db-query` — 查数据库、查 DDL
-- `codegraph_explore` MCP 工具 / `cgraphx query` / `cgraphx affected` CLI — 查代码调用关系、影响半径(MCP 优先;MCP 不可用走 Bash CLI)
+- grep / Read — 查代码调用关系、定位符号与实现
 
 如果缺少关键代码上下文,先读取项目结构、相关文件、测试脚本和既有模式,再写计划。不要凭空规划不存在的模块。
 

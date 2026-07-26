@@ -1,15 +1,17 @@
 ---
 name: code-impact-init
-description: Explore an unfamiliar project automatically. Discovers entry points, spawns sub-agents to explore each one in depth, saves knowledge documents, then merges and deep-dives into cross-cutting concepts. Requires code-impact-markdown skill. Use when the user asks to explore, understand, or map out a new project, or wants to build knowledge base for a project from scratch.
+description: Explore an unfamiliar project automatically to build a business knowledge base. Discovers entry points via grep/Read, spawns sub-agents to explore each one in depth, saves knowledge documents to docs/knowledge/, then merges cross-cutting concepts and deep-dives. Requires code-impact-markdown skill. Use when the user asks to explore, understand, or map out a new project, or wants to build a knowledge base for a project from scratch.
 ---
 
 # Project Exploration
 
-Automated project exploration skill. Discovers entry points, explores each in depth via sub-agents, saves knowledge to the local knowledge service, then merges cross-cutting concepts and deep-dives.
+Automated project exploration skill. Discovers entry points via grep/Read, explores each in depth through sub-agents, saves knowledge to the local markdown knowledge base (`docs/knowledge/*.md`), then merges cross-cutting concepts and deep-dives.
 
 **Dependencies:**
 - `code-impact-markdown` skill must be installed in the same project（沉淀业务理解到 `docs/knowledge/*.md`）
-- cgraphx 已 `init` 的项目索引（提供代码结构事实：symbols / 调用链 / impact）。优先通过 `codegraph_explore` / `codegraph_impact` / `codegraph_node` 等 MCP 工具,不可用时走 Bash CLI(`cgraphx query` / `cgraphx callers` / `cgraphx callees` / `cgraphx affected`)。两者都不可用时降级为 grep 模式(精度损失,详见各 Phase 的 fallback 说明)
+- 项目有代码可读（`grep` / `rg` / `Read` 可定位符号、跟踪调用、看实现）
+- `docs/knowledge/` 可写（知识文档沉淀目录）
+- cgraphx CLI 可用（提供 `cgraphx docs` 系列命令管理 markdown 知识库：concept 索引 / dedup / 校验）
 
 ## Trigger
 
@@ -19,29 +21,39 @@ Use this skill when:
 - The user says things like "explore this project", "understand this codebase", "build knowledge for this repo"
 
 Do NOT use for:
-- Quick targeted questions about specific code (use `code-impact-api` instead)
+- Quick targeted questions about specific code（直接用 `grep` / `Read` 即可）
 - Creating a single knowledge document (use `code-impact-markdown` skill instead)
-- 纯代码结构查询（直接用 `codegraph_explore` MCP 或 `cgraphx query` CLI 即可,无需走整套 exploration 流程）
+- 单点代码定位 / 单函数实现查询（直接 `grep` / `Read`,无需走整套 exploration 流程）
 
-## Service & Pre-flight Check
+## Pre-flight Check
 
-This skill assumes cgraphx CLI is available and the project is initialized.
+This skill assumes the project has readable code and a writable knowledge directory.
 
 ```bash
-CODEGRAPH="cgraphx"
-command -v "$CODEGRAPH" >/dev/null 2>&1 || {
-  echo "cgraphx 未在 PATH。先 npm install -g cgraphx,或在项目里跑 cgraphx init" >&2
+# 1. docs/knowledge/ 可写
+mkdir -p docs/knowledge
+
+# 2. cgraphx CLI 可用（提供 cgraphx docs 系列：concept 索引 / dedup / validate）
+command -v cgraphx >/dev/null 2>&1 || {
+  echo "cgraphx 未在 PATH。先 npm install -g cgraphx（提供 markdown 知识库管理命令）" >&2
   exit 1
 }
 
-# 验证项目已 init(.cgraphx/ 存在)
-$CODEGRAPH status | grep -qiE 'up to date|indexed' || {
-  echo "cgraphx 未 init 或索引 stale。跑:cgraphx init" >&2
+# 3. 项目有代码文件可读（简单的存在性检查）
+test -n "$(find . -type f \( -name '*.java' -o -name '*.kt' -o -name '*.go' -o -name '*.rs' \
+                                      -o -name '*.py' -o -name '*.ts' -o -name '*.tsx' -o -name '*.js' \) \
+                              -not -path '*/node_modules/*' -not -path '*/.git/*' \
+                              -not -path '*/target/*' -not -path '*/build/*' \
+                       | head -1)" || {
+  echo "未发现可探索的代码文件" >&2
   exit 1
 }
+
+# 4. 优先用 ripgrep（尊重 .gitignore、并行、千万行级别必需）
+command -v rg >/dev/null 2>&1 || echo "警告：未装 rg，将退化到 grep（千万行项目性能不可接受）"
 ```
 
-If cgraphx is not available: do **not** silently degrade. Ask the user to run `npm install -g cgraphx && cgraphx init`.
+If cgraphx is not available: do **not** silently degrade. Ask the user to run `npm install -g cgraphx`（提供 `cgraphx docs` 知识库管理命令）。
 
 ## Configuration
 
@@ -51,7 +63,6 @@ max_explored: 5000         # max entry points to explore across both phases（�
 max_queue_size: 150        # max items in pending queue
 wake_interval_seconds: 60  # seconds between loop iterations
 max_fail_retries: 3        # 单个 entry point 最多重试次数，超过跳过并进 failed[]
-use_cgraphx: true        # 优先用 cgraphx 查代码结构；false 时降级为 grep 模式（精度损失）
 use_persistent_dedup: true # true: Layer 1 dedup 走 cgraphx docs seen-names(SQLite 持久化,跨中断恢复);false: 仅在内存中(不建议,中断会丢)
 ```
 
@@ -76,31 +87,28 @@ queue 文件大小主要由 `pending`（≤150 项 × 约 200 字节）+ `failed
 
 ## 与 cgraphx 的协作（Tools Coordination）
 
-code-impact-init 协调 cgraphx 的**两个互补子系统**：
+code-impact-init 协调两类工具：
 
-| 子系统 | 命令前缀 | 索引对象 | 提供什么 | 重建时机 |
-|------|---------|---------|---------|---------|
-| **代码图谱** | `cgraphx query/impact/...` | 代码（`.java` / `.rs` / `.go` / ...） | symbols / 调用链 / execution flows / impact | 一次性，代码变了再 `cgraphx sync` |
-| **markdown 知识库** | `cgraphx docs ...` | 业务知识（`docs/knowledge/*.md`） | concept / domain / 决策文档 / dedup 状态 | Phase 2 末尾 + Phase 3 末尾各一次 `cgraphx docs index` |
+| 工具 | 提供什么 | 用途 |
+|------|---------|------|
+| **grep / rg / Read** | 代码事实（符号位置、调用关系、实现细节） | Phase 1 找 entry points、Phase 2 子 agent 探索代码、Phase 3 评估 symbol 中心性 |
+| **cgraphx docs**（markdown 知识库） | 业务理解（concept / domain / 决策文档 / dedup 状态） | Phase 2 末尾 + Phase 3 末尾各一次 `cgraphx docs index`;dedup 用 `cgraphx docs seen-names` / `cgraphx docs dedup` |
 
-**分工**：代码图谱提供**代码事实**（callers / callees / impact 都是 tree-sitter 解析的真实结构），markdown 知识库沉淀**业务理解**（人为或 AI 提炼的概念、决策、约束）。两者**互不依赖**——index 时序独立，谁先谁后都行。
+**分工**：代码事实靠 `grep` / `rg` / `Read`（定位符号、跟踪调用链、看具体实现），markdown 知识库沉淀**业务理解**（人为或 AI 提炼的概念、决策、约束）。两者**互不依赖**——grep/Read 随时可用，markdown 知识库的 index 时序独立。
 
 **子 agent 调用方式**：
-- **CLI(推荐)**:`cgraphx <cmd>`——全局 npm 装在 PATH,或项目本地 `npx cgraphx`。稳定,无进程依赖
-- **MCP(可选)**:`codegraph_explore` / `codegraph_node` / `codegraph_callers` / `codegraph_callees` / `codegraph_impact`——已在 `.claude/settings.local.json` allow;MCP server 跑着时省去 CLI 启动开销
+- **代码探索**：`grep` / `rg`（ripgrep，尊重 .gitignore 且并行）/ `Read`（按行号定位实现细节）——通用工具，无进程依赖
+- **markdown 知识库**：CLI `cgraphx docs <cmd>`——管理 concept 索引、dedup、validate
 
 **降级路径**：
-- `use_cgraphx: false` 或 cgraphx 不可用 → 退化为纯 grep 模式（精度损失，见 Phase 1 Step 3 fallback）
-- `cgraphx init` 失败 → 同上
-- markdown 知识库不可用(项目未 init)→ 整个 code-impact-init **不可启动**（dedup 和文档持久化都靠它）
+- markdown 知识库不可用（项目未装 cgraphx）→ 整个 code-impact-init **不可启动**（dedup 和文档持久化都靠它）
 
 **index 时序图**：
 
 ```
-Phase 1 Step 1.5:  cgraphx init（一次性，几分钟，建代码图谱）
-Phase 1-2:         查询用 cgraphx query / callers / callees / affected CLI,或 codegraph_explore / codegraph_impact / codegraph_node MCP（毫秒级，子 agent 主用）
+Phase 1-2:         子 agent 用 grep/Read 探索代码，写 .md 到 docs/knowledge/
 Phase 2 末尾:      cgraphx docs index（同步子 agent 写的 .md 到知识图谱）
-Phase 3 Step 1:    【已 deprecated — 原 cgraphx impact CLI 已去除】用 codegraph_impact MCP 主观评估影响面,或等阶段 2 gitnexus impact 工具
+Phase 3 Step 1:    grep 统计 symbol 跨文件引用数，评估中心性
 Phase 3 Step 2:    cgraphx docs concepts --sort=doc-count 找高中心性 concepts
 Phase 3 Step 3:    交叉验证 → cross-cutting pending
 Phase 3 末尾:      cgraphx docs index（同步 Phase 3 文档）
@@ -206,7 +214,7 @@ docs/knowledge/.exploration-queue.json
 | SQL | `.sql` | `CREATE TABLE`、`CREATE INDEX`、`CREATE PROCEDURE` |
 | Mixed | 用户自选组合 | 多后缀 union |
 
-用户选定后把后缀列表存入 queue 文件 `config.languages: ["java", "kotlin"]`，后续 Phase 1/2 命令读取它动态生成 `--include`。
+用户选定后把后缀列表存入 queue 文件 `config.languages: ["java", "kotlin"]`，后续 Phase 1/2 命令读取它动态生成 `--include` / `--type`。
 
 **Step 1 — 排除规则（必做）**
 
@@ -221,37 +229,6 @@ EXCLUDE_FILES=('*.min.js' '*.min.css' '*.lock' 'package-lock.json' 'yarn.lock' '
 
 2. **尊重 .gitignore**：首选 `rg`（ripgrep，自动尊重 .gitignore 且并行）；无 `rg` 时 fallback 到 `grep` + 显式 EXCLUDE_DIRS。**禁止裸 `grep -rn`**（千万行级别会跑数小时）。
 
-**Step 1.5 — cgraphx 索引检查/构建（如 `use_cgraphx: true`）**
-
-cgraphx 提供 tree-sitter 解析的代码结构图谱（symbols / 调用链 / execution flows / impact）。后续 Phase 1 找 entry points、Phase 2 子 agent 查调用链、Phase 3 cross-cutting 都依赖它。**千万行项目 `cgraphx init` 通常几分钟完成**——一次性投入，后续查询毫秒级。
-
-```bash
-CODEGRAPH="cgraphx"
-command -v "$CODEGRAPH" >/dev/null 2>&1 || {
-  echo "cgraphx 未在 PATH。先 npm install -g cgraphx,或在项目里跑 cgraphx init" >&2
-  exit 1
-}
-
-# 1. 检查索引新鲜度
-$CODEGRAPH status
-
-# 2. 不存在或 stale 时跑 init 或 sync
-if ! $CODEGRAPH status 2>&1 | grep -qiE 'up to date|indexed|fresh'; then
-  echo "cgraphx index missing or stale, running sync..."
-  $CODEGRAPH sync   # 增量;首次或大规模结构变更用 $CODEGRAPH index(全量)
-fi
-
-# 3. 验证可用(应返回符号数据)
-$CODEGRAPH query "main" --limit 5
-```
-
-**失败降级**（任一失败时）：
-- `cgraphx status` 报"未安装/不可用" → 警告用户，把 `use_cgraphx` 设为 `false` 写回 queue 文件，后续走 grep 模式
-- `cgraphx init` 失败 → 同上
-- `cgraphx query` 返回空 → 可能 analyze 未成功，重试一次或降级
-
-**MCP 模式（可选优化）**：如果 `cgraphx mcp` 已启动（或 Claude Code 自动启 MCP server），子 agent 可直接调 `codegraph_explore` / `codegraph_node` / `codegraph_callers` / `codegraph_callees` / `codegraph_impact` 等工具，省去 CLI 启动开销。`.claude/settings.local.json` 已 allow 这些 MCP 工具。
-
 **Step 2 — Identify project root, repo_id, project name**
 
 ```bash
@@ -260,37 +237,7 @@ REPO_ID=$(basename "$REPO_PATH")
 PROJECT_NAME="$REPO_ID"
 ```
 
-**Step 3 — Scan structure & entry points**
-
-**首选：cgraphx 语义查询（如 `use_cgraphx: true`）**
-
-cgraphx 基于 tree-sitter 实际符号解析，能找到 grep 漏掉的（同名方法、interface 实现、跨语言调用、被注解但模式不规则的入口）：
-
-```bash
-# cgraphx 已在 PATH(全局装)或在已 init 的项目里直接可用
-
-# 按业务概念搜索符号(让用户给 3-5 个核心业务词)
-cgraphx query "订单" --limit 30
-cgraphx query "导出" --limit 30
-cgraphx query "payment" --limit 30
-
-# 找 Spring/消息驱动入口(按符号类型过滤,比 grep 注解名更准)
-cgraphx query "@PostMapping" --limit 30
-cgraphx query "@RabbitListener" --limit 30
-
-# 对每个候选符号用 codegraph_explore MCP 拿调用链做初步验证(看 callers/callees 是否构成完整流程)
-# MCP 不可用时走 CLI:
-cgraphx callers com.example.OrderService.createOrder
-cgraphx callees com.example.OrderService.createOrder
-
-# 找数据模型(@Entity / CREATE TABLE)
-cgraphx query "@Entity" --limit 30
-cgraphx query "CREATE TABLE" --limit 30
-```
-
-cgraphx 返回结构化 symbols + execution flows，**比 grep 字符串匹配更准**——尤其在千万行项目里，同名方法/继承链/接口实现这些 grep 必漏。
-
-**Fallback：grep 模式（`use_cgraphx: false` 或 cgraphx 不可用）**
+**Step 3 — Scan structure & entry points（grep / rg）**
 
 千万行级别必须用 `rg`（ripgrep）。示例 Java + Kotlin：
 
@@ -300,17 +247,37 @@ rg --files -g '*.java' -g '*.kt' \
    -g '!node_modules/**' -g '!target/**' -g '!build/**' -g '!vendor/**' -g '!.git/**' \
    | head -100
 
-# Entry points
+# Entry points：HTTP / 消息驱动 / 定时任务 / 主入口
 rg --type java --type kotlin -n \
    '@(GetMapping|PostMapping|PutMapping|DeleteMapping|RabbitListener|Scheduled|KafkaListener)|public static void main|fun main' \
    | head -50
 
-# Data models
-rg --type java -n '@(Entity|Table)|CREATE TABLE' | head -30
+# 数据模型
+rg --type java -n '@(Entity|Table)' | head -30
 rg --type sql -n '^CREATE TABLE' | head -30
+
+# 按业务概念搜索（让用户给 3-5 个核心业务词）
+rg -n '订单|order' --type java | head -30
+rg -n 'payment' --type java | head -30
+rg -n '导出|export' --type java | head -30
 ```
 
-**精度损失警告**：grep 模式会漏掉接口实现、跨语言调用、不规则命名的入口。建议在 cgraphx 不可用时降低 `max_explored` 上限或缩小语言范围。
+**对每个候选符号做初步验证**（看是否构成完整流程）：
+
+```bash
+# 拿到 entry 文件 + 行号后，Read 看实现
+# 例：rg 给出 src/main/java/com/example/OrderService.java:42 @PostMapping("/orders")
+# → Read src/main/java/com/example/OrderService.java offset=30 limit=40
+
+# 跟踪调用链：在 entry 函数名上反向 grep 找调用方
+rg -n 'createOrder' --type java            # 谁调用了 createOrder
+rg -n 'PaymentGateway' --type java         # PaymentGateway 在哪些文件出现
+```
+
+**grep 模式局限**：字符串匹配会漏掉接口实现、动态分发、继承链覆盖、不规则命名的入口。建议：
+- 结合 IDE 的"查找引用"语义（如可用），或多次 grep 同义词 / 别名
+- 对每个候选 entry 至少 Read 一段实现，确认是业务逻辑而非样板（如 `@SpringBootApplication` 类不算业务 entry）
+- 必要时缩小语言范围或降低 `max_explored` 上限
 
 **Step 4 — 构造 pending + 写 queue**
 
@@ -401,7 +368,7 @@ DONE_NAME="客户导出 Batch"
 
 # Layer 1 持久化：完成的 entry name 加入 cgraphx docs seen-names
 # (CLI 内部会自动 normalize,主 agent 不需要预先 normalize)
-$CODEGRAPH docs seen-names --add="$DONE_NAME" --json >/dev/null
+cgraphx docs seen-names --add="$DONE_NAME" --json >/dev/null
 
 # queue 本地只改 pending 和 explored_count(不再维护 seen_normalized_names)
 jq --argjson id "$DONE_ID" '
@@ -438,7 +405,7 @@ jq --argjson id "$FAIL_ID" --arg err "$FAIL_ERROR" --arg at "$FAIL_AT" '
 Phase 2 全部完成后，触发**单次**全量 markdown 知识库 index：
 
 ```bash
-$CODEGRAPH docs index --json
+cgraphx docs index --json
 ```
 
 完成后进入 Phase 3。**千万行项目这步单次可能跑数十分钟到几小时**——耐心等，期间不读 queue 文件。
@@ -462,60 +429,49 @@ Time →
 **为什么不能每批次 index？**
 
 - `cgraphx docs index` 是**全量重建** markdown 知识库（清表后重扫所有 `docs/knowledge/*.md`）
-- 千万行项目 docs/knowledge/ 可能有上千-上万 .md，单次 index 数十分钟到几小时
+- 千万行项目 docs/knowledge/ 可能有上千-上万 .md，单次 index 数十分钟到数小时
 - 每批次跑 = 累计 N 批次 × 单次耗时，几天到几周
 - 根本解是 markdown 知识库做增量 index endpoint（P0 #1，留作下一轮）
 
-### Phase 3: Cross-cutting Deep-dive（基于 codegraph_impact MCP + cgraphx docs concepts 交叉）
+### Phase 3: Cross-cutting Deep-dive（grep symbol 中心性 + cgraphx docs concepts 交叉）
 
-> **【2026-07-05 deprecated notice】** 原Phase 3 依赖 `cgraphx impact <symbol> --json` CLI 返回 `{nodeCount, edgeCount, affected[]}` 用于脚本循环 + 数值排序。该 CLI 在阶段 1 已去除(实测无法替代 MCP)。当前替代:
-> - **代码层面找高中心性 symbol** — 用 `codegraph_impact(symbol)` MCP 工具,从返回的格式化报告里**主观评估**影响面广度(返回文本包含 affected symbols 列表 + 树状结构,agent 看大小估计中心性)
-> - **完整 nodeCount 排序机制** — 等阶段 2 gitnexus 内核迁入后,用 gitnexus 的 `impact` 工具(基于 KuzuDB + Cypher,支持结构化返回)
-> - Phase 3 的"交叉验证"思路仍然有效,只是代码层面从"机器排序"降级为"agent 主观判断"
+**核心思路**：cross-cutting concern = **代码层面被多个 entry 依赖的高中心性 symbol**（grep 统计跨文件引用数测量）+ **业务层面已被多文档提及但无专属文档的 concept**（`cgraphx docs concepts --sort=doc-count` 测量）。两者交叉验证，比单纯靠 markdown concept 频率更准——concept 在 markdown 里出现可能是子 agent 主观判断，grep 跨文件引用数是代码事实。
 
-**核心思路**：cross-cutting concern = **代码层面被多个 entry 依赖的高中心性 symbol**（`codegraph_impact` MCP 评估)+ **业务层面已被多文档提及但无专属文档的 concept**（`cgraphx docs concepts --sort=doc-count` 测量）。两者交叉验证，比单纯靠 markdown concept 频率更准——concept 在 markdown 里出现可能是子 agent 主观判断，codegraph_impact 是代码事实。
+**Step 1 — 代码层面：找高中心性 symbols（grep 统计跨文件引用数）**
 
-**Step 1 — 代码层面：找高中心性 symbols（codegraph_impact MCP 主观评估）**
+对每个 Phase 2 探索到的 entry symbol，用 `rg -l` 统计引用该 symbol 的文件数。被多个文件 / 模块引用的 symbol 即代码层面的 cross-cutting concern。
 
-`codegraph_impact(symbol, depth)` MCP 返回该 symbol 的影响半径报告(affected symbols list + 树状结构 + 统计)。agent 看返回报告的**规模**(涉及的文件数 / 模块数 / 跨服务 hop 数)主观判断中心性。
-
-**MCP 调用路径**(取代原 shell 循环):
-```
-对每个 Phase 2 探索到的 entry symbol:
-  → 调用 codegraph_impact(symbol, depth=2) MCP
-  → 看返回报告里 affected symbols 的数量 + 跨文件 / 跨模块分布
-  → 主观标记"高中心性 / 中中心性 / 低中心性"
-  → 取高中心性 top 30 作为 Phase 3 deep-dive 候选
-```
-
-**原 shell 脚本路径(已废弃,留作历史参考)**:
 ```bash
-# 原 cgraphx impact CLI 已去除,以下脚本不工作,仅作历史参考
-# CODEGRAPH="cgraphx"
-# while IFS= read -r sym; do
-#   $CODEGRAPH impact "$sym" --json 2>/dev/null \
-#     | jq -r --arg sym "$sym" '[.nodeCount // 0, $sym] | @tsv' >> "$TMP"
-# done <<< "$SYMBOLS"
-# sort -t$'\t' -k1 -rn "$TMP" | head -30 > high-centrality-symbols.txt
+# 从 Phase 2 文档 frontmatter 收集候选 symbol / concept 名
+SYMBOLS=$(awk '/^---$/{c++; next} c==1 && /^concepts:/{flag=1; next} flag && /^  - /{gsub(/^  - /,""); print}' docs/knowledge/*.md \
+           | sort -u | head -100)
+
+# 对每个 symbol 统计跨文件引用数
+TMP=$(mktemp)
+for sym in $SYMBOLS; do
+  # 转义 regex 特殊字符
+  esc=$(printf '%s' "$sym" | sed 's/[.[\*()+?{|\\^$]/\\&/g')
+  count=$(rg -l "$esc" --type java --type kotlin 2>/dev/null | wc -l | tr -d ' ')
+  printf '%d\t%s\n' "$count" "$sym" >> "$TMP"
+done
+
+# 按引用文件数降序，取 top 30
+sort -t$'\t' -k1 -rn "$TMP" | head -30 > high-centrality-symbols.txt
+rm -f "$TMP"
 ```
 
-**注释说明**：
-- ~~`cgraphx impact <symbol> --json` 输出 `{symbol, depth, nodeCount, edgeCount, affected[]}`~~（CLI 已去除)
-- **替代**:`codegraph_impact(symbol)` MCP 返回格式化影响半径报告,agent 主观评估规模
-- 如果 `related_code` 字段是文件路径而不是 symbol，需要先 `cgraphx query --kind=function --kind=method` 在该文件下找 symbol，再调 codegraph_impact MCP
+**指标说明**：
+- `rg -l <symbol>` 返回包含该字符串的所有文件路径；`wc -l` 即"被多少文件引用"
+- 这是 grep 层面的"影响半径"近似——比字符串频率更克制（每文件只算 1 次），适合识别被多个模块依赖的核心 symbol
+- **局限**：同名方法 / 工具类名 / 通用词会虚高。建议人工筛一遍 top 30，剔除明显是 util / helper / 通用词的项
 
-**MCP 调用优势**：
-> 把 Phase 2 探索到的 entry symbols 喂给 `codegraph_impact` MCP 工具，agent 直接看结构化结果做判断,比 shell 循环 + 文件拼接更直接。
-
-**为什么这么设计**：用 `codegraph_impact` MCP 评估中心性，不需要 cypher 接口;等阶段 2 gitnexus 内核迁入后可升级到结构化 nodeCount 排序。
-
-被多个 entry 依赖的 symbol 就是代码层面的 cross-cutting concern（如业务项目的 OrderService、PaymentGateway、AuthMiddleware——它们的影响半径远大于工具类）。
+被多个文件引用的 symbol 就是代码层面的 cross-cutting concern（如业务项目的 OrderService、PaymentGateway、AuthMiddleware——它们的引用文件数远大于工具类）。
 
 **Step 2 — 业务层面：找高中心性 concepts（cgraphx docs concepts）**
 
 ```bash
 # 拿所有 concept + 关联文档数,按 doc_count 排序(cgraphx docs concepts 已实现 --sort=doc-count)
-$CODEGRAPH docs concepts --sort=doc-count --limit=30 --json \
+cgraphx docs concepts --sort=doc-count --limit=30 --json \
   > high-centrality-concepts.json
 
 # cgraphx docs concepts 已经返回 documentCount 字段,直接用
@@ -526,7 +482,7 @@ jq '[.[] | {name, doc_count: .documentCount}] | sort_by(-.doc_count) | .[:30]' \
 **Step 3 — 交叉验证：找"代码中心性高 + 业务无文档"的 concerns**
 
 ```text
-对每个高中心性 symbol（Step 1，nodeCount >= 3）：
+对每个高中心性 symbol（Step 1，跨文件引用数 >= 3）：
   - 该 symbol 对应的 concept 名是否已在 markdown 知识库？
   - 该 concept 是否已有 type: architecture/decision 的专属文档？
   - NO（代码中心性高 + 业务无专属文档）→ 加入 Phase 3 cross-cutting pending
@@ -538,27 +494,21 @@ jq '[.[] | {name, doc_count: .documentCount}] | sort_by(-.doc_count) | .[:30]' \
 对每个 cross-cutting concern 创建 pending item：
 - `type: "cross_cutting_concept"`
 - `entry_symbol`: 高中心性 symbol
-- `entry_files`: `codegraph_impact(<symbol>)` MCP 报告里 affected symbols 的 `filePath`
+- `entry_files`: grep 给出的引用该 symbol 的代表性文件路径（top 5-10）
 - `related_documents`: markdown 知识库里连接到该 concept 的已有文档路径
 
-跑 Phase 2 探索循环，但用下方的 **Cross-cutting Sub-Agent Template**（强调基于 `codegraph_impact` MCP + 已有文档整合，不重读代码）。
+跑 Phase 2 探索循环，但用下方的 **Cross-cutting Sub-Agent Template**（强调基于 grep 影响面 + 已有文档整合，不重读代码）。
 
 **Step 5 — Finalize**
 
 1. 触发最终 markdown 知识库全量 index（同步 Phase 2 + Phase 3 所有文档）：
 
 ```bash
-$CODEGRAPH docs index --json
+cgraphx docs index --json
 ```
 
-2. （兜底）如果 Phase 3 期间代码有变化（不该有，但防御性检查），跑 cgraphx 同步代码索引：
-
-```bash
-$CODEGRAPH status | grep -qi 'up to date\|indexed' || $CODEGRAPH sync
-```
-
-3. 设置 `phase` 为 `completed`。
-4. 告知用户探索完成，列出：已生成文档数 / 覆盖的 entry symbol 数 / 识别的 cross-cutting concern 数 / 永久跳过的 failed 项数。
+2. 设置 `phase` 为 `completed`。
+3. 告知用户探索完成，列出：已生成文档数 / 覆盖的 entry symbol 数 / 识别的 cross-cutting concern 数 / 永久跳过的 failed 项数。
 
 ### Dedup Rules (cgraphx docs seen-names Layer 1 + cgraphx docs dedup Layer 2)
 
@@ -569,14 +519,12 @@ Before adding new entry points to `pending`, run **two layers** of dedup. Layer 
 主 agent 收集子 agent 返回的 new_entry_points names，一次性批量 check：
 
 ```bash
-CODEGRAPH="cgraphx"
-
 # 主 agent 收集子 agent 返回的 new_entry_points names,一次性批量 check
 CANDIDATES=("客户导出 Batch" "export-customer-batch" "Knowledge Recall")
 
 # 一次性 batch check(用逗号分隔 names)
 CANDIDATES_CSV=$(IFS=,; echo "${CANDIDATES[*]}")
-CHECK_RESP=$($CODEGRAPH docs seen-names --check="$CANDIDATES_CSV" --json)
+CHECK_RESP=$(cgraphx docs seen-names --check="$CANDIDATES_CSV" --json)
 
 # 提取通过 Layer 1 的候选(is_seen=false)
 NEW=$(echo "$CHECK_RESP" | jq -r '.results[] | select(.is_seen == false) | .name')
@@ -592,7 +540,7 @@ cgraphx 内部 SQLite 的 `UNIQUE(project_path, normalized_name)` 索引提供 O
 ```bash
 # 把通过 Layer 1 的候选用逗号 join 后发给 cgraphx docs dedup
 NEW_CSV=$(echo "$NEW" | paste -sd, -)
-DEDUP_RESP=$($CODEGRAPH docs dedup --names="$NEW_CSV" --json)
+DEDUP_RESP=$(cgraphx docs dedup --names="$NEW_CSV" --json)
 
 # is_duplicate=true 的项 SKIP(concept 已在图谱);false 的项才入队
 NEW_AFTER_DEDUP=$(echo "$DEDUP_RESP" | jq -r '.results[] | select(.is_duplicate == false) | .name')
@@ -601,7 +549,7 @@ echo "通过 Layer 2 的候选: $NEW_AFTER_DEDUP"
 
 cgraphx docs dedup 内置 normalize + alias 匹配。`is_duplicate: true` 的项 SKIP（concept 已在 markdown 知识库）；`false` 的项才入队，同时通过 Layer 1 的候选会在被探索完成时由 Phase 2 Step 2 写回脚本通过 `cgraphx docs seen-names --add` 持久化到 SQLite 表（`markdown_explored_entry_names`）。
 
-**Fallback**（`use_cgraphx: false` 时）：仅内存模式，主 agent 在 queue 文件维护 `seen_normalized_names`，但**不推荐**——中断会丢，且 queue 文件随 explored 增长，千万行项目性能不可接受。新项目一律用 cgraphx 持久化模式。
+**Fallback**（`use_persistent_dedup: false` 时）：仅内存模式，主 agent 在 queue 文件维护 `seen_normalized_names`，但**不推荐**——中断会丢，且 queue 文件随 explored 增长，千万行项目性能不可接受。新项目一律用 cgraphx 持久化模式。
 
 **File-level coverage is NOT a dedup signal** —— 一个文件可能含多个独立功能，已探索其中一个函数不代表整文件覆盖。
 
@@ -636,33 +584,36 @@ Each sub-agent receives this prompt structure. Fill in the `{placeholders}` befo
 名称：{name}
 类型：{type}
 起始文件：{entry_files}
-起始符号：{entry_symbol}（如 com.example.OrderService.createOrder，cgraphx 索引定位用）
+起始符号：{entry_symbol}（如 com.example.OrderService.createOrder，grep 关键词）
 
-【工具优先级：cgraphx > Read（铁律）】
+【工具优先级：grep 定位 → Read 看实现（铁律）】
 
-**强制**：所有代码结构查询先走 cgraphx。**Read 仅在需要看具体实现细节**（算法、注释、边界条件、错误处理分支）时使用——且优先按 cgraphx 给的位置信息定位行号再 Read，**不要 Read 整个文件**。千万行项目里 Read 整个文件是 context 黑洞。
+**强制**：先用 `grep` / `rg` 定位符号、跟踪调用链，**只在需要看具体实现细节**（算法、注释、边界条件、错误处理分支）时用 `Read`——且优先按 grep 给的行号定位再 Read，**不要 Read 整个文件**。千万行项目里 Read 整个文件是 context 黑洞。
 
 ```bash
-CODEGRAPH="cgraphx"
+LANG_TYPES="--type java --type kotlin"   # 按 config.languages 动态生成
+EXCLUDES=(-g '!node_modules/**' -g '!target/**' -g '!build/**' -g '!vendor/**' -g '!.git/**')
 
-# 1. 拿该入口符号的完整调用链(callers + callees)
-$CODEGRAPH callers {entry_symbol}
-$CODEGRAPH callees {entry_symbol}
+# 1. 拿该入口符号的调用方（谁调用了它）
+rg -n $LANG_TYPES "${EXCLUDES[@]}" "{entry_symbol}"
 
-# 2. 找相关 execution flows(同 process 下的其他入口)
-$CODEGRAPH query "{name}" --limit 10
+# 2. 拿该入口符号的下游调用（它调用了什么——Read 入口函数实现后从函数体提取）
+#    先定位入口函数实现位置：
+rg -n $LANG_TYPES "${EXCLUDES[@]}" "func {entry_symbol}|def {entry_symbol}|void {entry_symbol}|fun {entry_symbol}"
+#    然后 Read 该位置（offset/limit），从函数体里识别被调用的下游函数名
+#    再对每个下游函数名 rg 找定义位置 → 递归追踪
 
-# 3. 看改动影响面(哪些其他模块依赖这个符号)—— 识别跨模块依赖
-#    (返回 {symbol, depth, nodeCount, edgeCount, affected[]};用 nodeCount 作中心性指标)
-$CODEGRAPH impact {entry_symbol} --json
+# 3. 找相关同模块入口（按业务名搜）
+rg -n $LANG_TYPES "${EXCLUDES[@]}" "{name}" | head -20
 
-# 4. callers/callees 返回的符号列表给出关联符号
-#    对每个 callee 再 callers/callees 一次,递归追踪调用链
+# 4. 看改动影响面（哪些其他文件引用了这个符号）—— 识别跨模块依赖
+rg -l $LANG_TYPES "${EXCLUDES[@]}" "{entry_symbol}"
+#    -l 只列文件名，文件数即"被多少文件依赖"，作中心性指标
 ```
 
 **Read 策略**：
-- 仅当 cgraphx query/impact 输出指向某段具体实现，且需要看代码细节（算法、注释、错误分支）时
-- 优先用 `Read offset/limit` 按 cgraphx 给的行号定位
+- 仅当 grep 输出指向某段具体实现，且需要看代码细节（算法、注释、错误分支）时
+- 优先用 `Read offset/limit` 按 grep 给的行号定位
 - **单次任务最多 Read 30 个文件**，超过报 `DONE_WITH_CONCERNS` 并列出未覆盖部分
 
 【已有业务知识 — 先查询再探索】
@@ -671,10 +622,10 @@ $CODEGRAPH impact {entry_symbol} --json
 
 ```bash
 # 已有 concept（避免在自己写文档时创建重复 concept 名）
-$CODEGRAPH docs concepts --json
+cgraphx docs concepts --json
 
 # 已有相关文档
-$CODEGRAPH docs find --q="{name}" --limit=5 --json
+cgraphx docs find --q="{name}" --limit=5 --json
 ```
 
 **职责分工**：entry point name 维度的去重由**主 agent** 在入队前完成，你不需要做。发现新入口点时**全部报告**给主 agent（不预先过滤）。
@@ -684,11 +635,11 @@ $CODEGRAPH docs find --q="{name}" --limit=5 --json
 项目名称：{project_name}
 
 【任务】
-1. 从起始符号开始，用 cgraphx 拿完整调用链：
-   - 跟踪函数调用链（至少 4-5 层深度，用 `cgraphx callers` / `cgraphx callees`）
-   - 识别数据模型、状态转换、错误处理路径（cgraphx 给位置，Read 看实现）
-   - 关注跨模块/跨文件的依赖关系（用 `codegraph_impact({entry_symbol})` MCP 看影响半径 + affected symbols)
-   - 记录外部服务调用（数据库、消息队列、HTTP 调用——通常在 callees 里）
+1. 从起始符号开始，用 grep 跟踪完整调用链：
+   - 跟踪函数调用链（至少 4-5 层深度，反向 grep 找调用方 + Read 实现提取下游调用）
+   - 识别数据模型、状态转换、错误处理路径（grep 定位 → Read 看实现）
+   - 关注跨模块/跨文件的依赖关系（用 `rg -l "{entry_symbol}"` 看影响面 + 跨文件分布）
+   - 记录外部服务调用（数据库、消息队列、HTTP 调用——通常在函数体里，Read 时识别）
 
 2. 识别业务概念和非显而易见的约束：
    - 核心业务实体和它们的关系
@@ -702,13 +653,13 @@ $CODEGRAPH docs find --q="{name}" --limit=5 --json
 【保存知识文档】
 使用 code-impact-markdown skill 的完整流程保存文档：
 1. 先调用 Skill 工具加载 code-impact-markdown skill，按其规范执行保存流程
-2. 查询已有概念：$CODEGRAPH docs concepts --json
+2. 查询已有概念：cgraphx docs concepts --json
 3. 复用已有概念名，新名称放 aliases
 4. 文件名 kebab-case，基于入口点命名，保存到 docs/knowledge/
 5. document_type 根据探索内容判断：流程探索→exploration，约束/陷阱→finding，架构模式→architecture，设计决策→decision
 6. domains 填 [{project_name}]
 7. source_type 填 ai_session
-8. related_code 填实际探索过的文件路径（cgraphx query / impact 输出已有，直接复制）
+8. related_code 填实际探索过的文件路径（grep 输出已有，直接复制）
 9. 文档正文必须包含：Summary, Context, Findings, Evidence, Impact For Future Changes
 10. **Write 后必须 `cgraphx docs validate <file>` 校验通过**（code-impact-markdown skill 的强制步骤）；非法则修 frontmatter 再 Write 再校验，直到合法
 
@@ -732,37 +683,43 @@ $CODEGRAPH docs find --q="{name}" --limit=5 --json
 For Phase 3 deep-dive items with `type: "cross_cutting_concept"`：
 
 ```text
-你是一个代码探索 agent，负责对跨多个模块的核心概念做**整合分析**——不再重读代码，基于已有事实综合。
+你是一个代码探索 agent，负责对跨多个模块的核心概念做**整合分析**——基于已有事实综合，必要时按需 Read。
 
 【目标概念】
 名称：{name}
-中心性 symbol：{entry_symbol}（被 N 个 entry 依赖的高中心性代码符号）
+中心性 symbol：{entry_symbol}（被 N 个文件引用的高中心性代码符号）
 关联已有文档（Read 这些）：{document_paths}
 
-【工具优先级：codegraph_impact MCP > Read 已有文档 > Read 代码】
+【工具优先级：grep 看影响面 > Read 已有文档 > Read 代码】
 
-1. **先看代码影响面**（codegraph_impact MCP）—— 知道这个 symbol 在多少模块/调用链里出现：
+1. **先看代码影响面**（grep 跨文件引用）—— 知道这个 symbol 在多少模块/文件里出现：
 
+```bash
+LANG_TYPES="--type java --type kotlin"   # 按 config.languages 动态生成
+EXCLUDES=(-g '!node_modules/**' -g '!target/**' -g '!build/**' -g '!vendor/**' -g '!.git/**')
+
+# 列出所有引用该 symbol 的文件（含路径，看跨模块分布）
+rg -ln $LANG_TYPES "${EXCLUDES[@]}" "{entry_symbol}"
+
+# 看具体引用上下文（每个文件取一行，看是定义还是调用）
+rg -n $LANG_TYPES "${EXCLUDES[@]}" "{entry_symbol}" | head -50
 ```
-# MCP 调用(取代原 cgraphx impact CLI)
-# 返回格式化影响半径报告:affected symbols + 树状结构 + 跨文件 / 跨模块分布
-# 用报告规模作中心性,涉及的文件/模块分布看影响面
-调用 codegraph_impact({entry_symbol}, depth=2) MCP
-```
+
+从文件路径分布看影响面：跨多少模块 / 包 / 服务，文件数即"被多少处依赖"。
 
 2. **Read 关联已有文档**（{document_paths}）—— 知道业务层面已经记录了什么。
 
-3. **不要 Read 代码**（除非前两步明确指向某个具体实现且需要细节）—— Phase 2 已经探索过这些代码，重复 Read 是浪费 token。
+3. **按需 Read 代码**（仅当前两步明确指向某个具体实现且需要细节时）—— Phase 2 已经探索过这些代码，避免重复 Read 浪费 token。
 
 【项目信息】
 项目路径：{repo_path}
 项目名称：{project_name}
 
 【任务】
-1. 用 codegraph_impact MCP 返回构建"代码影响面"：哪些模块/调用链依赖这个 symbol（看报告中 affected symbols 的 `filePath` 分布），跨多少文件/包，规模多大
+1. 用 grep 跨文件引用结果构建"代码影响面"：哪些模块/包依赖这个 symbol（看 `rg -l` 输出的文件路径分布），跨多少文件，规模多大
 2. 用已有文档（{document_paths}）构建"业务已知"：业务侧如何描述这个 concept
 3. 找 gap：
-   - 代码影响面 ≠ 业务已知 → 缺失视角（例：代码层面 OrderService 被 5 个模块调用，但业务文档只覆盖了 2 个）
+   - 代码影响面 ≠ 业务已知 → 缺失视角（例：代码层面 OrderService 被 5 个模块引用，但业务文档只覆盖了 2 个）
    - 各文档之间矛盾（同一 concept 在不同文档描述不一致）
    - 整合视角（concept 在不同模块的完整生命周期、数据流、控制流）
 
@@ -776,7 +733,7 @@ document_type 建议：
 
 frontmatter：
 - related_documents 填引用的已有文档
-- related_code 填 codegraph_impact MCP 报告里 affected symbols 涉及的高中心性文件
+- related_code 填 grep 跨文件引用结果里涉及的高中心性文件
 - concepts 填此核心 concept + 关联 concept
 
 **Write 后必须 `cgraphx docs validate <file>` 校验通过**（同知识文档流程步骤 10）。

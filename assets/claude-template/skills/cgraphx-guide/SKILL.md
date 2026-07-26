@@ -1,11 +1,11 @@
 ---
 name: cgraphx-guide
-description: cgraphx 应用整体使用指南 — 安装、项目接入、日常做需求的工作流(skill 串联)、agent 自动加载的上下文工具。Use when 用户问 cgraphx 怎么用/怎么安装/怎么接入项目/有哪些 skill/日常工作流/onboarding/新手入门/使用流程/安装步骤/skill 怎么配合/cgraphx 能干什么/cgraphx 和别的工具区别。问单个代码查询工具(codegraph_explore/callers/impact 怎么调)走 cgraphx skill,不是本 skill。
+description: cgraphx 应用整体使用指南 — 安装、项目接入、日常做需求的工作流(skill 串联)、agent 自动加载的上下文工具。Use when 用户问 cgraphx 怎么用/怎么安装/怎么接入项目/有哪些 skill/日常工作流/onboarding/新手入门/使用流程/安装步骤/skill 怎么配合/cgraphx 能干什么/cgraphx 和别的工具区别。问单个知识库/数据库/时间线工具怎么调走对应专责 skill(code-impact-api/db-query/developer-timeline),不是本 skill。
 ---
 
 # cgraphx 应用使用指南
 
-cgraphx 是本地优先的代码智能工具,把**代码图谱 + markdown 知识库 + 数据库查询 + 开发时间线**打包给 AI agent 用。本 skill 是**整体使用导航**——用户问"怎么用 / 怎么装 / 日常工作流 / 有哪些 skill"时调这里。
+cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数据库查询 + 开发时间线**打包给 AI agent 用。本 skill 是**整体使用导航**——用户问"怎么用 / 怎么装 / 日常工作流 / 有哪些 skill"时调这里。
 
 视觉版介绍页(给人类用户看):`how-to-use.html`(本 skill 目录内,随 skill 分发,`cgraphx install` 时部署到项目 `.claude/skills/cgraphx-guide/`)。
 
@@ -18,11 +18,12 @@ cgraphx 是本地优先的代码智能工具,把**代码图谱 + markdown 知识
 - 用户问 cgraphx 整体能干什么、和别的工具区别
 
 **不要用本 skill**(走对应专责 skill):
-- 单个代码查询(`codegraph_explore` / `callers` / `impact` 怎么调)→ `cgraphx` skill
 - 查业务知识(`docs/knowledge/`)→ `code-impact-api` skill
 - 查数据库 → `db-query` skill
+- 生成开发时间线 / 日报 / 周报 → `developer-timeline` skill
 - 写 PRD / spec / plan → 各自 skill
 - 探索陌生项目建知识库 → `code-impact-init` skill
+- 查代码结构 / 调用链 / 影响半径 → 用 `grep` / `Read` 等编辑器自带工具(2.0 起不再提供代码图谱)
 
 本 skill 只做整体导航,不重复各 skill 的内部规范。
 
@@ -31,7 +32,7 @@ cgraphx 是本地优先的代码智能工具,把**代码图谱 + markdown 知识
 | 阶段 | 命令 / skill |
 |---|---|
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
-| **项目级 · 每项目一次** | `cgraphx init`(建代码图谱)、`cgraphx install`(写 MCP 配置 + 部署 skills 模板到项目 `.claude/`)、`/code-impact-init`(接手陌生项目时建业务知识库) |
+| **项目级 · 每项目一次** | `cgraphx init`(建空 `cgraphx.db` 支持 markdown 知识库 + timeline)、`cgraphx install`(写 MCP 配置 + 部署 skills 模板到项目 `.claude/`)、`/code-impact-init`(接手陌生项目时建业务知识库) |
 | **日常做需求 · 必经 2 步** | `/clarify-requirements` 澄清 → `/implementation`(简单)或 `/subagent-implement`(复杂)实现 |
 | **日常做需求 · 复杂按需** | `/write-prd`、`/write-spec`、`/write-plan`、`/code-impact-markdown`(沉淀到 `docs/knowledge/`) |
 | **工作回顾 · 按需** | `/developer-timeline`(日/周/月报)、`/code-impact-docgen`(合成业务/技术文档) |
@@ -58,7 +59,6 @@ cgraphx 是本地优先的代码智能工具,把**代码图谱 + markdown 知识
 
 | skill / 工具 | agent 何时自动调 |
 |---|---|
-| `codegraph_explore` | 任何代码理解 / 修改前——查代码结构、调用链、影响半径 |
 | `code-impact-api` | 任务开始时查 `docs/knowledge/` 业务决策 / 概念 / 历史教训 |
 | `db-query` | 验证数据假设 / 查表结构 / 找测试数据(查 MySQL / PostgreSQL,沉淀 schema 到 `docs/schema-knowledge/`) |
 
@@ -66,7 +66,7 @@ cgraphx 是本地优先的代码智能工具,把**代码图谱 + markdown 知识
 
 ```bash
 npm install -g cgraphx               # 装 CLI(Node ≥ 20 且 < 25)
-cd /your/project && cgraphx init     # 建代码图谱索引、开 watcher
+cd /your/project && cgraphx init     # 建空 cgraphx.db(支持 markdown 知识库 + timeline)
 cgraphx install                      # 写 MCP 配置 + 部署 skills 模板到项目 .claude/(默认 local)
 ```
 
@@ -76,17 +76,16 @@ cgraphx install                      # 写 MCP 配置 + 部署 skills 模板到�
 
 ## 背后自动(agent 跑的,用户无感)
 
-- 文件改动 → watcher 自动增量同步代码图谱(无需手动 reindex)
-- agent 经 `codegraph_explore` 自动查代码结构 / 调用链 / 影响半径
+- timeline 自动记录开发事件(无需手动跑)
 - agent 经 `code-impact-api` 自动查业务知识
 - agent 经 `db-query` 自动查数据库
-- `status` / `sync` / `explore` / `docs` / `db` / `timeline` 等 CLI 子命令由 agent / skill 调用,人类日常不主动跑
+- `status` / `docs` / `db` / `timeline` 等 CLI 子命令由 agent / skill 调用,人类日常不主动跑
 
 ## 卸载
 
 ```bash
 npm uninstall -g cgraphx             # preuninstall 钩子自动清所有 agent 的 MCP 配置
-# 需要清索引数据时,手动删项目目录下的 .cgraphx/
+# 需要清数据时,手动删项目目录下的 .cgraphx/
 ```
 
 ## 视觉版

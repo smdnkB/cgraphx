@@ -30,7 +30,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 - 写 HTML 接口文档 → 用 `/write-api-doc`
 - 修代码 / 改 .bru → 用户手动或走 `/implementation`(本 skill 只测不修)
 - 探索陌生项目 → 用 `/code-impact-init`
-- 查代码调用关系 → 用 `/cgraphx` 或 `codegraph_explore` MCP
+- 查代码调用关系 → 用 grep / Read
 
 ## 与既有 skill 边界
 
@@ -38,7 +38,6 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 |---|---|---|
 | `write-api` | 上游 | 产 .bru + 测试规格 + environments;本 skill 消费这些产物跑测试,不调它也不改 .bru |
 | `write-api-doc` | 独立并列 | 不互相调用;本 skill 产测试报告 + JSONL,write-api-doc 产 HTML 接口文档 |
-| `cgraphx` / `codegraph_explore` | 可选复用 | R1 确定测试范围时,若需定位接口 handler 可用(但通常用户已给接口名,直接用即可) |
 | `db-query` | 复用 | R4 核实写接口 DB 副作用;受 db-query 既有只读约束 |
 | `implementation` / `subagent-implement` | 下游 | 测试失败后由用户决定是否调起修 bug |
 | `code-impact-docgen` | 独立 | 自测后产设计文档 |

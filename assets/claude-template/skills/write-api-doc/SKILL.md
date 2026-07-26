@@ -1,6 +1,6 @@
 ---
 name: write-api-doc
-description: 在 feature 接口开发完毕后(可选环节),从 spec 的接口章节 + 实际代码反向提取,生成静态只读 HTML 接口文档,默认输出到 docs/features/<feature-id>/<文件前缀>-接口文档.html。覆盖本次 feature 新增的接口(严格新增,不含修改),支持 Node/Python/Java/Go/Rust/C#/PHP/Ruby 主流 web 框架。不依赖 cgraphx 索引、不做交互式 Swagger、不重新定义 spec。
+description: 在 feature 接口开发完毕后(可选环节),从 spec 的接口章节 + 实际代码反向提取,生成静态只读 HTML 接口文档,默认输出到 docs/features/<feature-id>/<文件前缀>-接口文档.html。覆盖本次 feature 新增的接口(严格新增,不含修改),支持 Node/Python/Java/Go/Rust/C#/PHP/Ruby 主流 web 框架。不做交互式 Swagger、不重新定义 spec。
 ---
 
 # Write API Doc
@@ -15,7 +15,7 @@ description: 在 feature 接口开发完毕后(可选环节),从 spec 的接口�
 不要重新定义 spec 已锁定的接口契约、参数语义、错误码、权限边界。如果发现 spec 与代码现实不符,标注【待确认】而不是自行解释。
 不要编造未在代码或 spec 中体现的接口、参数、响应字段或错误码。
 范围严格限定"本次 feature 新增的接口",不得自行扩展到修改的老接口或全项目接口。
-不依赖 cgraphx 索引;不调用 codegraph_explore / cgraphx CLI;只用 grep + Read。
+只用 grep + Read 查代码;不依赖外部图谱或索引工具。
 </HARD-GATE>
 
 ## Trigger
@@ -31,7 +31,7 @@ description: 在 feature 接口开发完毕后(可选环节),从 spec 的接口�
 - 写 spec(使用 `write-spec` skill,接口文档不重新定义规格契约)
 - 写设计文档(使用 `code-impact-docgen` skill,设计文档覆盖架构/模块/决策,接口文档只覆盖接口)
 - 探索陌生项目(使用 `code-impact-init` skill)
-- 查询代码调用关系(使用 `cgraphx` skill 或 `codegraph_explore` MCP)
+- 查询代码调用关系(使用 grep / Read)
 
 ## 与 code-impact-docgen 的边界
 

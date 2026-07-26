@@ -86,7 +86,7 @@ AI 判断时**优先参考 `docs/bruno/common/` 既有接口**,避免重复生�
 
 - 接口清单(S1)
 - 测试规格文档(S2 产出)
-- 代码上下文:通过 `codegraph_explore` 拿 handler 源码、参数定义、默认值、必填项
+- 代码上下文:通过 grep + Read 拿 handler 源码、参数定义、默认值、必填项
 - DB 数据:通过 `db-query` 查真实可用数据
 
 ### 输出
@@ -127,7 +127,6 @@ AI 调用失败(超时 / 限流):
 
 | 项目状态 | S3 降级行为 |
 |---|---|
-| 未接入 cgraphx 索引 | S3 用 grep + Read 兜底拿 handler 源码,精度可能下降;在测试规格 §4 标注 |
 | 未配置 db-query profile | S3 留 `{{var}}` 占位 + 测试规格 §4 标注"DB 查询不可用";后续 `/run-api-test` 的 R4 也会降级,标"无法核实" |
 
 降级不中断 skill,继续跑能跑的部分。

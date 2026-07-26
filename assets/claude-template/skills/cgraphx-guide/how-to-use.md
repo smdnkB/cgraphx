@@ -1,6 +1,6 @@
 # cgraphx 怎么用
 
-本地优先的代码智能 · 给 AI agent 用的代码图谱
+本地优先的 AI agent 研发工具 · 知识库 / 数据库 / 时间线
 
 最后更新:2026-07-16
 
@@ -12,14 +12,14 @@
 
 ### 项目级 · 每项目一次
 
-- 项目目录内执行 `cgraphx init` 建 `.cgraphx/` 代码图谱索引和配置文件
+- 项目目录内执行 `cgraphx init` 建 `.cgraphx/` 数据目录(markdown 知识库 + timeline)和配置文件
 - 项目目录内执行 `cgraphx install` 写 MCP 配置 + 部署 skills 模板到项目 `.claude/`
 - 一定要先 `cgraphx init`, `cgraphx init` 执行的同时可以执行 `cgraphx install`
 
 ### 卸载 · 可选
 
 - `npm uninstall -g cgraphx`
-- 删项目目录下 `.cgraphx/` 清索引数据
+- 删项目目录下 `.cgraphx/` 清数据
 
 ---
 
@@ -35,7 +35,7 @@
 - 可选 `/write-plan` 拆执行计划(给 agent 执行)
 - 必经 `/implementation` 实现(简单任务)或 `/subagent-implement`(复杂多任务)
 
-> 日常默认 2 步:澄清 + 实现。复杂需求按需补 prd / spec / plan。cgraphx 在背后自动同步代码图谱,你不需要主动跑命令。
+> 日常默认 2 步:澄清 + 实现。复杂需求按需补 prd / spec / plan。timeline 自动记录开发事件,你不需要主动跑命令。
 
 ---
 

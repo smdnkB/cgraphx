@@ -384,7 +384,7 @@ footer p { margin: 0; }
 <header>
   <div class="eyebrow">cgraphx 安装与使用</div>
   <h1>cgraphx 怎么用</h1>
-  <p class="subtitle">本地优先的代码智能 · 给 AI agent 用的代码图谱</p>
+  <p class="subtitle">本地优先的 AI agent 研发工具 · 知识库 / 数据库 / 时间线</p>
   <p class="meta">最后更新:2026-07-13</p>
 </header>
 
@@ -402,13 +402,13 @@ footer p { margin: 0; }
       <div class="t-line"><span class="t-prompt">$</span> npm install <span class="t-flag">-g</span> cgraphx <span class="t-comment"># 装 CLI(Node ≥ 20 且 &lt; 25)</span></div>
 
       <div class="t-sep"># ── 项目级 · 每项目一次 ──────────────────────</div>
-      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx init <span class="t-comment"># 建 .cgraphx/ 代码图谱索引 + 配置文件</span></div>
+      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx init <span class="t-comment"># 建 .cgraphx/ 数据目录(markdown 知识库 + timeline)+ 配置文件</span></div>
       <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx install <span class="t-comment"># 写 MCP 配置 + 部署 skills 到 .claude/</span></div>
       <div class="t-note">↳ 两者可同时执行,但 <span class="t-cmd">cgraphx init</span> 必须先发起</div>
 
       <div class="t-sep"># ── 卸载 · 可选 ──────────────────────────────</div>
       <div class="t-line"><span class="t-prompt">$</span> npm uninstall <span class="t-flag">-g</span> cgraphx</div>
-      <div class="t-line"><span class="t-prompt">$</span> rm <span class="t-flag">-rf</span> .cgraphx/ <span class="t-comment"># 清索引数据</span><span class="t-cursor"></span></div>
+      <div class="t-line"><span class="t-prompt">$</span> rm <span class="t-flag">-rf</span> .cgraphx/ <span class="t-comment"># 清数据</span><span class="t-cursor"></span></div>
     </div>
   </div>
 </section>
@@ -434,7 +434,7 @@ footer p { margin: 0; }
       <li><strong style="color:var(--color-primary);">必经</strong> <code>/implementation</code> 实现<em>（简单任务）</em>或 <code>/subagent-implement</code><em>（复杂多任务）</em></li>
     </ul>
     <div class="highlight">
-      <p>日常默认 2 步:澄清 + 实现。复杂需求按需补 prd / spec / plan。cgraphx 在背后自动同步代码图谱,你不需要主动跑命令。</p>
+      <p>日常默认 2 步:澄清 + 实现。复杂需求按需补 prd / spec / plan。timeline 自动记录开发事件,你不需要主动跑命令。</p>
     </div>
   </div>
 

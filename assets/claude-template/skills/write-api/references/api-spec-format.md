@@ -60,7 +60,6 @@
   - {{admin_user_id}}:管理员用户 id
 
 降级说明(仅在降级时填,正常情况删):
-- 未接入 cgraphx:S3 用 grep + Read 兜底,参数提取精度可能下降
 - 未配置 db-query:S3 留 {{var}} 占位,S6 DB 核实标"无法核实"
 ```
 
