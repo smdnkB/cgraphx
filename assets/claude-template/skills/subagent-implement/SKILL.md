@@ -55,7 +55,7 @@ description: 复杂 plan 的子 agent 实现流程 — 主 agent 作为 controll
 3. 所有任务完成后:
    - 派 final quality-reviewer 子 agent(整体审查:架构、命名一致性、文件组织、跨任务问题)
    - 不通过 → 按问题大小选择主 agent 低风险微修或派 fix 子 agent 修 → quality-reviewer 重审
-   - 通过 → 收尾(提示用户走 commit / PR / finish-feature)
+   - 通过 → 收尾(提示用户走 commit / PR)
 
 4. 收尾汇报:
    - 完成的任务清单
@@ -187,7 +187,7 @@ Agent({
 | 写 plan | `write-plan` |
 | **执行 plan(派子 agent)** | **`subagent-implement`(本 skill)** |
 | 执行 plan(主会话顺序) | `implementation` |
-| 收尾 | `finish-feature` / `commit` / PR |
+| 收尾 | `commit` / PR |
 
 ## 处理 plan 与代码现实的冲突
 
@@ -218,7 +218,6 @@ Agent({
 1. 汇报:完成清单 / 修复历史 / 剩余风险
    - 说明 plan 忠实度:`PLAN_FOLLOWED` / `PLAN_ADAPTED` / 是否出现并解决过 `PLAN_CONFLICT`
 2. 提示用户下一步:
-   - 走 `finish-feature` 收尾?
    - 直接 commit?
    - 创建 PR?
 

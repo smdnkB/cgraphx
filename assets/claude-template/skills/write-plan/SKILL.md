@@ -341,4 +341,4 @@ graph TD
 | **写 plan + Self-Review + Plan Review**(本 skill) | `write-plan` |
 | 执行 plan(主会话顺序) | `implementation` |
 | 执行 plan(派子 agent) | `subagent-implement` |
-| 收尾 | `finish-feature` / commit / PR |
+| 收尾 | commit / PR |
