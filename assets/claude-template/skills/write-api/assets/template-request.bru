@@ -1,0 +1,93 @@
+meta {
+    name: <场景名,如 正常 / 缺prodInstId / 产品不存在>
+    type: http
+}
+
+# HTTP 方法段:get / post / put / delete / patch
+# 查询接口示例(get):
+get {
+    url: {{baseUrl}}/api/v1/users/:id
+    body: none
+}
+
+# 写接口示例(post,取消注释切换):
+# post {
+#     url: {{baseUrl}}/api/v1/users
+#     body: json
+# }
+
+params:query {
+    # 查询参数,写真实值(AI 从 DB 查或代码推断),不变量化
+    # expand: true
+    # ~disabled_param: value    # ~ 前缀表示禁用此参数
+}
+
+params:path {
+    # 路径参数,写真实值(如 id: 12345),不变量化
+    # 唯一例外:前置接口动态传递的值可用 {{var}}
+    # id: {{test_user_id}}
+    id: 12345
+}
+
+headers {
+    Content-Type: application/json
+    # 鉴权 header 由 AI 在 S3 根据项目既有 .bru 和 environments/local.bru 的变量名对齐后追加
+    # 不同项目鉴权方式不同(accesstoken/staffcode/regionid 或 Authorization/X-API-Key 等)
+    # 不在此硬编码示例,避免 AI 套模板;AI 必须按目标项目实际生成
+}
+
+# 请求体(写接口用,查询接口删此段):
+# 入参写真实值(AI 从 DB 查或代码推断),不变量化
+# 唯一例外:前置接口动态传递的值可用 {{var}}
+# body:json {
+#     {
+#         "name": "测试用户",
+#         "email": "test@example.com",
+#         "phone": "13800000000"
+#     }
+# }
+
+# 测试脚本:用项目既有 bruno 版本支持的语法
+# 既有语法:test("name", function() { ... }) + res.getStatus() / res.getBody()
+# 不要用 function onResponse(request, response) 新语法
+# 不要用 assert 段(项目 bruno 版本可能不支持),断言全放 tests
+tests {
+    test("HTTP 200", function() {
+        expect(res.getStatus()).to.equal(200);
+    });
+
+    test("响应体关键字段", function() {
+        const body = JSON.parse(res.getBody());
+        expect(body.code).to.equal(0);
+        expect(body.data).to.exist;
+    });
+
+    # 写接口额外写 DB 副作用预期注释,供 S6 AI 核实参考:
+    # DB 预期:users 表新增一行,name=测试用户,email=test@example.com
+    # DB 预期:user_profile 表同步新增一行,user_id=本次返回的 id
+}
+
+docs {
+    业务说明: <一句话,从 Javadoc 或 spec 提取;提取不到占位"(scan 阶段未提取到 Javadoc,请补充业务说明)"
+}
+
+# 上传文件的请求格式
+meta {
+  name: 生成seqID
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/order-service/service/order_svc_buildOrdProdInstAttrId
+  body: multipartForm
+  auth: none
+}
+
+body:json {
+  {}
+}
+
+body:multipart-form {
+  file: @file(/Users/smdnk/Documents/副本虎翼统计数据_202512_202607.xlsx)
+}

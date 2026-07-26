@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>db schema skills 闭环</title>
+<style>
+  :root {
+    --green: #16a34a;  /* 本地知识库(便宜) */
+    --green-bg: #dcfce7;
+    --blue: #2563eb;   /* DB 连接(贵) */
+    --blue-bg: #dbeafe;
+    --orange: #ea580c; /* 探索补充 */
+    --orange-bg: #ffedd5;
+    --red: #dc2626;
+    --gray: #6b7280;
+    --gray-bg: #f3f4f6;
+    --border: #d1d5db;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px;
+    color: #111827; line-height: 1.6;
+  }
+  h1 { font-size: 28px; margin: 0 0 8px; }
+  h2 { font-size: 20px; margin: 40px 0 12px; border-bottom: 2px solid var(--border); padding-bottom: 6px; }
+  h3 { font-size: 15px; margin: 20px 0 8px; color: var(--gray); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .subtitle { color: var(--gray); font-size: 15px; margin-bottom: 32px; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; margin-right: 6px; }
+  .tag-green { background: var(--green-bg); color: var(--green); }
+  .tag-blue { background: var(--blue-bg); color: var(--blue); }
+  .tag-orange { background: var(--orange-bg); color: var(--orange); }
+
+  /* 角色卡 */
+  .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .role-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; }
+  .role-card.init { border-left: 4px solid var(--blue); background: var(--blue-bg); }
+  .role-card.daily { border-left: 4px solid var(--green); background: var(--green-bg); }
+  .role-card h3 { margin: 0 0 8px; color: inherit; text-transform: none; letter-spacing: 0; font-size: 16px; }
+  .role-card .when { font-size: 13px; color: var(--gray); margin-top: 8px; }
+
+  /* 目录树 */
+  .tree {
+    background: var(--gray-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 20px; font-family: "SF Mono", Menlo, monospace; font-size: 13px; line-height: 1.8;
+    margin: 12px 0; white-space: pre;
+  }
+  .tree .hl { background: var(--green-bg); padding: 1px 4px; border-radius: 3px; color: var(--green); font-weight: 600; }
+  .tree .hlo { background: var(--orange-bg); padding: 1px 4px; border-radius: 3px; color: var(--orange); font-weight: 600; }
+
+  /* 数据流图 */
+  .flow {
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px 8px; align-items: center;
+    margin: 16px 0;
+  }
+  .box {
+    border: 2px solid var(--border); border-radius: 8px; padding: 12px 16px; text-align: center;
+    background: white;
+  }
+  .box.db { border-color: var(--blue); background: var(--blue-bg); }
+  .box.kb { border-color: var(--green); background: var(--green-bg); }
+  .box.agent { border-color: var(--gray); background: var(--gray-bg); }
+  .box .label { font-weight: 600; font-size: 14px; }
+  .box .sub { font-size: 12px; color: var(--gray); margin-top: 4px; }
+  .arrow {
+    text-align: center; font-size: 24px; color: var(--gray); font-weight: bold;
+    position: relative;
+  }
+  .arrow .a-label {
+    position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; white-space: nowrap; background: white; padding: 0 4px; color: var(--gray);
+  }
+  .arrow.green { color: var(--green); }
+  .arrow.blue { color: var(--blue); }
+  .arrow.orange { color: var(--orange); }
+  .arrow-row { display: contents; }
+
+  /* 时序 */
+  .timeline { position: relative; padding-left: 24px; margin: 16px 0; }
+  .timeline::before { content: ''; position: absolute; left: 8px; top: 8px; bottom: 8px; width: 2px; background: var(--border); }
+  .tl-item { position: relative; padding: 8px 0 16px 24px; }
+  .tl-item::before {
+    content: ''; position: absolute; left: -20px; top: 14px; width: 12px; height: 12px;
+    border-radius: 50%; background: white; border: 2px solid var(--gray);
+  }
+  .tl-item.init::before { border-color: var(--blue); background: var(--blue); }
+  .tl-item.read::before { border-color: var(--green); background: var(--green); }
+  .tl-item.write::before { border-color: var(--orange); background: var(--orange); }
+  .tl-item .tl-title { font-weight: 600; }
+  .tl-item .tl-body { font-size: 14px; color: var(--gray); margin-top: 2px; }
+  .tl-item code { background: var(--gray-bg); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+  /* 枢纽表对比 */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .compare-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .compare-card.bad { border-color: var(--red); background: #fef2f2; }
+  .compare-card.good { border-color: var(--green); background: var(--green-bg); }
+  .compare-card .head { font-weight: 600; margin-bottom: 8px; }
+  .compare-card.bad .head::before { content: "✗ "; color: var(--red); font-weight: bold; }
+  .compare-card.good .head::before { content: "✓ "; color: var(--green); font-weight: bold; }
+
+  /* 规则卡 */
+  .rules { display: grid; gap: 10px; margin: 16px 0; }
+  .rule { display: flex; gap: 12px; padding: 12px 16px; border-left: 3px solid var(--green); background: var(--gray-bg); border-radius: 4px; }
+  .rule .num { font-weight: 700; color: var(--green); font-size: 18px; flex-shrink: 0; }
+  .rule .body { font-size: 14px; }
+  .rule .body b { color: #111827; }
+
+  code { font-family: "SF Mono", Menlo, monospace; }
+  .footer { margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--gray); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>db schema skills 闭环</h1>
+<p class="subtitle">两个 skill + 一个共享知识库,让 agent 越用越懂业务数据</p>
+
+<h2>1. 共享的目录结构(知识库本体)</h2>
+<div class="tree">docs/schema-knowledge/
+├── order-svc/
+│   ├── <span class="hl">INDEX.md</span>                ← agent 进目录第一件事读(表清单+注释)
+│   ├── pending-comments.sql   ← DBA 待执行 COMMENT SQL(action 队列,不在 agent 读路径)
+│   └── ddl/
+│       ├── work_order.sql    ← DDL + <span class="hlo">DISCOVERED 块</span>(积累的隐式关系/含义/陷阱)
+│       ├── users.sql         ← DDL + DISCOVERED 块
+│       └── payment.sql
+└── cust-svc/
+    ├── INDEX.md
+    ├── pending-comments.sql
+    └── ddl/...</div>
+<p style="font-size:14px;color:var(--gray);">
+  <b style="color:var(--green)">绿色</b> = agent 必经节点(INDEX.md 是入口,ddl/&lt;table&gt;.sql 是详情);
+  <b style="color:var(--orange)">橙色</b> = db-query 探索补充的部分,export 重 dump 时会保留;
+  <b style="color:var(--gray)">灰色</b> pending-comments.sql = DBA action 队列,不在 agent 读路径上(所以可以独立文件)。
+</p>
+
+<h2>2. 时序:知识怎么积累起来</h2>
+<div class="timeline">
+  <div class="tl-item init">
+    <div class="tl-title">T0 · 跑 export-table-ddl</div>
+    <div class="tl-body">建基线 → <code>ddl/work_order.sql</code> 只有 DDL,无 DISCOVERED 块</div>
+  </div>
+  <div class="tl-item read">
+    <div class="tl-title">T1 · db-query 任务:"查 work_order 待派单的数据"</div>
+    <div class="tl-body"><code>Read ddl/work_order.sql</code>(首选)→ <code>cgraphx db query --sql "SELECT ... LIMIT 5"</code>(查数据)</div>
+  </div>
+  <div class="tl-item write">
+    <div class="tl-title">T1 续 · 发现 work_order.assignee_id 实际对应 users.staff_code</div>
+    <div class="tl-body">
+      知识 → append 到 <code>ddl/work_order.sql</code> 和 <code>ddl/users.sql</code> 的 DISCOVERED 块(双向)<br>
+      DB 注释缺失 → action 进 <code>pending-comments.sql</code>(DBA 待执行)
+    </div>
+  </div>
+  <div class="tl-item init">
+    <div class="tl-title">T2 · DBA 改了 schema,重跑 export-table-ddl</div>
+    <div class="tl-body">DDL 部分刷新(拿新结构),<b style="color:var(--orange)">DISCOVERED 块自动保留</b>(不覆盖);pending-comments.sql 不动</div>
+  </div>
+  <div class="tl-item write">
+    <div class="tl-title">T2 续 · DBA 执行 pending-comments.sql 里的 COMMENT</div>
+    <div class="tl-body">DB 注释固化 → 删 pending-comments.sql 里那条 + 删 DISCOVERED 对应的 <code>[字段含义]</code> 行(DB 已是单一事实源)</div>
+  </div>
+  <div class="tl-item read">
+    <div class="tl-title">T3 · 下一次 db-query 读 work_order</div>
+    <div class="tl-body"><code>Read ddl/work_order.sql</code> → 看到 DDL + DISCOVERED 块(<b>积累生效,不用重新踩坑</b>)</div>
+  </div>
+</div>
+
+<div class="footer">
+  闭环核心:知识库是 <b style="color:var(--green)">便宜 + 丰富</b> 的首选信息源(本地读 + DISCOVERED 块),DB 是 <b style="color:var(--blue)">昂贵 + 不可替代</b> 的兜底(连库 + 只读铁律)。agent 默认走知识库,只在"知识库没有"或"要实际数据"时连库 —— 这样新沉淀的知识才会被读到,闭环才转得起来。
+</div>
+
+</body>
+</html>

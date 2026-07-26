@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Developer Timeline 周报 Demo</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --paper: #ffffff;
+      --ink: #20242a;
+      --muted: #687281;
+      --line: #d9dee7;
+      --soft: #eef2f7;
+      --blue: #1f6feb;
+      --green: #20885f;
+      --amber: #a66500;
+      --red: #bf3b35;
+      --violet: #7257c9;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --mono: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .report {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      box-shadow: 0 16px 42px rgba(28, 36, 48, 0.08);
+    }
+
+    header {
+      padding: 28px 32px 22px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: start;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: 0;
+      font-weight: 720;
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      color: var(--muted);
+      max-width: 720px;
+    }
+
+    .meta {
+      min-width: 260px;
+      border: 1px solid var(--line);
+      background: var(--soft);
+      padding: 12px 14px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .meta strong {
+      display: block;
+      color: var(--ink);
+      font-size: 14px;
+      margin-bottom: 3px;
+    }
+
+    .nav {
+      padding: 12px 32px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    .nav a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    main {
+      padding: 28px 32px 34px;
+      display: grid;
+      gap: 28px;
+    }
+
+    section {
+      display: grid;
+      gap: 14px;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h2 {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border: 1px solid var(--line);
+    }
+
+    .metric {
+      padding: 16px;
+      border-right: 1px solid var(--line);
+      min-height: 104px;
+    }
+
+    .metric:last-child { border-right: 0; }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .metric .value {
+      font-size: 28px;
+      font-weight: 760;
+      line-height: 1;
+    }
+
+    .metric .note {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      gap: 18px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .panel-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--soft);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .panel h3 {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .panel-body {
+      padding: 14px;
+    }
+
+    .list {
+      display: grid;
+      gap: 11px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .list li {
+      display: grid;
+      gap: 4px;
+      padding-bottom: 11px;
+      border-bottom: 1px solid var(--soft);
+    }
+
+    .list li:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+
+    .item-title {
+      font-weight: 650;
+    }
+
+    .item-meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .tag {
+      border: 1px solid var(--line);
+      background: var(--soft);
+      color: var(--muted);
+      padding: 2px 7px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .tag.green { color: var(--green); background: #edf7f2; border-color: #cce8da; }
+    .tag.amber { color: var(--amber); background: #fff5df; border-color: #f3d69a; }
+    .tag.red { color: var(--red); background: #fff0ef; border-color: #f1c4c0; }
+    .tag.blue { color: var(--blue); background: #eef5ff; border-color: #c9ddff; }
+    .tag.violet { color: var(--violet); background: #f4f0ff; border-color: #dcd2ff; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+      padding: 9px 10px;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 650;
+      background: var(--soft);
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .bar-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 92px 1fr 46px;
+      gap: 10px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .bar-track {
+      height: 9px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: var(--blue);
+    }
+
+    .bar-fill.green { background: var(--green); }
+    .bar-fill.amber { background: var(--amber); }
+    .bar-fill.violet { background: var(--violet); }
+
+    .timeline {
+      border-left: 2px solid var(--line);
+      margin-left: 8px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .timeline-item {
+      position: relative;
+      padding-left: 18px;
+    }
+
+    .timeline-item::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      top: 5px;
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--blue);
+      background: var(--paper);
+    }
+
+    .time {
+      font-family: var(--mono);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .callout {
+      border: 1px solid #c9ddff;
+      background: #f4f8ff;
+      padding: 14px;
+    }
+
+    .risk {
+      border-color: #f1c4c0;
+      background: #fff7f6;
+    }
+
+    .habit-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .habit-card {
+      border: 1px solid var(--line);
+      padding: 14px;
+      min-height: 128px;
+    }
+
+    .habit-card h3 {
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .habit-card p {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    footer {
+      padding: 18px 32px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 880px) {
+      .page { padding: 12px; }
+      header, main, footer { padding-left: 18px; padding-right: 18px; }
+      header { grid-template-columns: 1fr; }
+      .meta { min-width: 0; }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric { border-right: 0; border-bottom: 1px solid var(--line); }
+      .metric:nth-child(odd) { border-right: 1px solid var(--line); }
+      .metric:nth-last-child(-n + 2) { border-bottom: 0; }
+      .two-col, .habit-grid { grid-template-columns: 1fr; }
+      .bar-row { grid-template-columns: 82px 1fr 42px; }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .page { max-width: none; padding: 0; }
+      .report { border: 0; box-shadow: none; }
+      .nav { display: none; }
+      section, .panel, .habit-card { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="report">
+      <header>
+        <div>
+          <h1>Developer Timeline 周报</h1>
+          <p class="subtitle">面向领导与个人复盘的综合视图: 聚焦本周交付成果、验证闭环、风险遗留和开发习惯。</p>
+        </div>
+        <div class="meta">
+          <strong>2026-06-22 至 2026-06-28</strong>
+          项目: claude-template<br>
+          生成时间: 2026-06-28 18:30<br>
+          输出模式: single-page-html
+        </div>
+      </header>
+
+      <nav class="nav">
+        <a href="#summary">摘要</a>
+        <a href="#outcomes">成果</a>
+        <a href="#evidence">证据</a>
+        <a href="#habits">习惯分析</a>
+        <a href="#risks">风险</a>
+        <a href="#next">下周计划</a>
+      </nav>
+
+      <main>
+        <section id="summary">
+          <div class="section-title">
+            <h2>一页摘要</h2>
+            <span class="hint">给领导快速判断本周价值</span>
+          </div>
+          <div class="summary-grid">
+            <div class="metric">
+              <div class="label">完成主题</div>
+              <div class="value">5</div>
+              <div class="note">需求澄清、spec/plan、subagent 流程、报告 HTML、探索收口</div>
+            </div>
+            <div class="metric">
+              <div class="label">关键文件改动</div>
+              <div class="value">14</div>
+              <div class="note">集中在 skills/ 下,未触碰业务代码</div>
+            </div>
+            <div class="metric">
+              <div class="label">验证动作</div>
+              <div class="value">8</div>
+              <div class="note">包含 diff check、规则搜索、状态确认</div>
+            </div>
+            <div class="metric">
+              <div class="label">未闭环风险</div>
+              <div class="value">1</div>
+              <div class="note">用户目录下 skill 同步仍需单独处理</div>
+            </div>
+          </div>
+          <div class="callout">
+            本周核心价值: 将 skill 流程从"工具说明和执行建议"推进为"前置决策、规格契约、计划锁定、实现忠实度审查"的完整链路。
+          </div>
+        </section>
+
+        <section id="outcomes">
+          <div class="section-title">
+            <h2>本周重点成果</h2>
+            <span class="hint">按目标聚合,不按工具流水账展开</span>
+          </div>
+          <div class="two-col">
+            <div class="panel">
+              <div class="panel-head">
+                <h3>交付成果</h3>
+                <span class="tag green">可复用</span>
+              </div>
+              <div class="panel-body">
+                <ul class="list">
+                  <li>
+                    <div class="item-title">重塑 clarify-requirements 为前置决策锁定协议</div>
+                    <div class="item-meta">新增 Spec 就绪问题池、决策分层、方案锁定式澄清和下游就绪判断。</div>
+                    <div class="tag-row">
+                      <span class="tag blue">需求前置</span>
+                      <span class="tag green">减少返工</span>
+                    </div>
+                  </li>
+                  <li>
+                    <div class="item-title">明确 PRD 是领导/业务方拍板文档</div>
+                    <div class="item-meta">把业务规则、统计口径、权限边界等需拍板项从实现期前移。</div>
+                    <div class="tag-row">
+                      <span class="tag violet">业务决策</span>
+                      <span class="tag green">可审阅</span>
+                    </div>
+                  </li>
+                  <li>
+                    <div class="item-title">将 spec/plan 定义为实现契约</div>
+                    <div class="item-meta">加入不可留到实现期的决策、必须严格执行、允许局部适配和 PLAN_CONFLICT。</div>
+                    <div class="tag-row">
+                      <span class="tag blue">执行契约</span>
+                      <span class="tag amber">防漂移</span>
+                    </div>
+                  </li>
+                  <li>
+                    <div class="item-title">收紧 subagent-implement 的忠实度审查</div>
+                    <div class="item-meta">实现侧新增 PLAN_FOLLOWED / PLAN_ADAPTED / PLAN_CONFLICT 报告语义。</div>
+                    <div class="tag-row">
+                      <span class="tag blue">多 agent 协作</span>
+                      <span class="tag green">可审计</span>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head">
+                <h3>本周数据</h3>
+                <span class="tag blue">timeline 聚合</span>
+              </div>
+              <div class="panel-body">
+                <div class="bar-list">
+                  <div class="bar-row">
+                    <span>文档编辑</span>
+                    <div class="bar-track"><div class="bar-fill" style="width: 84%"></div></div>
+                    <strong>84%</strong>
+                  </div>
+                  <div class="bar-row">
+                    <span>上下文读取</span>
+                    <div class="bar-track"><div class="bar-fill green" style="width: 62%"></div></div>
+                    <strong>62%</strong>
+                  </div>
+                  <div class="bar-row">
+                    <span>验证检查</span>
+                    <div class="bar-track"><div class="bar-fill amber" style="width: 48%"></div></div>
+                    <strong>48%</strong>
+                  </div>
+                  <div class="bar-row">
+                    <span>代码实现</span>
+                    <div class="bar-track"><div class="bar-fill violet" style="width: 18%"></div></div>
+                    <strong>18%</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="evidence">
+          <div class="section-title">
+            <h2>证据与交付物</h2>
+            <span class="hint">适合技术负责人追踪范围</span>
+          </div>
+          <div class="panel">
+            <table>
+              <thead>
+                <tr>
+                  <th>交付物</th>
+                  <th>涉及文件</th>
+                  <th>验证/状态</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>需求前置协议</td>
+                  <td><code>skills/clarify-requirements/SKILL.md</code></td>
+                  <td><span class="tag green">已检查</span></td>
+                  <td>增加用户确认硬门禁、Spec 就绪问题池和决策账本。</td>
+                </tr>
+                <tr>
+                  <td>业务拍板 PRD</td>
+                  <td><code>skills/write-prd/SKILL.md</code></td>
+                  <td><span class="tag green">已检查</span></td>
+                  <td>强调领导/业务方确认规则、口径、权限和验收。</td>
+                </tr>
+                <tr>
+                  <td>执行契约链路</td>
+                  <td><code>write-spec</code>, <code>write-plan</code>, <code>implementation</code></td>
+                  <td><span class="tag amber">需试跑</span></td>
+                  <td>语义已统一,建议后续用一个真实需求做端到端演练。</td>
+                </tr>
+                <tr>
+                  <td>HTML 报告 Demo</td>
+                  <td><code>skills/developer-timeline/demo-single-page-report.html</code></td>
+                  <td><span class="tag blue">待确认风格</span></td>
+                  <td>作为日报/周报/月报/习惯分析输出样式草案。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="habits">
+          <div class="section-title">
+            <h2>使用习惯分析</h2>
+            <span class="hint">给个人复盘和流程优化</span>
+          </div>
+          <div class="habit-grid">
+            <div class="habit-card">
+              <h3>工作模式</h3>
+              <p>本周主要是文档和流程设计型工作,读上下文后集中 patch,说明决策密度高于编码密度。</p>
+            </div>
+            <div class="habit-card">
+              <h3>验证习惯</h3>
+              <p>多次使用 <code>git diff --check</code> 和语义搜索验证一致性,适合文档型 skill 迭代。</p>
+            </div>
+            <div class="habit-card">
+              <h3>改进建议</h3>
+              <p>下一步建议增加真实需求试跑,用生成结果反向校准 skill 规则是否过重。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="risks">
+          <div class="section-title">
+            <h2>风险与遗留</h2>
+            <span class="hint">需要后续闭环的事项</span>
+          </div>
+          <div class="two-col">
+            <div class="callout risk">
+              <strong>主要风险:</strong> 当前仓库 skill 已更新,但用户目录下的同名 skill 曾出现内容异常,需要确认同步策略,避免实际调用时使用旧版本或坏版本。
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <h3>未闭环项</h3>
+                <span class="tag amber">跟进</span>
+              </div>
+              <div class="panel-body">
+                <ul class="list">
+                  <li>
+                    <div class="item-title">单页面 HTML 输出规范尚未写入 skill</div>
+                    <div class="item-meta">需先确认 demo 风格、布局和信息层级。</div>
+                  </li>
+                  <li>
+                    <div class="item-title">缺少真实 timeline 数据试跑</div>
+                    <div class="item-meta">当前 demo 使用样例数据,后续应接入真实 query/stats 输出校准。</div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="next">
+          <div class="section-title">
+            <h2>下周计划</h2>
+            <span class="hint">建议转化为可执行事项</span>
+          </div>
+          <div class="timeline">
+            <div class="timeline-item">
+              <div class="time">Step 1</div>
+              <div class="item-title">确认 HTML 报告风格</div>
+              <div class="item-meta">决定是否采用当前密集工作报告风格,或拆成领导版/个人分析版两套主题。</div>
+            </div>
+            <div class="timeline-item">
+              <div class="time">Step 2</div>
+              <div class="item-title">重写 developer-timeline skill</div>
+              <div class="item-meta">把 CLI 说明降级为数据采集层,主流程改为日报/周报/月报/习惯分析生成。</div>
+            </div>
+            <div class="timeline-item">
+              <div class="time">Step 3</div>
+              <div class="item-title">真实数据试跑</div>
+              <div class="item-meta">用最近 7 天 timeline 事件生成一份真实周报,检查摘要准确性和隐私暴露风险。</div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <span>Developer Timeline Report Demo</span>
+        <span>单文件 HTML · 内联 CSS · 无外部依赖 · 可打印</span>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

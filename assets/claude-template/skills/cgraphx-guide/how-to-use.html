@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cgraphx 怎么用 — 安装与使用</title>
+<style>
+:root {
+  --color-primary: #2B6CB0;
+  --color-primary-dark: #2C5282;
+  --color-text: #1A202C;
+  --color-text-secondary: #4A5568;
+  --color-text-tertiary: #718096;
+  --color-border: #E2E8F0;
+  --color-bg: #FFFFFF;
+  --color-bg-subtle: #F7FAFC;
+  --color-bg-code: #EDF2F7;
+  --color-bg-accent: #FFFAF0;
+  --color-cgraphx: #2B6CB0;
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--color-text);
+  background: var(--color-bg);
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.container {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Header */
+header {
+  padding: 80px 0 50px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 50px;
+}
+header .eyebrow {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+header h1 {
+  font-size: 38px;
+  font-weight: 700;
+  margin: 0 0 16px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+header .subtitle {
+  font-size: 18px;
+  color: var(--color-text-secondary);
+  margin: 0 0 24px;
+}
+header .meta {
+  font-size: 14px;
+  color: var(--color-text-tertiary);
+  margin: 0;
+}
+
+/* Section */
+section { margin-bottom: 56px; }
+
+h2 {
+  font-size: 26px;
+  font-weight: 600;
+  margin: 0 0 24px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--color-border);
+  letter-spacing: -0.01em;
+}
+
+p { margin: 0 0 16px; }
+p strong, li strong { font-weight: 600; }
+
+/* Inline code */
+code {
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.88em;
+  background: var(--color-bg-code);
+  color: var(--color-primary-dark);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Tags */
+.tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.tag-cgraphx { background: #EBF8FF; color: #2C5282; }
+
+/* Pipeline (单卡片,沿用左侧 code-workflow 卡片样式) */
+.pipeline {
+  border: 1px solid var(--color-border);
+  border-top: 4px solid var(--color-cgraphx);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  background: var(--color-bg);
+  margin: 0 0 24px;
+}
+.pipeline h4 {
+  margin: 0 0 20px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.phase {
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px dashed var(--color-border);
+}
+.phase:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.phase-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.phase-list {
+  padding-left: 20px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+}
+.phase-list li { margin-bottom: 6px; }
+.phase-list code { font-size: 12.5px; }
+.phase-list em {
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+  font-style: normal;
+}
+
+/* Highlight box */
+.highlight {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-cgraphx);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin: 0 0 16px;
+}
+.highlight p:last-child { margin-bottom: 0; }
+
+/* Tabs */
+.tabs-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.tab-btn {
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.tab-btn:hover { color: var(--color-primary); }
+.tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.tab-panel .phase-list code { font-size: 12.5px; }
+.tab-panel .phase-list em {
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+  font-style: normal;
+}
+.tab-panel .flow-diagram {
+  background: var(--color-bg-code);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  overflow-x: auto;
+  margin: 12px 0 0;
+  white-space: pre;
+  color: var(--color-text-secondary);
+}
+
+/* Lists */
+ul, ol {
+  padding-left: 24px;
+  margin: 0 0 16px;
+}
+li { margin-bottom: 6px; }
+
+/* Footer */
+footer {
+  margin-top: 80px;
+  padding: 30px 0;
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+}
+footer p { margin: 0; }
+
+/* docs/ 目录速查 */
+.docs-tree {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-cgraphx);
+  border-radius: var(--radius);
+  padding: 22px 26px;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: var(--color-text);
+  overflow-x: auto;
+  margin: 0 0 16px;
+  white-space: pre;
+}
+.docs-tree b {
+  font-weight: 600;
+  color: var(--color-primary-dark);
+}
+.docs-tree .skill {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.docs-tree .ann {
+  color: var(--color-text-tertiary);
+}
+.docs-tree .must {
+  color: #2e7d32;
+  font-weight: 600;
+}
+.docs-tree .opt {
+  color: #e65100;
+  font-weight: 600;
+}
+.docs-legend {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0 0 20px;
+}
+.docs-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.docs-legend .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.docs-legend .dot.must { background: #2e7d32; }
+.docs-legend .dot.opt { background: #e65100; }
+.docs-legend .dot.local { background: var(--color-cgraphx); }
+
+/* Terminal-style install flow */
+.terminal {
+  background: #282c34;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+  margin: 0 0 24px;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+.terminal-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 14px;
+  background: #21252b;
+  border-bottom: 1px solid #181a1f;
+}
+.terminal-titlebar .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.terminal-titlebar .dot.red { background: #ff5f56; }
+.terminal-titlebar .dot.yellow { background: #ffbd2e; }
+.terminal-titlebar .dot.green { background: #27c93f; }
+.terminal-title {
+  margin-left: 10px;
+  font-size: 12.5px;
+  color: #5c6370;
+  letter-spacing: 0.02em;
+}
+.terminal-body {
+  padding: 20px 22px;
+  font-size: 13.5px;
+  line-height: 1.95;
+  color: #abb2bf;
+  overflow-x: auto;
+}
+.t-line { white-space: pre-wrap; }
+.t-prompt { color: #98c379; font-weight: 600; }
+.t-path { color: #61afef; }
+.t-cmd { color: #e5c07b; }
+.t-flag { color: #c678dd; }
+.t-comment { color: #5c6370; }
+.t-sep {
+  color: #4b5263;
+  margin: 16px 0 2px;
+  font-size: 12.5px;
+  letter-spacing: 0.03em;
+}
+.t-note {
+  color: #56b6c2;
+  font-size: 12.5px;
+  padding-left: 18px;
+  margin: 2px 0 0;
+}
+.t-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  background: #abb2bf;
+  vertical-align: text-bottom;
+  margin-left: 3px;
+  animation: t-blink 1.1s steps(2, start) infinite;
+}
+@keyframes t-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .t-cursor { animation: none; }
+}
+@media (max-width: 768px) {
+  .terminal-body { padding: 16px; font-size: 12.5px; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container { padding: 0 18px; }
+  header { padding: 50px 0 30px; margin-bottom: 30px; }
+  header h1 { font-size: 28px; }
+  header .subtitle { font-size: 16px; }
+  h2 { font-size: 22px; }
+  body { font-size: 15px; }
+  .pipeline { padding: 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<header>
+  <div class="eyebrow">cgraphx 安装与使用</div>
+  <h1>cgraphx 怎么用</h1>
+  <p class="subtitle">本地优先的代码智能 · 给 AI agent 用的代码图谱</p>
+  <p class="meta">最后更新:2026-07-13</p>
+</header>
+
+<section>
+  <h2>安装流程</h2>
+
+  <div class="terminal">
+    <div class="terminal-titlebar">
+      <span class="dot red"></span>
+      <span class="dot yellow"></span>
+      <span class="dot green"></span>
+      <span class="terminal-title">bash — 安装 cgraphx</span>
+    </div>
+    <div class="terminal-body">
+      <div class="t-line"><span class="t-prompt">$</span> npm install <span class="t-flag">-g</span> cgraphx <span class="t-comment"># 装 CLI(Node ≥ 20 且 &lt; 25)</span></div>
+
+      <div class="t-sep"># ── 项目级 · 每项目一次 ──────────────────────</div>
+      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx init <span class="t-comment"># 建 .cgraphx/ 代码图谱索引 + 配置文件</span></div>
+      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx install <span class="t-comment"># 写 MCP 配置 + 部署 skills 到 .claude/</span></div>
+      <div class="t-note">↳ 两者可同时执行,但 <span class="t-cmd">cgraphx init</span> 必须先发起</div>
+
+      <div class="t-sep"># ── 卸载 · 可选 ──────────────────────────────</div>
+      <div class="t-line"><span class="t-prompt">$</span> npm uninstall <span class="t-flag">-g</span> cgraphx</div>
+      <div class="t-line"><span class="t-prompt">$</span> rm <span class="t-flag">-rf</span> .cgraphx/ <span class="t-comment"># 清索引数据</span><span class="t-cursor"></span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>使用流程</h2>
+
+  <div class="tabs-bar">
+    <button class="tab-btn active" onclick="switchTab(this, 'tab-dev')">开发流程</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-api-test')">接口测试流程</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-unit-test')">单元测试流程</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-knowledge')">知识库管理</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-schema')">模型知识库管理</button>
+  </div>
+
+  <div id="tab-dev" class="tab-panel active">
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">做需求的主线。</p>
+    <ul class="phase-list">
+      <li><strong style="color:var(--color-primary);">必经</strong> <code>/clarify-requirements</code> 澄清意图、业务边界、技术边界</li>
+      <li><span class="opt">可选</span> <code>/write-prd</code> 写业务文档<em>（给业务方 / 领导确认）</em></li>
+      <li><strong style="color:var(--color-primary);">核心</strong> <code>/write-spec</code> 写技术规格<em>（归档业务行为 / 规则 / 接口 / 数据）</em></li>
+      <li><span class="opt">可选</span> <code>/write-plan</code> 拆执行计划<em>（给 agent 执行）</em></li>
+      <li><strong style="color:var(--color-primary);">必经</strong> <code>/implementation</code> 实现<em>（简单任务）</em>或 <code>/subagent-implement</code><em>（复杂多任务）</em></li>
+    </ul>
+    <div class="highlight">
+      <p>日常默认 2 步:澄清 + 实现。复杂需求按需补 prd / spec / plan。cgraphx 在背后自动同步代码图谱,你不需要主动跑命令。</p>
+    </div>
+  </div>
+
+  <div id="tab-api-test" class="tab-panel">
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>需求开发完成后</strong></p>
+    <ul class="phase-list">
+      <li><code>/write-api</code> 基于 spec 或已有代码生成 bruno 测试接口<em>（.bru + 测试规格 + 多环境配置）</em></li>
+      <li><code>/run-api-test</code> 跑接口测试 + 核实写接口 DB 副作用 + 出报告 <em>—— write-api 后执行;写接口必须查 DB 验数据</em></li>
+    </ul>
+    <div class="highlight">
+      <p>产物落在 <code>docs/bruno/</code>（接口定义）+ <code>docs/features/&lt;前缀&gt;/</code>（测试规格 + 报告）。两个 skill 顺序依赖,但 run-api-test 也可独立跑（针对已有 .bru）。</p>
+    </div>
+  </div>
+
+  <div id="tab-unit-test" class="tab-panel">
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">和开发流程平行,共享 spec 作为输入,时序任意<em>（典型是代码先行、测试补充）</em>。</p>
+    <ul class="phase-list">
+      <li><code>/write-unit-test-spec</code> 基于 spec 产出单元测试规格文档<em>（零代码依赖,该测哪些路径/边界/异常）</em> <span class="opt">可选</span> <em>write-spec 后任意时机</em></li>
+      <li><code>/write-unit-test-code</code> 基于测试规格 + 已有实现,填实测试代码 + 跑测试 + 出报告 <em>—— 找不到测试规格则退出要求先跑 write-unit-test-spec</em></li>
+    </ul>
+    <div class="flow-diagram">                         ┌──→ /write-plan → /implementation              开发流程 · 写代码
+                         │
+/clarify-requirements → /write-spec ──┤
+                         │
+                         └──→ /write-unit-test-spec → /write-unit-test-code   单元测试 · 写测试</div>
+    <div class="highlight">
+      <p>两条独立线路:开发流程写代码,单元测试流程写测试。产物落在 <code>docs/features/&lt;前缀&gt;/</code>（测试规格 + 报告）+ 项目测试目录（.test.ts）。</p>
+    </div>
+  </div>
+
+  <div id="tab-knowledge" class="tab-panel">
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">沉淀业务决策、概念定义、历史教训到跨需求共享的知识库。</p>
+    <ul class="phase-list">
+      <li><code>/code-impact-markdown</code> 任何有价值的会话都可以触发沉淀 <em>—— 你只需要关注这一个指令</em></li>
+      <li><code>/code-impact-init</code> 新项目起步时批量探索 + 写知识库 <span class="opt">可选</span> <em>接手陌生项目时跑</em></li>
+      <li><code>knowledge-recall</code> 聊业务 / 不懂术语 / 对齐黑话时,派子 agent 召回相关概念 <em>—— agent 自动触发</em></li>
+      <li><code>code-impact-api</code> 已知概念名,精确查知识库 <em>—— agent 自动触发</em></li>
+    </ul>
+    <div class="highlight">
+      <p>产物落在 <code>docs/knowledge/*.md</code>。写文件前必须过 <code>cgraphx docs validate</code> 校验,非法文件会被索引跳过。</p>
+    </div>
+  </div>
+
+  <div id="tab-schema" class="tab-panel">
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">数据库 schema 的 DDL 快照 + 探索补充,让 AI 理解表结构和业务语义。</p>
+    <ul class="phase-list">
+      <li><code>/export-table-ddl</code> 按 profile 批量导出项目用到的表的 CREATE TABLE DDL,按工程分目录 <em>—— 项目接入时跑一次,schema 变了重跑</em></li>
+      <li><code>db-query</code> 查数据时读本地 DDL 文件<em>（首选）</em>,文件不存在才连 DB 兜底;探索发现的隐式关系/含义/陷阱 append 到对应表的 DISCOVERED 块 <em>—— agent 自动触发</em></li>
+    </ul>
+    <div class="highlight">
+      <p>产物落在 <code>docs/schema-knowledge/&lt;工程&gt;/</code>（INDEX.md + ddl/&lt;table&gt;.sql + pending-comments.sql）。重 dump 时 DISCOVERED 块自动保留,积累不丢。</p>
+    </div>
+  </div>
+
+  <script>
+  function switchTab(btn, panelId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(panelId).classList.add('active');
+  }
+  </script>
+</section>
+
+<section>
+  <h2>docs/ 目录速查</h2>
+  <p>翻文档时知道去哪儿找 —— 哪个目录由哪个 skill 自动维护。</p>
+
+  <div class="docs-legend">
+    <span><span class="dot must"></span>必有</span>
+    <span><span class="dot opt"></span>可选(按需)</span>
+    <span><span class="dot local"></span>本地测试相关</span>
+  </div>
+
+  <pre class="docs-tree"><b>docs/</b> 文档工程                                             <span class="ann"># 必有</span>
+├── <b>bruno/</b>  API接口目录          <span class="ann"># write-api + run-api-test 维护; bruno app 可以直接打开这个目录识别为接口列表</span>
+│   ├── bruno.json
+│   ├── <b>environments/</b>
+│   │   ├── local.bru
+│   │   ├── staging.bru
+│   │   └── production.bru
+│   ├── <b>common/</b>
+│   │   └── &lt;接口名&gt;/&lt;场景&gt;.bru
+│   └── <b>&lt;服务名&gt;/</b>
+│       └── <b>&lt;需求前缀&gt;/</b>
+│           └── <b>&lt;接口名&gt;/</b>
+│               ├── &lt;场景1&gt;.bru
+│               └── &lt;场景2&gt;.bru
+│
+├── <b>features/</b>   需求目录
+│   └── <b>&lt;日期&gt;-&lt;编号&gt;-&lt;前缀&gt;/</b>  <span class="ann"># 如 2026-07-03-CRM-req19230-号百商品详情查询接口</span>
+│       ├── &lt;前缀&gt;-spec.md          <span class="skill">/write-spec</span>           <span class="must">必选</span>  <span class="ann">clarify 后执行</span>
+│       ├── &lt;前缀&gt;-需求文档.md       <span class="skill">/write-prd</span>            <span class="opt">可选</span>  <span class="ann">需要需求文档时,spec 之后</span>
+│       ├── <b>plan/</b>                <span class="skill">/write-plan</span>           <span class="opt">可选</span>  <span class="ann">大需求,spec/prd 后</span>
+│       ├── &lt;前缀&gt;-单元测试-spec.md  <span class="skill">/write-unit-test-spec</span>  <span class="opt">可选</span>  <span class="ann">spec 后任意时机</span>
+│       ├── &lt;前缀&gt;-单元测试报告.md   <span class="skill">/write-unit-test-code</span>  <span class="opt">可选</span>  <span class="ann">spec+开发完成后</span>
+│       ├── &lt;前缀&gt;-api-spec.md      <span class="skill">/write-api</span>            <span class="opt">可选</span>  <span class="ann">接口测试,开发完成后</span>
+│       ├── &lt;前缀&gt;-测试报告.md       <span class="skill">/run-api-test</span>          <span class="opt">可选</span>  <span class="ann">write-api 后自动产出</span>
+│       ├── &lt;前缀&gt;-测试验证.jsonl    <span class="skill">/run-api-test</span>          <span class="opt">可选</span>  <span class="ann">自动产出</span>
+│       └── &lt;前缀&gt;-设计文档.md       <span class="skill">/code-impact-docgen</span>   <span class="opt">可选</span>  <span class="ann">功能稳定后执行</span>
+│
+├── <b>knowledge/</b>   知识库目录                         <span class="skill">/code-impact-markdown</span> <span class="ann">任何有价值的会话都可以触发沉淀;</span>
+│                                                 <span class="skill">/code-impact-init</span> <span class="ann">新项目起步可以批量写 [可选]</span>
+│
+├── <b>schema-knowledge/</b>   模型知识库目录  <span class="skill">/export-table-ddl</span> <span class="ann">批量初始化工程模型, 按工程分目录</span>
+│   ├── xw-inst                      <span class="skill">/db-query</span> <span class="ann">自动读文件内的模型, 兜底连接数据库获取数据, 经验回写到对应的 ddl文件</span>
+│   │   ├── INDEX.md                 <span class="ann"># 表名 + 表注释,agent 进目录第一件事读</span>
+│   │   ├── pending-comments.sql     <span class="ann"># DBA 待执行 COMMENT SQL(action 队列,执行一条删一条)</span>
+│   │   └── ddl/
+│   │       ├── &lt;table&gt;.sql          <span class="ann"># 完整 DDL + 末尾 DISCOVERED 块(db-query 探索补充的隐式关系/含义/陷阱)</span>
+│   │       └── &lt;table&gt;.sql
+│   ├── xw-order                     <span class="ann"># 结构同 xw-inst</span>
+│   └── xw-so                        <span class="ann"># 结构同 xw-inst</span>
+  </pre>
+
+  <div class="highlight">
+    <p><strong>两个核心目录</strong>——<code>docs/features/</code> 是单次需求工作目录(必须有 spec.md),<code>docs/knowledge/</code> 是跨需求共享的业务知识库。<strong>bruno/ 和 schema-knowledge/ 按需出现</strong>,只在跑接口测试 / 查 DB 时产生。</p>
+  </div>
+</section>
+
+<footer>
+  <p>cgraphx 使用说明 · 2026-07-16</p>
+</footer>
+
+</div>
+
+</body>
+</html>

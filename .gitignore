@@ -1,1 +1,19 @@
-/.idea/
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# cgraphx runtime data
+.cgraphx/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# cgraphx 1.x usage-environment products (not part of cgraphx 2.0 source repo)
+.claude/
+.mcp.json

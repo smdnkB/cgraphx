@@ -1,0 +1,26 @@
+{
+  "skill_name": "export-table-ddl",
+  "evals": [
+    {
+      "id": 1,
+      "name": "single-project-from-code",
+      "prompt": "我在做一个客户管理服务的代码理解,项目根目录在 ~/work/customer-svc,用 zqassis 这个 pg profile。帮我把这个项目用到的所有表的 DDL 导出来,放到 docs/schema-dump/ 下,工程名就叫 customer-svc。表名从代码里 grep 出来就行,导出前先给我看一眼表清单确认。",
+      "expected_output": "docs/schema-dump/customer-svc/INDEX.md + ddl/*.sql;INDEX.md 列出所有表名+注释;导出前用户确认过表清单",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "multi-project-monorepo",
+      "prompt": "我们的 monorepo 在 ~/work/platform,下面 services/order-svc 和 services/cust-svc 两个工程,各自有自己的表。用 xw-order 和 xw-cust 两个 mysql profile 分别导出(每个工程对应一个 profile),放到 docs/schema-dump/ 下按工程分目录。表清单用全库导出(--tables all)。",
+      "expected_output": "docs/schema-dump/order-svc/ + docs/schema-dump/cust-svc/,各自 INDEX.md + ddl/,两个工程用了各自的 profile",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "user-provided-table-list",
+      "prompt": "我有一个表清单文件 /tmp/核心表.txt,每行一个表名,大概 30 张表。用 zqassis profile 导出到 docs/schema-dump/core/ 下,工程名 core。直接导出不用让我确认表清单了。",
+      "expected_output": "docs/schema-dump/core/INDEX.md + ddl/*.sql;跳过表清单确认步骤直接导出;清单里不存在于 DB 的表在 INDEX 里标 missing",
+      "files": []
+    }
+  ]
+}
