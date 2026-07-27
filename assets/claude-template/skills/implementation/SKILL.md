@@ -31,7 +31,7 @@ description: 用户要求根据已确认的 plan、spec、任务清单、实现�
 
 2. **读取代码上下文**
     - 查看相关文件、调用链、测试、配置和项目约定。
-    - 读 plan 引用的适用规范(`docs/guides/` 下:ddl / model / interface / coding);无 plan 时自行识别——动 schema 必读 ddl.md,新增接口读 interface-standards.md。风格级规范(错误处理/日志/注释)是写法约束;契约与规范冲突时按 spec > plan > 规范 服从上层,实质冲突上报。
+    - 读 plan 引用的适用规范(`docs/guides/` 下:ddl / model / interface / coding);无 plan 时自行识别——动 schema 必读 ddl.md,新增接口读 interface-standards.md。**适用的规范文件缺失 → 中断,提示用户先用 init-project-guides 补齐**,补齐后(或用户明确表示不需要规范)才继续——没有规范写不出标准的代码。风格级规范(错误处理/日志/注释)是写法约束;契约与规范冲突时按 spec > plan > 规范 服从上层,实质冲突上报。
     - 只读取足以安全实现的上下文。
 
 3. **实现变更**
