@@ -1,13 +1,20 @@
 ---
 name: code-impact-markdown
-description: 维护可供 cgraphx docs 扫描的 Markdown 知识文件。用于创建、编辑、规范化或提取元数据,将对话、代码探索结果、教程、指南、运维手册、安装说明、决策、经验教训或面向 AI 的项目知识保存为可被本地图谱扫描的 .md 文件。
+description: 维护可供 cgraphx docs 索引的 Markdown 知识文件(docs/knowledge/)。用于创建、编辑、规范化或提取元数据,将对话、代码探索结果、教程、指南、运维手册、安装说明、决策、经验教训、业务实体概念或面向 AI 的项目知识保存为可被 cgraphx docs 检索的 .md 文件。
 ---
 
 # Code Impact Markdown
 
-当项目知识需要以可被图谱检索的方式持久化时,使用此 skill。
+当项目知识需要以可被 `cgraphx docs` 检索的方式持久化时,使用此 skill。
+
+## 定位:知识库 = 索引层,不是百科层
+
+知识库是**业务概念与代码的索引**:条目只存代码给不了的东西(概念定位、黑话映射、跨文件才看得出的关系、代码入口指针),行为细节永远让 agent 从代码入口进去读。**代码是事实来源,条目是指北针。** 不存细节,所以没有东西可腐烂。
+
+**重构幸存测试**(一条知识该不该进库的判据):代码重构之后这条还成立吗?概念名、文件级入口、跨文件关系成立;行号、步骤时序、实现逻辑不成立——后者一律不写。
 
 典型输入:
+- 业务实体的概念定义(商品、订单这类,见「双层结构」节)
 - 有价值的对话摘要
 - 代码探索或分析结果
 - 架构或实现发现
@@ -19,7 +26,7 @@ description: 维护可供 cgraphx docs 扫描的 Markdown 知识文件。用于�
 
 ## 保存目录
 
-所有可被图谱扫描的 Markdown 知识文件必须保存到:
+所有知识文件必须保存到:
 
 ```text
 docs/knowledge/
@@ -29,77 +36,29 @@ docs/knowledge/
 
 ## 必要流程
 
-1. 确定目标 Markdown 路径(在 `docs/knowledge/` 下)。
-2. **在命名新概念之前,先查询已有的 concepts、domains、tags**(见下节)。
-3. 当含义相同时,复用规范名称。
-4. 为替代名称添加 `aliases`,而非创建重复的 concept。
-5. 如果是更新已有的 Markdown 文件,先读取并保留当前 frontmatter。
-6. 编写简洁的 frontmatter,使文档可被图谱解析。
-7. 正文必须包含 `## Summary`(唯一进索引的章节),其他章节按 `document_type` 选模板自由组织。
-8. **Write 后立刻 `cgraphx docs validate <file>` 校验**(见下节),非法则修 frontmatter 再 Write 再校验,直到合法。
-9. 检查是否已有文档覆盖了相同主题。当三个合并条件全部满足时(见文档合并检查),提示用户是否合并。
-10. 编辑后询问是否触发扫描。**未经确认不要运行扫描**。
+1. 确定目标路径(`docs/knowledge/` 下,一个文档一个主题)。
+2. **命名新概念前,先查已有词汇**(见「查询已有词汇」);含义相同复用规范名,替代名称走 `aliases`,不造重复 concept。
+3. 更新已有文件时,先读取并保留其 frontmatter(见「已有文档维护」)。
+4. 写 frontmatter(见「Frontmatter 规范」);正文必须包含 `## Summary`——唯一进索引的章节。
+5. **Write 后立刻 `cgraphx docs validate <file>`**,非法则修 frontmatter 再 Write 再校验,直到合法(见「校验 frontmatter」)。
+6. 做合并检查,三个条件全部满足时才提示用户(见「合并检查」)。
+7. 询问是否触发扫描。**未经用户确认不要运行 `cgraphx docs index`**(见「扫描提示」)。
 
-## 查询已有词汇
+## 双层结构:实体条目与流程条目
 
-扫描已运行过时,先用 CLI 列出已有 concept/domain/tag,避免造重复名:
+知识库是**双层结构**:**实体层**(`concept` 条目,一个业务实体一个文档)+ **流程层**(exploration/guide 等条目,一个业务流程一个文档)。两层靠概念引用连接,这是召回精度的根基:
 
-```bash
-cgraphx docs concepts              # 列所有 concept + 关联文档数 + 所属 domain
-cgraphx docs domains               # 列所有 domain
-cgraphx docs tags                  # 列所有 tag
-```
+- **实体主条目**(`document_type: concept`):业务实体 = 能用名词指代、有属性和生命周期、被多个流程引用(如"商品"、"礼包"、"订单")。按 [template-concept.md](template-concept.md) 写——条目只做定位与指引(定义、黑话、跨文件约束、代码入口),行为细节留给代码。
+- **流程条目的正向引用**:流程条目必须在 `concepts:` 里声明所涉业务实体(用规范实体名)。这是反查的依据,漏标则该流程从实体视图里消失。
+- **反查 = 派生的"参与业务"视图**:`cgraphx docs find --concept=<实体>` 返回所有引用该实体的文档。**任何条目里都不手动维护"参与业务"全量清单**——手动维护必陈旧,反查永远最新。
+- **同名严格性**:流程条目里的实体名与实体条目的规范 concept 名必须逐字一致。建实体条目前先 `cgraphx docs concepts` 查名,错一个名反查就断。
+- **不是所有概念都配主条目**:机制概念(Scene 分发机制、准三层)、动作概念(礼包续订)留在流程/架构条目里当 tag;只有业务实体升级为 concept 条目。
 
-查找特定术语或概念:
-
-```bash
-cgraphx docs find --q=Redis         # 关键词子串匹配(LIKE on title + summary)
-cgraphx docs find --concept=Redis   # 按 concept 精确过滤
-```
-
-如果索引尚未建立(刚 clone 仓库 / 还没跑过 `cgraphx docs index`),直接 grep 本地 Markdown 的 frontmatter:
-
-```bash
-grep -rl "concepts:" docs/knowledge/ --include="*.md"
-```
-
-## 校验 frontmatter(写文件前必跑)
-
-cgraphx 提供 `docs validate` 子命令,写文件前**必须**跑一遍校验,通过才保存:
-
-```bash
-cgraphx docs validate <file>        # 文本输出,exit 0 合法 / 2 非法
-cgraphx docs validate <file> --json # JSON 输出 {valid, skipReason, detail}
-```
-
-校验内容(规则与 `cgraphx docs index` 扫描时一致,单一事实源 `src/markdown/validator.ts`):
-
-| 字段 | 校验 |
-|---|---|
-| `title` | 非空字符串 |
-| `document_type` | 16 枚举之一(见下) |
-| `domains` | 至少 1 项 |
-| `concepts` | 至少 1 项 |
-| `status` | 4 枚举之一(`draft`/`active`/`superseded`/`deprecated`) |
-| `source_type` | 7 枚举之一(见下) |
-| `updated` | `YYYY-MM-DD` 格式 |
-
-**流程**:Write 文件 → `cgraphx docs validate <file>` → 非法则**修 frontmatter 再 Write 再校验**,直到合法才告知用户文件已保存。非法文件即使写了,`cgraphx docs index` 扫描时也会整个跳过 —— 所以校验前置不是可选,是必须。
-
-## 命名规则
-
-- 每个概念或领域使用一个规范名称。
-- 优先用 cgraphx 已索引的名称(用 `cgraphx docs concepts` 查)。
-- 不要为同一概念创建翻译后的重复项,如 `Redis`、`redis server`、`Redis Installation`。
-- 将替代名称放入 `aliases`。
-- **concept 用项目实际话语里的规范名**:代码标识符/协议/产品名保留真实形式(多为英文,如 `Redis`、`SqliteStore`),领域/业务/流程概念用项目语言(本项目多为中文,如 `本地开发环境`、`知识图谱`)—— 不要把中文概念硬翻成英文。完整规则见「语言」节。
-- 保持 domain 名称稳定且有界,如 `order-service`、`infra`、`cache`、`billing`。
-- 使用 `tags` 进行松散分组;不要用 tags 替代 concepts 或 domains。
-- **文件名用项目实际话语里的词,不二次翻译**:文件名是主题 slug,跟着项目里实际怎么叫走 —— 常说"流程"就用"流程",常说"redis"就用"redis",不要把"流程"译成 process、把"redis"译成"缓存"。代码组件/架构类主题(本来就是英文标识符)自然用英文(如 `extraction-orchestrator.md`);业务/流程类主题用项目语言(如 `任务办理流程.md`、`redis-安装问题.md`)。中英混排按实际用词,不强制统一。文件名不进索引、不参与检索(只有 title/concept/Summary 进),中文文件名不会影响命中 —— 它只是 slug,中文表达交给 title 和正文。
+沉淀时机:功能交付完成时是沉淀实体知识的最佳时点(此时对涉及实体的理解最新鲜最完整)。交付流程(implementation/subagent-implement)收尾会提示识别本次新增/引用的实体,确认后走本 skill。只从一两个流程抽出的实体条目用 `status: draft` + Open Questions 显式标记未补全。
 
 ## Frontmatter 规范
 
-每个可被图谱扫描的 Markdown 文件顶部必须使用 YAML frontmatter:
+每个知识文件顶部必须使用 YAML frontmatter:
 
 ```yaml
 ---
@@ -129,7 +88,7 @@ updated: 2026-04-28
 ---
 ```
 
-**`related_code` 语义**:cgraphx **仅作元数据保存**(JSON 数组存表),**不建立到代码符号的反向链接**(A 范围下的设计决策,文档与代码图完全隔离)。值可以是文件路径、全限定类名或方法引用,作为人类/未来工具的链接提示。
+**`related_code` 语义**:仅作元数据保存(JSON 数组存表),**不建立到代码的反向链接,也不校验路径是否存在**。值用文件级路径(稳定)或全限定类名,作为人类/未来工具的链接提示——别写行号,重构即失效。
 
 **必填字段(7 个)**:
 
@@ -145,7 +104,7 @@ updated
 
 **时间格式**:`YYYY-MM-DD`(ISO 8601 日期,不含时分)。示例:`2026-04-28`。`created` 字段可选但推荐填写。
 
-**`document_type` 枚举(16 个)**:
+**`document_type` 枚举(17 个)**:
 
 ```text
 conversation     # 对话总结
@@ -164,6 +123,7 @@ installation     # 安装说明
 api              # API 文档
 faq              # 常见问题
 note             # 笔记
+concept          # 实体概念主条目(索引层枢纽,见「双层结构」节)
 ```
 
 **`source_type` 枚举(7 个)**:
@@ -187,9 +147,9 @@ superseded # 已被替代
 deprecated # 已废弃
 ```
 
-## 稳定标题(只有 Summary 进索引)
+## Summary 章节(唯一进索引)
 
-**唯一进 cgraphx 索引的章节是 `## Summary`(或中文别名 `## 摘要`)**。其他章节保留在文件里,AI 想看就 Read 文件。
+**唯一进索引的章节是 `## Summary`(或中文别名 `## 摘要`)**。其他章节保留在文件里,AI 想看就 Read 文件。
 
 ```text
 ## Summary        ← 唯一进索引(标题大小写敏感,必须正好两个 # + 一个空格)
@@ -197,19 +157,8 @@ deprecated # 已废弃
 
 ## Context        ← 不进索引,留文件里供 Read
 ## Decisions      ← 同上
-## Steps          ← 同上
-...               ← 任意其他章节,自由组织
+...               ← 任意其他章节,按模板自由组织
 ```
-
-**写作建议**(虽不进索引,但让文档更系统):按 `document_type` 选模板(`template-memory.md` / `template-guide.md` / `template-runbook.md`),模板里的章节结构是写作指南,不是索引契约。
-
-## 语言
-
-文档正文必须用**中文**编写。技术术语、代码标识符、文件路径、函数名和类名保留原始英文形式。`## Summary` 标题保留英文(大小写敏感)。
-
-**Concept 与 aliases 的语言**:concept 用项目实际话语里的规范名 —— 代码标识符/协议/产品名保留真实形式(多为英文,如 `Redis`、`SqliteStore`、`FTS5`),领域/业务/流程概念用项目语言(本项目多为中文,如 `本地开发环境`、`知识图谱`、`任务办理流程`)。**不要把中文概念硬翻成英文。** aliases 放这个 concept 的其他语言译名 + 同义词 + 缩写(例:concept `知识图谱` → aliases `[Knowledge Graph, KG]`;concept `SqliteStore` → aliases `[SQLite 存储层]`)。
-
-理由:cgraphx 关键词搜索是 LIKE 子串匹配(concept 名 + title + Summary 都参与),用项目实际用词,中文查询才能直接命中。dedup 不受影响(同名 concept 跨文档自动合并)。
 
 ## 文档模板
 
@@ -220,71 +169,81 @@ deprecated # 已废弃
 | conversation, exploration, finding, analysis, decision, lesson, warning, rule, architecture | [template-memory.md](template-memory.md) |
 | guide, tutorial, installation, api, faq, note | [template-guide.md](template-guide.md) |
 | runbook | [template-runbook.md](template-runbook.md) |
+| concept | [template-concept.md](template-concept.md) |
 
-**注意**:模板里的章节结构是**写作指南**(让文档更系统),cgraphx **只提取 `## Summary`** 进索引,其他章节留文件里。
+模板里的章节结构是**写作指南**(让文档更系统),不是索引契约——索引只提取 `## Summary`。
 
-## 已有 Markdown 处理
+## 命名与语言
 
-当文件已存在时:
-- 首先提取当前 frontmatter。
-- 保留未知的元数据字段,除非它们明显有误。
-- 将 `domains`、`concepts`、`aliases`、`tags`、`owners`、`related_code`、`related_documents` 规范化为 YAML 列表。
-- 添加缺失的必填字段。
-- 未检查已有用法前,不要重命名 concepts 或 domains。
-- 保留有用的已有标题;仅在能改善可读性时才规范化标题。
-- 优先在已有结构下追加带日期的新发现,而非重写历史结论(除非已过时)。
+**concept 命名**:
 
-## 文档合并检查
+- 每个概念使用一个规范名称;优先复用已索引的名称(用 `cgraphx docs concepts` 查),不要为同一概念创建翻译后的重复项(如 `Redis`、`redis server`、`Redis Installation` 算重复)。
+- **concept 用项目实际话语里的规范名**:代码标识符/协议/产品名保留真实形式(多为英文,如 `Redis`、`SqliteStore`、`FTS5`);领域/业务/流程概念用项目语言(本项目多为中文,如 `本地开发环境`、`任务办理流程`)。**不要把中文概念硬翻成英文。**
+- `aliases` 放该概念的其他语言译名 + 同义词 + 缩写(例:concept `知识图谱` → aliases `[Knowledge Graph, KG]`)。
 
-编写新 Markdown 文档后,检查是否已有文档覆盖了相同主题。仅当以下三个条件**同时满足**时才提示用户。
+**为什么这样命名(检索机制决定)**:
 
-### 三个合并条件
+- `find --q=<词>` 是**整串 LIKE 子串匹配,只匹配 title + Summary**——concept 名不参与。所以口语/黑话变体要在 Summary 里出现一次才能被 `--q` 命中。
+- `find --concept=<名>` 是 concept **精确过滤**,knowledge-recall 子 agent 做语义匹配的也是 concept 名——规范名用项目实际用词,这两条路才准。
+- `aliases` 只用于归一与展示,不参与任何搜索。
 
-1. **document_type 匹配或兼容** —— 已有文档具有相同的 `document_type`,或类型用途相同(例如 `guide` 和 `installation`、`conversation` 和 `exploration`)。
-2. **核心概念高度重叠** —— 新文档的至少一个核心 concept 出现在已有文档的 `concepts` frontmatter 中。仅边缘概念重叠不足以触发。
-3. **范围相似** —— 标题或正文范围重叠,不仅仅是提到了相同概念,而是覆盖了相同的知识领域。
+**语言**:
 
-当任一条件不满足时,跳过合并提示,继续第 9 步。
+- 文档正文必须用**中文**编写;技术术语、代码标识符、文件路径、函数名和类名保留原始英文形式。`## Summary` 标题保留英文(大小写敏感)。
 
-### 如何检查
+**domain 与 tags**:
 
-用 cgraphx docs find 查找候选文档(已扫描过):
+- domain 名称稳定且有界,如 `order-service`、`infra`、`cache`、`billing`。
+- tags 用于松散分组;不要用 tags 替代 concepts 或 domains。
+
+**文件名**:
+
+- 文件名是主题 slug,跟着项目里实际怎么叫走——常说"流程"就用"流程",常说"redis"就用"redis",不要二次翻译(不要把"流程"译成 process、把"redis"译成"缓存")。代码组件类主题自然用英文(如 `extraction-orchestrator.md`);业务/流程类用项目语言(如 `任务办理流程.md`)。
+- 文件名不进索引、不参与检索(只有 title + Summary 进关键词搜索),中文文件名不影响命中。
+
+## 查询已有词汇
+
+扫描已运行过时,先用 CLI 列出已有 concept/domain/tag,避免造重复名:
 
 ```bash
-cgraphx docs find --concept=<new-doc-core-concept>
-cgraphx docs find --q=<keyword-from-title>
+cgraphx docs concepts              # 列所有 concept + 关联文档数 + 所属 domain
+cgraphx docs domains               # 列所有 domain
+cgraphx docs tags                  # 列所有 tag
 ```
 
-或当索引未建立时直接 grep 本地:
+查找特定术语或概念:
 
 ```bash
-grep -rl "concepts:" docs/knowledge/ --include="*.md" | head -20
+cgraphx docs find --q=Redis         # 整串 LIKE 子串,匹配 title + Summary
+cgraphx docs find --concept=Redis   # 按 concept 精确过滤(也是实体反查入口)
 ```
 
-对每个候选文档,把 `document_type`、`concepts` 以及 `title` 和正文与新文档对比。
+如果索引尚未建立(刚 clone 仓库 / 还没跑过 `cgraphx docs index`),直接 grep 本地 Markdown 的 frontmatter:
 
-### 提示
-
-当三个条件全部满足时,展示合并选项:
-
-```text
-发现已有文档 [existing-doc.md] 与新文档覆盖相同主题:
-
-- 文档类型: [type](相同/兼容)
-- 共享概念: [overlapping concepts]
-- 范围重叠: [brief description]
-
-是否将新内容合并到已有文档?合并后会保留已有文档的结构,追加新内容。选择 "否" 将保留两个独立文档。
+```bash
+grep -rl "concepts:" docs/knowledge/ --include="*.md"
 ```
 
-### 合并行为
+## 校验 frontmatter
 
-当用户选择合并时:
-- 完整读取已有文档。
-- 在带日期的标题下或相应章节中追加新内容。
-- 更新 `updated` 日期,合并 `concepts`、`aliases`、`tags`、`related_code`、`related_documents`。
-- 如果新文件已写入磁盘,则删除新创建的文件。
-- 保留已有文档的 `title`,除非用户提供了更好的名称。
+```bash
+cgraphx docs validate <file>        # 文本输出,exit 0 合法 / 2 非法
+cgraphx docs validate <file> --json # JSON 输出 {valid, skipReason, detail}
+```
+
+校验规则与 `cgraphx docs index` 扫描时一致(单一事实源 `src/core/markdown/validator.ts`):
+
+| 字段 | 校验 |
+|---|---|
+| `title` | 非空字符串 |
+| `document_type` | 17 枚举之一(见「Frontmatter 规范」) |
+| `domains` | 至少 1 项 |
+| `concepts` | 至少 1 项 |
+| `status` | 4 枚举之一 |
+| `source_type` | 7 枚举之一 |
+| `updated` | `YYYY-MM-DD` 格式 |
+
+非法文件即使写了,`cgraphx docs index` 扫描时也会**整个跳过**——所以校验前置不是可选,是必须。
 
 ## 质量规则
 
@@ -309,26 +268,65 @@ grep -rl "concepts:" docs/knowledge/ --include="*.md" | head -20
 - **逐字记录** —— 未经提炼的原始对话日志。提取持久性结论,而非得出结论的过程。
 - **工具使用说明** —— 如何使用 curl、git、npm 等。这些是通用知识。
 - **可从文件结构推导的信息** —— 模块角色、文件位置、API 端点列表。
+- **行号与符号偏移**(`Foo.java:372`)—— 一次重构全部失效;只写文件级路径。
+- **流程步骤时序、代码逻辑复述** —— 知识库是索引层:条目给代码入口,细节由 agent 读代码获取。写进步骤就种下腐烂。
 
 ### 通用规则
 
 - 优先记录持久性知识而非对话式日志。
-- 保留足够的证据,使另一个 AI 无需重复整个探索即可信任该文档。
+- 保留足够的证据(文件级路径、符号名、命令输出),使另一个 AI 无需重复整个探索即可信任该文档。
 - 用 `Open Questions` 章节或 `status: draft` 显式标记不确定性。
 - 对已知的陷阱、回归或意外约束使用 `warning` 类型文档。
 - 当文档被替代时使用 `superseded` 状态;在 `related_documents` 中链接替代文档。
 - 教程和指南尽可能包含 `Validation` 和 `Troubleshooting` 章节。
 
-## 文档拆分
+## 已有文档维护
 
-当内容在单个文档中覆盖多个不相关的概念时(例如一次对话讨论了几个不同的问题,用户要求记录整个会话),**拆分为独立文档**而非创建一个庞大的文件。
+### 更新已有文件
 
-拆分规则:
-- 每个文档应聚焦于**一个核心概念或一个连贯主题**。
-- 如果两个章节不共享 concepts、domains 或 `document_type`,它们应分别放入不同文件。
-- 当章节相关但目的不同(例如一个发现和由其触发的决策),如果 `concepts` 和 `domains` 显著重叠,可以保留在同一文档中。
-- 以主要主题命名每个文件。
-- 在 frontmatter 中使用 `related_documents` 交叉链接拆分后的文档。
+当文件已存在时:
+- 首先提取当前 frontmatter。
+- 保留未知的元数据字段,除非它们明显有误。
+- 将 `domains`、`concepts`、`aliases`、`tags`、`owners`、`related_code`、`related_documents` 规范化为 YAML 列表。
+- 添加缺失的必填字段。
+- 未检查已有用法前,不要重命名 concepts 或 domains。
+- 保留有用的已有标题;仅在能改善可读性时才规范化标题。
+- 优先在已有结构下追加带日期的新发现,而非重写历史结论(除非已过时)。
+
+### 合并检查
+
+编写新文档后,检查是否已有文档覆盖了相同主题。仅当以下三个条件**同时满足**时才提示用户:
+
+1. **document_type 匹配或兼容** —— 相同或用途相同(如 `guide` 和 `installation`、`conversation` 和 `exploration`)。`concept` 与流程类类型不兼容:实体条目与流程条目**永不互合**,实体的新发现追加进实体条目。
+2. **核心概念高度重叠** —— 新文档的至少一个核心 concept 出现在已有文档的 `concepts` 中。仅边缘概念重叠不足以触发。
+3. **范围相似** —— 标题或正文覆盖相同的知识领域,不仅仅是提到了相同概念。
+
+任一条件不满足时,跳过合并提示。
+
+**如何检查**:用「查询已有词汇」里的 `find --concept=<核心概念>` / `find --q=<标题关键词>`(索引未建立时 grep 本地),对每个候选文档比对 `document_type`、`concepts`、`title` 与正文。
+
+**提示**(三条件全满足时):
+
+```text
+发现已有文档 [existing-doc.md] 与新文档覆盖相同主题:
+
+- 文档类型: [type](相同/兼容)
+- 共享概念: [overlapping concepts]
+- 范围重叠: [brief description]
+
+是否将新内容合并到已有文档?合并后会保留已有文档的结构,追加新内容。选择 "否" 将保留两个独立文档。
+```
+
+**合并行为**:完整读取已有文档 → 在带日期标题或相应章节下追加新内容 → 更新 `updated` 日期,合并 `concepts`/`aliases`/`tags`/`related_code`/`related_documents` → 删除已写入磁盘的新文件 → 保留已有文档的 `title`(除非用户给了更好的)。
+
+### 拆分
+
+当内容在单个文档中覆盖多个不相关的概念时(例如一次对话讨论了几个不同的问题),**拆分为独立文档**而非创建一个庞大的文件:
+
+- 每个文档聚焦于**一个核心概念或一个连贯主题**。
+- 两个章节不共享 concepts、domains 或 `document_type` → 分文件。
+- 章节相关但目的不同(如一个发现和由其触发的决策),若 `concepts` 和 `domains` 显著重叠,可保留在同一文档。
+- 以主要主题命名文件;用 `related_documents` 交叉链接拆分后的文档。
 
 示例:一次涵盖"Redis 安装问题"和"order-service API 设计"的对话应生成两个文档:
 
@@ -339,7 +337,7 @@ docs/knowledge/order-service-api-design.md    (document_type: decision, concepts
 
 ## 扫描提示
 
-创建或编辑 Markdown 元数据后,询问:
+创建或编辑知识文件后,询问:
 
 ```text
 是否需要触发一次扫描,把新的 Markdown 知识写入索引?
@@ -351,4 +349,4 @@ docs/knowledge/order-service-api-design.md    (document_type: decision, concepts
 cgraphx docs index
 ```
 
-扫描为**全量覆盖式重建**。运行后会清空旧索引,从 `docs/knowledge/` 下所有合规 `.md` 重建。事务性:任一步骤失败则回滚,旧索引不破坏。
+扫描为**全量覆盖式重建**:清空旧索引,从 `docs/knowledge/` 下所有合规 `.md` 重建。事务性:任一步骤失败则回滚,旧索引不破坏。

@@ -32,6 +32,7 @@ export const DOCUMENT_TYPES = [
   'api',
   'faq',
   'note',
+  'concept', // 实体概念主条目(知识库索引层的枢纽,如"商品"、"礼包")
 ] as const;
 
 export const DOCUMENT_STATUSES = [

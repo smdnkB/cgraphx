@@ -45,10 +45,14 @@ description: 复杂 plan 的子 agent 实现流程 — 主 agent 作为 controll
 
 2. 按依赖批次执行任务:
    a. 默认一次派 1 个 implementer;只有任务在 plan 中被标为"可并行"且通过无冲突检查时,才同批派多个 implementer
-   b. 派 implementer 子 agent(把任务全文 + context 拼进 prompt;可附 index.md 摘要,不让子 agent 读全 plan)
+   b. 派 implementer 子 agent —— **四件套注入** prompt(不让子 agent 读全 plan):
+      ① 任务全文(含 必须严格执行 / 允许局部适配 / 完成条件 / 对应 spec 条款)
+      ② index.md 契约节 —— 该任务引用的跨任务共享契约,原文注入(不是"见 index"的指涉)
+      ③ 任务引用的 spec 条款 —— 原文,不转述
+      ④ 任务引用的适用规范章节 —— docs/guides/ 文件 + 章节标题,要求 implementer 开工前读对应章节
    c. 处理 implementer status(见下文)
    d. **主 agent sanity check**:
-      - 看 implementer 报告合理性(改了哪些文件 / 测试是否真绿 / 自审发现是否已修)
+      - 看 implementer 报告合理性(改了哪些文件 / 测试是否真绿 / 自审发现是否已修 / 契约与引用的规范条目是否被遵循)
       - 不通过 → 派 implementer 修 / 补 context / 主 agent 做低风险微修 / 上报
    e. 通过 → 标记任务完成 → 下个任务或下一批
 
@@ -217,7 +221,11 @@ Agent({
 
 1. 汇报:完成清单 / 修复历史 / 剩余风险
    - 说明 plan 忠实度:`PLAN_FOLLOWED` / `PLAN_ADAPTED` / 是否出现并解决过 `PLAN_CONFLICT`
-2. 提示用户下一步:
+2. 知识沉淀提示(不是每次都问 —— 确有下面内容时才问):
+   - **本次交付让某业务实体参与了新业务,或出现了新实体**(实体 = 能用名词指代、有属性和生命周期的业务对象)→ 新建/更新实体主条目(`concept` 条目),流程条目在 concepts 里声明该实体
+   - 踩坑 / 隐式约束 / 取舍决策 / 跨文件关系 / 历史背景,值得跨需求复用
+   - 列出候选清单问用户;确认 → 走 `code-impact-markdown` skill 完整流程(它有 frontmatter 规范、校验、合并检查);拒绝或无内容 → 不提。**不要自己直接 Write .md**
+3. 提示用户下一步:
    - 直接 commit?
    - 创建 PR?
 

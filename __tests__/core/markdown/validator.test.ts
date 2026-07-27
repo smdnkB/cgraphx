@@ -87,12 +87,21 @@ describe('validateFrontmatter — enum values', () => {
     const all = [
       'conversation', 'exploration', 'finding', 'analysis', 'lesson',
       'warning', 'decision', 'rule', 'architecture', 'guide', 'tutorial',
-      'runbook', 'installation', 'api', 'faq', 'note',
+      'runbook', 'installation', 'api', 'faq', 'note', 'concept',
     ];
     for (const t of all) {
       const parsed = makeValid();
       parsed.values.set('document_type', t);
       expect(validateFrontmatter(parsed).valid).toBe(true);
     }
+  });
+
+  it('accepts concept document_type for entity entries', () => {
+    const parsed = makeValid();
+    parsed.values.set('document_type', 'concept');
+    parsed.values.set('title', '商品');
+    const r = validateFrontmatter(parsed);
+    expect(r.valid).toBe(true);
+    expect(r.fields?.documentType).toBe('concept');
   });
 });

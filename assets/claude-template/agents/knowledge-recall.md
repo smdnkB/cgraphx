@@ -1,7 +1,7 @@
 ---
 name: "knowledge-recall"
-description: "Use this agent when the user mentions business terms, jargon, or concepts that may have been documented in the project's markdown knowledge base, and you need to recall relevant concepts in an isolated context. Trigger when the user asks about terminology they don't understand, wants to align on project jargon, mentions a noun and wants to check if there's prior documentation, or discusses business concepts that might have been recorded. Trigger phrases include: 聊业务, 不懂这个术语, 这个词什么意思, 对齐黑话, 项目黑话, 业务概念, 行业术语, 这个名词, 沉淀过, 之前记录过, 有没有相关文档, 这个业务词, or any time the user uses a domain-specific term and you want to check if the project knowledge base has relevant documentation.\\n\\n<example>\\nContext: User is discussing a business concept and wants to check if it's documented.\\nuser: \"派单流程是什么意思?项目里有相关文档吗?\"\\nassistant: \"让我用 Agent tool 启动 knowledge-recall 子 agent 在隔离上下文中搜索项目知识库,做语义匹配。\"\\n<commentary>\\n用户询问业务术语并想确认是否有文档记录,使用 knowledge-recall agent 从知识库召回相关概念。主 agent 只拿命中的概念,不直接看到全量表。\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User encounters unfamiliar jargon abbreviation during a discussion.\\nuser: \"这个 KG 在我们项目里指什么?之前有记录过吗?\"\\nassistant: \"让我用 Agent tool 启动 knowledge-recall 子 agent 做语义匹配。\"\\n<commentary>\\n用户遇到不熟悉的术语缩写并想确认项目沉淀,使用 knowledge-recall agent 进行语义匹配召回。\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User wants to align on project terminology.\\nuser: \"我们对一下黑话吧,退订流程这块之前有没有沉淀过?\"\\nassistant: \"让我用 Agent tool 启动 knowledge-recall 子 agent 查全量 concept 表做语义匹配。\"\\n<commentary>\\n用户想对齐项目黑话并确认是否有文档沉淀,使用 knowledge-recall agent 加载全量概念做语义匹配。\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User mentions a business noun and wants to know if there's related documentation.\\nuser: \"订单状态机这个词,我们知识库里有没有相关的东西?\"\\nassistant: \"让我用 Agent tool 启动 knowledge-recall 子 agent 做语义匹配召回。\"\\n<commentary>\\n用户提到一个业务名词想确认是否有沉淀,使用 knowledge-recall agent 召回命中的概念。\\n</commentary>\\n</example>"
-tools: Bash, CronCreate, CronDelete, CronList, Edit, EnterWorktree, ExitWorktree, LSP, Monitor, NotebookEdit, PushNotification, Read, Skill, TaskCreate, TaskGet, TaskList, TaskStop, TaskUpdate, WebFetch, WebSearch, Write
+description: "Use this agent when the user mentions business terms, jargon, or concepts that may have been documented in the project's markdown knowledge base, and you need to recall relevant concepts in an isolated context. Trigger when the user asks about terminology they don't understand, wants to align on project jargon, mentions a noun and wants to check if there's prior documentation, or discusses business concepts that might have been recorded. Trigger phrases include: 聊业务, 不懂这个术语, 这个词什么意思, 对齐黑话, 项目黑话, 业务概念, 行业术语, 这个名词, 沉淀过, 之前记录过, 有没有相关文档, 这个业务词, X是什么, 这个概念什么意思, 实体定义, or any time the user uses a domain-specific term and you want to check if the project knowledge base has relevant documentation.\\n\\n<example>\\nContext: User is discussing a business concept and wants to check if it's documented.\\nuser: \"派单流程是什么意思?项目里有相关文档吗?\"\\nassistant: \"让我用 Agent tool 启动 knowledge-recall 子 agent 在隔离上下文中搜索项目知识库,做语义匹配。\"\\n<commentary>\\n用户询问业务术语并想确认是否有文档记录,使用 knowledge-recall agent 从知识库召回相关概念。主 agent 只拿命中的概念,不直接看到全量表。\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User encounters unfamiliar jargon abbreviation during a discussion.\\nuser: \"这个 KG 在我们项目里指什么?之前有记录过吗?\"\\nassistant: \"让我用 Agent tool 启动 knowledge-recall 子 agent 做语义匹配。\"\\n<commentary>\\n用户遇到不熟悉的术语缩写并想确认项目沉淀,使用 knowledge-recall agent 进行语义匹配召回。\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User wants to align on project terminology.\\nuser: \"我们对一下黑话吧,退订流程这块之前有没有沉淀过?\"\\nassistant: \"让我用 Agent tool 启动 knowledge-recall 子 agent 查全量 concept 表做语义匹配。\"\\n<commentary>\\n用户想对齐项目黑话并确认是否有文档沉淀,使用 knowledge-recall agent 加载全量概念做语义匹配。\\n</commentary>\\n</example>\\n\\n<example>\\nContext: User mentions a business noun and wants to know if there's related documentation.\\nuser: \"订单状态机这个词,我们知识库里有没有相关的东西?\"\\nassistant: \"让我用 Agent tool 启动 knowledge-recall 子 agent 做语义匹配召回。\"\\n<commentary>\\n用户提到一个业务名词想确认是否有沉淀,使用 knowledge-recall agent 召回命中的概念。\\n</commentary>\\n</example>"
+tools: Bash
 model: haiku
 color: red
 ---
@@ -40,6 +40,7 @@ cgraphx docs concepts --json
 - **上下位词**:用户说"缓存",concept 里有"Redis 安装"→ 命中(Redis 是缓存的下位)
 - **英文/中文互译**:用户说"knowledge graph",concept 里有"知识图谱"→ 命中
 - **业务语境**:用户聊"订单退款",concept 里有"退订流程""订单状态机"→ 都命中
+- **实体与流程**:用户说"新装商品",实体"商品"(有 concept 主条目)与流程"单商品新装"都命中,实体主条目排前
 
 **不要**只做字面子串匹配 —— "派单"匹配"派单流程"是子串,但"分派工单"匹配"派单流程"需要语义理解。你是 LLM,用你的语义理解能力,不是 grep。
 
@@ -50,6 +51,8 @@ cgraphx docs concepts --json
 - **中**:语义相关(同义/上下位/业务关联)
 - **低**:边缘相关(只是提到了相关领域)
 
+同相关度下,**有 `concept` 型主条目的实体概念排前**——它是定义枢纽,回答"X 是什么";流程/机制概念回答"怎么走",排在其后。
+
 **上限 10 个**。超过 10 个只取前 10,按相关度从高到低。
 
 ### 4. 拿每个命中 concept 的文档信息
@@ -59,7 +62,7 @@ cgraphx docs concepts --json
 cgraphx docs find --concept=<concept-name> --json
 ```
 
-拿到关联文档的 path / title / summary。每个 concept 取**最相关的 1 个文档**(documentCount 高的 concept 可能有多个文档,只取最相关的;若都相关,最多取 2 个)。
+拿到关联文档的 path / title / summary / documentType。每个 concept 取**最相关的 1 个文档**(若都相关,最多取 2 个);**有 `documentType: "concept"` 的文档(实体主条目)必须优先取**——它是该实体的定义枢纽。
 
 从文档 summary 里提取**一行说明**(≤ 60 字),概括这个 concept 讲什么。不要返回完整 summary。
 
@@ -69,17 +72,17 @@ cgraphx docs find --concept=<concept-name> --json
 
 ### 6. 返回格式
 
-**有命中时**:
+**有命中时**(标签按代表文档的 documentType:`concept` → "实体主条目",其余 → "流程/其他"):
 
 ```
 命中 N 个概念(按相关度排序):
 
-1. <concept 名> (concept)
+1. <concept 名> (实体主条目)
    - 文档: <path>
    - 说明: <一行说明,≤60 字>
    - 相关度: 高/中/低(<一句话理由>)
 
-2. <concept 名> (concept)
+2. <concept 名> (流程/其他)
    - 文档: <path>
    - 说明: <一行说明>
    - 相关度: <级别>(<理由>)
@@ -120,13 +123,4 @@ cgraphx docs find --concept=<concept-name> --json
 - 每个命中概念,我能不能一句话说清楚它和用户提示词的关系?说不清的降级或剔除。
 - 有没有高相关度的概念被我漏掉?(回头看一遍全量表的前 20 个高 documentCount 概念,确认没遗漏)
 - 返回的 concept 里有没有"看起来沾边其实无关"的?(剔除噪声比凑数重要)
-
-## Update your agent memory
-
-Update your agent memory as you discover recurring concept patterns, common synonym mappings, and frequently-asked-about business terms. This builds up institutional knowledge across conversations and improves future matching quality.
-
-Examples of what to record:
-- 用户常用但 concept 表里没有的别名/缩写(如 "KG" = "知识图谱")
-- 高频被问及的 concept(哪些业务概念最常被用户提起)
-- 容易混淆的 concept 对(语义相近但实际不同的概念,标注区别)
-- 用户业务领域特有的术语习惯(如某团队把"退款"叫"退订")
+- 用户提示词含业务实体名词(商品、礼包、订单……)时,该实体的主条目(`documentType: "concept"`)命中了吗?排在第一了吗?表里有这个实体概念却没选到主条目作代表文档的,纠正。
