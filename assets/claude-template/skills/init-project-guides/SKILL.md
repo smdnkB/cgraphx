@@ -1,6 +1,6 @@
 ---
 name: init-project-guides
-description: 为项目初始化 docs/guides/ 规范文件模板。根据技术栈(Java/Go/TS/...)动态生成编码规范、接口规范、模型规范、DDL规范、项目背景等速查文档。Use when 用户需要为项目建立开发规范文档体系,或新项目起步时需要规范文件骨架。
+description: 为项目初始化 docs/guides/ 规范文件模板。根据技术栈(Java/Go/TS/...)动态生成编码规范、接口规范、模型规范、DDL规范、Git 提交规范、项目背景等速查文档。Use when 用户需要为项目建立开发规范文档体系,或新项目起步时需要规范文件骨架。
 ---
 
 # init-project-guides
@@ -29,6 +29,7 @@ description: 为项目初始化 docs/guides/ 规范文件模板。根据技术�
 | `model-standards.md` | 模型/实体规范:字段命名、类型映射、关系定义、校验规则、通用字段 | 中 |
 | `ddl.md` | 数据库规范:表命名、字段类型、索引、注释、迁移、模板 | 中 |
 | `project-background.md` | 项目背景:是什么、给谁用、核心流程、架构分层、模块清单、技术栈 | 低 |
+| `git-standards.md` | Git 提交门禁文件:① 提交消息规范(标题格式 / 票据关联 / 语言 / 正文)② 提交前检查点(项目自定义) | 低(与技术栈无关,与项目/团队绑定) |
 
 ## 执行流程
 
@@ -77,19 +78,38 @@ description: 为项目初始化 docs/guides/ 规范文件模板。根据技术�
 | `model-standards.md` | 项目实际使用的 ORM、数据库类型、实体设计 |
 | `ddl.md` | 项目实际使用的数据库类型、迁移工具 |
 | `project-background.md` | 用户提示 + 项目探索结果 |
+| `git-standards.md` | 挖掘项目实际 git 历史(最近 50-100 条 message 的风格:标题格式、票据前缀、语言、正文)+ 已有 commitlint/hook 配置;无 git 历史则直接询问用户团队规范 |
+
+**git-standards.md 是提交门禁文件(precommit-check hook 指向它),包含两部分:**
+
+**第一部分 · 提交消息规范:**
+- 标题格式:从历史 message 提炼格式模式 + 正例/反例(如 `CRM-req74181<描述>-client@req74181`、`bug54911<描述>@bug54911` 这类项目独有格式,挖不出来就问用户)
+- 票据关联规则:需求号/bug 号如何进标题;**编号未知时必须问用户,不得编造或省略**
+- 语言与措辞、长度约定;正文写哪些关键细节;breaking change / scope 等特殊标注
+- agent 署名行(Claude Code 的 co-author 署名)与项目规范如何共存
+
+**第二部分 · 提交前检查点(项目自定义):**
+按技术栈给默认检查点 + 用户确认增删。通用种子:
+- 被注释掉的开关/注册项(写该项目实际的语法:Spring 的 `@Component`/`@Scheduled`/`@JmsListener` 等注解、前端的组件注册、配置开关)——被注释 = 功能静默失效,高危
+- 被注释掉的业务调用(监听注册、定时任务、关键链路入口)
+- 未闭合逻辑(括号失衡、if/try/for 未配对)
+- 写死的魔法字符串/数字(密码、URL、ID、阈值)
+- 新增 TODO/FIXME/临时标记
+项目特有项由用户补充(历史事故点、团队红线)。每个检查点写"查什么 + 为什么危险";门禁触发时 agent 自己跑 `git diff --cached` 对照逐项判断,命中报告用户,不替用户改代码。
 
 ### 4. 用户确认
 
 **写入文件前,必须将生成的内容展示给用户,询问:**
 
 ```
-我将在 `docs/guides/` 目录下生成以下 5 个文件:
+我将在 `docs/guides/` 目录下生成以下 6 个文件:
 
 1. coding-standards.md — 编码规范(技术栈:Java)
 2. interface-standards.md — 接口设计规范
 3. model-standards.md — 模型/实体规范
 4. ddl.md — 数据库规范
 5. project-background.md — 项目背景
+6. git-standards.md — Git 提交规范(commit message 格式)
 
 以下是各文件的主要内容预览:
 
