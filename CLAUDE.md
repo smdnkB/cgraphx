@@ -4,7 +4,7 @@
 
 ## 本仓库是什么
 
-这是 **cgraphx 2.0 的源码仓库** —— 单个 npm 包(`cgraphx`,bin → `dist/cli/index.js`),通过一个 CLI 为 AI 编码 agent 提供三个相互独立、项目本地的工具:`docs`(基于 `docs/knowledge/*.md` 的 markdown 知识库)、`db`(MySQL/PostgreSQL 只读内省)、`timeline`(Claude Code 开发事件)。TypeScript,CommonJS 输出,Node `>=22.5 <27`(依赖内置的 `node:sqlite`;无原生依赖、无 wasm)。
+这是 **cgraphx 2.0 的源码仓库** —— 单个 npm 包(`cgraphx`,bin → `dist/cli/index.js`),通过一个 CLI 为 AI 编码 agent 提供四个相互独立、项目本地的工具:`docs`(基于 `docs/knowledge/*.md` 的 markdown 知识库)、`db`(MySQL/PostgreSQL 只读内省)、`timeline`(Claude Code 开发事件)、`features`(`docs/features/` 需求目录实时索引,按负责人/关键词定位;无 DB,纯文件系统派生)。TypeScript,CommonJS 输出,Node `>=22.5 <27`(依赖内置的 `node:sqlite`;无原生依赖、无 wasm)。
 
 2.0 是一次破坏性重构:1.x 得名所由来代码图谱层已被**整体移除**(没有 `explore`/`query`/`callers`/`index`/`sync`,没有 MCP server,没有遥测)。在假设任何 1.x 行为之前,请先看 `CHANGELOG.md`。由此带来的本仓库现状:
 
@@ -28,7 +28,7 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 
 **`docs/` 目录约定(skill 与程序的契约,目标项目内):**
 
-- `docs/features/<日期>-<编号>-<前缀>/` —— 单次需求工作目录,`<前缀>-spec.md` 必有,其余产物(plan/、单元测试规格与报告、api 测试规格与报告、设计文档)由各 skill 按流程写入。
+- `docs/features/<日期>-<编号>-<前缀>/` —— 单次需求工作目录,`<前缀>-spec.md` 必有(头部声明 `> 负责人:`),其余产物(plan/、单元测试规格与报告、api 测试规格与报告、设计文档)由各 skill 按流程写入。按人找需求:`cgraphx features list --mine`(本地个人索引由 `features sync` 生成于 `.cgraphx/my-features.md`)。
 - `docs/knowledge/*.md` —— 跨需求共享的业务知识库,**`cgraphx docs` 的索引对象**;写文件前必须过 `cgraphx docs validate`,非法文件会被索引跳过。
 - `docs/bruno/` —— 接口测试产物(write-api + run-api-test 维护,bruno app 可直接打开)。
 - `docs/schema-knowledge/<工程>/` —— DDL 快照(INDEX.md + ddl/*.sql + pending-comments.sql);`db-query` 首选读本地 DDL,文件不存在才连 DB 兜底,探索发现 append 到对应表的 DISCOVERED 块(重 dump 时保留)。
@@ -37,9 +37,9 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 
 **分层(约定强制,见 spec §3.1):** `src/core/` 承载全部业务逻辑与基础设施,且永远不得依赖 `src/cli/` 或 `src/web/`;`cli` 和 `web` 都只依赖 `core`。
 
-**CLI 入口(`src/cli/index.ts`):** Node 版本下限硬拦截(可用 `CGRAPHX_ALLOW_UNSAFE_NODE` 覆盖)、fatal handler、无参数时进入交互式安装器,然后构建 commander 程序。三个子系统通过各自 `cli.ts` 导出的 `registerDocsCommands` / `registerDbCommands` / `registerTimelineCommands` 自行注册。新的顶层命令(`init`、`status`、`uninit`、`upgrade`、`install`、`uninstall`)在 `index.ts` 内联注册;子系统子命令归各自子系统的 `cli.ts`。ANSI 颜色是手写的转义序列("避免 chalk 的 ESM 问题")—— 不要引入 chalk。
+**CLI 入口(`src/cli/index.ts`):** Node 版本下限硬拦截(可用 `CGRAPHX_ALLOW_UNSAFE_NODE` 覆盖)、fatal handler、无参数时进入交互式安装器,然后构建 commander 程序。四个子系统通过各自 `cli.ts` 导出的 `registerDocsCommands` / `registerDbCommands` / `registerTimelineCommands` / `registerFeaturesCommands` 自行注册。新的顶层命令(`init`、`status`、`uninit`、`upgrade`、`install`、`uninstall`)在 `index.ts` 内联注册;子系统子命令归各自子系统的 `cli.ts`。ANSI 颜色是手写的转义序列("避免 chalk 的 ESM 问题")—— 不要引入 chalk。
 
-**子系统形态(三个子系统都遵循):** 公共门面 `index.ts`(外部调用方必须用它 —— 不得直接伸手进内部模块)、`cli.ts`、`types.ts`、`errors.ts` 中的类型化错误层级、`constants.ts`,以及用于幂等 schema 应用的 `schema.sql` + `schema-bootstrap.ts`。
+**子系统形态(docs/db/timeline 三个遵循):** 公共门面 `index.ts`(外部调用方必须用它 —— 不得直接伸手进内部模块)、`cli.ts`、`types.ts`、`errors.ts` 中的类型化错误层级、`constants.ts`,以及用于幂等 schema 应用的 `schema.sql` + `schema-bootstrap.ts`。`features` 是轻形态:无 DB、无 schema,索引是 `docs/features/` 目录树的实时派生视图(`list` 查询 / `sync` 全量重写本地个人索引 `.cgraphx/my-features.md`,负责人取 git 用户,write-spec/write-plan 创建时在头部声明 `> 负责人:`)。
 
 **共享 DB(`src/core/db/`):** 每个目标项目一个 SQLite 文件 `.cgraphx/cgraphx.db`,将 `node:sqlite` 的 `DatabaseSync` 包装成 better-sqlite3 风格的接口(`prepare/exec/pragma/transaction`,statement 提供 `run/get/all/iterate`)。基础层与 schema 无关;每个子系统拥有自己的前缀表(`markdown_*`、`timeline_*`)并自行应用 schema。`cgraphx init` 应用 markdown + timeline 两套 schema,已初始化时为空操作;`cgraphx status` 只读、从不应用 schema、从不读 1.x 的图表(`nodes`/`edges`/`files`),未初始化时退出码为 2。
 

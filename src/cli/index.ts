@@ -38,6 +38,7 @@ import { ensureTimelineSchema } from '../core/timeline/schema-bootstrap';
 import { registerDocsCommands } from '../core/markdown/cli';
 import { registerDbCommands } from '../core/dbquery/cli';
 import { registerTimelineCommands } from '../core/timeline/cli';
+import { registerFeaturesCommands } from '../core/features/cli';
 
 import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
@@ -139,6 +140,7 @@ function main(): void {
   registerDocsCommands(program);
   registerDbCommands(program);
   registerTimelineCommands(program);
+  registerFeaturesCommands(program);
 
   // ===========================================================================
   // init — create an empty shared cgraphx.db and ensure subsystem schemas.
