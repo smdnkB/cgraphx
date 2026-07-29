@@ -10,7 +10,7 @@
 
 - 根目录下的 `.cgraphx/` 只是运行时数据;`.claude/` 和 `.mcp.json` 是被 gitignore 的 1.x 使用环境产物。
 - `src/web/` 是刻意保留的占位(未来的 `cgraphx web` 本地服务);MVP 阶段不要在这里构建 UI。
-
+- 1.* 版本源代码在 ` /Users/smdnk/objects/ai/codegraph `
 
 - 没有配置 lint 脚本。
 - 从构建产物直接跑 CLI:`node dist/cli/index.js <command>`(不带参数直接执行 `node dist/cli/index.js` 会启动交互式安装器)。
@@ -59,3 +59,6 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 - 版本号在 `cli/index.ts` 中于运行时从 `package.json` 读取(`npm version` 的版本号唯一事实来源)。
 - `src/cli/uninstall.ts` 通过 npm 的 `preuninstall` 钩子执行。
 - `docs/features/` 下是 2.0 重构的 spec 与 plan(中文)—— 各子系统预期行为(§3)与分层约束的权威描述。
+
+## 关于注释
+- 代码注释使用中文, 已有的注释遇到也要重写成中文
