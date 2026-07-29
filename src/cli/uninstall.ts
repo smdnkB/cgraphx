@@ -2,36 +2,19 @@
 /**
  * cgraphx preuninstall cleanup script.
  *
- * Runs automatically when `npm uninstall -g cgraphx` is called (wired via
- * the `preuninstall` script in package.json). Loops over every known
- * agent target's `uninstall(loc)` for the GLOBAL location only —
- * local-location entries live inside project working trees and aren't
- * ours to nuke at npm-uninstall time.
+ * Runs automatically when `npm uninstall -g cgraphx` is called (wired via the
+ * `preuninstall` script in package.json).
  *
- * This script must never throw — a failed cleanup must not block
- * uninstall.
+ * 2.0 note: this is now a NO-OP. cgraphx 2.0 has no global (~/.claude) config —
+ * everything is project-local, and a project's `.claude/` + `.cgraphx/` are
+ * cleaned by running `cgraphx uninstall` INSIDE that project, not by
+ * uninstalling the global CLI. There is nothing for this hook to sweep at
+ * npm-uninstall time. The file is kept (package.json references it) so
+ * `npm uninstall -g cgraphx` doesn't error on a missing script.
  *
- * Migrated from cgraphx 1.x (src/bin/uninstall.ts). Path adjusted for
- * the 2.0 layout (src/cli/installer/targets/registry).
+ * This script must never throw — a failed cleanup must not block uninstall.
  */
 
-try {
-  // Lazy require so any module-level error in the registry can't bubble
-  // out and abort the npm uninstall.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { ALL_TARGETS } = require('./installer/targets/registry') as
-    typeof import('./installer/targets/registry');
-
-  for (const target of ALL_TARGETS) {
-    if (!target.supportsLocation('global')) continue;
-    try {
-      target.uninstall('global');
-    } catch {
-      // Each target is independently safe-to-skip; per-target failure
-      // must not stop the loop.
-    }
-  }
-} catch {
-  // If the registry itself can't be loaded (e.g. partial install),
-  // we silently skip cleanup. Uninstall still completes.
-}
+// Intentionally empty — see the header. A valid, side-effect-free module so the
+// npm `preuninstall` hook resolves and exits 0.
+export {};

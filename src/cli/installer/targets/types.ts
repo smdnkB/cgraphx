@@ -12,7 +12,14 @@
  * now-removed server config and were dropped together with it.
  */
 
-export type Location = 'global' | 'local';
+/**
+ * Where a target's config lives. 2.0 is project-local only — the flow
+ * deliberately does not support a global (`~/.claude`) install, so the union
+ * has collapsed to `'local'`. The `loc` parameter is retained on the
+ * `AgentTarget` methods for now (a later cleanup can drop it entirely); keeping
+ * the type single-valued lets the compiler flag any stray `'global'` usage.
+ */
+export type Location = 'local';
 
 /**
  * Stable string id used in the `--target` CLI flag and the registry

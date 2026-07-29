@@ -80,7 +80,7 @@ export function openTimelineDb(projectRoot: string): DatabaseConnection {
 
   if (!fs.existsSync(dbPath)) {
     throw new TimelineSchemaError(
-      `Cgraphx not initialized at ${resolved} — run \`cgraphx init\` first.`,
+      `Cgraphx not initialized at ${resolved} — run \`cgraphx install\` first.`,
       { projectRoot: resolved },
     );
   }

@@ -9,18 +9,20 @@
  *   - `statusLine` — points at the bundled `claude-hud` asset.
  *   - `.claude/` template (skills / agents / commands / hooks / plugins)
  *     deployed into the project's `.claude/` directory (local scope only).
+ *   - `.claude/CLAUDE.md` workflow-guidance block (local scope only) —
+ *     marker-fenced, upserted from the template-root CLAUDE.md asset.
  *
- * 2.0 cut points (versus 1.x): the server-entry write, the
- * server-scoped permissions write, and the CGRAPHX instructions block
- * write are GONE — there is no server in 2.0. The 1.x marker-fenced
- * block in CLAUDE.md is still stripped on uninstall (and on install as
- * self-heal) so upgrades don't leave stale pointers to a server that
- * no longer exists.
+ * 2.0 cut points (versus 1.x): the server-entry write and the
+ * server-scoped permissions write are GONE — there is no server in 2.0.
+ * The marker-fenced CLAUDE.md block is still written, but its content is
+ * now the cgraphx workflow guidance (sourced from the template-root
+ * CLAUDE.md asset), not the 1.x server pointer; a stale 1.x block is
+ * replaced in place on install (same markers) and stripped on uninstall.
+ * Uninstall also removes the package-owned `.claude/` assets by manifest.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import {
   AgentTarget,
   DetectionResult,
@@ -32,23 +34,23 @@ import {
   readJsonFile,
   writeJsonFile,
   removeMarkedSection,
+  replaceOrAppendMarkedSection,
 } from './shared';
-import { deployClaudeAssets } from '../claude-assets';
+import { deployClaudeAssets, readTemplateClaudeMd, removeClaudeAssets } from '../claude-assets';
 
-function configDir(loc: Location): string {
-  return loc === 'global'
-    ? path.join(os.homedir(), '.claude')
-    : path.join(process.cwd(), '.claude');
+function configDir(_loc: Location): string {
+  // 2.0 is project-local only; the global (~/.claude) install was removed.
+  return path.join(process.cwd(), '.claude');
 }
 function settingsJsonPath(loc: Location): string {
   return path.join(configDir(loc), 'settings.json');
 }
 
 /**
- * Markers used by the (removed) CGRAPHX instructions block. Kept as
- * private constants so uninstall / self-heal can strip a stale 1.x
- * block from CLAUDE.md without us having to keep the block content
- * (which advertized the removed server) in the source tree.
+ * Markers fencing the cgraphx instructions block in `.claude/CLAUDE.md`.
+ * Install upserts the workflow-guidance block between them; uninstall strips
+ * it. The same markers fenced the 1.x server-pointer block, so an upgrade
+ * replaces stale content in place.
  */
 const CGRAPHX_SECTION_START = '<!-- CGRAPHX_START -->';
 const CGRAPHX_SECTION_END = '<!-- CGRAPHX_END -->';
@@ -114,10 +116,12 @@ class ClaudeCodeTarget implements AgentTarget {
       if (removed.action === 'removed') files.push(removed);
     }
 
-    // 5. Self-heal: strip any stale 1.x CGRAPHX instructions block from
-    //    CLAUDE.md. The block advertized a server that no longer exists.
-    const instructionsHeal = removeInstructionsEntry(loc);
-    if (instructionsHeal.action === 'removed') files.push(instructionsHeal);
+    // 5. Instructions block in `.claude/CLAUDE.md` — upsert the workflow
+    //    guidance (sourced from the template-root CLAUDE.md asset). Idempotent,
+    //    preserves surrounding user content, and (same markers) replaces any
+    //    stale 1.x server-pointer block, so an upgrade self-heals.
+    const instructions = writeInstructionsEntry(loc);
+    if (instructions.action !== 'kept') files.push(instructions);
 
     // 6. Deploy the bundled `.claude/` template (skills / agents / commands
     //    / hooks / plugins) into the project's `.claude/` directory. Local
@@ -151,8 +155,17 @@ class ClaudeCodeTarget implements AgentTarget {
     const hookCleanup = cleanupLegacyHooks(loc);
     if (hookCleanup.action === 'removed') files.push(hookCleanup);
 
-    // 3. Strip the 1.x CGRAPHX instructions block if present.
+    // 3. Strip the cgraphx instructions block if present.
     files.push(removeInstructionsEntry(loc));
+
+    // 4. Remove the package-owned `.claude/` assets (skills / commands / agents
+    //    / hooks / plugins), driven by the template manifest — see
+    //    removeClaudeAssets. User-added files outside the manifest survive.
+    const assetChanges = removeClaudeAssets(configDir(loc));
+    for (const change of assetChanges) {
+      if (change.action === 'not-found') continue; // no template baked in
+      files.push(change);
+    }
 
     return { files };
   }
@@ -562,12 +575,37 @@ function removeHookCommandsMatching(
 }
 
 /**
- * Strip the marker-delimited CGRAPHX block from CLAUDE.md if a prior 1.x
- * install wrote one. The block advertized a server that no longer exists,
- * so install (self-heal on upgrade) and uninstall both call this.
- * `removeMarkedSection` returns `not-found`/`kept` when there's nothing
- * to strip; the install caller drops those from the report so a fresh
- * install stays quiet.
+ * Upsert the cgraphx workflow-guidance block into `.claude/CLAUDE.md`,
+ * sourcing the content from the template-root CLAUDE.md asset. Marker-
+ * fenced (`CGRAPHX_SECTION_START/END`), so it's idempotent, preserves any
+ * surrounding user content, replaces a stale 1.x server-pointer block in
+ * place (same markers), and is stripped by `removeInstructionsEntry` on
+ * uninstall.
+ *
+ * When the asset is absent (running from source before a build) returns
+ * `kept` so the caller drops it from the report instead of logging a
+ * misleading write.
+ */
+function writeInstructionsEntry(loc: Location): WriteResult['files'][number] {
+  const file = instructionsPath(loc);
+  const content = readTemplateClaudeMd();
+  if (content === null) {
+    return { path: file, action: 'kept' };
+  }
+  const action = replaceOrAppendMarkedSection(
+    file,
+    CGRAPHX_SECTION_START,
+    CGRAPHX_SECTION_END,
+    content,
+  );
+  return { path: file, action };
+}
+
+/**
+ * Strip the marker-delimited cgraphx block from `.claude/CLAUDE.md`.
+ * Called by uninstall. `removeMarkedSection` returns `not-found`/`kept`
+ * when there's nothing to strip; callers drop those from the report so a
+ * quiet path stays quiet.
  */
 function removeInstructionsEntry(loc: Location): WriteResult['files'][number] {
   const file = instructionsPath(loc);

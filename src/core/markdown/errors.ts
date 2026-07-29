@@ -32,7 +32,7 @@ export class DocumentNotFoundError extends MarkdownIndexError {
 export class ProjectNotInitializedError extends MarkdownIndexError {
   constructor(public readonly projectPath: string) {
     super(
-      `cgraphx not initialized at ${projectPath}. Run \`cgraphx init\` first.`,
+      `cgraphx not initialized at ${projectPath}. Run \`cgraphx install\` first.`,
     );
     this.name = 'ProjectNotInitializedError';
   }

@@ -126,3 +126,65 @@ export function removeMarkedSection(
   }
   return 'removed';
 }
+
+/**
+ * Inverse of `removeMarkedSection`. Upserts a marker-delimited block:
+ * creates the file (and block) when missing, appends the block when the
+ * file exists without our markers, or replaces the existing block in
+ * place — always preserving any surrounding user content verbatim.
+ *
+ * Idempotent: when a block already exists with an identical body the file
+ * is left byte-for-byte untouched and `unchanged` is returned, so re-running
+ * install doesn't emit a spurious "Updated" line (mirrors the `jsonDeepEqual`
+ * guard used for the JSON configs).
+ *
+ * @param body Inner block content WITHOUT the markers — they are wrapped
+ *             around it here. Trailing whitespace is normalized so the
+ *             wrapped block is deterministic across runs.
+ * @returns `created` when the file didn't exist, `updated` when the block
+ *          was appended or replaced, `unchanged` when it already matched
+ *          (or the existing file was unreadable — we never clobber on a
+ *          read failure).
+ */
+export function replaceOrAppendMarkedSection(
+  filePath: string,
+  startMarker: string,
+  endMarker: string,
+  body: string,
+): 'created' | 'updated' | 'unchanged' {
+  const inner = body.replace(/\s+$/, '');
+  const block = `${startMarker}\n${inner}\n${endMarker}`;
+
+  if (!fs.existsSync(filePath)) {
+    atomicWriteFileSync(filePath, block + '\n');
+    return 'created';
+  }
+
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return 'unchanged'; // exists but unreadable — leave it alone
+  }
+
+  const startIdx = content.indexOf(startMarker);
+  const endIdx = content.indexOf(endMarker);
+
+  if (startIdx === -1 || endIdx <= startIdx) {
+    // No existing block — append, separated from any prior content.
+    const prefix = content.length > 0 ? content.replace(/\s+$/, '') + '\n\n' : '';
+    atomicWriteFileSync(filePath, prefix + block + '\n');
+    return 'updated';
+  }
+
+  // Existing block — rewrite only when the body actually differs.
+  const existingBlock = content.substring(startIdx, endIdx + endMarker.length);
+  if (existingBlock === block) {
+    return 'unchanged';
+  }
+
+  const before = content.substring(0, startIdx);
+  const after = content.substring(endIdx + endMarker.length);
+  atomicWriteFileSync(filePath, before + block + after);
+  return 'updated';
+}

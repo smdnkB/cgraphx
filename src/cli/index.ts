@@ -28,13 +28,6 @@ import { Command } from 'commander';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
-import {
-  getCodeGraphDir,
-  isInitialized,
-} from '../core/directory';
-import { DatabaseConnection, getDatabasePath } from '../core/db';
-import { ensureMarkdownSchema } from '../core/markdown/schema-bootstrap';
-import { ensureTimelineSchema } from '../core/timeline/schema-bootstrap';
 import { registerDocsCommands } from '../core/markdown/cli';
 import { registerDbCommands } from '../core/dbquery/cli';
 import { registerTimelineCommands } from '../core/timeline/cli';
@@ -42,8 +35,6 @@ import { registerFeaturesCommands } from '../core/features/cli';
 
 import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
-import { getGlyphs } from './ui/glyphs';
-import { runStatus } from './status';
 
 // -----------------------------------------------------------------------------
 // Node.js version floor.
@@ -143,122 +134,10 @@ function main(): void {
   registerFeaturesCommands(program);
 
   // ===========================================================================
-  // init — create an empty shared cgraphx.db and ensure subsystem schemas.
-  //
-  // 2.0 init deliberately does NOT build a code-graph index (there is no graph
-  // layer in 2.0). It just creates the .cgraphx/ directory, opens the shared
-  // SQLite DB (which is schema-agnostic at the base-layer level), and asks the
-  // markdown + timeline subsystems to apply their own idempotent schemas on
-  // top. Re-running init on an already-initialized project is a no-op.
+  // (init / status / uninit were folded into install / uninstall — see the
+  // installer. `install` creates `.cgraphx/` + applies schemas; `uninstall`
+  // removes it. There is no separate data-layer command in 2.0.)
   // ===========================================================================
-  program
-    .command('init [path]')
-    .description('Initialize the shared .cgraphx/ database for this project')
-    .action(async (pathArg: string | undefined) => {
-      const projectRoot = path.resolve(pathArg || process.cwd());
-
-      if (isInitialized(projectRoot)) {
-        console.log(`Already initialized in ${projectRoot}`);
-        return;
-      }
-
-      try {
-        // createDirectory: makes .cgraphx/, writes .gitignore, throws if
-        // cgraphx.db already exists (race guard; the isInitialized check
-        // above makes this branch unlikely).
-        const { createDirectory } = await import('../core/directory');
-        createDirectory(projectRoot);
-
-        const conn = DatabaseConnection.open(getDatabasePath(projectRoot));
-        try {
-          const db = conn.getDb();
-          ensureMarkdownSchema(db);
-          ensureTimelineSchema(db);
-        } finally {
-          conn.close();
-        }
-
-        console.log(
-          `${chalk.green(getGlyphs().ok)} Initialized cgraphx in ${projectRoot}`,
-        );
-        console.log(
-          chalk.dim(
-            `  ${getCodeGraphDir(projectRoot)}  (markdown + timeline schemas applied)`,
-          ),
-        );
-      } catch (err) {
-        console.error(
-          `${chalk.red(getGlyphs().err)} Failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        process.exit(1);
-      }
-    });
-
-  // ===========================================================================
-  // status — placeholder wiring. B-7 fills in the full report.
-  // ===========================================================================
-  program
-    .command('status [path]')
-    .description('Show initialization state and subsystem summaries')
-    .option('-j, --json', 'Output as JSON')
-    .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
-      const projectRoot = path.resolve(pathArg || process.cwd());
-      await runStatus(projectRoot, { json: options.json });
-    });
-
-  // ===========================================================================
-  // uninit — delete the project's .cgraphx/ data directory.
-  //
-  // The inverse of `init`: drops the shared cgraphx.db plus every transient
-  // file the runtime keeps in .cgraphx/. Sibling project files (.claude/,
-  // settings.json, the git post-commit hook) are untouched — those are owned
-  // by `uninstall` / `timeline uninstall`. Confirmation is y/N by default;
-  // `-f` / `--force` skips it.
-  // ===========================================================================
-  program
-    .command('uninit [path]')
-    .description('Remove the .cgraphx/ data directory from a project')
-    .option('-f, --force', 'Skip the confirmation prompt')
-    .action(async (pathArg: string | undefined, options: { force?: boolean }) => {
-      const projectRoot = path.resolve(pathArg || process.cwd());
-
-      if (!isInitialized(projectRoot)) {
-        console.log(`${chalk.yellow(getGlyphs().warn)} cgraphx is not initialized in ${projectRoot}`);
-        return;
-      }
-
-      if (!options.force) {
-        const readline = await import('node:readline');
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-        const answer = await new Promise<string>((resolve) => {
-          rl.question(
-            chalk.yellow(
-              `${getGlyphs().warn} This will permanently delete all cgraphx data in ${projectRoot}. Continue? (y/N) `,
-            ),
-            resolve,
-          );
-        });
-        rl.close();
-        if (answer.trim().toLowerCase() !== 'y') {
-          console.log('Cancelled');
-          return;
-        }
-      }
-
-      try {
-        const { removeDirectory } = await import('../core/directory');
-        removeDirectory(projectRoot);
-        console.log(`${chalk.green(getGlyphs().ok)} Removed cgraphx from ${projectRoot}`);
-      } catch (err) {
-        console.error(
-          `${chalk.red(getGlyphs().err)} Failed to uninitialize: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        process.exit(1);
-      }
-    });
 
   // ===========================================================================
   // upgrade — inline registration (matches cgraphx 1.x; no register()
@@ -289,7 +168,6 @@ function main(): void {
             method,
             resolveLatest: () => up.resolveLatestVersion(),
             run: up.defaultRun,
-            hasCommand: up.hasCommand,
             log: (m: string) => console.log(m),
             warn: (m: string) => console.log(chalk.yellow(m)),
             error: (m: string) => console.error(chalk.red(m)),
@@ -315,15 +193,11 @@ function main(): void {
   // ===========================================================================
   program
     .command('install')
-    .description('Install cgraphx into Claude Code (skills, hooks, statusLine)')
+    .description('Install cgraphx into the current project (skills, hooks, statusLine, .cgraphx/)')
     .option('-t, --target <ids>', 'Target agent(s) (2.0 ships only Claude)')
     .option(
-      '-l, --location <where>',
-      'Install location: "global" or "local". Default: prompt',
-    )
-    .option(
       '-y, --yes',
-      'Non-interactive: defaults to --location=local, prompt-hook on',
+      'Non-interactive: use defaults (prompt-hook on, no prompts)',
     )
     .option(
       '--prompt-hook <bool>',
@@ -332,21 +206,10 @@ function main(): void {
     .action(
       async (opts: {
         target?: string;
-        location?: string;
         yes?: boolean;
         promptHook?: string;
       }) => {
         const { runInstallerWithOptions } = await import('./installer');
-        if (
-          opts.location &&
-          opts.location !== 'global' &&
-          opts.location !== 'local'
-        ) {
-          console.error(
-            `${chalk.red(getGlyphs().err)} --location must be "global" or "local" (got "${opts.location}").`,
-          );
-          process.exit(1);
-        }
         const promptHook =
           opts.promptHook === undefined
             ? undefined
@@ -354,7 +217,6 @@ function main(): void {
         try {
           await runInstallerWithOptions({
             target: opts.target,
-            location: opts.location as 'global' | 'local' | undefined,
             promptHook,
             yes: opts.yes,
           });
@@ -369,35 +231,22 @@ function main(): void {
 
   program
     .command('uninstall')
-    .description('Remove cgraphx from Claude Code')
+    .description('Remove cgraphx from the current project (skills, config, .cgraphx/)')
     .option('-t, --target <ids>', 'Target agent(s) (2.0 ships only Claude)')
-    .option(
-      '-l, --location <where>',
-      'Uninstall location: "global" or "local". Default: prompt',
-    )
-    .option('-y, --yes', 'Non-interactive: defaults to --location=global')
+    .option('-y, --yes', 'Non-interactive: no prompts (also deletes .cgraphx/ without confirming)')
+    .option('--keep-data', 'Keep the .cgraphx/ data directory (default: remove it)')
     .action(
       async (opts: {
         target?: string;
-        location?: string;
         yes?: boolean;
+        keepData?: boolean;
       }) => {
         const { runUninstaller } = await import('./installer');
-        if (
-          opts.location &&
-          opts.location !== 'global' &&
-          opts.location !== 'local'
-        ) {
-          console.error(
-            `${chalk.red(getGlyphs().err)} --location must be "global" or "local" (got "${opts.location}").`,
-          );
-          process.exit(1);
-        }
         try {
           await runUninstaller({
             target: opts.target,
-            location: opts.location as 'global' | 'local' | undefined,
             yes: opts.yes,
+            keepData: opts.keepData,
           });
         } catch (err) {
           console.error(

@@ -32,11 +32,11 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | 阶段 | 命令 / skill |
 |---|---|
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
-| **项目级 · 每项目一次** | `cgraphx init`(建空 `cgraphx.db` 支持 markdown 知识库 + timeline)、`cgraphx install`(写 MCP 配置 + 部署 skills 模板到项目 `.claude/`)、`/code-impact-init`(接手陌生项目时建业务知识库) |
+| **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/code-impact-init`(接手陌生项目时建业务知识库) |
 | **日常做需求 · 必经 2 步** | `/clarify-requirements` 澄清 → `/implementation`(简单)或 `/subagent-implement`(复杂)实现 |
 | **日常做需求 · 复杂按需** | `/write-prd`、`/write-spec`、`/write-plan`、`/code-impact-markdown`(沉淀到 `docs/knowledge/`) |
 | **工作回顾 · 按需** | `/developer-timeline`(日/周/月报)、`/code-impact-docgen`(合成业务/技术文档) |
-| **卸载 · 可选** | `npm uninstall -g cgraphx` + 删 `.cgraphx/` |
+| **卸载 · 可选** | `cgraphx uninstall`(清项目 `.claude/` 内包自带的 skills/配置 + 删 `.cgraphx/`)、`npm uninstall -g cgraphx` |
 
 ## 各 skill 导航
 
@@ -62,15 +62,14 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `code-impact-api` | 任务开始时查 `docs/knowledge/` 业务决策 / 概念 / 历史教训 |
 | `db-query` | 验证数据假设 / 查表结构 / 找测试数据(查 MySQL / PostgreSQL,沉淀 schema 到 `docs/schema-knowledge/`) |
 
-## 安装与接入(三步)
+## 安装与接入(两步)
 
 ```bash
 npm install -g cgraphx               # 装 CLI(Node ≥ 20 且 < 25)
-cd /your/project && cgraphx init     # 建空 cgraphx.db(支持 markdown 知识库 + timeline)
-cgraphx install                      # 写 MCP 配置 + 部署 skills 模板到项目 .claude/(默认 local)
+cd /your/project && cgraphx install  # 建 .cgraphx/ + 部署 skills/commands 到 .claude/ + 写 hooks/statusLine
 ```
 
-`cgraphx install` 默认 **local**(写项目内 `.claude/` / `.cursor/` 等);想影响所有项目才用 `--location=global`。
+`cgraphx install` 只作用于当前项目(项目级,写项目内 `.claude/` 与 `.cgraphx/`);升级 CLI(`cgraphx upgrade`)后到各项目重跑一次即可刷新。
 
 接手陌生项目时可选第四步:`/code-impact-init` 派子 agent 自动探索、建业务知识库到 `docs/knowledge/`。
 

@@ -12,14 +12,12 @@
 
 ### 项目级 · 每项目一次
 
-- 项目目录内执行 `cgraphx init` 建 `.cgraphx/` 数据目录(markdown 知识库 + timeline)和配置文件
-- 项目目录内执行 `cgraphx install` 写 MCP 配置 + 部署 skills 模板到项目 `.claude/`
-- 一定要先 `cgraphx init`, `cgraphx init` 执行的同时可以执行 `cgraphx install`
+- 项目目录内执行 `cgraphx install`:建 `.cgraphx/` 数据目录(markdown 知识库 + timeline)+ 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine(一条命令全做)
 
 ### 卸载 · 可选
 
-- `npm uninstall -g cgraphx`
-- 删项目目录下 `.cgraphx/` 清数据
+- 项目目录内执行 `cgraphx uninstall`:清 `.claude/` 内包自带的 skills/配置 + 删 `.cgraphx/`(加 `--keep-data` 保留数据)
+- `npm uninstall -g cgraphx` 卸载 CLI
 
 ---
 

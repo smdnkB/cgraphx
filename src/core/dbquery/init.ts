@@ -57,7 +57,7 @@ export function templateProfilesContent(): string {
  * @param opts.force   Overwrite an existing file. Default false.
  *
  * Behavior:
- *   - .cgraphx/ missing → throws (caller should tell user to run `cgraphx init` first)
+ *   - .cgraphx/ missing → throws (caller should tell user to run `cgraphx install` first)
  *   - File exists + !force → returns action='already-exists', no write
  *   - File exists + force  → action='overwritten'
  *   - File absent          → action='created'
@@ -67,7 +67,7 @@ export function initDbProfiles(projectRoot: string, opts: { force?: boolean } = 
   const codegraphDir = path.join(resolved, '.cgraphx');
   if (!fs.existsSync(codegraphDir)) {
     throw new Error(
-      `cgraphx not initialized at ${resolved} — run \`cgraphx init\` first.`,
+      `cgraphx not initialized at ${resolved} — run \`cgraphx install\` first.`,
     );
   }
 

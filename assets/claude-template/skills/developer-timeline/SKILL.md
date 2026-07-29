@@ -293,7 +293,7 @@ cgraphx timeline show <id>
 
 ## 前置条件和失败处理
 
-- 项目必须 `cgraphx init`。
+- 项目必须已 `cgraphx install`(会建 `.cgraphx/`)。
 - Timeline hooks 必须安装(`cgraphx timeline install` 或 `cgraphx install`)。
 - Kill-switch:`CGRAPHX_NO_TIMELINE=1` 时 hooks 静默不记录。
 - 如果 timeline 无数据,说明原因并建议检查 hooks;可以退化到 `git log` + 当前工作区状态,但必须标明覆盖不足。

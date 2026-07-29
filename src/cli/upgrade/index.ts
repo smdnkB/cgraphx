@@ -1,134 +1,62 @@
 /**
- * `cgraphx upgrade`
+ * `cgraphx upgrade` — npm-only self-update.
  *
- * Self-update for the CLI, whatever way it was installed:
+ * cgraphx ships as an npm package, so the single supported download channel is
+ * the npm registry: upgrading shells out to `npm install -g cgraphx@<ver>`.
+ * The 1.x-era "bundle" path (download `install.sh` / a release zip from GitHub)
+ * was removed — those artifacts were never built or published, and a CLI
+ * upgrade should not depend on anything but npm.
  *
- *   - **bundle** — the self-contained runtime+app installed by `install.sh`
- *     (Linux/macOS) or `install.ps1` (Windows). Upgrading re-runs the SAME
- *     canonical installer script (single source of truth) so the download /
- *     version-resolution / PATH logic never drifts between first-install and
- *     upgrade.
- *   - **npm** — installed via `npm i -g cgraphx`. Upgrading
- *     shells out to npm.
- *   - **npx** — ephemeral; nothing to upgrade (next `npx` fetches latest).
- *   - **source** — a git checkout running its own `dist/`; `git pull` + rebuild.
- *
- * Detection is structural (see `detectInstallMethod`): a bundle carries a
- * vendored `node` binary and a `bin/cgraphx` launcher next to its `lib/`, so
- * we can recognize it from the running file's path without a marker file.
- *
- * Windows wrinkle: a running `node.exe` is locked and can't be deleted, so the
- * bundle's `current\` dir can't be overwritten in place by the process doing
- * the upgrade. We therefore spawn a DETACHED helper that waits for this
- * process to exit (releasing the lock), then runs `install.ps1`. This is the
- * conventional Windows self-update dance (rustup/nvm-windows do the same).
+ * Detection (`detectInstallMethod`) only distinguishes what matters here:
+ *   - **npm**   — installed via `npm i -g cgraphx` (or a local `npm i`); the
+ *                 upgrade performs `npm install -g cgraphx@<ver>`.
+ *   - **npx**   — ephemeral; nothing to upgrade (next `npx` fetches latest).
+ *   - **other** — source checkout / anything else; guided back to npm.
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
-import * as https from 'https';
 import { spawnSync } from 'child_process';
 
-export const REPO = 'smdnkB/cgraphx';
 export const NPM_PACKAGE = 'cgraphx';
-const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/main`;
-export const INSTALL_SH_URL = `${RAW_BASE}/install.sh`;
 
 // ---------------------------------------------------------------------------
-// Install-method detection (pure — fully unit-testable via injected probes)
+// Install-method detection (pure — fully unit-testable)
 // ---------------------------------------------------------------------------
 
 export type InstallMethod =
-  | { kind: 'bundle'; os: 'unix' | 'windows'; bundleRoot: string; installDir: string | null }
   | { kind: 'npm'; scope: 'global' | 'local' }
   | { kind: 'npx' }
-  | { kind: 'source'; root: string }
-  | { kind: 'unknown'; reason: string };
+  | { kind: 'other'; reason: string };
 
 export interface DetectInput {
   /** `__filename` of the running CLI module — `<…>/dist/cli/index.js`. */
   filename: string;
   platform: NodeJS.Platform;
   cwd: string;
-  /** Injectable existence probe (defaults to fs.existsSync) — for tests. */
-  exists?: (p: string) => boolean;
 }
 
 function toPosix(p: string): string {
   return p.replace(/\\/g, '/');
 }
 
-/**
- * Where the bundle installer keeps its install root, derived from the bundle
- * dir so an upgrade reuses a custom `CGRAPHX_INSTALL_DIR`. Returns null when
- * the layout isn't the one the installer creates (then the installer falls
- * back to its own default).
- *
- *   unix:    <installDir>/versions/<vX.Y.Z>   (bundleRoot)  → <installDir>
- *   windows: <installDir>\current             (bundleRoot)  → <installDir>
- */
-export function deriveInstallDir(
-  bundleRoot: string,
-  os: 'unix' | 'windows',
-  exists: (p: string) => boolean
-): string | null {
-  // Use the TARGET platform's path semantics (not the host's), so this is
-  // deterministic when reasoning about a Windows layout from a POSIX host (CI)
-  // and vice-versa. In production `os` always matches the running platform.
-  const P = os === 'windows' ? path.win32 : path.posix;
-  if (os === 'windows') {
-    if (P.basename(bundleRoot).toLowerCase() === 'current') {
-      return P.dirname(bundleRoot);
-    }
-    return null;
-  }
-  // unix: bundleRoot is <installDir>/versions/<version>
-  const parent = P.dirname(bundleRoot);
-  if (P.basename(parent) === 'versions') {
-    const installDir = P.dirname(parent);
-    return exists(installDir) ? installDir : P.dirname(parent);
-  }
-  return null;
-}
-
 export function detectInstallMethod(input: DetectInput): InstallMethod {
-  const exists = input.exists ?? fs.existsSync;
   const isWin = input.platform === 'win32';
   // Path math keyed on the TARGET platform so detection is host-independent
-  // (a Windows layout resolves correctly even when unit-tested on macOS/Linux).
+  // (a Windows path resolves correctly even when unit-tested on macOS/Linux).
   const P = isWin ? path.win32 : path.posix;
-  const binDir = P.dirname(input.filename); // <…>/bin
-
-  // Bundle: <root>/lib/dist/cli/index.js → <root> is up 3 from cli/.
-  // A bundle has a vendored node + a launcher script as siblings of lib/.
-  const bundleRoot = P.resolve(binDir, '..', '..', '..');
-  const vendoredNode = P.join(bundleRoot, isWin ? 'node.exe' : 'node');
-  const launcher = P.join(bundleRoot, 'bin', isWin ? 'cgraphx.cmd' : 'cgraphx');
-  if (exists(vendoredNode) && exists(launcher)) {
-    const os = isWin ? 'windows' : 'unix';
-    return { kind: 'bundle', os, bundleRoot, installDir: deriveInstallDir(bundleRoot, os, exists) };
-  }
-
   const norm = toPosix(input.filename);
 
   // npx cache: <…>/_npx/<hash>/node_modules/cgraphx/…
   if (norm.includes('/_npx/')) {
     return { kind: 'npx' };
   }
-
   // npm install (global or local): lives under a node_modules tree.
   if (norm.includes('/node_modules/')) {
     const underCwd = norm.startsWith(toPosix(P.resolve(input.cwd)) + '/');
     return { kind: 'npm', scope: underCwd ? 'local' : 'global' };
   }
-
-  // Source checkout: running <repo>/dist/cli/index.js with a sibling .git.
-  const repoRoot = P.resolve(binDir, '..', '..');
-  if (exists(P.join(repoRoot, 'package.json')) && exists(P.join(repoRoot, '.git'))) {
-    return { kind: 'source', root: repoRoot };
-  }
-
-  return { kind: 'unknown', reason: `unrecognized install layout at ${input.filename}` };
+  // Anything else (source checkout, legacy layout, unknown) — npm-only now.
+  return { kind: 'other', reason: `not an npm install (running from ${input.filename})` };
 }
 
 // ---------------------------------------------------------------------------
@@ -190,72 +118,26 @@ export function stripV(v: string): string {
   return t.startsWith('v') ? t.slice(1) : t;
 }
 
-/**
- * Parse the release tag out of the `Location` header GitHub returns for
- * `/releases/latest` → `…/releases/tag/v0.9.9`. Pure so it's unit-tested.
- */
-export function parseLatestTagFromLocation(location: string | undefined): string | null {
-  if (!location) return null;
-  const m = /\/releases\/tag\/([^/?#]+)/.exec(location);
-  return m ? decodeURIComponent(m[1]!) : null;
-}
-
 // ---------------------------------------------------------------------------
-// Latest-version resolution (network)
+// Latest-version resolution (npm registry)
 // ---------------------------------------------------------------------------
 
-function httpsGet(
-  url: string,
-  headers: Record<string, string>,
-  timeoutMs: number
-): Promise<{ status: number; headers: Record<string, string | string[] | undefined>; body: string }> {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers }, (res) => {
-      let body = '';
-      res.on('data', (c) => (body += c));
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }));
-    });
-    req.on('error', reject);
-    req.setTimeout(timeoutMs, () => req.destroy(new Error(`request timed out after ${timeoutMs}ms`)));
-  });
-}
-
 /**
- * Resolve the latest release tag (e.g. `v0.9.9`).
- *
- * Primary: read the redirect `Location` from `github.com/<repo>/releases/latest`
- * — same trick install.sh uses, because the unauthenticated GitHub API is
- * rate-limited to 60 req/h/IP and 403s on shared/cloud hosts (issue #325). The
- * redirect has no such limit. Fall back to the API only if the redirect can't
- * be read.
+ * Resolve the latest published version (e.g. `v2.0.0`) from the npm registry
+ * via `npm view cgraphx version`. npm-only by design — no GitHub dependency.
+ * npm is guaranteed present for anyone who installed via npm/npx, and the
+ * registry has none of the GitHub API's rate-limit problems.
  */
-export async function resolveLatestVersion(repo = REPO, timeoutMs = 12000): Promise<string> {
-  try {
-    const res = await httpsGet(
-      `https://github.com/${repo}/releases/latest`,
-      { 'User-Agent': 'cgraphx-upgrade' },
-      timeoutMs
+export async function resolveLatestVersion(): Promise<string> {
+  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const r = spawnSync(npm, ['view', NPM_PACKAGE, 'version'], { encoding: 'utf-8' });
+  const version = (r.stdout ?? '').trim();
+  if (r.status !== 0 || !/^\d+\.\d+\.\d+/.test(version)) {
+    throw new Error(
+      'could not resolve the latest version from npm. Check your network / registry, or pin a version: `cgraphx upgrade <version>`.'
     );
-    const loc = res.headers.location;
-    const tag = parseLatestTagFromLocation(Array.isArray(loc) ? loc[0] : loc);
-    if (tag) return normalizeVersion(tag);
-  } catch {
-    /* fall through to API */
   }
-  try {
-    const res = await httpsGet(
-      `https://api.github.com/repos/${repo}/releases/latest`,
-      { 'User-Agent': 'cgraphx-upgrade', Accept: 'application/vnd.github+json' },
-      timeoutMs
-    );
-    const tag = JSON.parse(res.body)?.tag_name;
-    if (typeof tag === 'string' && tag) return normalizeVersion(tag);
-  } catch {
-    /* fall through to error */
-  }
-  throw new Error(
-    'could not resolve the latest version from GitHub. Check your network, or pin a version: `cgraphx upgrade <version>`.'
-  );
+  return normalizeVersion(version);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +160,6 @@ export interface UpgradeDeps {
   resolveLatest: (pin?: string) => Promise<string>;
   /** Run a command inheriting stdio; returns its exit code (-1 = spawn failed). */
   run: (cmd: string, args: string[], env?: NodeJS.ProcessEnv) => number;
-  hasCommand: (cmd: string) => boolean;
   log: (msg: string) => void;
   warn: (msg: string) => void;
   error: (msg: string) => void;
@@ -293,16 +174,15 @@ const c = {
   cyan: (s: string) => `\x1b[36m${s}\x1b[0m`,
 };
 
-/** The honest, additive re-index reminder shown after a successful upgrade. */
+/** The honest, additive reminder shown after a successful upgrade. */
 export function reindexAdvisory(): string {
-  // 2.0 cut the code-graph index/sync commands. The only index left is the
-  // markdown knowledge base (`cgraphx docs index`), so the advisory points at
-  // that — a CLI upgrade may ship markdown-parser improvements worth picking up.
+  // upgrade is a pure binary swap — it touches no project's `.claude/` config
+  // or `.cgraphx/` data. To pick up this version's skills / hooks / workflow
+  // guidance (and any markdown-parser improvements), re-run install per project.
   return [
-    c.dim('Your existing docs indexes keep working, but were built by the previous version.'),
-    c.dim('To pick up this version’s markdown parsing improvements, refresh each project:'),
-    `  ${c.cyan('cgraphx docs index')}    ${c.dim('# re-index the markdown knowledge base')}`,
-    c.dim('(`cgraphx status` summarizes each project’s docs/timeline/db state.)'),
+    c.dim('upgrade 只更新了 CLI 本体,没有改动任何项目的配置。'),
+    c.dim('要让各项目用上这一版的 skills / hooks / 工作方式与解析改进,请到项目内重跑:'),
+    `  ${c.cyan('cgraphx install')}    ${c.dim('# 刷新 .claude/ skills、配置与 .claude/CLAUDE.md')}`,
   ].join('\n');
 }
 
@@ -342,153 +222,27 @@ export async function runUpgrade(opts: UpgradeOptions, deps: UpgradeDeps): Promi
     return 0;
   }
 
-  // Dispatch by install method. bundle/npm perform a real binary update, so
-  // after they succeed we self-heal the front-load hook (below); npx/source/
-  // unknown don't update anything here, so they return directly.
-  let code: number;
+  // npm-only dispatch: npm performs the real update; npx fetches on demand
+  // (nothing to do); anything else is guided back to npm.
   switch (method.kind) {
-    case 'bundle':
-      code = await (method.os === 'windows'
-        ? upgradeWindowsBundle(method, latest, deps)
-        : upgradeUnixBundle(method, opts.version ? latest : undefined, deps));
-      break;
-    case 'npm':
+    case 'npm': {
       // npm version specs have no leading "v" (`@0.9.8`, not `@v0.9.8` — the
       // latter resolves as a nonexistent dist-tag).
-      code = await upgradeNpm(method, opts.version ? stripV(latest) : 'latest', deps);
-      break;
+      const code = upgradeNpm(method, opts.version ? stripV(latest) : 'latest', deps);
+      // Future: when a release changes the `.cgraphx/cgraphx.db` data model, a
+      // schema-migration step would hook in here (after `code === 0`). None yet.
+      return code;
+    }
     case 'npx':
       deps.log(c.green('npx always runs the latest version on demand — nothing to upgrade.'));
       deps.log(c.dim(`Force a fresh fetch with: npx ${NPM_PACKAGE}@latest`));
       return 0;
-    case 'source':
-      deps.warn(`Running from a source checkout at ${method.root}.`);
-      deps.log(c.dim('Upgrade it with: git pull && npm run build'));
-      return 0;
     default:
-      deps.error(`Couldn’t determine how cgraphx was installed (${method.reason}).`);
-      deps.log(c.dim(`Reinstall manually — see https://github.com/${REPO}#install`));
-      return 1;
+      deps.warn(`This cgraphx isn't an npm install (${method.reason}).`);
+      deps.log(c.dim(`Install / upgrade via npm:  npm install -g ${NPM_PACKAGE}@latest`));
+      deps.log(c.dim('(Running from a source checkout? `git pull && npm run build`.)'));
+      return 0;
   }
-
-  // After a successful update, ensure the front-load prompt hook is wired for an
-  // already-configured global Claude install — so existing users pick it up on
-  // upgrade, not only on a fresh `install` (the hook config is version-agnostic,
-  // so the still-running old binary can write it safely). Idempotent + gated on
-  // an existing Claude config, and skipped entirely by the kill-switch. Never
-  // fatal to the upgrade.
-  if (code === 0) {
-    try {
-      await selfHealPromptHook(deps);
-    } catch {
-      /* a hook-wiring hiccup must not fail the upgrade */
-    }
-  }
-  return code;
-}
-
-/**
- * Wire the Claude `UserPromptSubmit` front-load hook on upgrade for an
- * already-configured global Claude install. No-op when Claude isn't configured,
- * when the hook is already present, or when the kill-switch is set.
- */
-async function selfHealPromptHook(deps: UpgradeDeps): Promise<void> {
-  if (process.env.CGRAPHX_NO_PROMPT_HOOK === '1' || process.env.CGRAPHX_PROMPT_HOOK === '0') return;
-  const { claudeTarget, writePromptHookEntry } = await import('../installer/targets/claude');
-  if (!claudeTarget.detect('global').alreadyConfigured) return;
-  const res = writePromptHookEntry('global');
-  if (res.action === 'created' || res.action === 'updated') {
-    deps.log(
-      c.dim('Enabled the cgraphx front-load hook for Claude Code (structural prompts). Disable any time: CGRAPHX_NO_PROMPT_HOOK=1'),
-    );
-  }
-}
-
-function upgradeUnixBundle(
-  method: Extract<InstallMethod, { kind: 'bundle' }>,
-  pinned: string | undefined,
-  deps: UpgradeDeps
-): number {
-  const downloader = deps.hasCommand('curl')
-    ? `curl -fsSL ${INSTALL_SH_URL}`
-    : deps.hasCommand('wget')
-      ? `wget -qO- ${INSTALL_SH_URL}`
-      : null;
-  if (!downloader) {
-    deps.error('Neither curl nor wget is available to download the installer.');
-    deps.log(c.dim(`Install curl, or run manually:  ${INSTALL_SH_URL} | sh`));
-    return 1;
-  }
-
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  if (method.installDir) env.CGRAPHX_INSTALL_DIR = method.installDir;
-  if (pinned) env.CGRAPHX_VERSION = pinned;
-
-  deps.log(c.dim(`Running the installer (${downloader} | sh)…`));
-  const code = deps.run('sh', ['-c', `${downloader} | sh`], env);
-  if (code !== 0) {
-    deps.error(`Installer exited with code ${code}.`);
-    return 1;
-  }
-  deps.log('');
-  deps.log(c.green('✓ Upgrade complete.') + c.dim(' Open a new terminal if the version looks unchanged (PATH cache).'));
-  deps.log(reindexAdvisory());
-  return 0;
-}
-
-/** Build the in-place Windows upgrade script (exported for unit-testing). */
-export function buildWindowsUpgradeScript(bundleRoot: string, version: string, arch: string): string {
-  const target = `win32-${arch}`;
-  const url = `https://github.com/${REPO}/releases/download/${version}/cgraphx-${target}.zip`;
-  // Windows can't DELETE a running exe but CAN rename it, so we upgrade IN
-  // PLACE: download → rename the locked node.exe aside → extract the new bundle
-  // over current\. Synchronous, no detached helper (which dies under SSH/job
-  // objects and has worse UX). The running process keeps its renamed node.exe
-  // mapped; the NEXT `cgraphx` invocation uses the new one. We can't reuse
-  // install.ps1 here — it `Remove-Item`s current\, which fails on the locked exe.
-  return [
-    `$ErrorActionPreference='Stop'`,
-    `$dest='${bundleRoot}'`,
-    `$url='${url}'`,
-    `Write-Host "Downloading $url"`,
-    `$tmp=Join-Path $env:TEMP ('cg-up-'+[guid]::NewGuid().ToString('N'))`,
-    `New-Item -ItemType Directory -Force -Path $tmp | Out-Null`,
-    `$zip=Join-Path $tmp 'cg.zip'`,
-    `Invoke-WebRequest -Uri $url -OutFile $zip`,
-    `$stage=Join-Path $tmp 'stage'`,
-    `Expand-Archive -Path $zip -DestinationPath $stage -Force`,
-    `$inner=Join-Path $stage 'cgraphx-${target}'`,
-    `$src=if(Test-Path $inner){$inner}else{$stage}`,
-    `$node=Join-Path $dest 'node.exe'`,
-    `if(Test-Path $node){Rename-Item -Path $node -NewName ('node.exe.old-'+[guid]::NewGuid().ToString('N')) -Force}`,
-    `Copy-Item -Path (Join-Path $src '*') -Destination $dest -Recurse -Force`,
-    `Get-ChildItem -Path $dest -Filter 'node.exe.old-*' -ErrorAction SilentlyContinue | ForEach-Object { try { Remove-Item $_.FullName -Force -ErrorAction Stop } catch {} }`,
-    `Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue`,
-    `Write-Host "Installed cgraphx ${version} to $dest"`,
-  ].join(';');
-}
-
-function upgradeWindowsBundle(
-  method: Extract<InstallMethod, { kind: 'bundle' }>,
-  latest: string,
-  deps: UpgradeDeps
-): number {
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
-  const script = buildWindowsUpgradeScript(method.bundleRoot, latest, arch);
-  // -EncodedCommand (base64 UTF-16LE), NOT -Command: Node's Windows argv→command
-  // -line quoting mangles a long multi-statement script, so PowerShell never
-  // parses it. Encoding sidesteps all shell quoting — the canonical approach.
-  const encoded = Buffer.from(script, 'utf16le').toString('base64');
-  deps.log(c.dim(`Downloading and installing ${latest}…`));
-  const code = deps.run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded]);
-  if (code !== 0) {
-    deps.error(`Installer exited with code ${code}.`);
-    return 1;
-  }
-  deps.log('');
-  deps.log(c.green('✓ Upgrade complete.') + c.dim(' Open a new terminal to be safe (PATH/version cache).'));
-  deps.log(reindexAdvisory());
-  return 0;
 }
 
 function upgradeNpm(
@@ -519,33 +273,6 @@ function upgradeNpm(
 // ---------------------------------------------------------------------------
 // Production deps wiring (used by the CLI)
 // ---------------------------------------------------------------------------
-
-/**
- * True if `cmd` resolves to an executable on PATH. A pure-Node PATH scan — NOT
- * a spawned `command -v`/`which`: `command` is a shell builtin (no standalone
- * binary on Debian, though macOS ships one), and `which` isn't guaranteed
- * present on minimal images, so spawning either is unreliable. Scanning PATH
- * ourselves behaves identically on every platform.
- */
-export function hasCommand(cmd: string): boolean {
-  const isWin = process.platform === 'win32';
-  const dirs = (process.env.PATH || process.env.Path || '').split(path.delimiter).filter(Boolean);
-  const exts = isWin ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';') : [''];
-  for (const dir of dirs) {
-    for (const ext of exts) {
-      const candidate = path.join(dir, cmd + ext);
-      try {
-        if (!fs.statSync(candidate).isFile()) continue;
-        if (isWin) return true;
-        fs.accessSync(candidate, fs.constants.X_OK);
-        return true;
-      } catch {
-        /* not here / not executable — keep scanning */
-      }
-    }
-  }
-  return false;
-}
 
 export function defaultRun(cmd: string, args: string[], env?: NodeJS.ProcessEnv): number {
   const r = spawnSync(cmd, args, { stdio: 'inherit', env: env ?? process.env });

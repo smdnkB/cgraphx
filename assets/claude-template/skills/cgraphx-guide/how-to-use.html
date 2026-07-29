@@ -402,13 +402,11 @@ footer p { margin: 0; }
       <div class="t-line"><span class="t-prompt">$</span> npm install <span class="t-flag">-g</span> cgraphx <span class="t-comment"># 装 CLI(Node ≥ 20 且 &lt; 25)</span></div>
 
       <div class="t-sep"># ── 项目级 · 每项目一次 ──────────────────────</div>
-      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx init <span class="t-comment"># 建 .cgraphx/ 数据目录(markdown 知识库 + timeline)+ 配置文件</span></div>
-      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx install <span class="t-comment"># 写 MCP 配置 + 部署 skills 到 .claude/</span></div>
-      <div class="t-note">↳ 两者可同时执行,但 <span class="t-cmd">cgraphx init</span> 必须先发起</div>
+      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx install <span class="t-comment"># 建 .cgraphx/ + 部署 skills 到 .claude/ + 写 hooks/statusLine</span></div>
 
       <div class="t-sep"># ── 卸载 · 可选 ──────────────────────────────</div>
-      <div class="t-line"><span class="t-prompt">$</span> npm uninstall <span class="t-flag">-g</span> cgraphx</div>
-      <div class="t-line"><span class="t-prompt">$</span> rm <span class="t-flag">-rf</span> .cgraphx/ <span class="t-comment"># 清数据</span><span class="t-cursor"></span></div>
+      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx uninstall <span class="t-comment"># 清 .claude/ skills/配置 + 删 .cgraphx/</span></div>
+      <div class="t-line"><span class="t-prompt">$</span> npm uninstall <span class="t-flag">-g</span> cgraphx<span class="t-cursor"></span></div>
     </div>
   </div>
 </section>

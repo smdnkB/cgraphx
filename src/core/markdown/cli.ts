@@ -453,7 +453,7 @@ function registerListCommand<T>(
 function handleQueryError(err: unknown): void {
   if (err instanceof ProjectNotInitializedError) {
     process.stderr.write(
-      `${err.message}\nRun \`cgraphx init\` in ${err.projectPath} first.\n`,
+      `${err.message}\nRun \`cgraphx install\` in ${err.projectPath} first.\n`,
     );
     process.exitCode = 1;
     return;

@@ -25,7 +25,13 @@ import {
   resolveTargetFlag,
 } from './targets/registry';
 import type { AgentTarget, Location } from './targets/types';
-import { getCodeGraphDir } from '../../core/directory';
+import {
+  getCodeGraphDir,
+  isInitialized,
+  createDirectory,
+  removeDirectory,
+  unsafeIndexRootReason,
+} from '../../core/directory';
 import { NPM_PACKAGE } from '../upgrade';
 
 // Dynamic import helper — tsc compiles import() to require() in CJS mode,
@@ -54,8 +60,6 @@ export interface RunInstallerOptions {
    * Comma-separated target list, or `auto` / `all` / `none`.
    */
   target?: string;
-  /** Skip the location prompt; use this value directly. */
-  location?: Location;
   /** Skip the prompt-hook prompt; use this value directly. */
   promptHook?: boolean;
   /**
@@ -129,29 +133,9 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 3: where the per-agent config files should land. Default LOCAL
-  // (project-level) — keeps the user's global ~/.claude/ untouched unless
-  // they explicitly opt in with --location=global.
-  let location: Location;
-  if (opts.location) {
-    location = opts.location;
-  } else if (useDefaults) {
-    location = 'local';
-  } else {
-    const sel = await clack.select({
-      message: '配置应用到当前项目,还是所有项目?',
-      options: [
-        { value: 'local'  as const, label: '仅当前项目(推荐)',  hint: './.claude' },
-        { value: 'global' as const, label: '⚠️  所有项目(不建议)', hint: '会影响你所有项目;如非必要不要选' },
-      ],
-      initialValue: 'local' as const,
-    });
-    if (clack.isCancel(sel)) {
-      clack.cancel('安装已取消。');
-      process.exit(0);
-    }
-    location = sel;
-  }
+  // Step 3: install location. 2.0 is project-local only — there is no global
+  // (~/.claude) install, so this is a constant, not a prompt.
+  const location: Location = 'local';
 
   // Step 4: front-load prompt hook (`cgraphx prompt-hook`). Opt-in via the
   // installer prompt (default-yes): `true` writes it; `false` strips any
@@ -198,11 +182,23 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
+  // Step 5¼: ensure the project's `.cgraphx/` data dir exists — the work the
+  // removed `cgraphx init` did, folded into install. Idempotent; an unsafe root
+  // ($HOME / filesystem root) is skipped with a warning so we never auto-create
+  // a data dir somewhere unintended. The `.claude` config above is unaffected.
+  const projectRoot = process.cwd();
+  const initOutcome = await ensureProjectInitialized(projectRoot);
+  if (initOutcome === 'initialized') {
+    clack.log.success(`已初始化 ${getCodeGraphDir(projectRoot)}(markdown + timeline schema)`);
+  } else if (initOutcome === 'skipped-unsafe') {
+    clack.log.warn('跳过 .cgraphx/ 初始化:当前目录看起来不是项目根($HOME / 文件系统根)。在真实项目内重跑 cgraphx install 以启用知识库 / 时间线。');
+  }
+  // (initOutcome === 'already' → quiet no-op)
+
   // Step 5½: optional subsystem setup — docs / db / timeline.
   // Each is independent and runs only if the user keeps it checked.
   // Skipped silently under --yes if their preconditions aren't met
-  // (e.g. db init needs .cgraphx/ to exist; docs needs docs/knowledge/).
-  const projectRoot = process.cwd();
+  // (e.g. docs needs docs/knowledge/ with .md files).
   const cgraphxExists = fs.existsSync(getCodeGraphDir(projectRoot));
   const docsDir = path.join(projectRoot, 'docs', 'knowledge');
   const docsHasMd = fs.existsSync(docsDir) &&
@@ -232,7 +228,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
 
   if (chosen.includes('docs')) {
     if (!cgraphxExists) {
-      clack.log.info('.cgraphx/ 不存在 — 文档子系统跳过(跑 `cgraphx init` 后再 `cgraphx docs index`)');
+      clack.log.info('.cgraphx/ 不存在 — 文档子系统跳过(在真实项目目录内重跑 `cgraphx install`,再 `cgraphx docs index`)');
     } else if (docsHasMd) {
       const s = clack.spinner();
       s.start('索引文档知识库...');
@@ -263,7 +259,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
         clack.log.warn(`db init 失败:${err instanceof Error ? err.message : String(err)}`);
       }
     } else {
-      clack.log.info('.cgraphx/ 不存在 — 数据库子系统跳过(跑 `cgraphx init` 后再 `cgraphx db init`)');
+      clack.log.info('.cgraphx/ 不存在 — 数据库子系统跳过(在真实项目目录内重跑 `cgraphx install`,再 `cgraphx db init`)');
     }
   }
 
@@ -283,14 +279,11 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 6: next steps. `install` deliberately doesn't initialize the
-  // data directory — the user runs `cgraphx init` (per project) when
-  // they're ready, so we never create a surprise `.cgraphx/` in e.g.
-  // $HOME.
+  // Step 6: next steps. install now initializes the data dir itself (the
+  // removed `cgraphx init` is folded in), so the only thing left is to restart
+  // the agent and, optionally, index an existing knowledge base.
   clack.note(
-    location === 'local'
-      ? 'cgraphx init        # 初始化本项目的 .cgraphx/(一次性)'
-      : 'cd <你的项目>\ncgraphx init        # 初始化项目 .cgraphx/(一次性)',
+    '重启你的 agent 以加载新技能。\ncgraphx docs index   # 可选:已有 docs/knowledge/ 时建知识库索引',
     '下一步',
   );
 
@@ -308,10 +301,10 @@ export interface RunUninstallerOptions {
    * where they configured it.
    */
   target?: string;
-  /** Skip the location prompt; use this value directly. */
-  location?: Location;
-  /** Non-interactive: location=global, target=all, no prompts. */
+  /** Non-interactive: target=all, no prompts (also skips the data-delete confirm). */
   yes?: boolean;
+  /** Keep the project's `.cgraphx/` data dir (default: remove it). */
+  keepData?: boolean;
 }
 
 export type UninstallStatus = 'removed' | 'not-configured' | 'unsupported';
@@ -347,13 +340,12 @@ export function uninstallTargets(
 ): UninstallReport[] {
   return targets.map((target) => {
     if (!target.supportsLocation(location)) {
-      const only: Location = location === 'local' ? 'global' : 'local';
       return {
         id: target.id,
         displayName: target.displayName,
         status: 'unsupported' as const,
         removedPaths: [],
-        notes: [`no ${location} config — this agent is ${only}-only`],
+        notes: [`no ${location} config for this agent`],
       };
     }
     const result = target.uninstall(location);
@@ -372,16 +364,15 @@ export function uninstallTargets(
 
 /**
  * Interactive uninstaller — the inverse of `runInstallerWithOptions`.
- * Asks global-vs-local first (unless `--location`/`--yes` is given),
- * then sweeps every agent target (or the `--target` subset) and prints
- * one block per agent so the user sees exactly which providers it hit.
+ * Project-local only (no global uninstall). Sweeps every agent target (or the
+ * `--target` subset) and prints one block per agent so the user sees exactly
+ * which providers it hit.
  *
- * Removes only what install wrote: the agent targets' hooks / statusLine /
- * prompt-hook / stale instructions block, and (for local uninstall) the
- * Developer Timeline hooks install wired into .claude/settings.json. The
- * `.cgraphx/` data dir is owned by `cgraphx uninit` and is left untouched;
- * the bundled `.claude/` template (skills/agents/...) is retained — the
- * user may have customized it (a hint is printed).
+ * Removes what install wrote: the agent targets' hooks / statusLine /
+ * prompt-hook / instructions block AND the package-owned `.claude/` assets (by
+ * manifest), plus the Developer Timeline hooks. Also removes the `.cgraphx/`
+ * data dir (the folded `uninit`) unless `--keep-data` — that's destructive, so
+ * it's confirmed interactively unless `--yes`.
  */
 export async function runUninstaller(opts: RunUninstallerOptions): Promise<void> {
   const clack = await importESM('@clack/prompts');
@@ -390,30 +381,8 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
 
   const useDefaults = opts.yes === true;
 
-  // Step 1: which location. Default is GLOBAL for uninstall — clean every
-  // trace of cgraphx from the user's home (project-local files are easy for
-  // the user to delete themselves; ~/.claude/ is the dangerous one they
-  // want us to remove for them).
-  let location: Location;
-  if (opts.location) {
-    location = opts.location;
-  } else if (useDefaults) {
-    location = 'global';
-  } else {
-    const sel = await clack.select({
-      message: '从所有项目移除 cgraphx,还是仅当前项目?',
-      options: [
-        { value: 'global' as const, label: '所有项目(全局)', hint: '~/.claude' },
-        { value: 'local'  as const, label: '仅当前项目(本地)', hint: './.claude' },
-      ],
-      initialValue: 'global' as const,
-    });
-    if (clack.isCancel(sel)) {
-      clack.cancel('卸载已取消。');
-      process.exit(0);
-    }
-    location = sel;
-  }
+  // Step 1: install location. 2.0 is project-local only — no global uninstall.
+  const location: Location = 'local';
 
   // Step 2: which agents. Default is every agent.
   let targets: AgentTarget[];
@@ -443,37 +412,55 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     }
   }
 
-  // Step 4: for local uninstall, mirror what `install` did beyond the
-  // agent targets. install optionally wires Developer Timeline hooks into
-  // .claude/settings.json (Step 5½), so uninstall removes them here for
-  // symmetry (spec §84 — install/uninstall must be inverse). The .cgraphx/
-  // data dir is owned by `cgraphx uninit` and is left untouched; the
-  // bundled .claude/ template (skills/agents/commands/hooks/plugins) is
-  // intentionally retained — the user may have customized it.
-  if (location === 'local') {
-    try {
-      const { uninstallTimelineHooks } = await import('../../core/timeline/installer');
-      const tlReport = uninstallTimelineHooks(process.cwd(), {});
-      if (tlReport.removedHookEvents.length > 0) {
-        clack.log.success(
-          `Developer Timeline:已移除 hooks(${tlReport.removedHookEvents.join(', ')})`,
-        );
-      }
-      if (tlReport.gitHookRemoved) {
-        clack.log.success('Developer Timeline:已移除 git post-commit hook');
-      }
-    } catch (err) {
-      clack.log.warn(
-        `timeline uninstall 失败:${err instanceof Error ? err.message : String(err)}`,
+  // Step 4: mirror what `install` did beyond the agent targets.
+  //   - install wires Developer Timeline hooks (Step 5½) → remove them here.
+  //   - install creates `.cgraphx/` (folded `init`) → remove it here (folded
+  //     `uninit`) unless --keep-data. Destructive (timeline / docs index data),
+  //     so confirm interactively unless --yes.
+  //   (The package-owned `.claude/` assets are removed by the agent target's
+  //   uninstall above; user-added files outside the manifest survive.)
+  try {
+    const { uninstallTimelineHooks } = await import('../../core/timeline/installer');
+    const tlReport = uninstallTimelineHooks(process.cwd(), {});
+    if (tlReport.removedHookEvents.length > 0) {
+      clack.log.success(
+        `Developer Timeline:已移除 hooks(${tlReport.removedHookEvents.join(', ')})`,
       );
     }
-
-    if (fs.existsSync(getCodeGraphDir(process.cwd()))) {
-      clack.log.info(`本项目的 .cgraphx/ 仍然存在。运行 \`cgraphx uninit\` 删除。`);
+    if (tlReport.gitHookRemoved) {
+      clack.log.success('Developer Timeline:已移除 git post-commit hook');
     }
-    clack.log.info(
-      `模板文件保留在 .claude/,如需手动删除:rm -rf .claude/{skills,agents,commands,hooks,plugins}`,
+  } catch (err) {
+    clack.log.warn(
+      `timeline uninstall 失败:${err instanceof Error ? err.message : String(err)}`,
     );
+  }
+
+  // Remove the `.cgraphx/` data dir (the folded `uninit`).
+  const dataDir = getCodeGraphDir(process.cwd());
+  if (fs.existsSync(dataDir)) {
+    if (opts.keepData === true) {
+      clack.log.info(`保留 ${dataDir}(--keep-data)。如需删除:rm -rf ${dataDir}`);
+    } else {
+      let confirmed = useDefaults;
+      if (!confirmed) {
+        const ans = await clack.confirm({
+          message: `删除 ${dataDir}?这会永久移除本项目的 cgraphx 数据(timeline / 知识库索引)。`,
+          initialValue: true,
+        });
+        if (clack.isCancel(ans)) {
+          clack.cancel('卸载已取消。');
+          process.exit(0);
+        }
+        confirmed = ans;
+      }
+      if (confirmed) {
+        removeDirectory(process.cwd());
+        clack.log.success(`已删除 ${dataDir}`);
+      } else {
+        clack.log.info(`保留 ${dataDir}。如需删除:rm -rf ${dataDir}`);
+      }
+    }
   }
 
   // Step 5: summary.
@@ -484,8 +471,38 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
       `重启 ${removed.length > 1 ? '它们' : '它'} 后生效。`,
     );
   } else {
-    clack.outro(`cgraphx 未在任何 ${location} agent 中配置 —— 无需移除。`);
+    clack.outro('cgraphx 未在本项目配置 —— 无需移除。');
   }
+}
+
+/**
+ * Ensure the project's `.cgraphx/` data dir exists and the markdown + timeline
+ * schemas are applied — the work the removed `cgraphx init` command did, folded
+ * into install. Idempotent: an already-initialized project is a no-op.
+ *
+ * @returns `initialized` (created + schemas applied), `already` (nothing to
+ *          do), or `skipped-unsafe` (the root looks like $HOME / a filesystem
+ *          root, so we refuse to auto-create a data dir there).
+ */
+export async function ensureProjectInitialized(
+  projectRoot: string,
+): Promise<'initialized' | 'already' | 'skipped-unsafe'> {
+  if (isInitialized(projectRoot)) return 'already';
+  if (unsafeIndexRootReason(projectRoot)) return 'skipped-unsafe';
+
+  createDirectory(projectRoot);
+  const { DatabaseConnection, getDatabasePath } = await import('../../core/db');
+  const { ensureMarkdownSchema } = await import('../../core/markdown/schema-bootstrap');
+  const { ensureTimelineSchema } = await import('../../core/timeline/schema-bootstrap');
+  const conn = DatabaseConnection.open(getDatabasePath(projectRoot));
+  try {
+    const db = conn.getDb();
+    ensureMarkdownSchema(db);
+    ensureTimelineSchema(db);
+  } finally {
+    conn.close();
+  }
+  return 'initialized';
 }
 
 /**

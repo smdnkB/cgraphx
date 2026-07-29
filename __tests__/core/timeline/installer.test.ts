@@ -13,6 +13,8 @@ import { execSync } from 'node:child_process';
 
 import { installTimelineHooks, uninstallTimelineHooks } from '../../../src/core/timeline/installer';
 import { DatabaseConnection } from '../../../src/core/db';
+import { createDirectory } from '../../../src/core/directory';
+import { ensureTimelineSchema } from '../../../src/core/timeline/schema-bootstrap';
 
 function makeTmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-tl-inst-'));
@@ -156,11 +158,16 @@ describe('uninstallTimelineHooks', () => {
     // init cgraphx + populate one event first
     execSync('git config user.email test@test', { cwd: project });
     execSync('git config user.name test', { cwd: project });
-    execSync(`CGRAPHX_ALLOW_UNSAFE_NODE=1 ${process.execPath} ${path.join(__dirname, '..', '..', '..', 'dist', 'cli', 'index.js')} init`, {
-      cwd: project,
-      stdio: 'ignore',
-      env: { ...process.env, CGRAPHX_ALLOW_UNSAFE_NODE: '1' },
-    });
+    // `cgraphx init` was folded into `install`; initialize the data dir directly
+    // via the core API (createDirectory + timeline schema) instead of shelling
+    // out to the CLI.
+    createDirectory(project);
+    const initConn = DatabaseConnection.open(path.join(project, '.cgraphx', 'cgraphx.db'));
+    try {
+      ensureTimelineSchema(initConn.getDb());
+    } finally {
+      initConn.close();
+    }
 
     // Insert one event
     const dbPath = path.join(project, '.cgraphx', 'cgraphx.db');
