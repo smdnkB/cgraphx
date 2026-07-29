@@ -195,6 +195,17 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   }
   // (initOutcome === 'already' → quiet no-op)
 
+  // Drop orphaned 1.x code-graph tables (the 2.0 rebuild removed the graph
+  // layer). Runs for new AND upgrading projects; idempotent no-op once gone or
+  // for 2.0-native projects. Skipped for unsafe roots (no data dir there).
+  if (initOutcome !== 'skipped-unsafe') {
+    const { dropLegacyGraphTables } = await import('../../core/db/migrate');
+    const cleanup = dropLegacyGraphTables(projectRoot);
+    if (cleanup.dropped.length > 0) {
+      clack.log.success(`已清理 1.x 代码图谱遗留表:${cleanup.dropped.join(', ')}`);
+    }
+  }
+
   // Step 5½: optional subsystem setup — docs / db / timeline.
   // Each is independent and runs only if the user keeps it checked.
   // Skipped silently under --yes if their preconditions aren't met
