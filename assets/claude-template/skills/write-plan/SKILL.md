@@ -42,7 +42,7 @@ spec 中"不可留到实现期的决策"或影响任务拆分的【待确认】,
    - 跨任务一致性:签名/命名/接口跨任务引用逐字一致
    - 每个任务有可验证完成条件(具体命令/步骤,不是"应该工作")
    - Plan 忠实度:spec 契约完整落到任务,没把关键方案留给 implementer
-   - 强制引用标注齐全:schema/接口/动代码任务都按映射标了 docs/guides 引用(执行期规范送达只认标注)
+   - 强制引用标注齐全:schema/接口/动代码/测试任务都按映射标了 docs/guides 引用(执行期规范送达只认标注)
 6. **Plan Review**:默认派 `plan-document-reviewer` 子 agent(同目录 `plan-document-reviewer-prompt.md`),审完整性/Spec 对齐/可执行性/跨任务一致性;校准:只标真正阻塞 implementer 的问题。返回 issues → 修 → 必要时复审。跳过条件:用户明确说不用 / plan 极小 / 时间紧(在 Self-Review 里写跳过理由)。
 
 ## 拆分规则
@@ -61,7 +61,7 @@ spec 中"不可留到实现期的决策"或影响任务拆分的【待确认】,
 - **双向追溯**:任务标注对应 spec 条款编号(有疑义读 spec 原文,不猜转述);index 任务清单让 spec 每条要求找到承载任务。权威链:任务 ← plan ← spec,冲突以上层为准并按 PLAN_CONFLICT 上报。
 - **契约两端同文**:T-5 消费 T-2 产出时,接口形态(签名/字段名/错误语义)在 T-2 输出和 T-5 输入里逐字一致。
 - **自由必须枚举**:「必须严格执行」= 契约边界,「允许局部适配」= 裁量边界,没列进允许的一律固定。钉死契约(签名、行为、spec 规则、验证命令),放开机制(内部拆分、局部命名、实现细节)。
-- **适用规范(强制读 + 标注)**:docs/guides/ 存在时(init-project-guides 产出),写 plan 前读本需求相关规范——schema 任务读 `ddl.md` + `model-standards.md`,接口任务读 `interface-standards.md`,所有任务参考 `coding-standards.md` 契约部分(命名/目录/分层)。**契约级规范落进具体契约**(任务直接写合规的表名/字段/签名,"按规范建表"式转交是失败);index.md「适用规范」节列文件 + 章节标题(不写行号)。**任务按映射打「强制引用」标注**(schema 任务 → ddl.md + model-standards.md;接口任务 → interface-standards.md;动代码任务 → coding-standards.md)——有 plan 时 implementation/subagent-implement 只读标注的规范、不再自行识别,标注是执行期规范送达的唯一载体。**规范缺失 = 中断**:docs/guides/ 不存在或所需文件缺失 → 停止写 plan,列缺失文件,提示 init-project-guides 补齐;用户明确说不需要才可继续并记入风险/备注。
+- **适用规范(强制读 + 标注)**:docs/guides/ 存在时(init-project-guides 产出),写 plan 前读本需求相关规范——schema 任务读 `data-standards.md`,接口任务读 `interface-standards.md`,测试任务读 `testing-standards.md`,所有任务参考 `coding-standards.md` 契约部分(命名/目录/分层)。**契约级规范落进具体契约**(任务直接写合规的表名/字段/签名,"按规范建表"式转交是失败);index.md「适用规范」节列文件 + 章节标题(不写行号)。**任务按映射打「强制引用」标注**(schema 任务 → data-standards.md;接口任务 → interface-standards.md;动代码任务 → coding-standards.md;测试任务 → testing-standards.md)——有 plan 时 implementation/subagent-implement 只读标注的规范、不再自行识别,标注是执行期规范送达的唯一载体。**规范缺失 = 中断**:docs/guides/ 不存在或所需文件缺失 → 停止写 plan,列缺失文件,提示 init-project-guides 补齐;用户明确说不需要才可继续并记入风险/备注。
 
 ## index.md 必备内容
 
@@ -71,7 +71,7 @@ feature-id/状态/负责人/日期/来源 spec 摘要 · 目标与范围 · 明�
 
 | 文件 | 适用 | 写什么 |
 |---|---|---|
-| `-01-schema.md` | 新表/字段/迁移/回填 | 迁移目标与**执行顺序**(需求 sql/ 增量文件的序号依此定)、兼容与回滚、数据校验;建表/改表任务按项目 `docs/guides/ddl.md`「Schema 变更约定」组织(增量文件 + 全量写透同步);不写不可确认的完整 DDL |
+| `-01-schema.md` | 新表/字段/迁移/回填 | 迁移目标与**执行顺序**(需求 sql/ 增量文件的序号依此定)、兼容与回滚、数据校验;建表/改表任务按项目 `docs/guides/data-standards.md`「Schema 变更约定」组织(增量文件 + 全量写透同步);不写不可确认的完整 DDL |
 | `-02-backend.md` | 业务逻辑/API/权限/任务/队列 | 规则落点、输入输出与错误处理、幂等/重试/并发、要更新的测试 |
 | `-03-frontend.md` | 页面/表单/交互/可见性 | 用户流程、展示字段与校验、API 对接点、loading/empty/error 状态 |
 | `-04-test.md` | 独立测试任务(默认并入实现后所剩) | 必测业务路径、边界异常、测试命令、手工验收、不测的与原因 |
@@ -83,7 +83,7 @@ feature-id/状态/负责人/日期/来源 spec 摘要 · 目标与范围 · 明�
 
 - 目标: ...
 - 对应 spec 条款: ...(implementer 据此读 spec 原文,不凭任务转述猜)
-- 强制引用: ...(implementer 开工前必读的 docs/guides 文件,按映射机械标注:schema 任务 → ddl.md + model-standards.md;接口任务 → interface-standards.md;动代码任务 → coding-standards.md;都不涉及 → 无)
+- 强制引用: ...(implementer 开工前必读的 docs/guides 文件,按映射机械标注:schema 任务 → data-standards.md;接口任务 → interface-standards.md;动代码任务 → coding-standards.md;测试任务 → testing-standards.md;都不涉及 → 无)
 - 依赖: ...
 - 涉及范围: ...
 - 必须严格执行:

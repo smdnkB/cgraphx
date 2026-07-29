@@ -33,7 +33,7 @@ description: 复杂 plan 的子 agent 实现流程 — 主 agent 作为 controll
 1. **任务全文**(含 必须严格执行 / 允许局部适配 / 完成条件 / 对应 spec 条款)
 2. **index.md 契约节** —— 该任务引用的跨任务共享契约,原文注入(不是"见 index"的指涉)
 3. **任务引用的 spec 条款** —— 原文,不转述
-4. **任务「强制引用」的规范** —— plan 标注的 docs/guides/ 文件 + 章节标题(schema 任务 → ddl.md + model-standards.md;接口 → interface-standards.md;动码 → coding-standards.md),要求 implementer 开工前读;controller 不自行补齐(标注是 plan 的职责,缺标注是 plan 质量问题)
+4. **任务「强制引用」的规范** —— plan 标注的 docs/guides/ 文件 + 章节标题(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md),要求 implementer 开工前读;controller 不自行补齐(标注是 plan 的职责,缺标注是 plan 质量问题)
 
 另给:依赖任务的完成摘要、相关代码上下文、验证命令。**不给**:无关子计划、其他任务的实现细节、会诱导扩范围的背景材料。implementer 觉得不够 → 返回 `NEEDS_CONTEXT`;可允许它只读 `index.md`,仍不读完整 plan 目录。
 

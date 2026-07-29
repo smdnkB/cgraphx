@@ -72,7 +72,7 @@
 
 ---
 
-## model-standards.md 模板
+## data-standards.md 模板 · 模型层
 
 ```markdown
 # 模型规范
@@ -100,7 +100,7 @@
 
 ---
 
-## ddl.md 模板
+## data-standards.md 模板 · DDL 层
 
 ```markdown
 # DDL 编写规范
@@ -124,4 +124,36 @@
 ## 迁移工具
 
 {{migration_tools}}
+```
+
+---
+
+## testing-standards.md 模板
+
+```markdown
+# 测试规范
+
+## 技术栈与框架
+
+{{test_frameworks}}
+
+## 目录与命名
+
+{{test_directory_naming}}
+
+## 单测 / 集成边界
+
+{{unit_vs_integration}}
+
+## Mock 政策
+
+{{mock_policy}}
+
+## Fixture 组织
+
+{{fixture_organization}}
+
+## 覆盖预期
+
+{{coverage_expectations}}
 ```

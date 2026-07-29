@@ -43,7 +43,7 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 - **链**:`/implementation`(简单:1-3 文件 / 单模块)| `/subagent-implement`(复杂:≥3 任务跨域,主 agent 只协调、派子 agent 实现)
 - **前置**:spec 必有;subagent-implement 需 plan
-- **强制读**:规范由 plan 打「强制引用」标注(write-plan 按任务类型机械标:schema → ddl.md + model-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation / subagent-implement 只读标注,无 plan 时 implementation 自行识别;**缺失 → 中断,先 `/init-project-guides` 补齐**
+- **强制读**:规范由 plan 打「强制引用」标注(write-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md);有 plan 时 implementation / subagent-implement 只读标注,无 plan 时 implementation 自行识别;**缺失 → 中断,先 `/init-project-guides` 补齐**
 - **收尾**:沉淀提示(新增/变更实体、坑、隐式约束 → `/code-impact-markdown`);commit 门禁由 precommit-check hook 指向 `docs/guides/git-standards.md`,被拦 → 按门禁提示 Read 该文件、依「提交前检查点」自查 staged diff
 
 ## 接口测试流程
@@ -67,24 +67,23 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 ## 数据库与 Schema
 
-- **全量(单一事实源)**:`docs/schema-knowledge/<工程>/ddl/<表名>.sql`,一表一文件、始终最终态——维护规则见 `docs/guides/ddl.md`「Schema 变更约定」节(全量写透 + 需求内增量流水 `sql/[<工程>/]<序号>-<动作名>.sql`)
+- **全量(单一事实源)**:`docs/schema-knowledge/<工程>/ddl/<表名>.sql`,一表一文件、始终最终态——维护规则见 `docs/guides/data-standards.md`「Schema 变更约定」节(全量写透 + 需求内增量流水 `sql/[<工程>/]<序号>-<动作名>.sql`)
 - **基线与校准**:`/export-table-ddl`(建基线 / 周期校准,DISCOVERED 块重导保留)
 - **查数据**:`db-query`(首选读本地 DDL,缺失连库兜底;探索发现回写 DISCOVERED 块;只读)
 
 ## 规范(guides)
 
-- `/init-project-guides` 生成 `docs/guides/`:`coding-standards.md` / `interface-standards.md` / `model-standards.md` / `ddl.md`(含 schema 变更约定)/ `git-standards.md`(提交门禁文件)/ `project-background.md`
+- `/init-project-guides` 生成 `docs/guides/`:`coding-standards.md` / `interface-standards.md` / `data-standards.md`(数据与模型,含 schema 变更约定)/ `testing-standards.md` / `git-standards.md`(提交门禁文件)
 - **决策时读点(write-plan,缺失中断;规范结晶进具体契约)**:
 
 | guide 文件 | write-plan 读点 |
 |---|---|
-| `ddl.md` | schema 任务(含「Schema 变更约定」) |
+| `data-standards.md` | schema 任务(含「Schema 变更约定」) |
 | `interface-standards.md` | 接口任务 |
 | `coding-standards.md` | 所有任务(契约部分) |
-| `model-standards.md` | schema 任务 |
+| `testing-standards.md` | 测试任务 |
 | `git-standards.md` | precommit-check 门禁(deny → Read 它,按「提交前检查点」自查) |
-| `project-background.md` | 参考型,无强制读点 |
-- **执行期送达**:任务按映射打「强制引用」标注(schema → ddl.md + model-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。
+- **执行期送达**:任务按映射打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。
 
 ## 其他能力
 
