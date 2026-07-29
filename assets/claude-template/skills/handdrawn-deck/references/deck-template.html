@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>手绘演示 · handdrawn-deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Ma+Shan+Zheng&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#3a2a1c; --ink-soft:#5a4636;
+    --peach:#f4c89c; --mint:#bfe2d0; --blue:#bfe2e6; --hilite:#f6cb9f; --paper:#f3ede1;
+    --hand:'Ma Shan Zheng', cursive;
+    --sym:'Caveat', cursive;
+    --display:'ZCOOL KuaiLe', cursive;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:var(--hand); color:var(--ink); background-color:var(--paper);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    overflow:hidden;
+  }
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(120% 90% at 50% 38%, transparent 55%, rgba(70,46,24,.10) 100%);}
+
+  /* —— 舞台：iframe 铺满视口，几何 100% 交给内容页（壳只管编排/切换/HUD） —— */
+  .deck{position:fixed; inset:0; z-index:1;}
+  .stage{position:absolute; inset:0;}
+  .page{position:absolute; inset:0; width:100%; height:100%; border:0; background:transparent;
+    opacity:0; pointer-events:none; transition:opacity .35s ease;}
+  .page.on{opacity:1; pointer-events:auto;}
+
+  /* —— 页名徽章（顶部） —— */
+  .ptitle{
+    position:fixed; top:14px; left:50%; transform:translateX(-50%) rotate(-1deg); z-index:5;
+    font-family:var(--hand); font-size:16px; color:var(--ink);
+    background:var(--paper); border:2px solid var(--ink);
+    padding:5px 14px; border-radius:14px 10px 15px 9px;
+    box-shadow:3px 3px 0 var(--ink); max-width:70vw;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .ptitle:empty{display:none;}
+
+  /* —— HUD 控制条（底部，贴纸风） —— */
+  .hud{
+    position:fixed; left:50%; bottom:18px; transform:translateX(-50%) rotate(.4deg); z-index:5;
+    display:flex; align-items:center; gap:14px;
+    background:var(--paper); border:2px solid var(--ink);
+    border-radius:18px 14px 20px 12px; box-shadow:4px 4px 0 var(--ink);
+    padding:8px 16px;
+  }
+  .hud button.nav{
+    font-family:var(--hand); font-size:18px; color:var(--ink); cursor:pointer;
+    background:var(--hilite); border:2px solid var(--ink); border-radius:12px 10px 13px 9px;
+    width:38px; height:34px; box-shadow:2px 2px 0 var(--ink);
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .hud button.nav:hover{transform:translate(-1px,-1px); box-shadow:3px 3px 0 var(--ink);}
+  .hud button.nav:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink);}
+  .dots{display:flex; gap:8px; align-items:center;}
+  .dot{
+    width:12px; height:12px; border-radius:50%; padding:0; cursor:pointer;
+    border:2px solid var(--ink); background:transparent; box-shadow:none;
+    transition:transform .15s ease, background .2s ease;
+  }
+  .dot:hover{transform:scale(1.25);}
+  .dot.on{background:var(--ink);}
+  .counter{font-family:var(--sym); font-weight:700; font-size:18px; min-width:52px; text-align:center;}
+  .rgh{display:flex; align-items:center; gap:8px; margin-left:4px;}
+  .rgh label{font-family:var(--hand); font-size:14px;}
+  .rgh .rval{font-family:var(--sym); font-weight:700; font-size:17px; min-width:28px; text-align:right;}
+  .rgh input[type=range]{-webkit-appearance:none; appearance:none; width:88px; height:4px; border-radius:4px; background:var(--ink); outline:none; cursor:pointer;}
+  .rgh input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--paper); border:2.5px solid var(--ink); box-shadow:1px 1px 0 var(--ink);}
+  .rgh input[type=range]::-moz-range-thumb{width:14px; height:14px; border-radius:50%; background:var(--paper); border:2.5px solid var(--ink);}
+  .help{
+    position:fixed; right:18px; bottom:22px; z-index:4;
+    font-family:var(--hand); font-size:13px; color:var(--ink-soft); transform:rotate(.6deg);
+  }
+
+  /* —— 空 deck 占位 —— */
+  #empty{position:fixed; inset:0; z-index:2; display:none; place-items:center; text-align:center;
+    font-family:var(--hand); font-size:20px; color:var(--ink-soft); padding:24px;}
+  #empty.show{display:grid;}
+</style>
+</head>
+<body>
+
+  <div class="deck"><div class="stage" id="stage"></div></div>
+  <div class="ptitle" id="ptitle"></div>
+
+  <div class="hud" id="hud">
+    <button class="nav" id="prev" title="上一页（←）">←</button>
+    <button class="nav" id="replayBtn" title="重放本页（R）">▶</button>
+    <div class="dots" id="dots"></div>
+    <button class="nav" id="next" title="下一页（→）">→</button>
+    <div class="counter"><span id="cur">0</span>/<span id="total">0</span></div>
+    <div class="rgh">
+      <label for="deckRough">抖</label>
+      <input id="deckRough" type="range" min="0.3" max="3" step="0.1" value="1.2">
+      <span class="rval" id="deckRoughVal">1.2</span>
+    </div>
+  </div>
+  <div class="help">← → 翻页 · 空格下一页 · R 重放本页 · F 全屏</div>
+  <div id="empty">空 deck —— 请在脚本顶部 <b>PAGES</b> 里填页面清单<br>（格式见 handdrawn-deck skill · §deck 组装规范）</div>
+
+<script>
+/* ============ 页面清单（deck skill 组装时填充） ============ */
+const PAGES=[
+  /* {file:'p1-cover.html',  title:'封面 · 标题'},
+     {file:'p2-xxx.html',    title:'第二页 · 标题'},
+     …… 顺序即放映顺序 */
+];
+
+/* ============ 放映机 ============ */
+const stage=document.getElementById('stage'), dotsWrap=document.getElementById('dots'),
+      ptitle=document.getElementById('ptitle'), curEl=document.getElementById('cur'),
+      totalEl=document.getElementById('total');
+const frames=[]; let cur=-1;
+
+if(!PAGES.length){ document.getElementById('empty').classList.add('show'); }
+totalEl.textContent=PAGES.length;
+
+PAGES.forEach((p,i)=>{
+  const d=document.createElement('button');
+  d.className='dot'; d.title=(p.title||p.file);
+  d.addEventListener('click',()=>go(i));
+  dotsWrap.appendChild(d);
+});
+
+function hud(){
+  dotsWrap.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on',i===cur));
+  curEl.textContent=Math.max(cur+1,0);
+  ptitle.textContent=(PAGES[cur]&&PAGES[cur].title)||'';
+}
+function ensure(n){
+  let f=frames[n];
+  if(!f){
+    f=document.createElement('iframe');
+    f.className='page'; f.setAttribute('scrolling','no');
+    f.src=PAGES[n].file+(PAGES[n].file.includes('?')?'&':'?')+'deck=1';
+    f.addEventListener('load',()=>{
+      f.dataset.ready='1';
+      /* 焦点落进页面内容后，壳的键盘监听会收不到事件 → 给页面 window 挂同一套 */
+      try{ f.contentWindow.addEventListener('keydown',onKey); }catch(e){}
+      /* 新页对齐壳当前抖动值（与页面默认相同则页面侧 no-op，不打断首播动画） */
+      try{ f.contentWindow.postMessage({type:'handdrawn:rough',value:parseFloat(dr.value),animate:true},'*'); }catch(e){}
+    });
+    stage.appendChild(f); frames[n]=f;
+  }
+  return f;
+}
+function go(n){
+  if(!PAGES.length) return;
+  n=Math.max(0,Math.min(PAGES.length-1,n));
+  if(n===cur) return;
+  if(cur>=0&&frames[cur]) frames[cur].classList.remove('on');
+  const f=ensure(n);
+  f.classList.add('on');
+  /* 已加载过的页 → 通知重播逐笔绘制；首次加载的页自己会首播 */
+  if(f.dataset.ready){ try{ f.contentWindow.postMessage({type:'handdrawn:show'},'*'); }catch(e){} }
+  cur=n; hud();
+  history.replaceState(null,'','#'+(n+1));
+}
+
+document.getElementById('prev').addEventListener('click',()=>go(cur-1));
+document.getElementById('next').addEventListener('click',()=>go(cur+1));
+
+/* ▶ 重放本页（R 键同效） */
+function replayCur(){
+  const f=frames[cur];
+  if(f&&f.dataset.ready){ try{ f.contentWindow.postMessage({type:'handdrawn:show'},'*'); }catch(e){} }
+}
+document.getElementById('replayBtn').addEventListener('click',replayCur);
+
+/* 全局抖动：实时广播到所有已加载页（播放权归壳，页内不再各自为政） */
+const dr=document.getElementById('deckRough'), drv=document.getElementById('deckRoughVal');
+function broadcastRough(){
+  const v=parseFloat(dr.value); drv.textContent=v.toFixed(1);
+  frames.forEach(f=>{ if(f&&f.dataset.ready){ try{ f.contentWindow.postMessage({type:'handdrawn:rough',value:v,animate:false},'*'); }catch(e){} } });
+}
+dr.addEventListener('input',broadcastRough);
+
+function onKey(e){
+  if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){ e.preventDefault(); go(cur+1); }
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){ e.preventDefault(); go(cur-1); }
+  else if(e.key==='Home'){ go(0); }
+  else if(e.key==='End'){ go(PAGES.length-1); }
+  else if(e.key==='r'||e.key==='R'){ replayCur(); }
+  else if(e.key==='f'||e.key==='F'){
+    if(document.fullscreenElement){ document.exitFullscreen(); }
+    else{ document.documentElement.requestFullscreen().catch(()=>{}); }
+  }
+}
+addEventListener('keydown',onKey);
+
+/* 深链：#3 直达第 3 页 */
+const start=Math.min(parseInt(location.hash.slice(1))||1, Math.max(PAGES.length,1));
+go(start-1);
+</script>
+</body>
+</html>

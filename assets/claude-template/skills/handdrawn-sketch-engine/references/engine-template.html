@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手绘白板 · handdrawn-sketch-engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Ma+Shan+Zheng&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --ink:#3a2a1c; --ink-soft:#5a4636;
+            --peach:#f4c89c; --mint:#bfe2d0; --blue:#bfe2e6; --hilite:#f6cb9f; --paper:#f3ede1;
+            --hand:'Ma Shan Zheng', cursive;     /* 中文手写贯穿 */
+            --sym:'Caveat', cursive;             /* 拉丁符号 */
+            --display:'ZCOOL KuaiLe', cursive;   /* 角标/兜底强调 */
+        }
+        *{box-sizing:border-box;}
+        html,body{margin:0;height:100%;}
+        body{
+            min-height:100%; font-family:var(--hand); color:var(--ink);
+            background-color:var(--paper);
+            background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+            display:flex; align-items:center; justify-content:center; padding:24px 16px 96px; overflow-x:hidden;
+        }
+        body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+            background:radial-gradient(120% 90% at 50% 38%, transparent 55%, rgba(70,46,24,.10) 100%);}
+
+        /* ambient 漂浮涂鸦 */
+        .ambient{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+        .ambient svg{position:absolute;color:var(--ink);opacity:.06;}
+        .ambient .d1{top:8%;left:6%;animation:drift 17s ease-in-out infinite;}
+        .ambient .d2{top:18%;right:9%;animation:drift 21s ease-in-out infinite reverse;}
+        .ambient .d3{bottom:14%;left:12%;animation:drift 19s ease-in-out infinite;}
+        .ambient .d4{bottom:9%;right:14%;animation:drift 23s ease-in-out infinite reverse;}
+        @keyframes drift{0%,100%{transform:translate(0,0) rotate(0);}50%{transform:translate(14px,-18px) rotate(8deg);}}
+
+        .stage{position:relative;z-index:1;width:100%;max-width:1180px;}
+        /* deck 模式：壳不约束几何，页面自行撑满视口（高度优先，按比例收宽） */
+        body.in-deck .stage{max-width:min(100%, calc((100vh - 150px) * 1.7778));}
+        .board{width:100%;height:auto;aspect-ratio:1280/720;display:block;overflow:visible;}
+
+        .t-hand{font-family:var(--hand);}
+        .t-sym{font-family:var(--sym);font-weight:700;}
+        .t-display{font-family:var(--hand);paint-order:stroke;stroke:var(--ink);stroke-width:.5px;stroke-linejoin:round;}
+
+        /* 入场动画三类型 */
+        [data-anim=stroke].anim{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);
+            animation:draw var(--dur,.7s) ease forwards;animation-delay:var(--delay,0s);}
+        @keyframes draw{to{stroke-dashoffset:0;}}
+        [data-anim=fill].anim{opacity:0;transform-box:fill-box;transform-origin:center;
+            animation:pop var(--dur,.55s) cubic-bezier(.2,1.25,.4,1) forwards;animation-delay:var(--delay,0s);}
+        @keyframes pop{0%{opacity:0;transform:scale(.55);}100%{opacity:1;transform:scale(1);}}
+        [data-anim=text].anim{opacity:0;transform-box:fill-box;
+            animation:rise var(--dur,.5s) ease forwards;animation-delay:var(--delay,0s);}
+        @keyframes rise{from{opacity:0;transform:translateY(9px);}to{opacity:1;transform:none;}}
+
+        /* 通用悬停微交互：给可交互容器加 .ix + 修饰类（不要加在带 data-anim 的元素上） */
+        .ix{transform-box:fill-box;transform-origin:center;transition:transform .35s cubic-bezier(.2,.8,.2,1),filter .35s ease;cursor:pointer;}
+        .ix-lift:hover{transform:translateY(-7px);filter:drop-shadow(2px 5px 0 rgba(58,42,28,.14));}
+        .ix-pop:hover{transform:scale(1.04);}
+        .ix-wobble:hover{animation:wobble .6s ease-in-out;}
+        @keyframes wobble{0%,100%{transform:rotate(0);}25%{transform:rotate(-6deg);}75%{transform:rotate(6deg);}}
+
+        /* 贴纸风角标 + 控制条（非玻璃拟态） */
+        .badge{position:fixed;top:16px;left:16px;z-index:5;font-family:var(--hand);font-size:15px;
+            background:var(--paper);border:2px solid var(--ink);padding:6px 12px;border-radius:14px 12px 16px 10px;
+            box-shadow:3px 3px 0 var(--ink);transform:rotate(-2.5deg);}
+        .panel{position:fixed;right:16px;bottom:16px;z-index:5;background:var(--paper);border:2px solid var(--ink);
+            border-radius:16px 14px 18px 12px;box-shadow:4px 4px 0 var(--ink);padding:12px 14px;max-width:min(92vw,330px);transform:rotate(.6deg);}
+        .panel .hint{font-family:var(--hand);font-size:13px;color:var(--ink-soft);margin:0 0 9px;line-height:1.35;}
+        .panel .row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+        .panel label{font-family:var(--hand);font-size:14px;white-space:nowrap;}
+        .panel .val{font-family:var(--sym);font-weight:700;font-size:16px;min-width:30px;text-align:right;}
+        .btns{display:flex;gap:8px;flex-wrap:wrap;}
+        button{font-family:var(--hand);font-size:15px;color:var(--ink);cursor:pointer;background:var(--hilite);
+            border:2px solid var(--ink);border-radius:12px 10px 13px 9px;padding:6px 12px;box-shadow:2px 2px 0 var(--ink);
+            transition:transform .12s ease,box-shadow .12s ease,background .2s;}
+        button.alt{background:var(--mint);}
+        button:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink);}
+        button:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink);}
+        input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:4px;background:var(--ink);outline:none;cursor:pointer;}
+        input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--paper);border:2.5px solid var(--ink);box-shadow:1px 1px 0 var(--ink);}
+        input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--paper);border:2.5px solid var(--ink);}
+        #err{position:fixed;inset:0;display:none;place-items:center;z-index:9;background:rgba(243,237,225,.92);font-family:var(--hand);font-size:18px;text-align:center;padding:24px;}
+        @media (max-width:560px){.panel{transform:none;}}
+    </style>
+</head>
+<body>
+<div class="ambient" aria-hidden="true">
+    <svg class="d1" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 9a3 3 0 1 1 4 2.8c-.8.4-1 .9-1 1.7M12 17h.01"/></svg>
+    <svg class="d2" width="64" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12h15M13 6l6 6-6 6"/></svg>
+    <svg class="d3" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l2.2 5.6L20 9l-4.4 3.6L17 18l-5-3.2L7 18l1.4-5.4L4 9l5.8-.4z"/></svg>
+    <svg class="d4" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v20M5 8c0-2 3-3 7-3s7 1 7 3-3 3-7 3-7 1-7 3 3 3 7 3 7-1 7-3"/></svg>
+</div>
+<div class="badge">手绘信息图 · <b style="font-family:var(--display)">engine</b></div>
+
+<main class="stage"><svg class="board" id="board" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg></main>
+
+<div class="panel">
+    <p class="hint">拖动滑块改变手绘抖动 · 点重放观看自动绘制</p>
+    <div class="row"><label for="rough">抖动</label>
+        <input id="rough" type="range" min="0.3" max="3" step="0.1" value="1.2"><span class="val" id="roughVal">1.2</span></div>
+    <div class="row btns"><button id="replay">▶ 重放绘制</button><button id="download" class="alt">⤓ 下载 SVG</button></div>
+</div>
+<div id="err">手绘引擎（rough.js）加载失败，请检查网络后刷新。</div>
+
+<script>
+    /* ===================== 常量 ===================== */
+    const SVGNS="http://www.w3.org/2000/svg";
+    const INK="#3a2a1c",PEACH="#f4c89c",MINT="#bfe2d0",BLUE="#bfe2e6",HILITE="#f6cb9f";
+    const F_HAND="'Ma Shan Zheng', cursive", F_SYM="'Caveat', cursive";
+    const board=document.getElementById('board');
+
+    /* ===================== 工具库 H ===================== */
+    const H={
+        mk:(tag,cls)=>{const g=document.createElementNS(SVGNS,tag);if(cls)g.setAttribute('class',cls);return g;},
+        txt:(x,y,s,size,fam,anchor='middle')=>{const t=document.createElementNS(SVGNS,'text');
+            t.setAttribute('x',x);t.setAttribute('y',y);t.setAttribute('font-size',size);
+            t.setAttribute('font-family',fam);t.setAttribute('text-anchor',anchor);t.setAttribute('fill',INK);t.textContent=s;return t;},
+        smoothCircle:(cx,cy,r,fill)=>{const c=document.createElementNS(SVGNS,'circle');
+            c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r',r);c.setAttribute('fill',fill);c.setAttribute('stroke','none');return c;},
+        /* 箭头：杆+头 */
+        arrow:(rc,w,x1,y1,x2,y2,b,sw)=>{const o=Object.assign({},b,sw?{strokeWidth:sw}:{});
+            w.appendChild(rc.linearPath([[x1,y1],[x2,y2]],o));const ang=Math.atan2(y2-y1,x2-x1),h=13;
+            w.appendChild(rc.linearPath([[x2,y2],[x2-h*Math.cos(ang-0.42),y2-h*Math.sin(ang-0.42)]],o));
+            w.appendChild(rc.linearPath([[x2,y2],[x2-h*Math.cos(ang+0.42),y2-h*Math.sin(ang+0.42)]],o));},
+        /* 圆圈叉号（列表否定标记） */
+        cross:(rc,w,cx,cy,color,b)=>{const o=Object.assign({},b,{stroke:color,strokeWidth:2.2});
+            w.appendChild(rc.circle(cx,cy,16,o));w.appendChild(rc.linearPath([[cx-5,cy-5],[cx+5,cy+5]],o));
+            w.appendChild(rc.linearPath([[cx+5,cy-5],[cx-5,cy+5]],o));},
+        /* —— 动画打戳：给一个 wrap 里的 path 批量登记入场时间 —— */
+        S:{
+            paths:(g,t,step=0.035)=>g.querySelectorAll('path').forEach((p,i)=>{
+                const f=p.getAttribute('fill'),s=p.getAttribute('stroke');
+                p.setAttribute('data-anim',(f&&f!=='none'&&(!s||s==='none'))?'fill':'stroke');
+                p.setAttribute('data-delay',(t+i*step).toFixed(2));}),
+            text:(el,t)=>{el.setAttribute('data-anim','text');el.setAttribute('data-delay',t.toFixed(2));},
+            fill:(el,t)=>{el.setAttribute('data-anim','fill');el.setAttribute('data-delay',t.toFixed(2));}
+        }
+    };
+
+    /* ===================== 动画引擎（与内容解耦） ===================== */
+    function measureAndPlay(animate){
+        board.querySelectorAll('[data-anim]').forEach(el=>{
+            const delay=parseFloat(el.getAttribute('data-delay'))||0, kind=el.getAttribute('data-anim');
+            el.style.setProperty('--delay',delay+'s');
+            el.style.setProperty('--dur',(kind==='text'?0.5:kind==='fill'?0.55:0.7)+'s');
+            if(kind==='stroke'){try{el.style.setProperty('--len',el.getTotalLength()+1);}catch(e){el.style.setProperty('--len',600);}}
+            if(animate)el.classList.add('anim');
+        });
+    }
+    function renderAll(roughness,animate){
+        board.innerHTML='';
+        const rc=rough.svg(board);
+        const b={stroke:INK,strokeWidth:2.4,roughness:roughness,bowing:1.3,seed:7};
+        buildScene({rc,b,board,H,animate});   /* ← 内容钩子 */
+        measureAndPlay(animate);
+    }
+
+    /* ===================== 内容钩子：做新图只改这里 ===================== */
+    function buildScene({rc,b,board,H,animate}){
+        /* 示例场景：标题 + 左桃圆 + 右薄荷圆 + 连接箭头 + 标签（替换为你的内容） */
+        const title=H.txt(640,80,'在这里写你的标题',46,F_HAND); title.setAttribute('class','t-display');
+        board.appendChild(title); H.S.text(title,0.0);
+
+        const colA=H.mk('g','ix ix-lift');
+        const cA=H.smoothCircle(380,300,95,PEACH); colA.appendChild(cA); H.S.fill(cA,0.3);
+        const wA=H.mk('g'); wA.appendChild(rc.circle(380,300,46,b)); wA.appendChild(rc.linearPath([[360,300],[400,300]],b)); wA.appendChild(rc.linearPath([[380,280],[380,320]],b));
+        colA.appendChild(wA); H.S.paths(wA,0.6);
+        const lA=H.txt(380,440,'要点 A',42,F_HAND); lA.setAttribute('class','t-display'); colA.appendChild(lA); H.S.text(lA,1.0);
+        board.appendChild(colA);
+
+        const colB=H.mk('g','ix ix-lift');
+        const cB=H.smoothCircle(900,300,95,MINT); colB.appendChild(cB); H.S.fill(cB,0.45);
+        const wB=H.mk('g'); wB.appendChild(rc.rectangle(868,272,64,56,b)); wB.appendChild(rc.linearPath([[868,292],[932,292]],b));
+        colB.appendChild(wB); H.S.paths(wB,0.75);
+        const lB=H.txt(900,440,'要点 B',42,F_HAND); lB.setAttribute('class','t-display'); colB.appendChild(lB); H.S.text(lB,1.15);
+        board.appendChild(colB);
+
+        const wLink=H.mk('g'); H.arrow(rc,wLink,476,300,804,300,b,2.6); board.appendChild(wLink); H.S.paths(wLink,1.3);
+
+        const foot=H.txt(640,640,'底部说明文字 · 自动逐笔绘制',26,F_HAND); foot.setAttribute('class','t-hand');
+        board.appendChild(foot); H.S.text(foot,1.6);
+    }
+
+    /* ===================== 控件 ===================== */
+    let curR=1.2, raf=false;
+    const slider=document.getElementById('rough'), rval=document.getElementById('roughVal');
+    slider.addEventListener('input',()=>{curR=parseFloat(slider.value);rval.textContent=curR.toFixed(1);
+        if(!raf){raf=true;requestAnimationFrame(()=>{renderAll(curR,false);raf=false;});}});
+    document.getElementById('replay').addEventListener('click',()=>renderAll(curR,true));
+    /* deck 模式（handdrawn-deck 组装时）：翻页消息 → 重播逐笔绘制；抖动消息 → 按壳广播值重渲 */
+    window.addEventListener('message',e=>{
+        if(!e.data||!e.data.type) return;
+        if(e.data.type==='handdrawn:show'){ renderAll(curR,true); }
+        else if(e.data.type==='handdrawn:rough'){
+            if(e.data.value===curR) return;   /* 值相同：不打断首播逐笔动画 */
+            curR=e.data.value; slider.value=curR; rval.textContent=curR.toFixed(1);
+            renderAll(curR, !!e.data.animate);
+        }
+    });
+    /* deck 模式（?deck=1）：控制条由放映壳提供，隐藏本页自带的；舞台放开宽度限制 */
+    if(new URLSearchParams(location.search).get('deck')==='1'){
+        document.body.classList.add('in-deck');
+        const p=document.querySelector('.panel'); if(p) p.style.display='none';
+    }
+    document.getElementById('download').addEventListener('click',()=>{
+        const clone=board.cloneNode(true);
+        clone.querySelectorAll('.anim').forEach(e=>e.classList.remove('anim'));
+        clone.setAttribute('xmlns',SVGNS);
+        const bg=`<rect width="1280" height="720" fill="${getComputedStyle(document.body).backgroundColor||'#f3ede1'}"/>`;
+        const data='<?xml version="1.0" encoding="UTF-8"?>\n'+clone.outerHTML.replace('viewBox',bg+' viewBox');
+        const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'image/svg+xml'}));
+        a.download='handdrawn.svg';a.click();URL.revokeObjectURL(a.href);
+    });
+
+    /* ===================== 启动：CDN 双源 + 等字体 ===================== */
+    function loadScript(u,ms=6000){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=u;
+        const t=setTimeout(()=>rej(0),ms);s.onload=()=>{clearTimeout(t);res();};s.onerror=()=>{clearTimeout(t);rej(0);};document.head.appendChild(s);});}
+    (async function boot(){
+        let ok=false;
+        for(const u of ['https://unpkg.com/roughjs@4.6.6/bundled/rough.js','https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js']){
+            try{await loadScript(u);if(window.rough){ok=true;break;}}catch(e){}}
+        if(!ok){document.getElementById('err').style.display='grid';return;}
+        try{await document.fonts.ready;}catch(e){}
+        renderAll(curR,true);
+    })();
+</script>
+</body>
+</html>

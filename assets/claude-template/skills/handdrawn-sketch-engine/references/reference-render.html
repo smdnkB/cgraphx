@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>核心方案 · 自动化白板手绘视频制作</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Ma+Shan+Zheng&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#3a2a1c; --ink-soft:#5a4636;
+    --peach:#f4c89c; --mint:#bfe2d0; --blue:#bfe2e6;
+    --peach-dk:#cf7e3f; --blue-dk:#5d9aa2; --hilite:#f6cb9f;
+    --paper:#f3ede1;
+    --display:'ZCOOL KuaiLe', cursive;   /* 仅做符号/兜底 */
+    --hand:'Ma Shan Zheng', cursive;      /* 中文手写（贯穿，贴近原图单族硬笔感） */
+    --sym:'Caveat', cursive;              /* $ ? 等拉丁符号 */
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    min-height:100%;
+    font-family:var(--hand);
+    color:var(--ink);
+    background-color:var(--paper);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    display:flex; align-items:center; justify-content:center;
+    padding:24px 16px 96px;
+    overflow-x:hidden;
+  }
+  /* 暗角，增加纸张层次 */
+  body::after{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:radial-gradient(120% 90% at 50% 38%, transparent 55%, rgba(70,46,24,.10) 100%);
+  }
+
+  /* —— 漂浮涂鸦 ambient 层 —— */
+  .ambient{position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden;}
+  .ambient svg{position:absolute; color:var(--ink); opacity:.06;}
+  .ambient .d1{top:8%;  left:6%;  animation:drift 17s ease-in-out infinite;}
+  .ambient .d2{top:18%; right:9%; animation:drift 21s ease-in-out infinite reverse;}
+  .ambient .d3{bottom:14%; left:12%; animation:drift 19s ease-in-out infinite;}
+  .ambient .d4{bottom:9%; right:14%; animation:drift 23s ease-in-out infinite reverse;}
+  .ambient .d5{top:46%; left:3%;  animation:drift 25s ease-in-out infinite;}
+  @keyframes drift{
+    0%,100%{transform:translate(0,0) rotate(0deg);}
+    50%{transform:translate(14px,-18px) rotate(8deg);}
+  }
+
+  /* —— 舞台 —— */
+  .stage{position:relative; z-index:1; width:100%; max-width:1180px;}
+  .board{width:100%; height:auto; aspect-ratio:1280/720; display:block; overflow:visible;}
+
+  /* 文字：标题/标签加同色细描边，让毛笔字体看起来更像“硬笔马克笔” */
+  .t-display{font-family:var(--hand); paint-order:stroke; stroke:var(--ink); stroke-width:.5px; stroke-linejoin:round;}
+  .t-hand{font-family:var(--hand);}
+  .t-sym{font-family:var(--sym); font-weight:700;}
+
+  /* —— 入场动画分流 —— */
+  [data-anim=stroke].anim{
+    stroke-dasharray:var(--len); stroke-dashoffset:var(--len);
+    animation:draw var(--dur,.7s) ease forwards; animation-delay:var(--delay,0s);
+  }
+  @keyframes draw{to{stroke-dashoffset:0;}}
+  [data-anim=fill].anim{
+    opacity:0; transform-box:fill-box; transform-origin:center;
+    animation:pop var(--dur,.55s) cubic-bezier(.2,1.25,.4,1) forwards; animation-delay:var(--delay,0s);
+  }
+  @keyframes pop{0%{opacity:0; transform:scale(.55);}100%{opacity:1; transform:scale(1);}}
+  [data-anim=text].anim{
+    opacity:0; transform-box:fill-box;
+    animation:rise var(--dur,.5s) ease forwards; animation-delay:var(--delay,0s);
+  }
+  @keyframes rise{from{opacity:0; transform:translateY(9px);}to{opacity:1; transform:none;}}
+
+  /* —— 悬停微交互：只作用于“容器 g”（不带 data-anim，避免和入场动画打架） —— */
+  .col,.comp,.stick,.bubble{
+    transform-box:fill-box; transform-origin:center;
+    transition:transform .35s cubic-bezier(.2,.8,.2,1), filter .35s ease;
+    cursor:pointer;
+  }
+  .col:hover{transform:translateY(-7px); filter:drop-shadow(2px 5px 0 rgba(58,42,28,.14));}
+  .comp:hover{transform:translateY(-3px) scale(1.025);}
+  .stick:hover{transform:rotate(-4deg);}
+  .bubble:hover{animation:wobble .6s ease-in-out;}
+  @keyframes wobble{0%,100%{transform:rotate(0);}25%{transform:rotate(-6deg);}75%{transform:rotate(6deg);}}
+
+  /* —— 角标贴纸 —— */
+  .badge{
+    position:fixed; top:16px; left:16px; z-index:5;
+    font-family:var(--hand); font-size:15px; color:var(--ink);
+    background:var(--paper); border:2px solid var(--ink);
+    padding:6px 12px; border-radius:14px 12px 16px 10px;
+    box-shadow:3px 3px 0 var(--ink); transform:rotate(-2.5deg);
+  }
+  .badge b{font-family:var(--display);}
+
+  /* —— 控制条（手绘贴纸风，非玻璃） —— */
+  .panel{
+    position:fixed; right:16px; bottom:16px; z-index:5;
+    background:var(--paper); border:2px solid var(--ink);
+    border-radius:16px 14px 18px 12px; box-shadow:4px 4px 0 var(--ink);
+    padding:12px 14px; max-width:min(92vw,330px);
+    transform:rotate(.6deg);
+  }
+  .panel .hint{font-family:var(--hand); font-size:13px; color:var(--ink-soft); margin:0 0 9px; line-height:1.35;}
+  .panel .row{display:flex; align-items:center; gap:8px; margin-top:8px;}
+  .panel label{font-family:var(--hand); font-size:14px; white-space:nowrap;}
+  .panel .val{font-family:var(--sym); font-weight:700; font-size:16px; min-width:30px; text-align:right;}
+  .btns{display:flex; gap:8px; flex-wrap:wrap;}
+  button{
+    font-family:var(--hand); font-size:15px; color:var(--ink); cursor:pointer;
+    background:var(--hilite); border:2px solid var(--ink); border-radius:12px 10px 13px 9px;
+    padding:6px 12px; box-shadow:2px 2px 0 var(--ink);
+    transition:transform .12s ease, box-shadow .12s ease, background .2s;
+  }
+  button.alt{background:var(--mint);}
+  button:hover{transform:translate(-1px,-1px); box-shadow:3px 3px 0 var(--ink);}
+  button:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink);}
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; flex:1; height:4px; border-radius:4px;
+    background:var(--ink); outline:none; cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:18px; height:18px; border-radius:50%;
+    background:var(--paper); border:2.5px solid var(--ink); box-shadow:1px 1px 0 var(--ink);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:16px; height:16px; border-radius:50%;
+    background:var(--paper); border:2.5px solid var(--ink);
+  }
+  #err{
+    position:fixed; inset:0; display:none; place-items:center; z-index:9;
+    background:rgba(243,237,225,.92); font-family:var(--hand); font-size:18px; text-align:center; padding:24px;
+  }
+  @media (max-width:560px){ .badge{font-size:13px;} .panel{transform:none;} }
+</style>
+</head>
+<body>
+
+  <!-- 漂浮涂鸦 -->
+  <div class="ambient" aria-hidden="true">
+    <svg class="d1" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 9a3 3 0 1 1 4 2.8c-.8.4-1 .9-1 1.7M12 17h.01"/></svg>
+    <svg class="d2" width="64" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12h15M13 6l6 6-6 6"/></svg>
+    <svg class="d3" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l2.2 5.6L20 9l-4.4 3.6L17 18l-5-3.2L7 18l1.4-5.4L4 9l5.8-.4z"/></svg>
+    <svg class="d4" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v20M5 8c0-2 3-3 7-3s7 1 7 3-3 3-7 3-7 1-7 3 3 3 7 3 7-1 7-3"/></svg>
+    <svg class="d5" width="58" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 17c3-6 6-6 9 0s6 6 9 0"/></svg>
+  </div>
+
+  <div class="badge">手绘信息图 · <b>HTML</b> 复刻</div>
+
+  <main class="stage">
+    <svg class="board" id="board" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet" role="img"
+         aria-label="核心方案：自动化白板手绘视频制作 信息图"></svg>
+  </main>
+
+  <!-- 控制条 -->
+  <div class="panel">
+    <p class="hint">拖动滑块改变手绘抖动 · 点重放观看自动绘制</p>
+    <div class="row">
+      <label for="rough">抖动</label>
+      <input id="rough" type="range" min="0.3" max="3" step="0.1" value="1.6">
+      <span class="val" id="roughVal">1.6</span>
+    </div>
+    <div class="row btns">
+      <button id="replay">▶ 重放绘制</button>
+      <button id="download" class="alt">⤓ 下载 SVG</button>
+    </div>
+  </div>
+
+  <div id="err">手绘引擎（rough.js）加载失败，请检查网络后刷新。</div>
+
+<script>
+/* ============ 常量 ============ */
+const SVGNS = "http://www.w3.org/2000/svg";
+const INK="#3a2a1c", PEACH="#f4c89c", MINT="#bfe2d0", BLUE="#bfe2e6",
+      PEACH_DK="#cf7e3f", BLUE_DK="#5d9aa2", HILITE="#f6cb9f";
+const F_HAND="'Ma Shan Zheng', cursive", F_SYM="'Caveat', cursive";
+const board = document.getElementById('board');
+
+/* ============ 时间表（秒） ============ */
+const T = {
+  title:0.0,
+  c1:0.25, c2:0.40, c3:0.55,
+  i1:0.80, i2:0.95, i3:1.10,
+  l1:1.70, l2:1.80, l3:1.90,
+  conv:2.10,
+  comp:2.50, hand:3.00, tagg:3.20,
+  hi:3.40, bott:3.50,
+  bubble:3.60, stick:3.70, q:3.80, ul:3.85, li1:4.00, li2:4.20, bend:4.40
+};
+
+/* ============ 小工具 ============ */
+function mk(tag, cls){ const g=document.createElementNS(SVGNS,tag); if(cls) g.setAttribute('class',cls); return g; }
+function txt(x,y,s,size,fam,anchor='middle'){
+  const t=document.createElementNS(SVGNS,'text');
+  t.setAttribute('x',x); t.setAttribute('y',y); t.setAttribute('font-size',size);
+  t.setAttribute('font-family',fam); t.setAttribute('text-anchor',anchor);
+  t.setAttribute('fill',INK); t.textContent=s; return t;
+}
+function smoothCircle(cx,cy,r,fill){
+  const c=document.createElementNS(SVGNS,'circle');
+  c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r',r);
+  c.setAttribute('fill',fill); c.setAttribute('stroke','none'); return c;
+}
+function stampPaths(g,t,step=0.035){
+  g.querySelectorAll('path').forEach((p,i)=>{
+    const f=p.getAttribute('fill'), s=p.getAttribute('stroke');
+    const type=(f&&f!=='none'&&(!s||s==='none'))?'fill':'stroke';
+    p.setAttribute('data-anim',type);
+    p.setAttribute('data-delay',(t+i*step).toFixed(2));
+  });
+}
+function stampText(el,t){ el.setAttribute('data-anim','text'); el.setAttribute('data-delay',t.toFixed(2)); }
+function stampFill(el,t){ el.setAttribute('data-anim','fill'); el.setAttribute('data-delay',t.toFixed(2)); }
+
+/* 箭头：杆 + 头，返回 wrap g */
+function arrow(rc,wrap,x1,y1,x2,y2,b,sw){
+  const o=Object.assign({},b, sw?{strokeWidth:sw}:{});
+  wrap.appendChild(rc.linearPath([[x1,y1],[x2,y2]],o));
+  const ang=Math.atan2(y2-y1,x2-x1), h=13;
+  wrap.appendChild(rc.linearPath([[x2,y2],[x2-h*Math.cos(ang-0.42),y2-h*Math.sin(ang-0.42)]],o));
+  wrap.appendChild(rc.linearPath([[x2,y2],[x2-h*Math.cos(ang+0.42),y2-h*Math.sin(ang+0.42)]],o));
+}
+
+/* ============ 图标绘制（节点都 append 进 wrap） ============ */
+function drawCoins(rc,w,b){
+  const cx=322, ys=[186,208,230], hw=35, eh=11;
+  ys.forEach(y=> w.appendChild(rc.ellipse(cx,y,hw*2,eh*2,b)) );
+  w.appendChild(rc.linearPath([[cx-hw,ys[0]],[cx-hw,ys[2]]],b));
+  w.appendChild(rc.linearPath([[cx+hw,ys[0]],[cx+hw,ys[2]]],b));
+  w.appendChild(rc.circle(288,252,46,b));                 // $ 圆币
+  const d=txt(288,263,'$',30,F_SYM); d.setAttribute('class','t-sym'); w.appendChild(d); stampText(d,T.i1+0.45);
+  arrow(rc,w,236,178,236,250,b,3.4);                      // 向下大箭头
+  w.appendChild(rc.linearPath([[352,176],[380,204]],b));  // X
+  w.appendChild(rc.linearPath([[380,176],[352,204]],b));
+}
+function drawStopwatch(rc,w,b){
+  w.appendChild(rc.circle(640,232,86,b));                 // 表身
+  w.appendChild(rc.rectangle(632,176,16,12,b));           // 顶钮
+  w.appendChild(rc.linearPath([[640,176],[640,188]],b));
+  w.appendChild(rc.linearPath([[664,184],[672,178]],b));  // 侧耳
+  [[640,196,640,204],[676,232,668,232],[640,268,640,260],[604,232,612,232]].forEach(k=>
+     w.appendChild(rc.linearPath([[k[0],k[1]],[k[2],k[3]]],b))); // 刻度
+  w.appendChild(rc.linearPath([[640,232],[664,210]],b));  // 指针
+  [[560,214,586,214],[554,232,586,232],[560,250,586,250]].forEach(s=>
+     w.appendChild(rc.linearPath([[s[0],s[1]],[s[2],s[3]]],b))); // 速度线
+  arrow(rc,w,690,232,738,232,b,2.6);                      // 右箭头
+}
+function drawKnife(rc,w,b){
+  w.appendChild(rc.path("M945,250 h70 a13,13 0 0 1 0,26 h-70 a13,13 0 0 1 0,-26 z",b)); // 刀柄
+  w.appendChild(rc.circle(953,263,6,b)); w.appendChild(rc.circle(1011,263,6,b));        // 铆钉
+  // 齿轮
+  w.appendChild(rc.circle(946,206,24,b));
+  for(let k=0;k<8;k++){const a=k*Math.PI/4;
+    w.appendChild(rc.linearPath([[946+Math.cos(a)*24,206+Math.sin(a)*24],[946+Math.cos(a)*31,206+Math.sin(a)*31]],b));}
+  // 画笔
+  w.appendChild(rc.linearPath([[982,250],[982,202]],b));
+  w.appendChild(rc.path("M982,202 q-7,-12 0,-22 q7,10 0,22 z",b));
+  // 播放键
+  w.appendChild(rc.circle(1018,206,22,b));
+  w.appendChild(rc.polygon([[1011,196],[1011,216],[1028,206]],b));
+  // 上翘箭头
+  arrow(rc,w,936,238,902,212,b,2.4);
+  arrow(rc,w,1026,238,1060,212,b,2.4);
+}
+function drawComputer(rc,w,b){
+  w.appendChild(rc.rectangle(560,520,160,100,b));         // 屏幕
+  w.appendChild(rc.linearPath([[624,620],[612,634]],b));  // 支架
+  w.appendChild(rc.linearPath([[656,620],[668,634]],b));
+  w.appendChild(rc.linearPath([[598,634],[682,634]],b));  // 底座
+  w.appendChild(rc.circle(636,562,30,b));                 // 播放键
+  w.appendChild(rc.polygon([[628,550],[628,574],[650,562]],b));
+  w.appendChild(rc.linearPath([[580,602],[700,602]],b));  // 进度条
+  w.appendChild(rc.circle(622,602,7,b));
+}
+function drawHand(rc,w,b){
+  w.appendChild(rc.linearPath([[700,590],[662,566]],b));  // 笔身
+  w.appendChild(rc.linearPath([[662,566],[655,560]],b));  // 笔尖
+  w.appendChild(rc.path("M702,594 q-4,-15 -17,-13 q-9,2 -8,12 q1,9 12,9 q11,0 13,-8 z",b)); // 拳
+  w.appendChild(rc.path("M688,582 q6,-3 10,2",b));        // 拇指
+}
+function drawTag(rc,w,b){
+  const g=mk('g','tag-g'); g.setAttribute('transform','rotate(-10 762 616)');
+  g.appendChild(rc.path("M726,600 h78 a6,6 0 0 1 6,6 v22 a6,6 0 0 1 -6,6 h-78 l-12,-17 z",b));
+  g.appendChild(rc.circle(730,617,5,b));
+  g.appendChild(rc.linearPath([[716,604],[702,588]],b));  // 挂线
+  const t=txt(772,624,'自制技能',18,F_HAND); t.setAttribute('class','t-hand'); g.appendChild(t); stampText(t,T.tagg+0.15);
+  w.appendChild(g);
+}
+function drawBubble(rc,w,b){
+  w.appendChild(rc.circle(112,520,34,b));
+  w.appendChild(rc.circle(138,512,28,b));
+  w.appendChild(rc.circle(88,524,22,b));
+  w.appendChild(rc.circle(112,548,8,b));
+  w.appendChild(rc.circle(120,562,5,b));
+  const q=txt(112,530,'?',30,F_SYM); q.setAttribute('class','t-sym'); w.appendChild(q); stampText(q,T.q);
+}
+function drawStick(rc,w,b){
+  w.appendChild(rc.circle(70,600,20,b));                  // 头
+  w.appendChild(rc.path("M63,602 q7,5 14,0",b));          // 愁嘴
+  w.appendChild(rc.linearPath([[70,620],[70,662]],b));    // 身
+  w.appendChild(rc.linearPath([[70,632],[52,650]],b));    // 臂
+  w.appendChild(rc.linearPath([[70,632],[88,648]],b));
+  w.appendChild(rc.linearPath([[70,662],[56,686]],b));    // 腿
+  w.appendChild(rc.linearPath([[70,662],[84,686]],b));
+}
+function crossMark(rc,w,cx,cy,color,b){
+  const o=Object.assign({},b,{stroke:color,strokeWidth:2.2});
+  w.appendChild(rc.circle(cx,cy,16,o));
+  w.appendChild(rc.linearPath([[cx-5,cy-5],[cx+5,cy+5]],o));
+  w.appendChild(rc.linearPath([[cx+5,cy-5],[cx-5,cy+5]],o));
+}
+
+/* ============ 主渲染 ============ */
+function renderAll(roughness, animate){
+  board.innerHTML='';
+  const rc=rough.svg(board);
+  const b={stroke:INK, strokeWidth:2.4, roughness:roughness, bowing:1.3, seed:7};
+
+  const col1=mk('g','col'), col2=mk('g','col'), col3=mk('g','col'),
+        mid=mk('g','mid'), left=mk('g','left');
+
+  /* 标题 */
+  const title=txt(640,72,'核心方案：自动化白板手绘视频制作',46,F_HAND);
+  title.setAttribute('class','t-display'); board.appendChild(title); stampText(title,T.title);
+
+  /* —— 三栏 —— */
+  const circ1=smoothCircle(300,235,92,PEACH); col1.appendChild(circ1); stampFill(circ1,T.c1);
+  const w1=mk('g'); drawCoins(rc,w1,b); col1.appendChild(w1); stampPaths(w1,T.i1);
+  const lab1=txt(300,402,'低成本',42,F_HAND); lab1.setAttribute('class','t-display'); col1.appendChild(lab1); stampText(lab1,T.l1);
+
+  const circ2=smoothCircle(640,232,95,MINT); col2.appendChild(circ2); stampFill(circ2,T.c2);
+  const w2=mk('g'); drawStopwatch(rc,w2,b); col2.appendChild(w2); stampPaths(w2,T.i2);
+  const lab2=txt(640,392,'高效率',42,F_HAND); lab2.setAttribute('class','t-display'); col2.appendChild(lab2); stampText(lab2,T.l2);
+
+  const circ3=smoothCircle(980,235,92,BLUE); col3.appendChild(circ3); stampFill(circ3,T.c3);
+  const w3=mk('g'); drawKnife(rc,w3,b); col3.appendChild(w3); stampPaths(w3,T.i3);
+  const lab3=txt(980,402,'高灵活',42,F_HAND); lab3.setAttribute('class','t-display'); col3.appendChild(lab3); stampText(lab3,T.l3);
+
+  /* —— 中部：汇聚 + 电脑 + 吊牌 + 底部标签 —— */
+  const wc=mk('g');
+  wc.appendChild(rc.path("M300,418 C 360,472 540,472 632,494",b));
+  wc.appendChild(rc.path("M980,418 C 920,472 740,472 648,494",b));
+  wc.appendChild(rc.linearPath([[640,402],[640,494]],b));
+  arrow(rc,wc,640,494,640,512,b,2.6);
+  mid.appendChild(wc); stampPaths(wc,T.conv);
+
+  const comp=mk('g','comp');
+  const wcomp=mk('g'); drawComputer(rc,wcomp,b); comp.appendChild(wcomp); stampPaths(wcomp,T.comp);
+  const whand=mk('g'); drawHand(rc,whand,b); comp.appendChild(whand); stampPaths(whand,T.hand);
+  mid.appendChild(comp);
+
+  const wtag=mk('g'); drawTag(rc,wtag,b); mid.appendChild(wtag); stampPaths(wtag,T.tagg);
+
+  const hi=rc.rectangle(468,668,344,36,{stroke:'none',fill:HILITE,fillStyle:'solid',roughness:roughness*0.6,bowing:1,seed:3});
+  mid.appendChild(hi); stampPaths(hi,T.hi);
+  const bott=txt(640,695,'自动化白板手绘视频',30,F_HAND); bott.setAttribute('class','t-display');
+  mid.appendChild(bott); stampText(bott,T.bott);
+
+  /* —— 左下：气泡 + 火柴人 + 提问 + 列表 + 弯箭头 —— */
+  const bubble=mk('g','bubble');
+  const wbub=mk('g'); drawBubble(rc,wbub,b); bubble.appendChild(wbub); stampPaths(wbub,T.bubble);
+  left.appendChild(bubble);
+
+  const stick=mk('g','stick');
+  const wst=mk('g'); drawStick(rc,wst,b); stick.appendChild(wst); stampPaths(wst,T.stick);
+  left.appendChild(stick);
+
+  const q=txt(176,560,'用户提问：有无自动化工作流？',23,F_HAND,'start'); q.setAttribute('class','t-hand');
+  left.appendChild(q); stampText(q,T.q);
+  const wul=mk('g'); wul.appendChild(rc.linearPath([[176,570],[556,570]],b)); left.appendChild(wul); stampPaths(wul,T.ul);
+
+  const wli1=mk('g'); crossMark(rc,wli1,186,602,PEACH_DK,b); left.appendChild(wli1); stampPaths(wli1,T.li1);
+  const li1=txt(206,609,'现有方案太贵（订阅费）',22,F_HAND,'start'); li1.setAttribute('class','t-hand'); left.appendChild(li1); stampText(li1,T.li1+0.1);
+  const wli2=mk('g'); crossMark(rc,wli2,186,642,BLUE_DK,b); left.appendChild(wli2); stampPaths(wli2,T.li2);
+  const li2=txt(206,649,'可修改项太少（缺乏灵活）',22,F_HAND,'start'); li2.setAttribute('class','t-hand'); left.appendChild(li2); stampText(li2,T.li2+0.1);
+
+  const wbend=mk('g');
+  wbend.appendChild(rc.path("M560,648 C 520,650 516,612 548,602",b));
+  arrow(rc,wbend,548,602,552,600,b,2.2);
+  left.appendChild(wbend); stampPaths(wbend,T.bend);
+
+  /* 挂载顺序 = z 顺序 */
+  board.appendChild(col1); board.appendChild(col2); board.appendChild(col3);
+  board.appendChild(mid); board.appendChild(left);
+
+  /* 测量 + 触发动画（或瞬时显示） */
+  board.querySelectorAll('[data-anim]').forEach(el=>{
+    const delay=parseFloat(el.getAttribute('data-delay'))||0;
+    const kind=el.getAttribute('data-anim');
+    const dur = kind==='text'?0.5 : kind==='fill'?0.55 : 0.7;
+    el.style.setProperty('--delay', delay+'s');
+    el.style.setProperty('--dur', dur+'s');
+    if(kind==='stroke'){
+      try{ el.style.setProperty('--len', el.getTotalLength()+1); }catch(e){ el.style.setProperty('--len', 600); }
+    }
+    if(animate) el.classList.add('anim');
+  });
+}
+
+/* ============ 控件 ============ */
+let currentRough=1.6, rafPending=false;
+const slider=document.getElementById('rough'), rval=document.getElementById('roughVal');
+slider.addEventListener('input', ()=>{
+  currentRough=parseFloat(slider.value); rval.textContent=currentRough.toFixed(1);
+  if(!rafPending){ rafPending=true; requestAnimationFrame(()=>{ renderAll(currentRough,false); rafPending=false; }); }
+});
+document.getElementById('replay').addEventListener('click', ()=> renderAll(currentRough,true));
+document.getElementById('download').addEventListener('click', ()=>{
+  const clone=board.cloneNode(true);
+  clone.querySelectorAll('.anim').forEach(e=>e.classList.remove('anim'));   // 导出静态
+  clone.setAttribute('xmlns',SVGNS);
+  const bg=`<rect width="1280" height="720" fill="${getComputedStyle(document.body).backgroundColor||'#f3ede1'}"/>`;
+  const data='<?xml version="1.0" encoding="UTF-8"?>\n'+clone.outerHTML.replace('viewBox',bg+' viewBox');
+  const blob=new Blob([data],{type:'image/svg+xml'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='whiteboard-infographic.svg'; a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+/* ============ 启动：动态加载 rough.js（双源兜底） ============ */
+function loadScript(url,ms=6000){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script'); s.src=url;
+    const t=setTimeout(()=>rej(new Error('timeout')),ms);
+    s.onload=()=>{clearTimeout(t);res();}; s.onerror=()=>{clearTimeout(t);rej(new Error('err'));};
+    document.head.appendChild(s);
+  });
+}
+async function boot(){
+  const urls=[
+    'https://unpkg.com/roughjs@4.6.6/bundled/rough.js',
+    'https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js'
+  ];
+  let ok=false;
+  for(const u of urls){ try{ await loadScript(u); if(window.rough){ok=true;break;} }catch(e){} }
+  if(!ok){ document.getElementById('err').style.display='grid'; return; }
+  try{ await document.fonts.ready; }catch(e){}
+  renderAll(currentRough,true);
+}
+boot();
+</script>
+</body>
+</html>
