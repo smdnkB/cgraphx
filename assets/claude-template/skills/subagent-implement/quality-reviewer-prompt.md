@@ -37,7 +37,7 @@
 
 - 是否破坏既有 public API / 类型签名?
 - 是否引入新依赖(本不需要)?
-- 是否遵循项目的 lint / 格式化 / 提交规范?
+- 是否遵循项目的 lint / 格式化 / 提交规范与 docs/guides/ 规范(coding-standards / interface-standards 等)?
 - 是否更新了相关文档(README / CHANGELOG / API doc)?
 
 ### 5. 跨任务问题(本审查独有价值)

@@ -133,13 +133,13 @@ node <skill-dir>/scripts/export-ddl.mjs \
 
 ## 闭环:和 db-query skill 配合
 
-本 skill 建**基线**(DDL + 列注释 + 表注释 + 索引,来自 DB),`db-query` skill 在日常查数据时**补充**探索发现:
+**全量保鲜的分工**:日常开发改模型 → 开发流程**写透**(全量 `ddl/<表名>.sql` 直接改到最终态,增量流水记在需求目录 `sql/`,见项目 `docs/guides/ddl.md`「Schema 变更约定」节);本 skill 建**基线**并做**周期校准**(初始化、全量重导、漂移复核,DDL + 列注释 + 表注释 + 索引来自 DB);`db-query` 在日常查数据时**补充**探索发现:
 
 ```
 export-table-ddl  →  docs/schema-knowledge/<project>/ddl/<table>.sql  (基线 DDL)
        ↑                          ↑ 重 dump 保留
        │                          │
-       └──── schema 变了重跑 ────┘
+       └── 周期校准 / 漂移重跑 ──┘
                                   │
 db-query 探索踩坑 → append DISCOVERED 块(隐式关系/字段含义/陷阱/流程)
 ```
