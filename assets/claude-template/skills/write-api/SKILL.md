@@ -43,6 +43,7 @@ description: 基于需求生成 bruno 测试接口(.bru + 测试规格 + 环境�
 
 - feature 编码已完成(`/implementation` 或 `/subagent-implement` 跑完)
 - `docs/features/<feature-id>/<文件前缀>-spec.md` 存在(S1 优先级 2 要用)
+- `docs/guides/interface-standards.md` 存在(接口约定;缺失 → 提示 `/init-project-guides` 补齐,见工作流前置)
 - 项目已配置 db-query profile(S3 查真实数据)—— 未配置则 S3 降级
 
 ## feature-id 与文件前缀规则
@@ -64,6 +65,8 @@ description: 基于需求生成 bruno 测试接口(.bru + 测试规格 + 环境�
 ## 工作流
 
 按 S1-S4 顺序执行,每步的规范细节在对应 reference 文件。
+
+**前置(每次执行,先于 S1):读接口规范** `docs/guides/interface-standards.md` —— 约束 S1 接口识别(路径/版本约定,从 spec/代码里认出真正的接口)与 S3 .bru 生成(请求路径、参数形态、header、错误码断言预期)。**缺失 → 中断,提示用户先跑 `/init-project-guides` 补齐**,用户明确表示不需要规范才可继续——不对齐项目约定的测试接口,测了也白测。
 
 ### S1. 确认接口范围
 
@@ -134,6 +137,7 @@ S4 完成后 skill 结束。**不跑 bru run、不核实 DB、不出报告**。
 - .bru 的 docs 段含业务说明(关联需求由目录层级表达,docs 段不写关联需求列表)
 - 入参写真实值,变量化只用于环境级 / 前置动态 / 拿不到时占位
 - header 名 / `{{var}}` 变量名大小写与项目既有 .bru 对齐
+- 接口路径 / 参数形态 / 错误码断言符合 `docs/guides/interface-standards.md`(用户豁免规范的除外)
 - 无程序化配置文件(`.services.yml` / `.config.yml`)
 - **工作流停在 S4,没跑 bru run,没核实 DB,没出报告**
 
