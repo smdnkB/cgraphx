@@ -15,7 +15,6 @@
   --color-bg: #FFFFFF;
   --color-bg-subtle: #F7FAFC;
   --color-bg-code: #EDF2F7;
-  --color-bg-accent: #FFFAF0;
   --color-cgraphx: #2B6CB0;
   --radius: 6px;
 }
@@ -110,7 +109,7 @@ code {
 }
 .tag-cgraphx { background: #EBF8FF; color: #2C5282; }
 
-/* Pipeline (单卡片,沿用左侧 code-workflow 卡片样式) */
+/* Pipeline (numbered steps) */
 .pipeline {
   border: 1px solid var(--color-border);
   border-top: 4px solid var(--color-cgraphx);
@@ -118,43 +117,40 @@ code {
   padding: 24px 28px;
   background: var(--color-bg);
   margin: 0 0 24px;
+  counter-reset: step;
 }
-.pipeline h4 {
-  margin: 0 0 20px;
-  font-size: 16px;
-  font-weight: 600;
-}
-.phase {
-  margin-bottom: 18px;
-  padding-bottom: 18px;
+.step {
+  position: relative;
+  padding-left: 40px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
   border-bottom: 1px dashed var(--color-border);
+  counter-increment: step;
 }
-.phase:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-.phase-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-tertiary);
-  font-weight: 600;
-  margin-bottom: 10px;
-}
-.phase-list {
-  padding-left: 20px;
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.75;
-}
-.phase-list li { margin-bottom: 6px; }
-.phase-list code { font-size: 12.5px; }
-.phase-list em {
-  color: var(--color-text-tertiary);
+.step:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+.step::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-cgraphx);
+  color: #fff;
   font-size: 13px;
-  font-style: normal;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+.step h4 {
+  margin: 0 0 6px;
+  font-size: 15.5px;
+  font-weight: 600;
+}
+.step h4 code { font-size: 13px; }
+.step p { margin: 0; font-size: 14.5px; color: var(--color-text-secondary); }
 
 /* Highlight box */
 .highlight {
@@ -163,7 +159,7 @@ code {
   border-left: 4px solid var(--color-cgraphx);
   border-radius: var(--radius);
   padding: 20px 24px;
-  margin: 0 0 16px;
+  margin: 16px 0 16px;
 }
 .highlight p:last-child { margin-bottom: 0; }
 
@@ -202,11 +198,13 @@ code {
   font-size: 13px;
   font-style: normal;
 }
-.tab-panel .flow-diagram {
+
+/* Workflow overview diagram */
+.flow-diagram {
   background: var(--color-bg-code);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: 16px 20px;
+  padding: 18px 22px;
   font-family: "SF Mono", "Menlo", monospace;
   font-size: 12.5px;
   line-height: 1.7;
@@ -222,6 +220,8 @@ ul, ol {
   margin: 0 0 16px;
 }
 li { margin-bottom: 6px; }
+.phase-list { padding-left: 20px; font-size: 14.5px; line-height: 1.75; }
+.phase-list li { margin-bottom: 8px; }
 
 /* Footer */
 footer {
@@ -249,25 +249,12 @@ footer p { margin: 0; }
   margin: 0 0 16px;
   white-space: pre;
 }
-.docs-tree b {
-  font-weight: 600;
-  color: var(--color-primary-dark);
-}
-.docs-tree .skill {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-.docs-tree .ann {
-  color: var(--color-text-tertiary);
-}
-.docs-tree .must {
-  color: #2e7d32;
-  font-weight: 600;
-}
-.docs-tree .opt {
-  color: #e65100;
-  font-weight: 600;
-}
+.docs-tree b { font-weight: 600; color: var(--color-primary-dark); }
+.docs-tree .skill { color: var(--color-primary); font-weight: 600; }
+.docs-tree .ann { color: var(--color-text-tertiary); }
+.docs-tree .must { color: #2e7d32; font-weight: 600; }
+.docs-tree .opt { color: #e65100; font-weight: 600; }
+.docs-tree .post { color: #6a1b9a; font-weight: 600; }
 .docs-legend {
   display: flex;
   gap: 20px;
@@ -276,11 +263,7 @@ footer p { margin: 0; }
   color: var(--color-text-secondary);
   margin: 0 0 20px;
 }
-.docs-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
+.docs-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .docs-legend .dot {
   display: inline-block;
   width: 8px;
@@ -289,14 +272,14 @@ footer p { margin: 0; }
 }
 .docs-legend .dot.must { background: #2e7d32; }
 .docs-legend .dot.opt { background: #e65100; }
-.docs-legend .dot.local { background: var(--color-cgraphx); }
+.docs-legend .dot.post { background: #6a1b9a; }
 
 /* Terminal-style install flow */
 .terminal {
   background: #282c34;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06);
   margin: 0 0 24px;
   font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
@@ -317,16 +300,15 @@ footer p { margin: 0; }
 .terminal-titlebar .dot.red { background: #ff5f56; }
 .terminal-titlebar .dot.yellow { background: #ffbd2e; }
 .terminal-titlebar .dot.green { background: #27c93f; }
-.terminal-title {
-  margin-left: 10px;
+.terminal-titlebar .terminal-title {
+  color: #9da5b4;
   font-size: 12.5px;
-  color: #5c6370;
-  letter-spacing: 0.02em;
+  margin-left: 8px;
 }
 .terminal-body {
   padding: 20px 22px;
   font-size: 13.5px;
-  line-height: 1.95;
+  line-height: 1.7;
   color: #abb2bf;
   overflow-x: auto;
 }
@@ -384,12 +366,12 @@ footer p { margin: 0; }
 <header>
   <div class="eyebrow">cgraphx 安装与使用</div>
   <h1>cgraphx 怎么用</h1>
-  <p class="subtitle">本地优先的 AI agent 研发工具 · 知识库 / 数据库 / 时间线</p>
-  <p class="meta">最后更新:2026-07-13</p>
+  <p class="subtitle">本地优先的 AI agent 研发系统 · skill 流程 + 知识库 / 数据库 / 时间线</p>
+  <p class="meta">最后更新:2026-07-30</p>
 </header>
 
 <section>
-  <h2>安装流程</h2>
+  <h2>安装</h2>
 
   <div class="terminal">
     <div class="terminal-titlebar">
@@ -399,10 +381,16 @@ footer p { margin: 0; }
       <span class="terminal-title">bash — 安装 cgraphx</span>
     </div>
     <div class="terminal-body">
-      <div class="t-line"><span class="t-prompt">$</span> npm install <span class="t-flag">-g</span> cgraphx <span class="t-comment"># 装 CLI(Node ≥ 20 且 &lt; 25)</span></div>
+      <div class="t-line"><span class="t-prompt">$</span> npm install <span class="t-flag">-g</span> cgraphx <span class="t-comment"># Node.js ≥22.5 &lt;27(内置 node:sqlite,无原生依赖)</span></div>
 
       <div class="t-sep"># ── 项目级 · 每项目一次 ──────────────────────</div>
-      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx install <span class="t-comment"># 建 .cgraphx/ + 部署 skills 到 .claude/ + 写 hooks/statusLine</span></div>
+      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx install</div>
+      <div class="t-note"># 建 .cgraphx/ + 部署 skills 到 .claude/ + 接入 hooks/statusLine + 写工作方式</div>
+      <div class="t-note"># 重启 Claude Code 即可</div>
+
+      <div class="t-sep"># ── 升级 ────────────────────────────────────</div>
+      <div class="t-line"><span class="t-prompt">$</span> cgraphx upgrade <span class="t-comment"># npm 自更新(纯换包,不动项目)</span></div>
+      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx install <span class="t-comment"># 各项目重跑,刷新 skill(自动清理旧 skill)</span></div>
 
       <div class="t-sep"># ── 卸载 · 可选 ──────────────────────────────</div>
       <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx uninstall <span class="t-comment"># 清 .claude/ skills/配置 + 删 .cgraphx/</span></div>
@@ -412,78 +400,143 @@ footer p { margin: 0; }
 </section>
 
 <section>
-  <h2>使用流程</h2>
+  <h2>最佳起步实践</h2>
+  <p>接入只是第一步。推荐这个顺序——<strong>先立规范、再聊业务、然后做需求</strong>:</p>
+
+  <div class="pipeline">
+    <div class="step">
+      <h4>立规范 · <code>/init-project-guides</code></h4>
+      <p>生成 <code>docs/guides/</code> 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的<strong>有意偏离</strong>——「SQL 禁止 ORDER BY」「金额一律 decimal(12,2)」这类最容易偏离又没有工具兜底的约定。这些 guide 是后续任务的<strong>强制读点</strong>,会被 <code>/write-plan</code> 结晶成契约。</p>
+    </div>
+    <div class="step">
+      <h4>聊业务 · 和 Claude Code 聊项目</h4>
+      <p>做需求前先聊业务。agent 会自动从知识库召回已沉淀的概念、对齐术语;边聊边用 <code>/knowledge-write</code> 把业务实体沉淀下来。接手陌生项目可以跑 <code>/knowledge-init</code> 批量探索建档。知识库越用越厚,重复解释和重复踩坑越少。</p>
+    </div>
+    <div class="step">
+      <h4>做需求 · <code>/clarify-requirements</code> 起步</h4>
+      <p>进入主工作流:澄清 → 规格(<code>/write-spec</code>)→ 实现 → 测试。有了前两步,澄清才有共同语境,而不是从零问起。</p>
+    </div>
+  </div>
+
+  <div class="highlight">
+    <p>先有规范(agent 懂「规矩」),再对齐业务(agent 懂「黑话」),然后做需求才事半功倍。</p>
+  </div>
+</section>
+
+<section>
+  <h2>工作流全景</h2>
+
+  <div class="flow-diagram">knowledge-recall(自动召回)
+        │
+        ▼
+/clarify-requirements ──→ /write-spec ──→ /write-plan(可选)
+     澄清                  唯一契约          执行计划
+        │                                        │
+        │            ┌───────────────────────────┘
+        ▼            ▼
+  /implementation(简单) 或 /subagent-implement(复杂)
+        │
+   ┌────┴─────────────────────────────┐
+   ▼              ▼                   ▼
+/write-api    /write-unit-test-spec  交付收尾:
+→ /run-api-test → /write-unit-test-code  /knowledge-write 沉淀
+  接口测试       单元测试              commit 门禁
+
+── 发布后 · 按需(不在主链,不参与门禁)──────────────────
+/write-prd(业务方审阅)  /write-design-doc(设计文档)  /write-api-doc(接口文档)</div>
+
+  <div class="highlight">
+    <p>日常默认两步:<strong>澄清 + 实现</strong>。复杂需求按需补规格/计划/测试。timeline 自动记录开发事件,你不需要主动跑命令。</p>
+  </div>
+</section>
+
+<section>
+  <h2>各流程详解</h2>
 
   <div class="tabs-bar">
     <button class="tab-btn active" onclick="switchTab(this, 'tab-dev')">开发流程</button>
-    <button class="tab-btn" onclick="switchTab(this, 'tab-api-test')">接口测试流程</button>
-    <button class="tab-btn" onclick="switchTab(this, 'tab-unit-test')">单元测试流程</button>
-    <button class="tab-btn" onclick="switchTab(this, 'tab-knowledge')">知识库管理</button>
-    <button class="tab-btn" onclick="switchTab(this, 'tab-schema')">模型知识库管理</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-api-test')">接口测试</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-unit-test')">单元测试</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-knowledge')">知识管理</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-postdoc')">事后文档</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-review')">工作回顾</button>
   </div>
 
   <div id="tab-dev" class="tab-panel active">
     <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">做需求的主线。</p>
     <ul class="phase-list">
-      <li><strong style="color:var(--color-primary);">必经</strong> <code>/clarify-requirements</code> 澄清意图、业务边界、技术边界</li>
-      <li><span class="opt">可选</span> <code>/write-prd</code> 写业务文档<em>（给业务方 / 领导确认）</em></li>
-      <li><strong style="color:var(--color-primary);">核心</strong> <code>/write-spec</code> 写技术规格<em>（归档业务行为 / 规则 / 接口 / 数据）</em></li>
-      <li><span class="opt">可选</span> <code>/write-plan</code> 拆执行计划<em>（给 agent 执行）</em></li>
-      <li><strong style="color:var(--color-primary);">必经</strong> <code>/implementation</code> 实现<em>（简单任务）</em>或 <code>/subagent-implement</code><em>（复杂多任务）</em></li>
+      <li><strong style="color:var(--color-primary);">必经</strong> <code>/clarify-requirements</code> 澄清意图、业务边界、技术约束<em>(不拍板实现手段)</em></li>
+      <li><strong style="color:var(--color-primary);">核心</strong> <code>/write-spec</code> 写技术规格——唯一契约<em>(归档业务行为/规则/接口/数据/权限/异常/验收)</em></li>
+      <li><span class="opt">可选</span> <code>/write-plan</code> 拆执行计划<em>(大需求/跨模块;手段选型在这一步结合代码定,选项+推荐,用户拍板)</em></li>
+      <li><strong style="color:var(--color-primary);">必经</strong> <code>/implementation</code><em>(简单:1-3 文件/单模块)</em>或 <code>/subagent-implement</code><em>(复杂:≥3 任务跨域,派子 agent 隔离上下文)</em></li>
     </ul>
     <div class="highlight">
-      <p>日常默认 2 步:澄清 + 实现。复杂需求按需补 prd / spec / plan。timeline 自动记录开发事件,你不需要主动跑命令。</p>
+      <p>日常默认 2 步:澄清 + 实现。spec 是唯一契约——「没有任何业务义务存在于 spec 之外」,变更时只改 spec 一处,下游重新派生。</p>
     </div>
   </div>
 
   <div id="tab-api-test" class="tab-panel">
-    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>需求开发完成后</strong></p>
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>需求开发完成后</strong>,从 spec 到测试报告的全自动闭环。</p>
     <ul class="phase-list">
-      <li><code>/write-api</code> 基于 spec 或已有代码生成 bruno 测试接口<em>（.bru + 测试规格 + 多环境配置）</em></li>
-      <li><code>/run-api-test</code> 跑接口测试 + 核实写接口 DB 副作用 + 出报告 <em>—— write-api 后执行;写接口必须查 DB 验数据</em></li>
+      <li><code>/write-api</code> 基于 spec 接口章节自动生成 bruno 测试接口<em>(.bru + 内嵌断言 + 真实参数 + 多环境配置)</em></li>
+      <li><code>/run-api-test</code> 跑测试 + 核实写接口 DB 副作用 + 出报告 <em>—— <strong>写接口必须查 DB 验数据,HTTP 200 ≠ 通过</strong></em></li>
     </ul>
     <div class="highlight">
-      <p>产物落在 <code>docs/bruno/</code>（接口定义）+ <code>docs/features/&lt;前缀&gt;/</code>（测试规格 + 报告）。两个 skill 顺序依赖,但 run-api-test 也可独立跑（针对已有 .bru）。</p>
+      <p>产物落在 <code>docs/bruno/</code>(接口定义,bruno app 可直接打开)+ <code>docs/features/&lt;前缀&gt;/</code>(测试规格 + 报告)。两个 skill 顺序依赖,但 run-api-test 也可独立跑(针对已有 .bru)。失败只报告不修代码不重跑,交用户决定。</p>
     </div>
   </div>
 
   <div id="tab-unit-test" class="tab-panel">
-    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">和开发流程平行,共享 spec 作为输入,时序任意<em>（典型是代码先行、测试补充）</em>。</p>
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">和开发流程平行,共享 spec 作为输入,时序任意<em>(典型是代码先行、测试补充)</em>。</p>
     <ul class="phase-list">
-      <li><code>/write-unit-test-spec</code> 基于 spec 产出单元测试规格文档<em>（零代码依赖,该测哪些路径/边界/异常）</em> <span class="opt">可选</span> <em>write-spec 后任意时机</em></li>
+      <li><code>/write-unit-test-spec</code> 基于 spec 产出测试规格文档<em>(零代码依赖——该测哪些路径/边界/异常)</em></li>
       <li><code>/write-unit-test-code</code> 基于测试规格 + 已有实现,填实测试代码 + 跑测试 + 出报告 <em>—— 找不到测试规格则退出要求先跑 write-unit-test-spec</em></li>
     </ul>
-    <div class="flow-diagram">                         ┌──→ /write-plan → /implementation              开发流程 · 写代码
-                         │
-/clarify-requirements → /write-spec ──┤
-                         │
-                         └──→ /write-unit-test-spec → /write-unit-test-code   单元测试 · 写测试</div>
     <div class="highlight">
-      <p>两条独立线路:开发流程写代码,单元测试流程写测试。产物落在 <code>docs/features/&lt;前缀&gt;/</code>（测试规格 + 报告）+ 项目测试目录（.test.ts）。</p>
+      <p>产物落在 <code>docs/features/&lt;前缀&gt;/</code>(测试规格 + 报告)+ 项目测试目录。</p>
     </div>
   </div>
 
   <div id="tab-knowledge" class="tab-panel">
-    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">沉淀业务决策、概念定义、历史教训到跨需求共享的知识库。</p>
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">两个知识积累闭环,用得越多越值钱。</p>
+
+    <p style="font-weight:600;font-size:14.5px;margin:0 0 8px;">业务知识(沉淀 → 召回)</p>
     <ul class="phase-list">
-      <li><code>/knowledge-write</code> 任何有价值的会话都可以触发沉淀 <em>—— 你只需要关注这一个指令</em></li>
-      <li><code>/knowledge-init</code> 新项目起步时批量探索 + 写知识库 <span class="opt">可选</span> <em>接手陌生项目时跑</em></li>
-      <li><code>knowledge-recall</code> 聊业务 / 不懂术语 / 对齐黑话时,派子 agent 召回相关概念 <em>—— agent 自动触发</em></li>
-      <li><code>knowledge-api</code> 已知概念名,精确查知识库 <em>—— agent 自动触发</em></li>
+      <li><code>/knowledge-write</code> 把有价值的知识沉淀到 <code>docs/knowledge/</code><em>(开发收尾自动提示,也可随时手动触发)</em></li>
+      <li><code>knowledge-recall</code> 做需求前自动召回相关概念、对齐术语 <em>—— agent 自动触发</em></li>
+      <li><code>knowledge-api</code> 已知概念名时精确查知识库 <em>—— agent 自动触发</em></li>
+      <li><code>/knowledge-init</code> 接手陌生项目时批量探索建档 <em>—— 可选,只跑一次</em></li>
+    </ul>
+
+    <p style="font-weight:600;font-size:14.5px;margin:16px 0 8px;">数据模型(导出 → 探索 → 回写)</p>
+    <ul class="phase-list">
+      <li><code>/export-table-ddl</code> 按工程批量导出 DDL 基线(一表一文件)<em>—— 项目接入时跑一次,schema 变了重跑</em></li>
+      <li><code>db-query</code> 查数据时<strong>首选读本地 DDL</strong>(便宜),只在知识库没有或要实际数据时才连库(贵,兜底);探索发现回写 DISCOVERED 块 <em>—— agent 自动触发</em></li>
     </ul>
     <div class="highlight">
-      <p>产物落在 <code>docs/knowledge/*.md</code>。写文件前必须过 <code>cgraphx docs validate</code> 校验,非法文件会被索引跳过。</p>
+      <p>业务知识落在 <code>docs/knowledge/*.md</code>(写前必过 <code>cgraphx docs validate</code>);数据模型落在 <code>docs/schema-knowledge/&lt;工程&gt;/</code>。重 dump 时 DISCOVERED 块<strong>自动保留</strong>,积累不丢。</p>
     </div>
   </div>
 
-  <div id="tab-schema" class="tab-panel">
-    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">数据库 schema 的 DDL 快照 + 探索补充,让 AI 理解表结构和业务语义。</p>
+  <div id="tab-postdoc" class="tab-panel">
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>发布后 · 按需</strong>——不在开发主链上,不参与流程门禁。</p>
     <ul class="phase-list">
-      <li><code>/export-table-ddl</code> 按 profile 批量导出项目用到的表的 CREATE TABLE DDL,按工程分目录 <em>—— 项目接入时跑一次,schema 变了重跑</em></li>
-      <li><code>db-query</code> 查数据时读本地 DDL 文件<em>（首选）</em>,文件不存在才连 DB 兜底;探索发现的隐式关系/含义/陷阱 append 到对应表的 DISCOVERED 块 <em>—— agent 自动触发</em></li>
+      <li><span class="post">发布后</span> <code>/write-prd</code> 业务需求文档<em>(给领导/客户/业务方审阅)</em></li>
+      <li><span class="post">自测通过后</span> <code>/write-design-doc</code> 设计文档<em>(面向研发/技术负责人/维护者)</em></li>
+      <li><span class="post">接口开发完毕后</span> <code>/write-api-doc</code> 接口文档<em>(仅本次新增接口)</em></li>
     </ul>
     <div class="highlight">
-      <p>产物落在 <code>docs/schema-knowledge/&lt;工程&gt;/</code>（INDEX.md + ddl/&lt;table&gt;.sql + pending-comments.sql）。重 dump 时 DISCOVERED 块自动保留,积累不丢。</p>
+      <p>设计原则:前期文档越少,变更回归成本越低;发布后写的是<strong>实际交付的行为</strong>,不存在文档与系统漂移的问题。</p>
+    </div>
+  </div>
+
+  <div id="tab-review" class="tab-panel">
+    <ul class="phase-list">
+      <li><code>/developer-timeline</code> 从自动记录的开发事件流生成日报/周报/月报/阶段总结/使用习惯分析</li>
+      <li><code>/write-workload</code> 产出需求工作量汇报<em>(内部对账/甲方结款依据)</em></li>
+    </ul>
+    <div class="highlight">
+      <p>timeline 通过隐藏 hook 自动记录(每次约 5ms,不阻塞工作流),数据一直在 <code>.cgraphx/cgraphx.db</code>——不用回忆,不用拼凑。</p>
     </div>
   </div>
 
@@ -499,62 +552,56 @@ footer p { margin: 0; }
 
 <section>
   <h2>docs/ 目录速查</h2>
-  <p>翻文档时知道去哪儿找 —— 哪个目录由哪个 skill 自动维护。</p>
+  <p>翻文档时知道去哪儿找——哪个目录由哪个 skill 维护。</p>
 
   <div class="docs-legend">
     <span><span class="dot must"></span>必有</span>
     <span><span class="dot opt"></span>可选(按需)</span>
-    <span><span class="dot local"></span>本地测试相关</span>
+    <span><span class="dot post"></span>发布后按需</span>
   </div>
 
-  <pre class="docs-tree"><b>docs/</b> 文档工程                                             <span class="ann"># 必有</span>
-├── <b>bruno/</b>  API接口目录          <span class="ann"># write-api + run-api-test 维护; bruno app 可以直接打开这个目录识别为接口列表</span>
+  <pre class="docs-tree"><b>docs/</b>
+├── <b>features/</b>   需求目录(单次需求工作目录,spec 必有)
+│   └── <b>&lt;日期&gt;-&lt;编号&gt;-&lt;前缀&gt;/</b>
+│       ├── &lt;前缀&gt;-spec.md            <span class="skill">/write-spec</span>           <span class="must">必有</span>  <span class="ann">唯一契约</span>
+│       ├── <b>plan/</b>                     <span class="skill">/write-plan</span>           <span class="opt">可选</span>  <span class="ann">大需求</span>
+│       ├── &lt;前缀&gt;-需求文档.md         <span class="skill">/write-prd</span>            <span class="post">发布后</span>  <span class="ann">按需</span>
+│       ├── &lt;前缀&gt;-api-spec.md        <span class="skill">/write-api</span>            <span class="opt">可选</span>  <span class="ann">开发完成后</span>
+│       ├── &lt;前缀&gt;-测试报告.md         <span class="skill">/run-api-test</span>         <span class="opt">可选</span>  <span class="ann">write-api 后</span>
+│       ├── &lt;前缀&gt;-测试验证.jsonl      <span class="skill">/run-api-test</span>         <span class="opt">可选</span>  <span class="ann">自动产出</span>
+│       ├── &lt;前缀&gt;-单元测试-spec.md    <span class="skill">/write-unit-test-spec</span> <span class="opt">可选</span>  <span class="ann">spec 后</span>
+│       ├── &lt;前缀&gt;-单元测试报告.md     <span class="skill">/write-unit-test-code</span> <span class="opt">可选</span>  <span class="ann">开发完成后</span>
+│       └── &lt;前缀&gt;-设计文档.md         <span class="skill">/write-design-doc</span>     <span class="post">发布后</span>  <span class="ann">按需</span>
+│
+├── <b>knowledge/</b>   业务知识库(跨需求共享)
+│   └── *.md                          <span class="skill">/knowledge-write</span> <span class="ann">沉淀</span>  <span class="skill">/knowledge-init</span> <span class="ann">批量建档</span>
+│
+├── <b>bruno/</b>   接口测试(bruno app 可直接打开)
 │   ├── bruno.json
-│   ├── <b>environments/</b>
-│   │   ├── local.bru
-│   │   ├── staging.bru
-│   │   └── production.bru
-│   ├── <b>common/</b>
-│   │   └── &lt;接口名&gt;/&lt;场景&gt;.bru
-│   └── <b>&lt;服务名&gt;/</b>
-│       └── <b>&lt;需求前缀&gt;/</b>
-│           └── <b>&lt;接口名&gt;/</b>
-│               ├── &lt;场景1&gt;.bru
-│               └── &lt;场景2&gt;.bru
+│   ├── <b>environments/</b>                 <span class="ann">local / staging / production</span>
+│   └── <b>&lt;服务&gt;/&lt;需求前缀&gt;/&lt;接口&gt;/</b>&lt;场景&gt;.bru
 │
-├── <b>features/</b>   需求目录
-│   └── <b>&lt;日期&gt;-&lt;编号&gt;-&lt;前缀&gt;/</b>  <span class="ann"># 如 2026-07-03-CRM-req19230-号百商品详情查询接口</span>
-│       ├── &lt;前缀&gt;-spec.md          <span class="skill">/write-spec</span>           <span class="must">必选</span>  <span class="ann">clarify 后执行</span>
-│       ├── &lt;前缀&gt;-需求文档.md       <span class="skill">/write-prd</span>            <span class="opt">可选</span>  <span class="ann">需要需求文档时,spec 之后</span>
-│       ├── <b>plan/</b>                <span class="skill">/write-plan</span>           <span class="opt">可选</span>  <span class="ann">大需求,spec/prd 后</span>
-│       ├── &lt;前缀&gt;-单元测试-spec.md  <span class="skill">/write-unit-test-spec</span>  <span class="opt">可选</span>  <span class="ann">spec 后任意时机</span>
-│       ├── &lt;前缀&gt;-单元测试报告.md   <span class="skill">/write-unit-test-code</span>  <span class="opt">可选</span>  <span class="ann">spec+开发完成后</span>
-│       ├── &lt;前缀&gt;-api-spec.md      <span class="skill">/write-api</span>            <span class="opt">可选</span>  <span class="ann">接口测试,开发完成后</span>
-│       ├── &lt;前缀&gt;-测试报告.md       <span class="skill">/run-api-test</span>          <span class="opt">可选</span>  <span class="ann">write-api 后自动产出</span>
-│       ├── &lt;前缀&gt;-测试验证.jsonl    <span class="skill">/run-api-test</span>          <span class="opt">可选</span>  <span class="ann">自动产出</span>
-│       └── &lt;前缀&gt;-设计文档.md       <span class="skill">/write-design-doc</span>    <span class="opt">可选</span>  <span class="ann">发布后按需执行</span>
+├── <b>schema-knowledge/</b>   数据模型知识库
+│   └── <b>&lt;工程&gt;/</b>
+│       ├── INDEX.md                  <span class="ann">表清单 + 注释(agent 入口)</span>
+│       ├── pending-comments.sql      <span class="ann">DBA 待执行 COMMENT(action 队列)</span>
+│       └── ddl/&lt;table&gt;.sql           <span class="ann">DDL + DISCOVERED 块(探索积累)</span>
 │
-├── <b>knowledge/</b>   知识库目录                         <span class="skill">/knowledge-write</span> <span class="ann">任何有价值的会话都可以触发沉淀;</span>
-│                                                 <span class="skill">/knowledge-init</span> <span class="ann">新项目起步可以批量写 [可选]</span>
-│
-├── <b>schema-knowledge/</b>   模型知识库目录  <span class="skill">/export-table-ddl</span> <span class="ann">批量初始化工程模型, 按工程分目录</span>
-│   ├── xw-inst                      <span class="skill">/db-query</span> <span class="ann">自动读文件内的模型, 兜底连接数据库获取数据, 经验回写到对应的 ddl文件</span>
-│   │   ├── INDEX.md                 <span class="ann"># 表名 + 表注释,agent 进目录第一件事读</span>
-│   │   ├── pending-comments.sql     <span class="ann"># DBA 待执行 COMMENT SQL(action 队列,执行一条删一条)</span>
-│   │   └── ddl/
-│   │       ├── &lt;table&gt;.sql          <span class="ann"># 完整 DDL + 末尾 DISCOVERED 块(db-query 探索补充的隐式关系/含义/陷阱)</span>
-│   │       └── &lt;table&gt;.sql
-│   ├── xw-order                     <span class="ann"># 结构同 xw-inst</span>
-│   └── xw-so                        <span class="ann"># 结构同 xw-inst</span>
+└── <b>guides/</b>   项目规范(<span class="skill">/init-project-guides</span> <span class="ann">生成</span>)
+    ├── coding-standards.md
+    ├── interface-standards.md
+    ├── data-standards.md
+    ├── testing-standards.md
+    └── git-standards.md              <span class="ann">commit 门禁指向此文件</span>
   </pre>
 
   <div class="highlight">
-    <p><strong>两个核心目录</strong>——<code>docs/features/</code> 是单次需求工作目录(必须有 spec.md),<code>docs/knowledge/</code> 是跨需求共享的业务知识库。<strong>bruno/ 和 schema-knowledge/ 按需出现</strong>,只在跑接口测试 / 查 DB 时产生。</p>
+    <p><strong>两个核心目录</strong>——<code>docs/features/</code> 是单次需求工作目录(必须有 spec),<code>docs/knowledge/</code> 是跨需求共享的业务知识库。bruno/、schema-knowledge/、guides/ 按需出现。</p>
   </div>
 </section>
 
 <footer>
-  <p>cgraphx 使用说明 · 2026-07-16</p>
+  <p>cgraphx 使用说明 · 2026-07-30</p>
 </footer>
 
 </div>
