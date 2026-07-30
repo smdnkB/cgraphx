@@ -1,6 +1,6 @@
 ---
 name: code-impact-init
-description: Explore an unfamiliar project automatically to build a business knowledge base. Discovers entry points via grep/Read, spawns sub-agents to explore each one in depth, saves knowledge documents to docs/knowledge/, then merges cross-cutting concepts and deep-dives. Requires code-impact-markdown skill. Use when the user asks to explore, understand, or map out a new project, or wants to build a knowledge base for a project from scratch.
+description: Explore an unfamiliar project automatically to build a business knowledge base. Discovers entry points via grep/Read, spawns sub-agents to explore each one in depth, saves knowledge documents to docs/knowledge/, then merges cross-cutting concepts and deep-dives. Requires knowledge-write skill. Use when the user asks to explore, understand, or map out a new project, or wants to build a knowledge base for a project from scratch.
 ---
 
 # Project Exploration
@@ -8,7 +8,7 @@ description: Explore an unfamiliar project automatically to build a business kno
 Automated project exploration skill. Discovers entry points via grep/Read, explores each in depth through sub-agents, saves knowledge to the local markdown knowledge base (`docs/knowledge/*.md`), then merges cross-cutting concepts and deep-dives.
 
 **Dependencies:**
-- `code-impact-markdown` skill must be installed in the same project（沉淀业务理解到 `docs/knowledge/*.md`）
+- `knowledge-write` skill must be installed in the same project（沉淀业务理解到 `docs/knowledge/*.md`）
 - 项目有代码可读（`grep` / `rg` / `Read` 可定位符号、跟踪调用、看实现）
 - `docs/knowledge/` 可写（知识文档沉淀目录）
 - cgraphx CLI 可用（提供 `cgraphx docs` 系列命令管理 markdown 知识库：concept 索引 / dedup / 校验）
@@ -22,7 +22,7 @@ Use this skill when:
 
 Do NOT use for:
 - Quick targeted questions about specific code（直接用 `grep` / `Read` 即可）
-- Creating a single knowledge document (use `code-impact-markdown` skill instead)
+- Creating a single knowledge document (use `knowledge-write` skill instead)
 - 单点代码定位 / 单函数实现查询（直接 `grep` / `Read`,无需走整套 exploration 流程）
 
 ## Pre-flight Check
@@ -651,8 +651,8 @@ cgraphx docs find --q="{name}" --limit=5 --json
    - **全部报告**给主 agent，不预先过滤
 
 【保存知识文档】
-使用 code-impact-markdown skill 的完整流程保存文档：
-1. 先调用 Skill 工具加载 code-impact-markdown skill，按其规范执行保存流程
+使用 knowledge-write skill 的完整流程保存文档：
+1. 先调用 Skill 工具加载 knowledge-write skill，按其规范执行保存流程
 2. 查询已有概念：cgraphx docs concepts --json
 3. 复用已有概念名，新名称放 aliases
 4. 文件名 kebab-case，基于入口点命名，保存到 docs/knowledge/
@@ -661,7 +661,7 @@ cgraphx docs find --q="{name}" --limit=5 --json
 7. source_type 填 ai_session
 8. related_code 填实际探索过的文件路径（grep 输出已有，直接复制）
 9. 文档正文必须包含：Summary, Context, Findings, Evidence, Impact For Future Changes
-10. **Write 后必须 `cgraphx docs validate <file>` 校验通过**（code-impact-markdown skill 的强制步骤）；非法则修 frontmatter 再 Write 再校验，直到合法
+10. **Write 后必须 `cgraphx docs validate <file>` 校验通过**（knowledge-write skill 的强制步骤）；非法则修 frontmatter 再 Write 再校验，直到合法
 
 完成后只返回以下 JSON（不要返回文档内容）：
 {

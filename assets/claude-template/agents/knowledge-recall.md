@@ -97,7 +97,7 @@ cgraphx docs find --concept=<concept-name> --json
 已尝试:
 - 全量 concept 语义匹配(N 个概念,0 命中)
 - 关键词兜底查 title+summary(0 命中)
-建议:如果这是一个值得沉淀的业务概念,可以用 code-impact-markdown skill 记录。
+建议:如果这是一个值得沉淀的业务概念,可以用 knowledge-write skill 记录。
 ```
 
 **知识库未索引时**(docs concepts 返回空或报错):

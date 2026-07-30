@@ -25,7 +25,7 @@
         ┌───────────────┼────────────────────────┐
         ▼               ▼                        ▼
   write-api        write-unit-test-spec     交付收尾:
-  → run-api-test   → write-unit-test-code   沉淀提示 → code-impact-markdown
+  → run-api-test   → write-unit-test-code   沉淀提示 → knowledge-write
   (接口测试)     (单元测试,与开发并行或开发结束)     commit 门禁 → git-standards.md
 
   ── 推荐发布后 · 按需(不在主链,不参与门禁); 原因: 发布前写 PRD:写的是预期,实现过程中一定会漂移,发布后 PRD 就过期了,给业务方看反而误导 ──────────────────
@@ -49,7 +49,7 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 - **链**:`/implementation`(简单:1-3 文件 / 单模块)| `/subagent-implement`(复杂:≥3 任务跨域,主 agent 只协调、派子 agent 实现)
 - **前置**:spec 必有;subagent-implement 需 plan
 - **强制读**:规范由 plan 打「强制引用」标注(write-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md);有 plan 时 implementation / subagent-implement 只读标注,无 plan 时 implementation 自行识别;**缺失 → 中断,先 `/init-project-guides` 补齐**
-- **收尾**:沉淀提示(新增/变更实体、坑、隐式约束 → `/code-impact-markdown`);commit 门禁由 precommit-check hook 指向 `docs/guides/git-standards.md`,被拦 → 按门禁提示 Read 该文件、依「提交前检查点」自查 staged diff
+- **收尾**:沉淀提示(新增/变更实体、坑、隐式约束 → `/knowledge-write`);commit 门禁由 precommit-check hook 指向 `docs/guides/git-standards.md`,被拦 → 按门禁提示 Read 该文件、依「提交前检查点」自查 staged diff
 
 ## 接口测试流程
 
@@ -66,7 +66,7 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 ## 知识库
 
-- **写**:`/code-impact-markdown`(双层结构:实体 `concept` 主条目 + 流程条目,正向引用 + 反查派生参与业务;写入前必过 `cgraphx docs validate`)| `/code-impact-init`(陌生项目批量探索建档)
+- **写**:`/knowledge-write`(双层结构:实体 `concept` 主条目 + 流程条目,正向引用 + 反查派生参与业务;写入前必过 `cgraphx docs validate`)| `/code-impact-init`(陌生项目批量探索建档)
 - **读**:knowledge-recall(子 agent 语义召回,实体条目优先)| code-impact-api(已知概念名精确查)
 - **目录**:`docs/knowledge/*.md`;沉淀时机由开发流程交付收尾提示触发
 

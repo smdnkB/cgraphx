@@ -24,7 +24,7 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 **skill 主线**(`assets/claude-template/skills/` 下共 20+ 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
 
 - 需求主线:`/clarify-requirements`(必经,澄清意图/业务边界/技术边界)→ `/write-spec`(核心,技术规格契约)→ `/write-plan`(可选,大需求)→ `/implementation`(简单任务)或 `/subagent-implement`(复杂多任务)。日常默认两步:澄清 + 实现。
-- 平行支线:接口测试(`/write-api` → `/run-api-test`,写接口必须查 DB 验数据)、单元测试(`/write-unit-test-spec` → `/write-unit-test-code`)、知识沉淀(`/code-impact-markdown` 触发,`knowledge-recall` / `code-impact-api` 由 agent 自动召回)、DB schema 知识(`/export-table-ddl` 导出 + `db-query` 探索回写)。
+- 平行支线:接口测试(`/write-api` → `/run-api-test`,写接口必须查 DB 验数据)、单元测试(`/write-unit-test-spec` → `/write-unit-test-code`)、知识沉淀(`/knowledge-write` 触发,`knowledge-recall` / `code-impact-api` 由 agent 自动召回)、DB schema 知识(`/export-table-ddl` 导出 + `db-query` 探索回写)。
 
 **`docs/` 目录约定(skill 与程序的契约,目标项目内):**
 
@@ -70,7 +70,7 @@ cgraphx 的 skill 流程针对 AI 辅助研发中反复出现的几类浪费,逐
 - PRD(`/write-prd`)、设计文档(`/write-design-doc`)、接口文档(`/write-api-doc`)都不在开发主链上,推荐发布后按需执行——发布后写的是实际交付的行为,不存在文档与系统漂移的问题。流程全景和时机标注见 `assets/claude-template/FLOW-MAP.md`。
 - 这也匹配 agent 的能力结构:维持 N 份文档互相一致很差(上下文有限、顾此失彼),从单一权威源派生很强。
 
-**2. 业务知识随会话消失。** 和 agent 聊出来的业务理解(概念定义、决策理由、踩过的坑、隐式约束)随会话结束就丢了;下次开发同一模块,agent 从零开始,人再解释一遍。解法是**沉淀 → 召回的闭环**:开发收尾由交付提示触发 `/code-impact-markdown` 把有价值的知识写入 `docs/knowledge/`(双层结构:实体主条目 + 流程条目);下次开发前 `/knowledge-recall` 先召回相关概念再动手——用得越多,agent 的项目上下文越厚,重复解释和重复踩坑越少。
+**2. 业务知识随会话消失。** 和 agent 聊出来的业务理解(概念定义、决策理由、踩过的坑、隐式约束)随会话结束就丢了;下次开发同一模块,agent 从零开始,人再解释一遍。解法是**沉淀 → 召回的闭环**:开发收尾由交付提示触发 `/knowledge-write` 把有价值的知识写入 `docs/knowledge/`(双层结构:实体主条目 + 流程条目);下次开发前 `/knowledge-recall` 先召回相关概念再动手——用得越多,agent 的项目上下文越厚,重复解释和重复踩坑越少。
 
 **3. 数据模型每次从零理解。** agent 要查数据或改表,要么连库拿结构(贵:要凭据、要网络、要 LIMIT 保护),要么凭空猜字段含义;上次探索发现的隐式关系(如 `assignee_id` 实际对应 `users.staff_code`)下次又不知道。解法是**本地 DDL 知识库 + 探索回写的闭环**(全景见 `export-table-ddl` skill 的 `closed-loop.html`):`/export-table-ddl` 建基线(按工程分目录,一表一文件)→ `/db-query` 首选读本地 DDL(便宜),只在知识库没有或要实际数据时才连库(贵,兜底)→ 探索中发现的字段含义、隐式关系 append 到对应表的 DISCOVERED 块(双向引用)→ 重跑 export 刷新 DDL 但**保留 DISCOVERED 块**。agent 默认走本地知识库,积累才生效,闭环才转得起来。
 

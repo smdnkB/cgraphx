@@ -111,13 +111,13 @@ cgraphx docs index              # 全量扫 docs/knowledge/,事务性覆盖
 不需要跑:
 - 改了 .md 的非 Summary 章节(那些不进索引,改完直接 Read 就行)
 
-## 文档规范要点(写新文档时遵守,详见 code-impact-markdown skill)
+## 文档规范要点(写新文档时遵守,详见 knowledge-write skill)
 
 frontmatter **7 必填**(缺一即被跳过):`title` / `document_type` / `domains` / `concepts` / `status` / `source_type` / `updated`
 
 **章节**:**只有 `## Summary`(或 `## 摘要`)进索引**,其他章节留文件里,AI 想看就 Read。
 
-详细 frontmatter 枚举值、稳定标题、命名规则、模板 → 见 `code-impact-markdown` skill。
+详细 frontmatter 枚举值、稳定标题、命名规则、模板 → 见 `knowledge-write` skill。
 
 ## 关键词搜索(中文友好)
 

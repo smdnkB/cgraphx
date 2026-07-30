@@ -8,7 +8,7 @@
  * `node_modules/` — those are either user-owned, platform-specific, or
  * contain binary artifacts. Project guides (coding standards, glossaries,
  * DDL references, etc.) are NOT shipped — users author those themselves
- * under `docs/` (the `code-impact-markdown` skill indexes that location).
+ * under `docs/` (the `knowledge-write` skill indexes that location).
  *
  * Conflict policy: **same-name overwrites unconditionally**.
  *   - File in template, NOT in target → created

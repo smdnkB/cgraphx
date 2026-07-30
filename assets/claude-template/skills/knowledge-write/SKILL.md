@@ -1,9 +1,9 @@
 ---
-name: code-impact-markdown
+name: knowledge-write
 description: 维护可供 cgraphx docs 索引的 Markdown 知识文件(docs/knowledge/)。用于创建、编辑、规范化或提取元数据,将对话、代码探索结果、教程、指南、运维手册、安装说明、决策、经验教训、业务实体概念或面向 AI 的项目知识保存为可被 cgraphx docs 检索的 .md 文件。
 ---
 
-# Code Impact Markdown
+# 知识沉淀 (Knowledge Write)
 
 ## 定位
 

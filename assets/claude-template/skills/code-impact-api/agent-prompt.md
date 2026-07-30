@@ -46,6 +46,6 @@
 
 ## 约束
 
-- **不要修改任何文件** —— 你是只读探索,Edit/Write 工具不要调;特别**不要修改 docs/knowledge/ 下任何 .md**(变更由人/主 agent 决定后再走 code-impact-markdown skill)
+- **不要修改任何文件** —— 你是只读探索,Edit/Write 工具不要调;特别**不要修改 docs/knowledge/ 下任何 .md**(变更由人/主 agent 决定后再走 knowledge-write skill)
 - **不要假设主 agent 知道你的中间步骤** —— 你的 final message 就是它看到的全部
 - **不要建议主 agent 派第二次子 agent** —— 一次没答完整就再探索几次,超出能力直接说

@@ -10,11 +10,11 @@ description: 功能发布后(或自测通过后)按需执行——从本地图�
 - **发布后的事后文档,不在开发主链上**:功能发布后(或自测通过后)按需执行,从 `docs/knowledge/` 召回项目级背景(cgraphx docs),读 feature 目录的 spec/plan,合成给研发/技术负责人/维护者读的设计文档("生成设计文档"、"沉淀一下设计文档"时触发)。
 - **两类来源缺一不可**:knowledge 给项目级架构/决策/风险;spec/plan 给本 feature 的目标/契约/任务拆分。knowledge 为空且无 spec/plan → **拒绝生成**,提示先备素材。
 - **事后沉淀,不是契约**:不得重新定义 spec 已锁定的契约;发现 spec 与代码现实不符,标【待确认】,不自行解释。
-- **边界**:写知识文件 → `code-impact-markdown`;查知识辅助编码 → `code-impact-api`;探索陌生项目 → `code-impact-init`;PRD/spec/plan → 各自 skill。
+- **边界**:写知识文件 → `knowledge-write`;查知识辅助编码 → `code-impact-api`;探索陌生项目 → `code-impact-init`;PRD/spec/plan → 各自 skill。
 
 ## 依赖
 
-- cgraphx 已装、`docs index` 已跑(用 `docs concepts` 验证;索引为空 → 先按 `code-impact-markdown` 沉淀再 index)。
+- cgraphx 已装、`docs index` 已跑(用 `docs concepts` 验证;索引为空 → 先按 `knowledge-write` 沉淀再 index)。
 - feature 目录下有 spec(`<文件前缀>-spec.md`)和/或 plan(`plan/`)。
 
 ## 流程

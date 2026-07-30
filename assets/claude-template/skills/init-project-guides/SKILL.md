@@ -67,4 +67,4 @@ description: 为项目初始化 docs/guides/ 规范文件模板。根据技术�
 
 ## 知识库联动
 
-生成后建议用户运行 `/code-impact-markdown` 将规范沉淀到 `docs/knowledge/`。
+生成后建议用户运行 `/knowledge-write` 将规范沉淀到 `docs/knowledge/`。
