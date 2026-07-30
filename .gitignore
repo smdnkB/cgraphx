@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+*.tgz
 
 # cgraphx runtime data
 .cgraphx/
@@ -17,3 +18,4 @@ dist/
 # cgraphx 1.x usage-environment products (not part of cgraphx 2.0 source repo)
 .claude/
 .mcp.json
+/docs/handdrawn-deck-ai-knowledge/
