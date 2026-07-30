@@ -1,0 +1,266 @@
+/**
+ * web 服务基座:node:http 服务器 + 路由骨架 + 生命周期。
+ *
+ * `startWebServer` 执行启动预检(经 bootstrap)→ 回环绑定 127.0.0.1 →
+ * 返回 `{ url, close }`。本函数保持纯净:不注册进程信号处理器(测试友好),
+ * SIGINT/SIGTERM 的优雅退出由 register.ts 装配。
+ *
+ * 路由骨架(B-2 落占位,B-3/B-4 填页面):
+ *   GET /            占位首页(壳骨架 + 「知识库页面实现中」+ 版本)
+ *   GET /timeline    占位页(平行需求未实现)
+ *   GET /assets/*    静态资产(路径穿越防护 + 扩展名白名单)
+ *   其他             404 页
+ *   处理器抛错       500 页(可读原因,禁输出堆栈)
+ *
+ * 只读契约(spec §4.1 / §11 #3):除 bootstrap 的 sqlite_master 查询外,
+ * web 进程内所有 SQL 为 SELECT;占位路由不触碰 DB。
+ */
+
+import * as http from 'node:http';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import type { AddressInfo } from 'node:net';
+
+import { openVerifiedConnection } from './bootstrap';
+import { WebStartupError } from './errors';
+import { escapeHtml, renderShellPage } from './render-utils';
+
+/** 已启动的 web 服务句柄。 */
+export interface WebServer {
+  /** 可点击的本地访问地址,形如 `http://127.0.0.1:<port>`(port 0 时取实际端口)。 */
+  url: string;
+  /** 关闭 http server + DB 连接。 */
+  close(): Promise<void>;
+}
+
+/** 静态资产 Content-Type 最小表(扩展名 → MIME)。不在表内的扩展名一律 404。 */
+const ASSET_CONTENT_TYPES: Record<string, string> = {
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+};
+
+/** 仅回环绑定(安全契约,spec §5.1):字面量,不做 host 参数。 */
+const LOOPBACK_HOST = '127.0.0.1';
+
+/** 运行时读 package.json 版本号(与 cli/index.ts 同源同机制,spec §7)。 */
+function readVersion(): string {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8'),
+    ) as { version?: string };
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** 发送一个壳布局 HTML 响应。 */
+function sendHtml(
+  res: http.ServerResponse,
+  status: number,
+  opts: { title: string; active: 'knowledge' | 'timeline' | 'none'; contentHtml: string; version: string },
+): void {
+  res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(renderShellPage(opts));
+}
+
+/** 404 页:可读文案 + 回首页链接;展示被请求路径(转义)。 */
+function sendNotFound(res: http.ServerResponse, version: string, requestPath: string): void {
+  const contentHtml = `
+    <section class="placeholder">
+      <h1>页面不存在</h1>
+      <p>没有与 <code>${escapeHtml(requestPath)}</code> 匹配的页面。</p>
+      <p><a href="/">返回知识库首页</a></p>
+    </section>`;
+  sendHtml(res, 404, { title: '页面不存在', active: 'none', contentHtml, version });
+}
+
+/** 500 页:可读错误原因,禁输出堆栈(spec §3.2 全局错误态)。 */
+function sendInternalError(res: http.ServerResponse, version: string, err: unknown): void {
+  const reason = err instanceof Error ? err.message : String(err);
+  const contentHtml = `
+    <section class="placeholder placeholder--error">
+      <h1>出错了</h1>
+      <p>处理请求时发生内部错误:</p>
+      <pre class="error-reason">${escapeHtml(reason)}</pre>
+      <p><a href="/">返回知识库首页</a></p>
+    </section>`;
+  sendHtml(res, 500, { title: '出错了', active: 'none', contentHtml, version });
+}
+
+/** 占位首页:壳骨架 + 「知识库页面实现中(B-3)」+ 版本。 */
+function renderHome(version: string): string {
+  return `
+    <section class="placeholder">
+      <h1>知识库</h1>
+      <p>知识库页面实现中(B-3)。</p>
+      <p class="placeholder__meta">cgraphx v${escapeHtml(version)}</p>
+    </section>`;
+}
+
+/** /timeline 占位页:平行需求尚未实现。 */
+function renderTimelinePlaceholder(): string {
+  return `
+    <section class="placeholder">
+      <h1>开发时间线</h1>
+      <p>开发时间线属平行需求,尚未实现(feature-id: 2026-07-30-cgraphx-web时间线浏览)。</p>
+    </section>`;
+}
+
+/**
+ * 静态资产服务。从 `path.join(__dirname, 'public')` 提供(dist 与 src 布局
+ * 同构,经 copy-assets 镜像)。
+ *
+ * 路径穿越防护:decode → `path.resolve` → 校验结果仍在 public 根内,否则
+ * 404(`/assets/..%2f..%2fpackage.json` 类请求在此被拦截)。扩展名白名单
+ * (css/js/svg/woff2)之外一律 404。
+ *
+ * @returns true 表示已处理(含 404),调用方无需再分发。
+ */
+function tryServeAsset(
+  res: http.ServerResponse,
+  version: string,
+  pathname: string,
+): boolean {
+  const publicRoot = path.resolve(__dirname, 'public');
+  let rel: string;
+  try {
+    rel = decodeURIComponent(pathname.slice('/assets/'.length));
+  } catch {
+    sendNotFound(res, version, pathname);
+    return true;
+  }
+
+  const filePath = path.resolve(publicRoot, rel);
+  // 根校验:resolve 后必须仍在 public 根内,否则视为穿越 → 404。
+  if (filePath !== publicRoot && !filePath.startsWith(publicRoot + path.sep)) {
+    sendNotFound(res, version, pathname);
+    return true;
+  }
+
+  const contentType = ASSET_CONTENT_TYPES[path.extname(filePath).toLowerCase()];
+  if (contentType === undefined) {
+    sendNotFound(res, version, pathname);
+    return true;
+  }
+
+  let data: Buffer;
+  try {
+    data = fs.readFileSync(filePath);
+  } catch {
+    sendNotFound(res, version, pathname);
+    return true;
+  }
+
+  res.writeHead(200, { 'Content-Type': contentType });
+  res.end(data);
+  return true;
+}
+
+/**
+ * 构造请求处理器。闭包持有版本号;处理器抛错统一兜底为 500 页。
+ * 仅支持 GET;其它方法走「其他 → 404」。
+ */
+function createRequestHandler(version: string): http.RequestListener {
+  return (req, res) => {
+    try {
+      const pathname = new URL(req.url ?? '/', 'http://internal').pathname;
+
+      if (req.method === 'GET') {
+        if (pathname === '/') {
+          sendHtml(res, 200, {
+            title: '知识库',
+            active: 'knowledge',
+            contentHtml: renderHome(version),
+            version,
+          });
+          return;
+        }
+        if (pathname === '/timeline') {
+          sendHtml(res, 200, {
+            title: '开发时间线',
+            active: 'timeline',
+            contentHtml: renderTimelinePlaceholder(),
+            version,
+          });
+          return;
+        }
+        if (pathname === '/assets' || pathname.startsWith('/assets/')) {
+          tryServeAsset(res, version, pathname);
+          return;
+        }
+      }
+
+      sendNotFound(res, version, pathname);
+    } catch (err) {
+      // 全局兜底:任何处理器抛错 → 500 页(可读原因,不输出堆栈)。
+      sendInternalError(res, version, err);
+    }
+  };
+}
+
+/**
+ * 启动本地只读 web 服务。
+ *
+ * 预检序列(契约,顺序固定):
+ *   1–3. bootstrap.openVerifiedConnection(存在性 → 单连接 → schema);
+ *   4.   `createServer(handler).listen(port, '127.0.0.1')`,EADDRINUSE →
+ *        `WebStartupError { kind: 'port-in-use', port }`。
+ *
+ * @param options.port 允许传 0(测试临时端口;url 用 server.address() 实际端口)。
+ */
+export async function startWebServer(options: {
+  projectRoot: string;
+  port: number;
+}): Promise<WebServer> {
+  const { projectRoot, port } = options;
+
+  // 预检 1–3:存在性 + 进程级单连接 + schema(只读)。
+  const connection = openVerifiedConnection(projectRoot);
+  const version = readVersion();
+  const server = http.createServer(createRequestHandler(version));
+
+  // 预检 4:回环绑定。Promise 化 listen;EADDRINUSE 在 'error' 事件捕获
+  // (不是同步 try/catch)。成功后移除一次性 error 监听,避免误吞运行期错误。
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onError = (err: NodeJS.ErrnoException): void => {
+        if (err.code === 'EADDRINUSE') {
+          reject(
+            new WebStartupError(
+              'port-in-use',
+              `port ${port} is already in use — use --port <port> to specify another port`,
+              { port },
+            ),
+          );
+        } else {
+          reject(err);
+        }
+      };
+      server.once('error', onError);
+      server.listen(port, LOOPBACK_HOST, () => {
+        server.removeListener('error', onError);
+        resolve();
+      });
+    });
+  } catch (err) {
+    // 绑定失败:关掉已打开的连接,避免泄漏。
+    connection.close();
+    throw err;
+  }
+
+  const address = server.address() as AddressInfo;
+  const url = `http://${LOOPBACK_HOST}:${address.port}`;
+
+  return {
+    url,
+    async close(): Promise<void> {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      });
+      connection.close();
+    },
+  };
+}
