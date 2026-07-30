@@ -2,100 +2,124 @@
 
 # cgraphx
 
-> A **local development-assistance system for Claude Code**: 20+ skills define the workflow, backed by four project-local capabilities (knowledge base / database / timeline / requirements index).
+> A local development-assistance system for Claude Code — 20+ skills define the workflow, backed by four project-local capabilities.
 
-One npm package, one `cgraphx install`, and a full "requirements → spec → implementation → testing → knowledge" workflow lands in your project. Claude Code reads the skills and follows the process — entirely **project-local, offline, and your data never leaves the repo**.
+One `cgraphx install` drops a full "clarify → spec → implement → test → knowledge capture" workflow into your project. Entirely **project-local, offline, and your data never leaves the repo**.
 
 ---
 
-## Not just another CLI tool
+## Problems it solves
 
-cgraphx = **skill workflow (the core) + program capabilities (the support)**:
+Most AI-assisted development tools (including open-source ones) stop at code generation. cgraphx solves what happens **before** and **after**:
 
-- **Skills are the core** — 20+ markdown process guides capturing "how requirements should be done": clarify first, write a spec, break big ones into plans, add tests after implementing, distill valuable findings into knowledge.
+| # | Pain point | How cgraphx addresses it |
+|---|---|---|
+| 1 | **Document drift → rework** — PRD/Spec/Plan: change one rule, regression-test all three; eventually none can be trusted | Spec is the sole contract; change one place. PRD, design doc, API doc are generated **post-release on demand**, not on the critical path |
+| 2 | **Business knowledge dies with the session** — understanding built during a conversation vanishes when the window closes | `knowledge-write` captures → `knowledge-recall` retrieves; a closed loop that grows richer with use |
+| 3 | **Data model re-learned from scratch every time** — field meanings, implicit relationships, pitfalls stepped on last time | `export-table-ddl` builds a local DDL baseline; `db-query` writes discoveries back to DISCOVERED blocks; re-dumps preserve accumulated knowledge |
+| 4 | **Requirement misinterpretation** — start coding from a one-liner, finish, discover you built the wrong thing | `/clarify-requirements` locks business boundaries and technical constraints before any code is written |
+| 5 | **Standards rely on memory** — coding/interface/data/commit standards written but never read | Standards are auto-delivered at execution time: plan marks "mandatory references" + a commit gate intercepts `git commit` |
+| 6 | **The workflow stops at "code written"** — testing is manual: record endpoints by hand, run by hand, verify by hand | `/write-api` auto-generates test cases from spec → `/run-api-test` executes + forces DB verification for write APIs (HTTP 200 ≠ pass) |
+| 7 | **Work is untraceable** — "what did you do this month?" answered by scavenging git log | timeline auto-records dev events (~5ms each); `/developer-timeline` generates daily/weekly/monthly reports on demand |
+| 8 | **Upgrades leave residue** — renamed skills leave stale directories; agents can still trigger outdated logic | `deprecated-assets.json` manifest + automatic cleanup on `install` |
+
+## How it works
+
+cgraphx = **skill workflow (the core) + CLI capabilities (the support)**.
+
+- **Skills are the core** — 20+ markdown process guides defining "how requirements should be done." The agent reads skills and follows the process.
 - **The CLI is the support** — four project-local capabilities a skill alone can't provide:
 
 | Subsystem | Command | Capability |
 |---|---|---|
 | **docs** knowledge base | `cgraphx docs` | Index and search `docs/knowledge/*.md` (LIKE queries, CJK-friendly) |
-| **db** database | `cgraphx db` | Read-only introspection for MySQL / PostgreSQL; a built-in safety layer structurally rejects writes |
-| **timeline** | `cgraphx timeline` | Records Claude Code development events via hooks; powers daily / weekly / monthly reports |
-| **features** requirements index | `cgraphx features` | Live index of `docs/features/`; locate your own requirements by owner / keyword (filesystem-derived, no DB) |
-
-Claude Code reads skills → follows the process → calls CLI capabilities. **Your development methodology, finally reusable by Claude Code — reliably.**
+| **db** database | `cgraphx db` | Read-only introspection for MySQL / PostgreSQL; safety layer structurally rejects writes |
+| **timeline** | `cgraphx timeline` | Auto-records development events via hooks; powers reports |
+| **features** requirements index | `cgraphx features` | Locate requirements by owner / keyword (filesystem-derived, no DB) |
 
 Each project gets its own `.cgraphx/cgraphx.db`: self-contained, no server, no telemetry.
 
-## The skill workflow
+## Workflow overview
 
 ```
-knowledge-recall → /clarify-requirements → /write-spec ─┬→ /write-plan → /implementation
-  chat (auto)       clarify                spec         │    plan          implement
-                                                        └→ /write-unit-test-spec → /write-unit-test-code
-                                                             test spec          write tests
+knowledge-recall (auto)
+        │
+        ▼
+/clarify-requirements ──→ /write-spec ──→ /write-plan (optional)
+     clarify               sole contract      execution plan
+        │                                        │
+        │            ┌───────────────────────────┘
+        ▼            ▼
+  /implementation (simple) or /subagent-implement (complex)
+        │
+   ┌────┴─────────────────────────────┐
+   ▼              ▼                   ▼
+/write-api    /write-unit-test-spec  delivery:
+→ /run-api-test → /write-unit-test-code  /knowledge-write capture
+  API testing     unit testing         commit gate
+
+── post-release · on demand (off the critical path) ──────
+/write-prd (stakeholder review)  /write-design-doc  /write-api-doc
 ```
 
-| Track | Skills |
-|---|---|
-| Requirements main line | `/clarify-requirements` → `/write-spec` →(optional `/write-prd` `/write-plan`)→ `/implementation` / `/subagent-implement` |
-| API testing | `/write-api` → `/run-api-test`(write APIs are verified against the DB) |
-| Unit testing | `/write-unit-test-spec` → `/write-unit-test-code` |
-| Knowledge capture | `/code-impact-markdown`, auto-recalled by `knowledge-recall` |
-| DB schema | `/export-table-ddl` + `db-query` exploration write-back |
+Everyday default: **clarify + implement**. Add spec / plan / tests as complexity grows.
 
-Everyday default: **clarify + implement**; add spec / plan / tests as the need grows. Full skill list in `cgraphx-guide`.
-
-## Install & the three commands
+## Install
 
 ```bash
-npm install -g cgraphx
+npm install -g cgraphx    # Node.js >=22.5 <27 (built-in node:sqlite, no native deps)
 ```
-
-| Command | What it does |
-|---|---|
-| `cgraphx install` | One command per project: deploys skills to `.claude/`, wires hooks / statusLine, writes the working method into `.claude/CLAUDE.md`, initializes `.cgraphx/` |
-| `cgraphx upgrade` | Self-update via npm (pure package swap, touches no project); re-run `cgraphx install` in each project to refresh afterwards |
-| `cgraphx uninstall` | Removes skills / config by the package manifest and deletes `.cgraphx/` (add `--keep-data` to keep it) |
-
-## Quick start
 
 ```bash
 cd your-project
-cgraphx install          # set up: .cgraphx/, skills, working method
+cgraphx install           # deploys skills → .claude/ + wires hooks + initializes .cgraphx/
 ```
 
-Restart Claude Code and you're set. For how to actually get value from it, see **Best getting-started practice** below.
+Restart Claude Code and you're set.
+
+| Command | What it does |
+|---|---|
+| `cgraphx install` | One command per project: full setup |
+| `cgraphx upgrade` | Self-update via npm; re-run `install` in each project to refresh skills |
+| `cgraphx uninstall` | Removes skills/config by manifest + deletes `.cgraphx/` (`--keep-data` to preserve) |
 
 ## Best getting-started practice
 
-Installing is only step one. To make Claude Code truly work by *your* project's rules, follow this onboarding order — **set standards first, then talk business, only then do requirements**:
+Installing is only step one. Recommended order — **set standards, talk business, then do requirements**:
 
 **1. Set standards · `/init-project-guides`**
-Generates `docs/guides/` quick-reference standards (coding / interface / data / testing / git — five files). A standard = a project's **deliberate deviation** from the default (e.g. "no `ORDER BY` in SQL", "money is always `decimal(12,2)`", "commits use format A") — the things most easily deviated from, with no tooling to enforce them. New projects get starting defaults (marked "to evolve"); existing projects mine settled conventions from code / git history. These guides are mandatory reads for later tasks and get crystallized into contracts by `/write-plan`.
 
-**2. Talk business · `knowledge-recall` (auto-triggered by Claude Code)**
-Before any requirement, chat about the business with Claude Code: it recalls settled concepts from the project knowledge base, aligns on jargon, and points to relevant decision docs — so you don't misuse terms or re-ask recorded questions. Distill business entities with `/code-impact-markdown` as you go; the knowledge base grows richer with use.
+Generates five quick-reference standards in `docs/guides/` (coding / interface / data / testing / git). A standard = a project's **deliberate deviation** from the default — "no `ORDER BY` in SQL", "money is always `decimal(12,2)`" — the things most easily deviated from with no tooling to enforce them. These guides become mandatory reads for later tasks.
+
+**2. Talk business · chat with Claude Code about your project**
+
+Before any requirement, talk about the business. The agent auto-recalls settled concepts from the knowledge base and aligns on jargon. Capture business entities with `/knowledge-write` as you go — the knowledge base grows richer with use.
 
 **3. Do requirements · start with `/clarify-requirements`**
-Enter the main workflow: clarify → spec (`/write-spec`) → implement (`/implementation`) → test. With the first two steps done, clarification happens in a shared context, not from scratch.
 
-> Why this order: standards first (Claude Code knows the project's "rules"), then business alignment (Claude Code knows the project's "jargon") — only then does clarifying a concrete requirement pay off.
+Enter the main workflow: clarify → spec (`/write-spec`) → implement → test. With the first two steps done, clarification happens in a shared context, not from scratch.
+
+> Standards first (the agent knows the "rules"), then business alignment (the agent knows the "jargon") — only then does clarifying a concrete requirement pay off.
+
+## Knowledge flywheels
+
+cgraphx has two knowledge accumulation loops that compound over time:
+
+**Business knowledge**: `/knowledge-write` captures to `docs/knowledge/` → `knowledge-recall` auto-retrieves before the next task → new concepts get captured → the thicker the base, the better the agent understands your project.
+
+**Data model**: `/export-table-ddl` builds a DDL baseline → `db-query` reads local files first (cheap) → discoveries written back to DISCOVERED blocks → re-dumps preserve accumulation → the agent never re-steps on the same mine.
 
 ## Requirements
 
-- **Claude Code** (skill deployment, hooks, and timeline all depend on its mechanisms — see below)
-- Node.js `>=22.5 <27` (uses built-in `node:sqlite`; no native deps, no wasm)
+- **Claude Code** (skill deployment, hooks, and timeline depend on its mechanisms)
+- **Node.js** `>=22.5 <27` (built-in `node:sqlite`; no native deps, no wasm)
 - Project-local, offline
 
-## Why Claude Code only
-
-cgraphx's skill deployment (`.claude/`), hook wiring, and **timeline** event recording all depend on Claude Code's mechanisms — and hooks / skill mechanisms differ across agents, so one size cannot fit all. cgraphx therefore supports Claude Code only.
-
-> The `docs` and `db` CLI capabilities themselves are agent-agnostic and can be invoked standalone anywhere a shell runs; but as a development system (skills + hooks + timeline), cgraphx targets Claude Code.
+> The `docs` and `db` CLI capabilities are agent-agnostic and can be invoked standalone; but as a development system (skills + hooks + timeline), cgraphx targets Claude Code.
 
 ## About the name
 
-cgraphx is named after the 1.x code graph. 2.0 is a breaking rebuild: **the graph layer is gone entirely** (no `explore` / `query` / `callers`, no MCP server, no telemetry), refocused on the four subsystems Claude Code actually reuses. 1.x → 2.0 is not compatible; see `CHANGELOG.md`.
+cgraphx is named after the 1.x code graph. 2.0 is a breaking rebuild: the graph layer is gone entirely, refocused on the skill workflow + four local capabilities. 1.x → 2.0 is not compatible; see `CHANGELOG.md`.
 
 ## License
 
