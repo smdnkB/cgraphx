@@ -56,7 +56,9 @@ description: 复杂 plan 的子 agent 实现流程 — 主 agent 作为 controll
 
 任务标了「独立提交:是」且 sanity check 通过 → 主 agent 提交该任务(不等到全部完成)。这是**用户批准 plan 时一并批准的提交**,不是擅自提交——plan 里写了提交粒度与 message 主题,用户过审 plan 即认可。
 
-- **谁提交**:主 agent(controller)在 sanity check 通过后提交,只提交已通过的任务;不让 implementer 子 agent 各自提交(避免提交粒度失控、message 风格分叉)。
+- **谁提交:主 agent(controller),不是 implementer**。决定性理由是**验证时序**:单任务时序是「派 implementer → 处理 status → sanity check → 标记完成」,sanity check 发生在 implementer 返回**之后**。若 implementer 自己提交,它是在「自报完工」时提交,controller 的 sanity check 还没跑——一旦不过(测试没真绿、契约被违反),就落了个坏提交得 amend/revert 去擦。提交点必须和验证闸门同侧,而闸门在 controller 手里,所以只有 controller 能保证「只提交验证过的东西」。次要理由:一个写手 = 一种 message 风格(N 个子 agent 各写各的会漂移);controller 手里本来就有 plan 的「提交规范」节。提交是 git 收纳动作,不是「实质实现」,不违反红线⑥。
+- **stage 范围**:implementer 在 DONE 摘要里**报告它改动的确切文件清单**,controller 精确 stage 这些文件后提交。默认串行下这很干净——前面任务都已提交,工作区只剩当前任务的改动。implementer 只改文件、不 `git add`/`commit`(职责边界见 `implementer-prompt.md`)。
+- **并行批的边界**:「独立提交」是**串行流程**的特性。并行批次里,现有流程要求「同批完成后看整体 git diff、确认无冲突」才收口,所以并行批的提交单位是「批」不是「单任务」——批内任务即便标了独立提交,也是批末验证无冲突后统一提交。
 - **怎么写**:按 plan「提交规范」节(从 `git-standards.md` 结晶的提交消息格式 + 提交前检查点)写 message、过检查点。规范已在 plan 上下文里,不必现场重读 `git-standards.md`。
 - **与 precommit 门禁的关系**:门禁仍会拦,但规范已结晶——自查按 plan 已列的检查点过即可,然后 `CGRAPHX_PRECOMMIT_REVIEWED=1 git commit` 重试。门禁退化为兜底,不再是每次提交的学习成本。
 - **没标「独立提交」的任务**:不擅自提交,改动累积,收尾时连同未提交部分一起交用户决定。
