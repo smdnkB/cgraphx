@@ -67,14 +67,17 @@ afterEach(async () => {
 });
 
 describe('startWebServer', () => {
-  it('serves placeholder pages for an initialized project (spec §3.1, §3.2)', async () => {
+  it('serves the knowledge overview + timeline placeholder for an initialized project (spec §3.1, §3.2, §3.3)', async () => {
     initProject(tmp);
     const srv = await startWebServer({ projectRoot: tmp, port: 0 });
     servers.push(srv);
 
+    // B-3 起 `GET /` 为知识库总览页(取代 B-2 占位);空库 fixture → 空态①。
     const home = await fetch(srv.url);
     expect(home.status).toBe(200);
-    expect(await home.text()).toContain('知识库页面实现中');
+    const homeBody = await home.text();
+    expect(homeBody).toContain('知识库为空');
+    expect(homeBody).toContain('只读');
 
     const timeline = await fetch(`${srv.url}/timeline`);
     expect(timeline.status).toBe(200);

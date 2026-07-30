@@ -5,15 +5,16 @@
  * 返回 `{ url, close }`。本函数保持纯净:不注册进程信号处理器(测试友好),
  * SIGINT/SIGTERM 的优雅退出由 register.ts 装配。
  *
- * 路由骨架(B-2 落占位,B-3/B-4 填页面):
- *   GET /            占位首页(壳骨架 + 「知识库页面实现中」+ 版本)
+ * 路由骨架:
+ *   GET /            知识库总览页(B-3:经 pages-overview 渲染)
  *   GET /timeline    占位页(平行需求未实现)
  *   GET /assets/*    静态资产(路径穿越防护 + 扩展名白名单)
  *   其他             404 页
  *   处理器抛错       500 页(可读原因,禁输出堆栈)
  *
  * 只读契约(spec §4.1 / §11 #3):除 bootstrap 的 sqlite_master 查询外,
- * web 进程内所有 SQL 为 SELECT;占位路由不触碰 DB。
+ * web 进程内所有 SQL 为 SELECT;总览页每请求以进程级单连接构造
+ * MarkdownQuery(只读),不持有额外 DB 连接。
  */
 
 import * as http from 'node:http';
@@ -21,9 +22,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { AddressInfo } from 'node:net';
 
+import type { SqliteDatabase } from '../core/db';
 import { openVerifiedConnection } from './bootstrap';
 import { WebStartupError } from './errors';
-import { escapeHtml, renderShellPage } from './render-utils';
+import { renderShellPage } from './layout';
+import { renderOverviewPage } from './pages-overview';
+import { escapeHtml } from './render-utils';
 
 /** 已启动的 web 服务句柄。 */
 export interface WebServer {
@@ -31,6 +35,16 @@ export interface WebServer {
   url: string;
   /** 关闭 http server + DB 连接。 */
   close(): Promise<void>;
+}
+
+/**
+ * 请求处理上下文。`localHost` 在 listen 成功后回填(port 0 时取实际端口);
+ * 处理器在请求时读取,绑定完成前不会有请求到达。
+ */
+interface HandlerContext {
+  db: SqliteDatabase;
+  version: string;
+  localHost: string;
 }
 
 /** 静态资产 Content-Type 最小表(扩展名 → MIME)。不在表内的扩展名一律 404。 */
@@ -60,25 +74,34 @@ function readVersion(): string {
 function sendHtml(
   res: http.ServerResponse,
   status: number,
-  opts: { title: string; active: 'knowledge' | 'timeline' | 'none'; contentHtml: string; version: string },
+  opts: { title: string; active: 'knowledge' | 'timeline' | 'none'; contentHtml: string },
+  ctx: HandlerContext,
 ): void {
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
-  res.end(renderShellPage(opts));
+  res.end(
+    renderShellPage({
+      title: opts.title,
+      active: opts.active,
+      contentHtml: opts.contentHtml,
+      version: ctx.version,
+      localHost: ctx.localHost,
+    }),
+  );
 }
 
 /** 404 页:可读文案 + 回首页链接;展示被请求路径(转义)。 */
-function sendNotFound(res: http.ServerResponse, version: string, requestPath: string): void {
+function sendNotFound(res: http.ServerResponse, ctx: HandlerContext, requestPath: string): void {
   const contentHtml = `
     <section class="placeholder">
       <h1>页面不存在</h1>
       <p>没有与 <code>${escapeHtml(requestPath)}</code> 匹配的页面。</p>
       <p><a href="/">返回知识库首页</a></p>
     </section>`;
-  sendHtml(res, 404, { title: '页面不存在', active: 'none', contentHtml, version });
+  sendHtml(res, 404, { title: '页面不存在', active: 'none', contentHtml }, ctx);
 }
 
 /** 500 页:可读错误原因,禁输出堆栈(spec §3.2 全局错误态)。 */
-function sendInternalError(res: http.ServerResponse, version: string, err: unknown): void {
+function sendInternalError(res: http.ServerResponse, ctx: HandlerContext, err: unknown): void {
   const reason = err instanceof Error ? err.message : String(err);
   const contentHtml = `
     <section class="placeholder placeholder--error">
@@ -87,17 +110,7 @@ function sendInternalError(res: http.ServerResponse, version: string, err: unkno
       <pre class="error-reason">${escapeHtml(reason)}</pre>
       <p><a href="/">返回知识库首页</a></p>
     </section>`;
-  sendHtml(res, 500, { title: '出错了', active: 'none', contentHtml, version });
-}
-
-/** 占位首页:壳骨架 + 「知识库页面实现中(B-3)」+ 版本。 */
-function renderHome(version: string): string {
-  return `
-    <section class="placeholder">
-      <h1>知识库</h1>
-      <p>知识库页面实现中(B-3)。</p>
-      <p class="placeholder__meta">cgraphx v${escapeHtml(version)}</p>
-    </section>`;
+  sendHtml(res, 500, { title: '出错了', active: 'none', contentHtml }, ctx);
 }
 
 /** /timeline 占位页:平行需求尚未实现。 */
@@ -121,7 +134,7 @@ function renderTimelinePlaceholder(): string {
  */
 function tryServeAsset(
   res: http.ServerResponse,
-  version: string,
+  ctx: HandlerContext,
   pathname: string,
 ): boolean {
   const publicRoot = path.resolve(__dirname, 'public');
@@ -129,20 +142,20 @@ function tryServeAsset(
   try {
     rel = decodeURIComponent(pathname.slice('/assets/'.length));
   } catch {
-    sendNotFound(res, version, pathname);
+    sendNotFound(res, ctx, pathname);
     return true;
   }
 
   const filePath = path.resolve(publicRoot, rel);
   // 根校验:resolve 后必须仍在 public 根内,否则视为穿越 → 404。
   if (filePath !== publicRoot && !filePath.startsWith(publicRoot + path.sep)) {
-    sendNotFound(res, version, pathname);
+    sendNotFound(res, ctx, pathname);
     return true;
   }
 
   const contentType = ASSET_CONTENT_TYPES[path.extname(filePath).toLowerCase()];
   if (contentType === undefined) {
-    sendNotFound(res, version, pathname);
+    sendNotFound(res, ctx, pathname);
     return true;
   }
 
@@ -150,7 +163,7 @@ function tryServeAsset(
   try {
     data = fs.readFileSync(filePath);
   } catch {
-    sendNotFound(res, version, pathname);
+    sendNotFound(res, ctx, pathname);
     return true;
   }
 
@@ -160,43 +173,44 @@ function tryServeAsset(
 }
 
 /**
- * 构造请求处理器。闭包持有版本号;处理器抛错统一兜底为 500 页。
- * 仅支持 GET;其它方法走「其他 → 404」。
+ * 构造请求处理器。闭包持有上下文(db / 版本 / 本地地址);处理器抛错
+ * 统一兜底为 500 页。仅支持 GET;其它方法走「其他 → 404」。
  */
-function createRequestHandler(version: string): http.RequestListener {
+function createRequestHandler(ctx: HandlerContext): http.RequestListener {
   return (req, res) => {
     try {
-      const pathname = new URL(req.url ?? '/', 'http://internal').pathname;
+      const url = new URL(req.url ?? '/', 'http://internal');
+      const pathname = url.pathname;
 
       if (req.method === 'GET') {
         if (pathname === '/') {
-          sendHtml(res, 200, {
-            title: '知识库',
-            active: 'knowledge',
-            contentHtml: renderHome(version),
-            version,
+          const html = renderOverviewPage(ctx.db, url.searchParams, {
+            version: ctx.version,
+            localHost: ctx.localHost,
           });
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(html);
           return;
         }
         if (pathname === '/timeline') {
-          sendHtml(res, 200, {
-            title: '开发时间线',
-            active: 'timeline',
-            contentHtml: renderTimelinePlaceholder(),
-            version,
-          });
+          sendHtml(
+            res,
+            200,
+            { title: '开发时间线', active: 'timeline', contentHtml: renderTimelinePlaceholder() },
+            ctx,
+          );
           return;
         }
         if (pathname === '/assets' || pathname.startsWith('/assets/')) {
-          tryServeAsset(res, version, pathname);
+          tryServeAsset(res, ctx, pathname);
           return;
         }
       }
 
-      sendNotFound(res, version, pathname);
+      sendNotFound(res, ctx, pathname);
     } catch (err) {
       // 全局兜底:任何处理器抛错 → 500 页(可读原因,不输出堆栈)。
-      sendInternalError(res, version, err);
+      sendInternalError(res, ctx, err);
     }
   };
 }
@@ -219,8 +233,12 @@ export async function startWebServer(options: {
 
   // 预检 1–3:存在性 + 进程级单连接 + schema(只读)。
   const connection = openVerifiedConnection(projectRoot);
-  const version = readVersion();
-  const server = http.createServer(createRequestHandler(version));
+  const ctx: HandlerContext = {
+    db: connection.getDb(),
+    version: readVersion(),
+    localHost: '', // listen 成功后回填实际 host:port(顶栏只读 pill 用)。
+  };
+  const server = http.createServer(createRequestHandler(ctx));
 
   // 预检 4:回环绑定。Promise 化 listen;EADDRINUSE 在 'error' 事件捕获
   // (不是同步 try/catch)。成功后移除一次性 error 监听,避免误吞运行期错误。
@@ -252,7 +270,8 @@ export async function startWebServer(options: {
   }
 
   const address = server.address() as AddressInfo;
-  const url = `http://${LOOPBACK_HOST}:${address.port}`;
+  ctx.localHost = `${LOOPBACK_HOST}:${address.port}`;
+  const url = `http://${ctx.localHost}`;
 
   return {
     url,
