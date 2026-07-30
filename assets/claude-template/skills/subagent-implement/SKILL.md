@@ -19,11 +19,12 @@ description: 复杂 plan 的子 agent 实现流程 — 主 agent 作为 controll
 
 2. 按依赖批次执行(默认串行;并行条件见红线①):
    派 implementer(四件套)→ 处理 status → sanity check → 标记完成
+   → 任务标了「独立提交」且 sanity check 通过 → 按 plan「提交规范」节提交(小步原子提交)
 
 3. 全部完成 → 派 quality-reviewer 整体审查(必派、仅一次、在自审+sanity check 之后)
    → 不通过:主 agent 微修或派 fix 子 agent → 重审
 
-4. 收尾:汇报 + 沉淀提示 + 交用户决定 commit/PR
+4. 收尾:汇报 + 沉淀提示 + 未提交任务的 commit/PR 交用户决定(push 永远归用户)
 ```
 
 ### 派任:四件套注入
@@ -51,6 +52,16 @@ description: 复杂 plan 的子 agent 实现流程 — 主 agent 作为 controll
 
 看:改了哪些文件 / 测试是否真绿 / 自审发现是否已修 / 契约与引用的规范条目是否被遵循。不通过 → 派 implementer 修 / 补 context / 主 agent 微修 / 上报。
 
+### 独立提交(按 plan 标注,小步原子提交)
+
+任务标了「独立提交:是」且 sanity check 通过 → 主 agent 提交该任务(不等到全部完成)。这是**用户批准 plan 时一并批准的提交**,不是擅自提交——plan 里写了提交粒度与 message 主题,用户过审 plan 即认可。
+
+- **谁提交**:主 agent(controller)在 sanity check 通过后提交,只提交已通过的任务;不让 implementer 子 agent 各自提交(避免提交粒度失控、message 风格分叉)。
+- **怎么写**:按 plan「提交规范」节(从 `git-standards.md` 结晶的提交消息格式 + 提交前检查点)写 message、过检查点。规范已在 plan 上下文里,不必现场重读 `git-standards.md`。
+- **与 precommit 门禁的关系**:门禁仍会拦,但规范已结晶——自查按 plan 已列的检查点过即可,然后 `CGRAPHX_PRECOMMIT_REVIEWED=1 git commit` 重试。门禁退化为兜底,不再是每次提交的学习成本。
+- **没标「独立提交」的任务**:不擅自提交,改动累积,收尾时连同未提交部分一起交用户决定。
+- **push 永远归用户**:即使任务已提交,是否 push、何时 push 由用户定。
+
 ### 主 agent 微修(仅低风险)
 
 同时满足才可亲自动手:问题已定位到具体文件/行 + 不碰业务规则/公共契约/schema/权限/安全/范围 + ≤2 文件 + 改完能立刻验证。否则派子 agent。
@@ -75,7 +86,7 @@ Read 模板 + 任务/审查目标拼成 prompt,派 `general-purpose`:
 
 1. 汇报:完成清单 / 修复历史 / 剩余风险 / plan 忠实度(`PLAN_FOLLOWED` / `PLAN_ADAPTED` / 是否出现并解决过 `PLAN_CONFLICT`)
 2. 知识沉淀提示(确有内容才问):本次交付让某业务实体参与了新业务或出现新实体(实体 = 名词可指代、有属性和生命周期的业务对象)→ 新建/更新 `concept` 主条目,流程条目在 concepts 声明该实体;或踩坑/隐式约束/取舍决策/跨文件关系值得复用。列候选清单问用户;确认 → 走 `knowledge-write` 完整流程。不要自己直接 Write .md
-3. 提示 commit / PR,停下等用户
+3. 提示收尾:已按 plan「独立提交」标注提交的任务清单 + 未提交任务的 commit / PR 交用户决定;push 永远归用户。停下等用户
 
 ## 红线(绝对不能做)
 
@@ -86,4 +97,4 @@ Read 模板 + 任务/审查目标拼成 prompt,派 `general-purpose`:
 5. ❌ **不忽略 PLAN_CONFLICT 让子 agent 临场换方案** —— 契约级冲突必须回到 controller/用户/spec-plan。
 6. ❌ **主 agent 不绕过子 agent 做实质实现** —— 微修可以,接手不行(主 agent 上下文要留给协调)。
 7. ❌ **不在主分支直接派 implementer** —— 先有 feature 分支或 worktree。
-8. ❌ **不自动 commit / push** —— 收尾后停下,归用户决定。
+8. ❌ **不超出 plan「独立提交」标注擅自 commit,绝不自动 push** —— plan 标了独立提交的任务可按 plan 结晶的规范提交(用户批准 plan 即批准这些提交);未标注的任务不擅自提交,累积到收尾交用户;push 任何情况下都归用户决定。

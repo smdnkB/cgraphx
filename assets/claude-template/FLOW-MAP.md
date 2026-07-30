@@ -49,7 +49,8 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 - **链**:`/implementation`(简单:1-3 文件 / 单模块)| `/subagent-implement`(复杂:≥3 任务跨域,主 agent 只协调、派子 agent 实现)
 - **前置**:spec 必有;subagent-implement 需 plan
 - **强制读**:规范由 plan 打「强制引用」标注(write-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md);有 plan 时 implementation / subagent-implement 只读标注,无 plan 时 implementation 自行识别;**缺失 → 中断,先 `/init-project-guides` 补齐**
-- **收尾**:沉淀提示(新增/变更实体、坑、隐式约束 → `/knowledge-write`);commit 门禁由 precommit-check hook 指向 `docs/guides/git-standards.md`,被拦 → 按门禁提示 Read 该文件、依「提交前检查点」自查 staged diff
+- **小步提交**:plan 把可独立提交的任务(完成后仓库可工作)标「独立提交」并把 `git-standards.md` 提交规范结晶进 index「提交规范」节;implementation / subagent-implement 每完成一个标注任务并按规范自查后提交(原子历史,好 review / revert / bisect),precommit 门禁退化为兜底。未标注的任务不擅自提交,push 永远归用户。
+- **收尾**:沉淀提示(新增/变更实体、坑、隐式约束 → `/knowledge-write`);commit 门禁由 precommit-check hook 指向 `docs/guides/git-standards.md`,被拦 → 按 plan 已结晶的「提交前检查点」自查 staged diff(plan 无结晶时才 Read 原文件)
 
 ## 接口测试流程
 
@@ -87,8 +88,8 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 | `interface-standards.md` | 接口任务 |
 | `coding-standards.md` | 所有任务(契约部分) |
 | `testing-standards.md` | 测试任务 |
-| `git-standards.md` | precommit-check 门禁(deny → Read 它,按「提交前检查点」自查) |
-- **执行期送达**:任务按映射打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。
+| `git-standards.md` | 有「独立提交」任务时结晶进 index「提交规范」节(plan 级,一次)+ precommit-check 门禁兜底(deny → 按已结晶的检查点自查) |
+- **执行期送达**:任务按映射打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。**git-standards.md 例外**:不是每任务强制引用,而是 plan 级结晶进 index「提交规范」节,实施期提交时直接用、门禁仅兜底——消除多次小步提交的重复读取成本。
 
 ## 事后文档(发布后 · 按需,不在开发主链)
 
