@@ -40,6 +40,39 @@ export class FrontmatterSyntaxError extends Error {
  * @returns the body between the fences (excluding the fences themselves)
  */
 export function extractFrontmatterBlock(source: string): string | null {
+  return locateFrontmatterBlock(source)?.inner ?? null;
+}
+
+/**
+ * 去掉文件开头的 `---` … `---` frontmatter 块,返回正文。
+ *
+ * 无 frontmatter / frontmatter 未闭合 → 原样返回(降级语义与调用方对
+ * parseFrontmatter 的处理一致:剥离失败不破坏原文)。
+ */
+export function stripFrontmatter(raw: string): string {
+  let located: FrontmatterLocation | null;
+  try {
+    located = locateFrontmatterBlock(raw);
+  } catch {
+    return raw; // frontmatter 未闭合 → 原样返回
+  }
+  return located?.body ?? raw; // 无 frontmatter → 原样返回
+}
+
+/** 块定位结果:inner = 两 fence 之间的内容;body = 闭合 fence 之后的正文。 */
+interface FrontmatterLocation {
+  inner: string;
+  body: string;
+}
+
+/**
+ * 共用的 frontmatter 块定位逻辑(extractFrontmatterBlock 与 stripFrontmatter
+ * 复用同一套 fence 规则:BOM 容忍、前置空行跳过、闭合 fence 为 `---` 或 `...`)。
+ *
+ * @returns null 表示没有 frontmatter
+ * @throws FrontmatterSyntaxError frontmatter opened with --- but never closed
+ */
+function locateFrontmatterBlock(source: string): FrontmatterLocation | null {
   const lines = source.split('\n');
 
   // Optional BOM at the very start
@@ -74,7 +107,10 @@ export function extractFrontmatterBlock(source: string): string | null {
     );
   }
 
-  return lines.slice(startIdx, endIdx).join('\n');
+  return {
+    inner: lines.slice(startIdx, endIdx).join('\n'),
+    body: lines.slice(endIdx + 1).join('\n'),
+  };
 }
 
 /**

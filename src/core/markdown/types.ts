@@ -63,6 +63,16 @@ export interface FindFilter {
   documentType?: DocumentType;
   q?: string;
   limit?: number;
+  // ---- 复数过滤维度(web 分页列表使用,CLI 不传,全部可选)----
+  // 语义:维度内 OR(SQL IN 候选集),维度间 AND(候选集求交);
+  // 单值字段与同维度复数同时出现时,视为该维度两个约束取交;
+  // 空数组等价于未传(不施加约束);statuses/documentTypes 含非法枚举值 →
+  // 该维度返回空候选集(与现有单值非法枚举返回 [] 的行为一致)。
+  concepts?: string[];
+  domains?: string[];
+  tags?: string[];
+  statuses?: DocumentStatus[];
+  documentTypes?: DocumentType[];
 }
 
 export interface DocumentDescriptor {
@@ -78,6 +88,32 @@ export interface DocumentDescriptor {
   domains: string[];
   tags: string[];
   score?: number;
+  // ---- 仅由 findPaged 填充的扩展字段 ----
+  // find() 不填(键缺省),保证 CLI 输出逐字节不变。
+  /** 引用数 = 出向 + 入向(对当页 id 集合一条 IN 聚合查询计数,非 N+1)。 */
+  referencesCount?: number;
+  owners?: string[];
+  aliases?: string[];
+}
+
+/** findPaged 的分页结果:total 为分页前匹配总数,items 为当前页切片。 */
+export interface FindPagedResult {
+  total: number;
+  items: DocumentDescriptor[];
+}
+
+/** 知识库统计条(web 总览页头部使用)。 */
+export interface KnowledgeStats {
+  documentCount: number;
+  conceptCount: number;
+  domainCount: number;
+  tagCount: number;
+  /** SELECT max(indexed_at);空库为 null。 */
+  latestIndexedAt: number | null;
+  /** 17 个 DocumentType 键全在,未出现的类型计数为 0。 */
+  byType: Record<DocumentType, number>;
+  /** 4 个 DocumentStatus 键全在,未出现的状态计数为 0。 */
+  byStatus: Record<DocumentStatus, number>;
 }
 
 export interface DocumentDetail extends DocumentDescriptor {
