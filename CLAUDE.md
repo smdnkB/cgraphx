@@ -53,7 +53,7 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 
 ## 易踩的坑
 
-- **skill 的修改入口是 `assets/claude-template/`(源,随包分发,`cgraphx install` 部署),不是本仓库根目录的 `.claude/`。** 后者是被 gitignore 的已部署运行环境,内容可能滞后于 2.0(例如 `cgraphx-guide/how-to-use.html` 仍带 1.x 措辞:MCP 配置、代码图谱自动同步、Node ≥20<25)——按 spec §1.3,它只作功能/流程参考,不作 Web UI 设计参考,更不要照着它假设 1.x 行为。
+- **skill 的修改入口是 `assets/claude-template/`(源,随包分发,`cgraphx install` 部署),不是本仓库根目录的 `.claude/`。** 后者是被 gitignore 的已部署运行环境,内容可能滞后——按 spec §1.3,它只作功能/流程参考,不作 Web UI 设计参考,更不要照着它假设 1.x 行为。
 - **`scripts/copy-assets.cjs` 是构建期的资产清单。** `tsc` 只产出 JS;任何与 TS 源码放在一起的新运行时资产(例如另一个 `schema.sql`)必须加进这个脚本,否则不会随包发布。运行时 schema 路径是相对编译后的模块文件解析的,所以 dist 的目录结构必须与 `src/` 镜像一致。
 - 严格 TS,含 `noUncheckedIndexedAccess` —— 索引访问得到的是 `T | undefined`,代码库中对此有显式处理。
 - 版本号在 `cli/index.ts` 中于运行时从 `package.json` 读取(`npm version` 的版本号唯一事实来源)。
