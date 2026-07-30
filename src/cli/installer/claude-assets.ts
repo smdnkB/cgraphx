@@ -34,6 +34,14 @@ import * as path from 'path';
 
 export type ClaudeAssetAction = 'created' | 'overwritten' | 'not-found' | 'removed';
 
+/**
+ * deprecated-assets.json 的结构——模板根目录下的清理清单,
+ * 列出已改名/移除的包自带资产路径(相对 `.claude/`)。
+ */
+interface DeprecatedAssetsManifest {
+  paths?: string[];
+}
+
 export interface ClaudeAssetChange {
   /** Project-relative path under `.claude/`, e.g. `skills/execute-plan/SKILL.md`. */
   path: string;
@@ -104,7 +112,8 @@ export function deployClaudeAssets(targetClaudeDir: string): ClaudeAssetChange[]
     // (see readTemplateClaudeMd below + targets/claude.ts), NOT verbatim —
     // a verbatim copy would overwrite the user's edits on every install and
     // survive uninstall. Skip it from the same-name-overwrites walk.
-    if (rel === 'CLAUDE.md') continue;
+    // deprecated-assets.json 是构建期清理清单,不是运行时资产,同样跳过。
+    if (rel === 'CLAUDE.md' || rel === 'deprecated-assets.json') continue;
     const srcFile = path.join(templateDir, rel);
     const destFile = path.join(targetClaudeDir, rel);
     const exists = fs.existsSync(destFile);
@@ -119,6 +128,55 @@ export function deployClaudeAssets(targetClaudeDir: string): ClaudeAssetChange[]
       // so the user knows the sync didn't happen and can investigate.
       changes.push({ path: `.claude/${rel}`, action: exists ? 'overwritten' : 'created' });
     }
+  }
+
+  // 清理已废弃的包自带资产(改名/移除的旧 skill 等)
+  changes.push(...cleanDeprecatedAssets(targetClaudeDir, templateDir));
+
+  return changes;
+}
+
+/**
+ * 读取模板根目录的 `deprecated-assets.json`,删除目标 `.claude/` 下对应的
+ * 旧路径。幂等:路径不存在则跳过。install 和 uninstall 都调用,确保升级
+ * 后改名/移除的包自带资产(如 `skills/code-impact-docgen`)不会残留。
+ *
+ * 只删清单里列出的路径,绝不 rm -rf 整个分类目录——用户自建的同名
+ * 内容不受影响(清单只收录包曾经部署过的路径)。
+ *
+ * @param targetClaudeDir  目标 `.claude/` 绝对路径
+ * @param overrideTemplateDir  可选模板目录(测试用 fixture;默认 dist 内嵌)
+ */
+export function cleanDeprecatedAssets(
+  targetClaudeDir: string,
+  overrideTemplateDir?: string,
+): ClaudeAssetChange[] {
+  const templateDir = overrideTemplateDir ?? resolveTemplateDir();
+  if (!templateDir) return [];
+
+  const manifestPath = path.join(templateDir, 'deprecated-assets.json');
+  let manifest: DeprecatedAssetsManifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  } catch {
+    // 清单不存在或不可读——视为空,不阻塞正常部署
+    return [];
+  }
+
+  const paths = manifest.paths;
+  if (!Array.isArray(paths)) return [];
+
+  const changes: ClaudeAssetChange[] = [];
+  for (const rel of paths) {
+    if (typeof rel !== 'string' || rel.length === 0) continue;
+    const dest = path.join(targetClaudeDir, rel);
+    if (!fs.existsSync(dest)) continue;
+    try {
+      fs.rmSync(dest, { recursive: true, force: true });
+    } catch {
+      // 防御性:单个路径删除失败不阻塞其余清理
+    }
+    changes.push({ path: `.claude/${rel}`, action: 'removed' });
   }
   return changes;
 }
@@ -232,5 +290,9 @@ export function removeClaudeAssets(
       } catch { /* best-effort prune */ }
     }
   }
+
+  // 卸载也清理已废弃资产——否则改名前的旧目录会永久残留
+  changes.push(...cleanDeprecatedAssets(targetClaudeDir, templateDir));
+
   return changes;
 }

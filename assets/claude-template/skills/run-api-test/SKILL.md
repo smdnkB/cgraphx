@@ -40,7 +40,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 | `write-api-doc` | 独立并列 | 不互相调用;本 skill 产测试报告 + JSONL,write-api-doc 产 HTML 接口文档 |
 | `db-query` | 复用 | R4 核实写接口 DB 副作用;受 db-query 既有只读约束 |
 | `implementation` / `subagent-implement` | 下游 | 测试失败后由用户决定是否调起修 bug |
-| `code-impact-docgen` | 独立 | 自测后产设计文档 |
+| `write-design-doc` | 独立 | 发布后按需产设计文档 |
 
 ## 依赖
 

@@ -60,5 +60,26 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 - `src/cli/uninstall.ts` 通过 npm 的 `preuninstall` 钩子执行。
 - `docs/features/` 下是 2.0 重构的 spec 与 plan(中文)—— 各子系统预期行为(§3)与分层约束的权威描述。
 
-## 关于注释
-- 代码注释使用中文, 已有的注释遇到也要重写成中文
+## 我们解决什么问题
+
+cgraphx 的 skill 流程针对 AI 辅助研发中反复出现的几类浪费,逐个给出流程级解法:
+
+**1. 文档漂移导致返工。** 传统链路 PRD → Spec → Plan → Code,改一条业务规则要回归所有上游文档——三份文档的一致性靠人维护,实际项目中必然漂移,最终「三份都在,没一份能信」。核心取舍:**前期文档越少,变更时的回归成本越低。**
+
+- Spec 是唯一契约——「没有任何业务义务存在于 spec 之外」。clarify 是对话(锁定决策但不产生需要维护的文档),spec 是唯一的权威源;变更时只改 spec 一处,plan / implementation 从这一处重新派生。
+- PRD(`/write-prd`)、设计文档(`/write-design-doc`)、接口文档(`/write-api-doc`)都不在开发主链上,推荐发布后按需执行——发布后写的是实际交付的行为,不存在文档与系统漂移的问题。流程全景和时机标注见 `assets/claude-template/FLOW-MAP.md`。
+- 这也匹配 agent 的能力结构:维持 N 份文档互相一致很差(上下文有限、顾此失彼),从单一权威源派生很强。
+
+**2. 业务知识随会话消失。** 和 agent 聊出来的业务理解(概念定义、决策理由、踩过的坑、隐式约束)随会话结束就丢了;下次开发同一模块,agent 从零开始,人再解释一遍。解法是**沉淀 → 召回的闭环**:开发收尾由交付提示触发 `/code-impact-markdown` 把有价值的知识写入 `docs/knowledge/`(双层结构:实体主条目 + 流程条目);下次开发前 `/knowledge-recall` 先召回相关概念再动手——用得越多,agent 的项目上下文越厚,重复解释和重复踩坑越少。
+
+**3. 数据模型每次从零理解。** agent 要查数据或改表,要么连库拿结构(贵:要凭据、要网络、要 LIMIT 保护),要么凭空猜字段含义;上次探索发现的隐式关系(如 `assignee_id` 实际对应 `users.staff_code`)下次又不知道。解法是**本地 DDL 知识库 + 探索回写的闭环**(全景见 `export-table-ddl` skill 的 `closed-loop.html`):`/export-table-ddl` 建基线(按工程分目录,一表一文件)→ `/db-query` 首选读本地 DDL(便宜),只在知识库没有或要实际数据时才连库(贵,兜底)→ 探索中发现的字段含义、隐式关系 append 到对应表的 DISCOVERED 块(双向引用)→ 重跑 export 刷新 DDL 但**保留 DISCOVERED 块**。agent 默认走本地知识库,积累才生效,闭环才转得起来。
+
+**4. 需求理解偏差。** 拿到模糊需求直接开写,做完发现理解错了,是另一种返工。`/clarify-requirements` 在写任何文档和代码之前先锁业务边界和技术约束——像员工接领导任务:先确认意图、识别任务类型、针对性提问,必要时挑战假设,而不是拿到一句话就开始干。
+
+**5. 规范靠人记。** 编码规范、接口规范、数据规范、提交规范,写了没人看、看了记不住。解法是**规范在执行期自动送达**:`/init-project-guides` 生成 `docs/guides/` → `/write-plan` 按任务类型打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md)→ implementation / subagent-implement 执行时只读标注的规范,不需要人主动想起来;commit 门禁(precommit-check hook)在 `git commit` 前拦截,指向 `git-standards.md` 自查。
+
+**6. 开发流程到「写完代码」就断了。** 市面上的 AI 辅助研发工具(包括开源的)基本只覆盖到代码生成为止——接口写完、代码提交,流程就结束了;测试是人的事,手动录接口、手动跑、手动验。cgraphx 把接口测试织进了 skill 流程:`/write-api` 从 spec 的接口章节自动生成 bruno 测试用例(.bru + 内嵌断言 + 真实参数),`/run-api-test` 跑测试并强制核实写接口的 DB 副作用(HTTP 200 ≠ 通过,不查数据等于没测)。从 spec → 代码 → 测试用例生成 → 执行 → DB 验证 → 出报告,是闭环而不是断链。
+
+**7. 工作不可追溯。** 过了两周领导问「这个月做了什么」,只能翻 git log 和聊天记录拼凑;agent 会话里的操作(改了哪些文件、跑了什么命令、卡在哪一步)更是无痕。解法是**自动记录 + 按需汇报**:timeline 通过五个隐藏 hook 子命令自动记录 Claude Code 事件(每次约 5ms,不阻塞工作流),落到 `.cgraphx/cgraphx.db` 的 `timeline_*` 表;需要时 `/developer-timeline` 从事件流生成日报、周报、月报、阶段总结、使用习惯分析——不用回忆,不用拼凑,数据一直在。
+
+**8. 工具升级留残渣。** skill 改名或移除后,旧目录在已部署项目中永久残留,agent 仍能触发过时的旧 skill。`deprecated-assets.json`(模板根目录)列出已废弃路径,`cgraphx install` / `uninstall` 时自动清理(`src/cli/installer/claude-assets.ts` 的 `cleanDeprecatedAssets`)。新增废弃路径只需往清单加一行。

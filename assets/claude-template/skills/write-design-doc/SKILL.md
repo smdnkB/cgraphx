@@ -1,13 +1,13 @@
 ---
-name: code-impact-docgen
-description: 从本地图谱知识库(docs/knowledge/)和当前 feature 目录下的 spec/plan 召回素材,合成面向研发和技术负责人的"设计文档"。在 feature 自测通过后调用,默认输出到 docs/features/<feature-id>/<文件前缀>-设计文档.md。支持 HTML 和 Markdown 两种输出格式,可按章节结构进行配置。
+name: write-design-doc
+description: 功能发布后(或自测通过后)按需执行——从本地图谱知识库(docs/knowledge/)和当前 feature 目录下的 spec/plan 召回素材,合成面向研发和技术负责人的"设计文档"。默认输出到 docs/features/<feature-id>/<文件前缀>-设计文档.md。支持 HTML 和 Markdown 两种输出格式,可按章节结构进行配置。不在开发主链上,不参与流程门禁,纯事后文档合成。
 ---
 
-# Code Impact DocGen
+# 生成设计文档 (Write Design Doc)
 
 ## 定位
 
-- **feature 自测通过后的事后沉淀**:从 `docs/knowledge/` 召回项目级背景(cgraphx docs),读 feature 目录的 spec/plan,合成给研发/技术负责人/维护者读的设计文档("生成设计文档"、"用 docgen 沉淀一下"时触发)。
+- **发布后的事后文档,不在开发主链上**:功能发布后(或自测通过后)按需执行,从 `docs/knowledge/` 召回项目级背景(cgraphx docs),读 feature 目录的 spec/plan,合成给研发/技术负责人/维护者读的设计文档("生成设计文档"、"沉淀一下设计文档"时触发)。
 - **两类来源缺一不可**:knowledge 给项目级架构/决策/风险;spec/plan 给本 feature 的目标/契约/任务拆分。knowledge 为空且无 spec/plan → **拒绝生成**,提示先备素材。
 - **事后沉淀,不是契约**:不得重新定义 spec 已锁定的契约;发现 spec 与代码现实不符,标【待确认】,不自行解释。
 - **边界**:写知识文件 → `code-impact-markdown`;查知识辅助编码 → `code-impact-api`;探索陌生项目 → `code-impact-init`;PRD/spec/plan → 各自 skill。

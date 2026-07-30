@@ -123,7 +123,7 @@ docs/ 文档工程                                             # 必有
 │       ├── <前缀>-api-spec.md      /write-api            可选  接口测试,开发完成后
 │       ├── <前缀>-测试报告.md       /run-api-test          可选  write-api 后自动产出
 │       ├── <前缀>-测试验证.jsonl    /run-api-test          可选  自动产出
-│       └── <前缀>-设计文档.md       /code-impact-docgen   可选  功能稳定后执行
+│       └── <前缀>-设计文档.md       /write-design-doc     可选  发布后按需执行
 │
 ├── knowledge/   知识库目录                         /code-impact-markdown 任何有价值的会话都可以触发沉淀;
 │                                                 /code-impact-init 新项目起步可以批量写 [可选]

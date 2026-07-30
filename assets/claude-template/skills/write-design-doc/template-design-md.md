@@ -1,6 +1,6 @@
 # 设计文档 Markdown 模板
 
-适用于 feature 实现完成后沉淀的设计文档,面向研发、技术负责人和后续维护者。由 `code-impact-docgen` skill 在自测通过后生成,默认输出到 `docs/features/<feature-id>/<文件前缀>-设计文档.md`。
+适用于 feature 发布后按需沉淀的设计文档,面向研发、技术负责人和后续维护者。由 `write-design-doc` skill 在发布后(或自测通过后)按需生成,默认输出到 `docs/features/<feature-id>/<文件前缀>-设计文档.md`。
 
 内容来源:`docs/knowledge/` 中与主题相关的 AI 知识文档 + 当前 feature 目录下的 spec/plan。
 

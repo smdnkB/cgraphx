@@ -98,7 +98,7 @@ description: 用户给一段话描述(模糊想法/领导式指令/产品想法/
 - **留给 plan 的手段决策**(识别到但不在此拍板的实现手段议题)
 - **必须在 spec 前解决的问题** / **后续阶段的决策**
 - **下游就绪判断**:Spec 可写否 / Plan 可写否 / 是否需先探索
-- **用户控制的下一步**:`/write-prd` · `/write-spec` · `/write-plan` · 开始实现(`/implementation` 简单 / `/subagent-implement` 复杂) · `/write-api-doc`(接口开发完毕后,可选) · `/code-impact-docgen`(自测通过后,可选)
+- **用户控制的下一步**:`/write-spec` · `/write-plan` · 开始实现(`/implementation` 简单 / `/subagent-implement` 复杂) · `/write-prd`(发布后按需) · `/write-api-doc`(接口开发完毕后,可选) · `/write-design-doc`(发布后按需)
 
 不要把 agent 推荐但用户未确认的写进"已锁定"。
 
@@ -116,7 +116,7 @@ description: 用户给一段话描述(模糊想法/领导式指令/产品想法/
 | 上下文压力 | 不会挤爆主 agent | 会挤爆,需隔离 |
 | 审查 | 主 agent 自审 | 按风险派 spec-reviewer + 最终 quality-reviewer |
 
-默认:简单(单点/1-3 文件)→ `/implementation`;复杂(多任务/跨域)→ `/subagent-implement`;边界情况看 plan 是否存在 + 任务独立性。事后沉淀(可选):`/write-api-doc`(接口开发完毕,仅新增接口)· `/code-impact-docgen`(自测通过后,设计文档)。
+默认:简单(单点/1-3 文件)→ `/implementation`;复杂(多任务/跨域)→ `/subagent-implement`;边界情况看 plan 是否存在 + 任务独立性。事后文档(发布后按需):`/write-prd`(业务方审阅)· `/write-api-doc`(接口开发完毕,仅新增接口)· `/write-design-doc`(设计文档)。
 
 ## 红线(绝对不能做)
 

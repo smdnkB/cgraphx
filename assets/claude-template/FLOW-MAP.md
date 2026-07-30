@@ -15,11 +15,10 @@
                         ▼
                   write-spec ◄── 唯一契约(声明负责人,进个人需求索引)
                         │
-            ┌───────────┴───────────┐
-            ▼ 可选                  ▼ 可选
-        write-prd              write-plan
-        (业务方审阅)        (手段决策:选项+推荐+用户拍板)
-            └───────────┬───────────┘
+                        ▼ 可选
+                    write-plan
+                (手段决策:选项+推荐+用户拍板)
+                        │
                         ▼
     implementation(简单)│ subagent-implement(复杂,需 plan)
                         │
@@ -29,15 +28,21 @@
   → run-api-test   → write-unit-test-code   沉淀提示 → code-impact-markdown
   (接口测试)     (单元测试,与开发并行或开发结束)     commit 门禁 → git-standards.md
 
+  ── 推荐发布后 · 按需(不在主链,不参与门禁); 原因: 发布前写 PRD:写的是预期,实现过程中一定会漂移,发布后 PRD 就过期了,给业务方看反而误导 ──────────────────
+  write-prd(业务方/客户审阅,任意时刻可执行,推荐发布后)
+  write-design-doc(设计文档,自测通过后)
+  write-api-doc(接口文档,接口开发完毕后)
+
 guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementation / subagent-implement 执行标注,仅无 plan 时自识别)· write-api 独立读接口规范 · commit 门禁 → git-standards;缺失 → init-project-guides 先补(中断)
 ```
 
 ## 设计流程
 
-- **链**:`/clarify-requirements` →(`/write-prd` 可选)→ `/write-spec` →(`/write-plan` 可选)
+- **链**:`/clarify-requirements` → `/write-spec` →(`/write-plan` 可选)
 - **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示)
 - **分工**:clarify 只锁业务边界 + 技术约束(读无界、决策有界);spec 是唯一契约,澄清总结只是输入;手段选型(同步/异步/缓存/定时任务)在 plan 结合代码定,选项 + 推荐,用户拍板
 - **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`plan/<前缀>-index.md` 等;spec 头部声明 `> 负责人:`,收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
+- **PRD 不在主链上**:`/write-prd` 是补充文档,任意时刻可执行,推荐功能发布后按需执行——发布后写的是实际交付的行为,不存在文档与系统漂移的问题
 
 ## 开发流程
 
@@ -85,8 +90,17 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 | `git-standards.md` | precommit-check 门禁(deny → Read 它,按「提交前检查点」自查) |
 - **执行期送达**:任务按映射打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。
 
+## 事后文档(发布后 · 按需,不在开发主链)
+
+设计原则:前期文档越少,变更时的回归成本越低;spec 是唯一契约,其余文档发布后按实际交付物生成,避免「文档描述预期、系统做了另一件事」的漂移。
+
+| skill | 产物 | 推荐时机 | 说明 |
+|---|---|---|---|
+| `/write-prd` | 业务需求文档 | 发布后按需 | 给领导/客户/业务方审阅;发布后写 = 记录实际交付的行为,不是事前审批件 |
+| `/write-design-doc` | 设计文档 | 自测通过后 | 从 knowledge + spec/plan 合成,面向研发/技术负责人/维护者 |
+| `/write-api-doc` | 接口文档 | 接口开发完毕后 | 仅覆盖本次新增接口,从 spec + 代码反向提取 |
+
 ## 其他能力
 
 - `/developer-timeline` 开发事件流与日报/周报/月报 | `/write-workload` 交付工作量汇报
-- 事后文档:`/write-api-doc`(新增接口文档)| `/code-impact-docgen`(设计文档,自测通过后)
 - 可视化:handdrawn-sketch-engine / handdrawn-deck(手绘信息图与翻页演示)

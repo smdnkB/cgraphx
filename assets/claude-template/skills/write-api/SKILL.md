@@ -37,7 +37,7 @@ description: 基于需求生成 bruno 测试接口(.bru + 测试规格 + 环境�
 | `db-query` | 复用 | S3 查真实测试数据;DB 副作用核实由 `/run-api-test` R4 做 |
 | `write-api-doc` | 独立并列 | 不互相调用;本 skill 产 .bru + 测试规格,write-api-doc 产 HTML 接口文档 |
 | `implementation` / `subagent-implement` | 上游 | 编码阶段,跑完触发本 skill |
-| `code-impact-docgen` | 独立 | 自测后产设计文档 |
+| `write-design-doc` | 独立 | 发布后按需产设计文档 |
 
 ## 依赖
 
