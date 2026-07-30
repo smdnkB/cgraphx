@@ -66,8 +66,8 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 ## 知识库
 
-- **写**:`/knowledge-write`(双层结构:实体 `concept` 主条目 + 流程条目,正向引用 + 反查派生参与业务;写入前必过 `cgraphx docs validate`)| `/code-impact-init`(陌生项目批量探索建档)
-- **读**:knowledge-recall(子 agent 语义召回,实体条目优先)| code-impact-api(已知概念名精确查)
+- **写**:`/knowledge-write`(双层结构:实体 `concept` 主条目 + 流程条目,正向引用 + 反查派生参与业务;写入前必过 `cgraphx docs validate`)| `/knowledge-init`(陌生项目批量探索建档)
+- **读**:knowledge-recall(子 agent 语义召回,实体条目优先)| knowledge-api(已知概念名精确查)
 - **目录**:`docs/knowledge/*.md`;沉淀时机由开发流程交付收尾提示触发
 
 ## 数据库与 Schema

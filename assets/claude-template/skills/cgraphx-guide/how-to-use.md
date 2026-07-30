@@ -72,9 +72,9 @@
 沉淀业务决策、概念定义、历史教训到跨需求共享的知识库。
 
 - `/knowledge-write` 任何有价值的会话都可以触发沉淀 —— 你只需要关注这一个指令
-- `/code-impact-init` 新项目起步时批量探索 + 写知识库 —— 可选,接手陌生项目时跑
+- `/knowledge-init` 新项目起步时批量探索 + 写知识库 —— 可选,接手陌生项目时跑
 - `knowledge-recall` 聊业务 / 不懂术语 / 对齐黑话时,派子 agent 召回相关概念 —— agent 自动触发
-- `code-impact-api` 已知概念名,精确查知识库 —— agent 自动触发
+- `knowledge-api` 已知概念名,精确查知识库 —— agent 自动触发
 
 > 产物落在 `docs/knowledge/*.md`。写文件前必须过 `cgraphx docs validate` 校验,非法文件会被索引跳过。
 
@@ -126,7 +126,7 @@ docs/ 文档工程                                             # 必有
 │       └── <前缀>-设计文档.md       /write-design-doc     可选  发布后按需执行
 │
 ├── knowledge/   知识库目录                         /knowledge-write 任何有价值的会话都可以触发沉淀;
-│                                                 /code-impact-init 新项目起步可以批量写 [可选]
+│                                                 /knowledge-init 新项目起步可以批量写 [可选]
 │
 
 ├── schema-knowledge/   模型知识库目录  /export-table-ddl 批量初始化工程模型, 按工程分目录

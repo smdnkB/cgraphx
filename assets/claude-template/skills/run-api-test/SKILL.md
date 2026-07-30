@@ -29,7 +29,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 - 生成测试接口 → 用 `/write-api`(本 skill 假设 .bru 已存在)
 - 写 HTML 接口文档 → 用 `/write-api-doc`
 - 修代码 / 改 .bru → 用户手动或走 `/implementation`(本 skill 只测不修)
-- 探索陌生项目 → 用 `/code-impact-init`
+- 探索陌生项目 → 用 `/knowledge-init`
 - 查代码调用关系 → 用 grep / Read
 
 ## 与既有 skill 边界

@@ -286,7 +286,7 @@ cgraphx timeline show <id>
 | 想知道 | 用 |
 |---|---|
 | 代码结构、调用关系 | `cgraphx` skill |
-| 业务决策、概念定义 | `code-impact-api` skill |
+| 业务决策、概念定义 | `knowledge-api` skill |
 | 数据库数据 | `db-query` skill |
 | 开发活动历史、报告、习惯分析 | 本 skill |
 | 只要 commit 列表 | `git log` 更轻量 |

@@ -1,7 +1,9 @@
 {
   "$comment": "升级时需清理的已废弃包自带资产(路径相对 .claude/)。skill 改名或移除后旧路径不会自动消失——install/uninstall 碰到清单里的路径就删,不存在则跳过(幂等)。",
   "paths": [
+    "skills/code-impact-api",
     "skills/code-impact-docgen",
+    "skills/code-impact-init",
     "skills/code-impact-markdown",
     "skills/precommit-review"
   ]

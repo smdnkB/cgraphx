@@ -1,5 +1,5 @@
 ---
-name: code-impact-api
+name: knowledge-api
 description: 项目文档知识库查询入口 — 通过 cgraphx docs CLI 查询 docs/knowledge/ 下的业务决策、概念定义、历史教训。Use when 任务开始时 / 查业务概念 / 查历史决策 / 对齐术语 / 找相关文档 / 探索既有知识。
 ---
 

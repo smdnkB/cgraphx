@@ -26,7 +26,7 @@ description: 基于需求生成 bruno 测试接口(.bru + 测试规格 + 环境�
 - 跑接口测试 → 用 `/run-api-test`
 - 写 PRD / spec / plan → 用 `/write-prd` / `/write-spec` / `/write-plan`
 - 写 HTML 接口文档 → 用 `/write-api-doc`
-- 探索陌生项目 → 用 `/code-impact-init`
+- 探索陌生项目 → 用 `/knowledge-init`
 - 查代码调用关系 → 用 grep / Read
 
 ## 与既有 skill 边界

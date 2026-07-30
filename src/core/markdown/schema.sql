@@ -104,7 +104,7 @@ INSERT OR IGNORE INTO markdown_schema_versions (version, applied_at, description
 VALUES (1, strftime('%s', 'now') * 1000, 'Initial markdown knowledge base schema');
 
 -- ============================================================
--- v2: code-impact-init migration — entry point name dedup
+-- v2: knowledge-init migration — entry point name dedup
 -- Persisted Layer 1 dedup state, replaces the original
 -- code-impact-graph HTTP /api/exploration/seen-names endpoint.
 -- Isolated by project_path (one .cgraphx/cgraphx.db per project).
@@ -121,4 +121,4 @@ CREATE TABLE IF NOT EXISTS markdown_explored_entry_names (
 CREATE INDEX IF NOT EXISTS idx_entry_names_norm ON markdown_explored_entry_names(normalized_name);
 
 INSERT OR IGNORE INTO markdown_schema_versions (version, applied_at, description)
-VALUES (2, strftime('%s', 'now') * 1000, 'code-impact-init migration: entry name dedup table');
+VALUES (2, strftime('%s', 'now') * 1000, 'knowledge-init migration: entry name dedup table');

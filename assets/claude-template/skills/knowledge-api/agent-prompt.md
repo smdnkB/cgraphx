@@ -1,4 +1,4 @@
-# code-impact-api 探索子 agent prompt(docs/knowledge/ 业务知识探索)
+# knowledge-api 探索子 agent prompt(docs/knowledge/ 业务知识探索)
 
 > 主 agent 通过 Agent tool 调用本文件时,把这份完整内容作为 prompt 传给 `general-purpose` 子 agent,后接 `\n\n当前任务: <用户原话>`。
 

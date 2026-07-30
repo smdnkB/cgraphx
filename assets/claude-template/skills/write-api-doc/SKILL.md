@@ -30,7 +30,7 @@ description: 在 feature 接口开发完毕后(可选环节),从 spec 的接口�
 
 - 写 spec(使用 `write-spec` skill,接口文档不重新定义规格契约)
 - 写设计文档(使用 `write-design-doc` skill,设计文档覆盖架构/模块/决策,接口文档只覆盖接口)
-- 探索陌生项目(使用 `code-impact-init` skill)
+- 探索陌生项目(使用 `knowledge-init` skill)
 - 查询代码调用关系(使用 grep / Read)
 
 ## 与 write-design-doc 的边界

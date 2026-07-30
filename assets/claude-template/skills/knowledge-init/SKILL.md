@@ -1,9 +1,9 @@
 ---
-name: code-impact-init
+name: knowledge-init
 description: Explore an unfamiliar project automatically to build a business knowledge base. Discovers entry points via grep/Read, spawns sub-agents to explore each one in depth, saves knowledge documents to docs/knowledge/, then merges cross-cutting concepts and deep-dives. Requires knowledge-write skill. Use when the user asks to explore, understand, or map out a new project, or wants to build a knowledge base for a project from scratch.
 ---
 
-# Project Exploration
+# 知识库批量建档 (Knowledge Init)
 
 Automated project exploration skill. Discovers entry points via grep/Read, explores each in depth through sub-agents, saves knowledge to the local markdown knowledge base (`docs/knowledge/*.md`), then merges cross-cutting concepts and deep-dives.
 
@@ -87,7 +87,7 @@ queue 文件大小主要由 `pending`（≤150 项 × 约 200 字节）+ `failed
 
 ## 与 cgraphx 的协作（Tools Coordination）
 
-code-impact-init 协调两类工具：
+knowledge-init 协调两类工具：
 
 | 工具 | 提供什么 | 用途 |
 |------|---------|------|
@@ -101,7 +101,7 @@ code-impact-init 协调两类工具：
 - **markdown 知识库**：CLI `cgraphx docs <cmd>`——管理 concept 索引、dedup、validate
 
 **降级路径**：
-- markdown 知识库不可用（项目未装 cgraphx）→ 整个 code-impact-init **不可启动**（dedup 和文档持久化都靠它）
+- markdown 知识库不可用（项目未装 cgraphx）→ 整个 knowledge-init **不可启动**（dedup 和文档持久化都靠它）
 
 **index 时序图**：
 
