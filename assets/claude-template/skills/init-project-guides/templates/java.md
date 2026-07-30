@@ -99,7 +99,15 @@
 {{relationship_rules}}
 ```
 
-> `字段注释` 是典型规范(必须指明关联表与字段,如 COMMENT '处理人工号,关联 users.staff_code')——推不出、无工具兜底,必写。
+> **关联关系标注(示范形态,按项目实际约定填)**:关系通常不靠 `FOREIGN KEY` 约束表达,而在字段注释里标"关联 <表>.<业务字段>"——**用有业务含义的字段关联,不用无意义的自增 id**。推不出、无工具兜底,是典型规范,必写;但"加不加 FK、用不用业务字段"本身是项目选型,挖到项目怎么定就怎么写,别照抄示例。
+>
+> ```sql
+> -- ✅ 对:业务字段关联,注释标明关联表与业务字段
+> COMMENT ON COLUMN work_order.assignee_staff IS '处理人工号,关联 users.staff_code';  -- PostgreSQL
+> `assignee_staff` varchar(32) COMMENT '处理人工号,关联 users.staff_code'             -- MySQL
+> -- ❌ 错:用无业务含义的 id 关联
+> COMMENT ON COLUMN work_order.assignee_id IS '处理人ID,关联 users.id';
+> ```
 
 ---
 
