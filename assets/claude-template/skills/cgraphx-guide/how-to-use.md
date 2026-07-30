@@ -1,50 +1,114 @@
 # cgraphx 怎么用
 
-本地优先的 AI agent 研发工具 · 知识库 / 数据库 / 时间线
+本地优先的 AI agent 研发系统 · skill 流程 + 知识库 / 数据库 / 时间线
 
-最后更新:2026-07-16
+最后更新:2026-07-30
 
 ---
 
-## 安装流程
+## 安装
 
-- `npm install -g cgraphx` 装 CLI(Node ≥ 20 且 < 25)
+```bash
+npm install -g cgraphx    # Node.js ≥22.5 <27(内置 node:sqlite,无原生依赖)
+```
 
 ### 项目级 · 每项目一次
 
-- 项目目录内执行 `cgraphx install`:建 `.cgraphx/` 数据目录(markdown 知识库 + timeline)+ 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine(一条命令全做)
+```bash
+cd your-project
+cgraphx install
+```
+
+一条命令全做:建 `.cgraphx/` 数据目录(知识库 + timeline)+ 部署 skills/commands 到 `.claude/` + 接入 hooks/statusLine + 写工作方式到 `.claude/CLAUDE.md`。重启 Claude Code 即可。
+
+### 升级
+
+```bash
+cgraphx upgrade           # npm 自更新(纯换包,不动项目)
+cgraphx install           # 到各项目重跑,刷新 skill(自动清理已改名/移除的旧 skill)
+```
 
 ### 卸载 · 可选
 
-- 项目目录内执行 `cgraphx uninstall`:清 `.claude/` 内包自带的 skills/配置 + 删 `.cgraphx/`(加 `--keep-data` 保留数据)
-- `npm uninstall -g cgraphx` 卸载 CLI
+```bash
+cgraphx uninstall         # 按清单清 .claude/ 内包自带 skills/配置 + 删 .cgraphx/
+npm uninstall -g cgraphx  # 卸载 CLI
+```
+
+加 `--keep-data` 保留 `.cgraphx/` 数据。
 
 ---
 
-## 使用流程
+## 最佳起步实践
+
+接入只是第一步。推荐这个顺序——**先立规范、再聊业务、然后做需求**:
+
+**1. 立规范 · `/init-project-guides`**
+
+生成 `docs/guides/` 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的**有意偏离**——「SQL 禁止 `ORDER BY`」「金额一律 `decimal(12,2)`」这类最容易偏离又没有工具兜底的约定。新项目立起步默认(注明「待演进」);已有项目从代码/git 历史挖既有约定固化成文。这些 guide 是后续任务的**强制读点**,会被 `/write-plan` 结晶成契约。
+
+**2. 聊业务 · 和 Claude Code 聊项目**
+
+做需求前先聊业务。agent 会自动从知识库召回已沉淀的概念、对齐术语;边聊边用 `/knowledge-write` 把业务实体沉淀下来。知识库越用越厚,重复解释和重复踩坑越少。接手陌生项目可以跑 `/knowledge-init` 批量探索建档。
+
+**3. 做需求 · `/clarify-requirements` 起步**
+
+进入主工作流:澄清 → 规格(`/write-spec`)→ 实现 → 测试。有了前两步,澄清才有共同语境,而不是从零问起。
+
+> 先有规范(agent 懂「规矩」),再对齐业务(agent 懂「黑话」),然后做需求才事半功倍。
+
+---
+
+## 工作流全景
+
+```
+knowledge-recall(自动召回)
+        │
+        ▼
+/clarify-requirements ──→ /write-spec ──→ /write-plan(可选)
+     澄清                  唯一契约          执行计划
+        │                                        │
+        │            ┌───────────────────────────┘
+        ▼            ▼
+  /implementation(简单) 或 /subagent-implement(复杂)
+        │
+   ┌────┴─────────────────────────────┐
+   ▼              ▼                   ▼
+/write-api    /write-unit-test-spec  交付收尾:
+→ /run-api-test → /write-unit-test-code  /knowledge-write 沉淀
+  接口测试       单元测试              commit 门禁
+
+── 发布后 · 按需(不在主链,不参与门禁)──────────────────
+/write-prd(业务方审阅)  /write-design-doc(设计文档)  /write-api-doc(接口文档)
+```
+
+日常默认两步:**澄清 + 实现**。复杂需求按需补规格/计划/测试。timeline 自动记录开发事件,你不需要主动跑命令。
+
+---
+
+## 各流程详解
 
 ### 开发流程
 
 做需求的主线。
 
-- 必经 `/clarify-requirements` 澄清意图、业务边界、技术边界
-- 可选 `/write-prd` 写业务文档(给业务方 / 领导确认)
-- 核心 `/write-spec` 写技术规格(归档业务行为 / 规则 / 接口 / 数据)
-- 可选 `/write-plan` 拆执行计划(给 agent 执行)
-- 必经 `/implementation` 实现(简单任务)或 `/subagent-implement`(复杂多任务)
+- **必经** `/clarify-requirements` 澄清意图、业务边界、技术约束(不拍板实现手段)
+- **核心** `/write-spec` 写技术规格——唯一契约,归档业务行为/规则/接口/数据/权限/异常/验收
+- **可选** `/write-plan` 拆执行计划(大需求/跨模块;手段选型在这一步结合代码定,选项+推荐,用户拍板)
+- **必经** `/implementation`(简单:1-3 文件/单模块)或 `/subagent-implement`(复杂:≥3 任务跨域,派子 agent 隔离上下文)
 
-> 日常默认 2 步:澄清 + 实现。复杂需求按需补 prd / spec / plan。timeline 自动记录开发事件,你不需要主动跑命令。
+> 日常默认 2 步:澄清 + 实现。spec 是唯一契约——「没有任何业务义务存在于 spec 之外」,变更时只改 spec 一处,下游重新派生。
 
 ---
 
 ### 接口测试流程
 
-**需求开发完成后**
+**需求开发完成后**,从 spec 到测试报告的全自动闭环。
 
-- `/write-api` 基于 spec 或已有代码生成 bruno 测试接口(.bru + 测试规格 + 多环境配置)
-- `/run-api-test` 跑接口测试 + 核实写接口 DB 副作用 + 出报告 —— write-api 后执行;写接口必须查 DB 验数据
+- `/write-api` 基于 spec 接口章节自动生成 bruno 测试接口(.bru + 内嵌断言 + 真实参数 + 多环境配置)
+- `/run-api-test` 跑测试 + 核实写接口 DB 副作用 + 出报告——**写接口必须查 DB 验数据,HTTP 200 ≠ 通过**
 
-> 产物落在 `docs/bruno/`(接口定义)+ `docs/features/<前缀>/`(测试规格 + 报告)。两个 skill 顺序依赖,但 run-api-test 也可独立跑(针对已有 .bru)。
+> 产物落在 `docs/bruno/`(接口定义,bruno app 可直接打开)+ `docs/features/<前缀>/`(测试规格 + 报告)。两个 skill 顺序依赖,但 run-api-test 也可独立跑(针对已有 .bru)。失败只报告不修代码不重跑,交用户决定。
 
 ---
 
@@ -52,96 +116,96 @@
 
 和开发流程平行,共享 spec 作为输入,时序任意(典型是代码先行、测试补充)。
 
-- `/write-unit-test-spec` 基于 spec 产出单元测试规格文档(零代码依赖,该测哪些路径/边界/异常)—— 可选,write-spec 后任意时机
-- `/write-unit-test-code` 基于测试规格 + 已有实现,填实测试代码 + 跑测试 + 出报告 —— 找不到测试规格则退出要求先跑 write-unit-test-spec
+- `/write-unit-test-spec` 基于 spec 产出测试规格文档(零代码依赖——该测哪些路径/边界/异常)
+- `/write-unit-test-code` 基于测试规格 + 已有实现,填实测试代码 + 跑测试 + 出报告
 
-```
-                         ┌──→ /write-plan → /implementation              开发流程 · 写代码
-                         │
-/clarify-requirements → /write-spec ──┤
-                         │
-                         └──→ /write-unit-test-spec → /write-unit-test-code   单元测试 · 写测试
-```
-
-> 两条独立线路:开发流程写代码,单元测试流程写测试。产物落在 `docs/features/<前缀>/`(测试规格 + 报告)+ 项目测试目录(.test.ts)。
+> 找不到测试规格则退出要求先跑 write-unit-test-spec。产物落在 `docs/features/<前缀>/`(测试规格 + 报告)+ 项目测试目录。
 
 ---
 
-### 知识库管理
+### 知识管理
 
-沉淀业务决策、概念定义、历史教训到跨需求共享的知识库。
+两个知识积累闭环,用得越多越值钱。
 
-- `/knowledge-write` 任何有价值的会话都可以触发沉淀 —— 你只需要关注这一个指令
-- `/knowledge-init` 新项目起步时批量探索 + 写知识库 —— 可选,接手陌生项目时跑
-- `knowledge-recall` 聊业务 / 不懂术语 / 对齐黑话时,派子 agent 召回相关概念 —— agent 自动触发
-- `knowledge-api` 已知概念名,精确查知识库 —— agent 自动触发
+**业务知识(沉淀 → 召回)**:
 
-> 产物落在 `docs/knowledge/*.md`。写文件前必须过 `cgraphx docs validate` 校验,非法文件会被索引跳过。
+- `/knowledge-write` 把有价值的知识沉淀到 `docs/knowledge/`(开发收尾自动提示,也可随时手动触发)
+- `knowledge-recall` 做需求前自动召回相关概念、对齐术语——agent 自动触发,你不用管
+- `knowledge-api` 已知概念名时精确查知识库——agent 自动触发
+- `/knowledge-init` 接手陌生项目时批量探索建档——可选,只跑一次
+
+> 产物落在 `docs/knowledge/*.md`。写文件前必须过 `cgraphx docs validate` 校验,非法文件会被索引跳过。闭环:沉淀 → 召回 → 新概念再沉淀,知识库越厚,agent 越懂你的项目。
+
+**数据模型(导出 → 探索 → 回写)**:
+
+- `/export-table-ddl` 按工程批量导出 DDL 基线(一表一文件)——项目接入时跑一次,schema 变了重跑
+- `db-query` 查数据时**首选读本地 DDL**(便宜),只在知识库没有或要实际数据时才连库(贵,兜底);探索发现的字段含义/隐式关系/陷阱 append 到对应表的 DISCOVERED 块——agent 自动触发
+
+> 产物落在 `docs/schema-knowledge/<工程>/`(INDEX.md + ddl/*.sql + pending-comments.sql)。重 dump 时 DISCOVERED 块**自动保留**,积累不丢。
 
 ---
 
-### 模型知识库管理
+### 事后文档(发布后 · 按需)
 
-数据库 schema 的 DDL 快照 + 探索补充,让 AI 理解表结构和业务语义。
+不在开发主链上,不参与流程门禁。设计原则:前期文档越少,变更回归成本越低;发布后写的是实际交付的行为,不存在文档与系统漂移。
 
-- `/export-table-ddl` 按 profile 批量导出项目用到的表的 CREATE TABLE DDL,按工程分目录 —— 项目接入时跑一次,schema 变了重跑
-- `db-query` 查数据时读本地 DDL 文件(首选),文件不存在才连 DB 兜底;探索发现的隐式关系/含义/陷阱 append 到对应表的 DISCOVERED 块 —— agent 自动触发
+| skill | 产物 | 推荐时机 |
+|---|---|---|
+| `/write-prd` | 业务需求文档(给领导/客户/业务方) | 发布后按需 |
+| `/write-design-doc` | 设计文档(面向研发/技术负责人/维护者) | 自测通过后 |
+| `/write-api-doc` | 接口文档(仅本次新增接口) | 接口开发完毕后 |
 
-> 产物落在 `docs/schema-knowledge/<工程>/`(INDEX.md + ddl/<table>.sql + pending-comments.sql)。重 dump 时 DISCOVERED 块自动保留,积累不丢。
+---
+
+### 工作回顾
+
+- `/developer-timeline` 从自动记录的开发事件流生成日报/周报/月报/阶段总结/使用习惯分析
+- `/write-workload` 产出需求工作量汇报(内部对账/甲方结款依据)
 
 ---
 
 ## docs/ 目录速查
 
-翻文档时知道去哪儿找 —— 哪个目录由哪个 skill 自动维护。
-
-**图例**:`必有` = 必有 | `可选` = 可选(按需) | `本地测试相关`
+翻文档时知道去哪儿找——哪个目录由哪个 skill 维护。
 
 ```
-docs/ 文档工程                                             # 必有
-├── bruno/  API接口目录          # write-api + run-api-test 维护; bruno app 可以直接打开这个目录识别为接口列表
-│   ├── bruno.json                                 
-│   ├── environments/
-│   │   ├── local.bru                               
-│   │   ├── staging.bru
-│   │   └── production.bru
-│   ├── common/                                   
-│   │   └── <接口名>/<场景>.bru
-│   └── <服务名>/                              
-│       └── <需求前缀>/                           
-│           └── <接口名>/                         
-│               ├── <场景1>.bru                   
-│               └── <场景2>.bru                   
+docs/
+├── features/   需求目录(单次需求工作目录,spec 必有)
+│   └── <日期>-<编号>-<前缀>/
+│       ├── <前缀>-spec.md            /write-spec           必有  唯一契约
+│       ├── plan/                     /write-plan           可选  大需求
+│       ├── <前缀>-需求文档.md         /write-prd            可选  发布后按需
+│       ├── <前缀>-api-spec.md        /write-api            可选  开发完成后
+│       ├── <前缀>-测试报告.md         /run-api-test         可选  write-api 后
+│       ├── <前缀>-测试验证.jsonl      /run-api-test         可选  自动产出
+│       ├── <前缀>-单元测试-spec.md    /write-unit-test-spec 可选  spec 后
+│       ├── <前缀>-单元测试报告.md     /write-unit-test-code 可选  开发完成后
+│       └── <前缀>-设计文档.md         /write-design-doc     可选  发布后按需
 │
-├── features/   需求目录
-│   └── <日期>-<编号>-<前缀>/  # 如 2026-07-03-CRM-req19230-号百商品详情查询接口
-│       ├── <前缀>-spec.md          /write-spec           必选  clarify 后执行
-│       ├── <前缀>-需求文档.md       /write-prd            可选  需要需求文档时,spec 之后
-│       ├── plan/                /write-plan           可选  大需求,spec/prd 后
-│       ├── <前缀>-单元测试-spec.md  /write-unit-test-spec  可选  spec 后任意时机
-│       ├── <前缀>-单元测试报告.md   /write-unit-test-code  可选  spec+开发完成后
-│       ├── <前缀>-api-spec.md      /write-api            可选  接口测试,开发完成后
-│       ├── <前缀>-测试报告.md       /run-api-test          可选  write-api 后自动产出
-│       ├── <前缀>-测试验证.jsonl    /run-api-test          可选  自动产出
-│       └── <前缀>-设计文档.md       /write-design-doc     可选  发布后按需执行
+├── knowledge/   业务知识库(跨需求共享)
+│   └── *.md                          /knowledge-write 沉淀  /knowledge-init 批量建档
 │
-├── knowledge/   知识库目录                         /knowledge-write 任何有价值的会话都可以触发沉淀;
-│                                                 /knowledge-init 新项目起步可以批量写 [可选]
+├── bruno/   接口测试(bruno app 可直接打开)
+│   ├── bruno.json
+│   ├── environments/                 local / staging / production
+│   └── <服务>/<需求前缀>/<接口>/<场景>.bru
 │
-
-├── schema-knowledge/   模型知识库目录  /export-table-ddl 批量初始化工程模型, 按工程分目录
-│   ├── xw-inst                      /db-query 自动读文件内的模型, 兜底连接数据库获取数据, 经验回写到对应的 ddl文件
-│   │   ├── INDEX.md                 # 表名 + 表注释,agent 进目录第一件事读
-│   │   ├── pending-comments.sql     # DBA 待执行 COMMENT SQL(action 队列,执行一条删一条)
-│   │   └── ddl/
-│   │       ├── <table>.sql          # 完整 DDL + 末尾 DISCOVERED 块(db-query 探索补充的隐式关系/含义/陷阱)
-│   │       └── <table>.sql
-│   ├── xw-order                     # 结构同 xw-inst
-│   └── xw-so                        # 结构同 xw-inst
+├── schema-knowledge/   数据模型知识库
+│   └── <工程>/
+│       ├── INDEX.md                  表清单 + 注释(agent 入口)
+│       ├── pending-comments.sql      DBA 待执行 COMMENT(action 队列)
+│       └── ddl/<table>.sql           DDL + DISCOVERED 块(探索积累)
+│
+└── guides/   项目规范(/init-project-guides 生成)
+    ├── coding-standards.md
+    ├── interface-standards.md
+    ├── data-standards.md
+    ├── testing-standards.md
+    └── git-standards.md              commit 门禁指向此文件
 ```
 
-> **两个核心目录** —— `docs/features/` 是单次需求工作目录(必须有 spec.md),`docs/knowledge/` 是跨需求共享的业务知识库。**bruno/ 和 schema-knowledge/ 按需出现**,只在跑接口测试 / 查 DB 时产生。
+> **两个核心目录**——`docs/features/` 是单次需求工作目录(必须有 spec),`docs/knowledge/` 是跨需求共享的业务知识库。bruno/、schema-knowledge/、guides/ 按需出现。
 
 ---
 
-cgraphx 使用说明 · 2026-07-16
+cgraphx 使用说明 · 2026-07-30
