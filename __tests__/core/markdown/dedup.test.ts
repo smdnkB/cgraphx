@@ -116,6 +116,8 @@ function mdDoc(opts: {
     'status: active',
     'source_type: work_context',
     'updated: 2026-06-27',
+    'owners:',
+    '  - team',
     '---',
     '',
     '## Summary',

@@ -21,12 +21,14 @@ function makeValid() {
       'status: active',
       'source_type: work_context',
       'updated: 2026-06-26',
+      'owners:',
+      '  - team',
     ].join('\n'),
   );
 }
 
 describe('validateFrontmatter — required fields', () => {
-  const REQUIRED = ['title', 'document_type', 'domains', 'concepts', 'status', 'source_type', 'updated'] as const;
+  const REQUIRED = ['title', 'document_type', 'domains', 'concepts', 'status', 'source_type', 'updated', 'owners'] as const;
 
   for (const key of REQUIRED) {
     it(`rejects when ${key} is missing`, () => {
@@ -50,6 +52,13 @@ describe('validateFrontmatter — required fields', () => {
   it('rejects when domains list is empty', () => {
     const parsed = makeValid();
     parsed.values.set('domains', []);
+    const r = validateFrontmatter(parsed);
+    expect(r.skipReason).toBe('missing_required_field');
+  });
+
+  it('rejects when owners list is empty', () => {
+    const parsed = makeValid();
+    parsed.values.set('owners', []);
     const r = validateFrontmatter(parsed);
     expect(r.skipReason).toBe('missing_required_field');
   });

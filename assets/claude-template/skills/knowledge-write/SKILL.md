@@ -60,7 +60,7 @@ updated: 2026-04-28
 ---
 ```
 
-- **必填 7 项**:title / document_type / domains / concepts / status / source_type / updated。
+- **必填 8 项**:title / document_type / domains / concepts / status / source_type / updated / owners。
 - **时间**:`YYYY-MM-DD`;`created` 可选推荐。
 - **`related_code`**:仅作元数据保存(不建反向链接,不校验路径存在);用文件级路径或全限定类名,不写行号。
 - **`document_type` 枚举(7)**:business-entity 业务实体(业务对象主条目)· business-flow 业务流程 · mechanism 技术机制(含架构)· decision 决策 · rule 规则 · lesson 教训 · guide 指南(含运维手册/教程/安装/FAQ/API 文档)。
@@ -90,7 +90,7 @@ updated: 2026-04-28
 ## CLI
 
 - **查已有词汇**:`cgraphx docs concepts`(concept + 关联文档数 + domain)/ `docs domains` / `docs tags`;查特定:`find --q=<词>`(整串 LIKE,title+Summary)/ `find --concept=<名>`(精确过滤,也是实体反查入口)。索引未建 → `grep -rl "concepts:" docs/knowledge/ --include="*.md"`。
-- **校验**:`docs validate <file>`(exit 0 合法 / 2 非法;`--json` 出 {valid, skipReason, detail})。规则与 index 扫描一致(单一事实源 `src/core/markdown/validator.ts`):title 非空 · document_type 属 7 枚举 · domains/concepts ≥1 项 · status 属 4 枚举 · source_type 属 5 枚举 · updated 为 YYYY-MM-DD。
+- **校验**:`docs validate <file>`(exit 0 合法 / 2 非法;`--json` 出 {valid, skipReason, detail})。规则与 index 扫描一致(单一事实源 `src/core/markdown/validator.ts`):title 非空 · document_type 属 7 枚举 · domains/concepts/owners ≥1 项 · status 属 4 枚举 · source_type 属 5 枚举 · updated 为 YYYY-MM-DD。
 - **扫描**:`docs index`——全量覆盖式重建,事务性(任一步失败回滚,旧索引不坏)。
 
 ## 质量规则

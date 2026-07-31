@@ -26,6 +26,8 @@ tags:
   - entity
 status: active             # 只从一两个流程抽出来、尚未补全时用 draft
 source_type: manual
+owners:
+  - platform
 related_code:
   - so-service/so-busi/src/main/java/.../PkgContinueAtom.java   # 文件级入口，不写行号
 related_documents:

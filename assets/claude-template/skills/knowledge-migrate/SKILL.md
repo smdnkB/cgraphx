@@ -1,6 +1,6 @@
 ---
 name: knowledge-migrate
-description: 将存量知识库(docs/knowledge/)批量迁移到新分类体系——逐篇读内容,按内容主题判定新 document_type / source_type / 业务域(不按旧值机械映射),服务模块移入 tags,仅改写 frontmatter 四个字段(保留正文与其余全部字段);流程为 dry-run 报告 → 用户确认 → 执行 → 逐篇 docs validate(失败回滚该条)→ 剔除归档 → 索引重建提议 → 抽检。Use when 迁移知识库/分类迁移/类型迁移/frontmatter 迁移/知识库换血/migrate knowledge/taxonomy migration.
+description: 将存量知识库(docs/knowledge/)批量迁移到新分类体系——逐篇读内容,按内容主题判定新 document_type / source_type / 业务域(不按旧值机械映射),服务模块移入 tags,仅改写 frontmatter 四个字段(保留正文与其余全部字段;owners 现为必填,缺失时补填默认负责人);流程为 dry-run 报告 → 用户确认 → 执行 → 逐篇 docs validate(失败回滚该条)→ 剔除归档 → 索引重建提议 → 抽检。Use when 迁移知识库/分类迁移/类型迁移/frontmatter 迁移/知识库换血/migrate knowledge/taxonomy migration.
 ---
 
 # 知识库迁移 (Knowledge Migrate)
@@ -63,6 +63,13 @@ description: 将存量知识库(docs/knowledge/)批量迁移到新分类体系�
 - **按内容填业务域**:迁移后 domains ≥1 项(**不得留空**)。
 - **非空边界**:服务模块值迁出 domains 后,若文档无明确业务域归属,必须按内容填入合适的业务域——不得迁出空 domains。
 
+### owners(新必填,缺失补填)
+
+- owners 现为必填字段:缺失或空列表 → `docs validate` 判 `missing_required_field`,该条迁移会被校验回滚。
+- **已有 owners 一律原样保留**,不改写、不追加。
+- **缺失或为空 → 补填默认负责人**:取 `git config user.name`(取不到则请用户给定),作为该文档 owners 的唯一值。
+- 补填是批量默认、不逐篇追问:在 dry-run 报告表「owners 补填」列示出,随第 3 步用户确认一并通过;用户对某条负责人有意见,在该步逐条修订。
+
 ### 同名保留值复核
 
 decision / rule / lesson / guide(document_type)与 debugging / manual(source_type)是同名保留值——**值合法 ≠ 归属准确**,必须按新语义逐篇复核,不得以「值没变」为由跳过。
@@ -76,7 +83,7 @@ decision / rule / lesson / guide(document_type)与 debugging / manual(source_typ
 1. **定范围**:目标项目知识库(`docs/knowledge/` 全量)或用户指定文件集;域外文件不碰。
 2. **dry-run**(不改任何文件):逐篇读内容,按上面的「旧值 → 新值映射表」判定,生成**迁移报告表**(格式见下节)——每行含判定依据(一句话);主题不明者标剔除建议。
 3. **用户确认(硬检查点)**:报告交用户确认——**未确认不得执行写入**;用户对单条的修改意见直接采纳,修订报告后以确认版为执行依据。
-4. **执行**:按确认版报告批量改写 frontmatter——**仅改 document_type / source_type / domains / tags 四个字段**,保留正文与其他全部 frontmatter 字段(未知字段原样保留,见「字段改写纪律」)。
+4. **执行**:按确认版报告批量改写 frontmatter——**仅改 document_type / source_type / domains / tags 四个字段**,并对 owners 缺失/为空的条目按确认版报告补填默认负责人(见「owners(新必填,缺失补填)」);保留正文与其他全部 frontmatter 字段(未知字段原样保留,见「字段改写纪律」)。
 5. **逐篇校验**:`cgraphx docs validate <file>`(或 `node dist/cli/index.js docs validate <file>`);不过的条目**回滚该条**(恢复迁移前 frontmatter)并列入失败清单。
 6. **剔除执行**:主题不明的剔除项**移出索引目录**(默认 `docs/knowledge/` → `docs/knowledge-archive/`,归档目录可在第 3 步用户确认环节改)——留在 `docs/knowledge/` 带旧值会导致重索引 skip,违反「重建索引无 skip」验收;剔除动作同样在用户确认后执行。
 7. **提议重建索引**:`cgraphx docs index`(**用户确认后**执行,全量覆盖式、事务性:失败回滚,不坏旧索引);不得自动执行。
@@ -93,12 +100,13 @@ decision / rule / lesson / guide(document_type)与 debugging / manual(source_typ
 | 旧 source_type → 新 | 同上 |
 | 旧 domains → 新业务域 | 迁出服务模块后保留/补填的业务域值 |
 | 移入 tags 的服务模块 | 从 domains 移入 tags 的具体值;无则 — |
+| owners 补填 | 缺失/为空 → 填默认负责人(git user);已有 owners → — |
 | 判定依据 | 一句话(为什么判为该新值),抽检可审 |
 | 剔除建议 | 主题不明者填「剔除」+ 理由;其余 — |
 
 ## 字段改写纪律
 
-仅改四个字段,其余一律保留。改写结果形态(值取自确认版报告):
+仅改四个字段(owners 缺失/为空时另按「owners(新必填,缺失补填)」补填默认负责人),其余一律保留。改写结果形态(值取自确认版报告):
 
 ```yaml
 document_type: <新 document_type>   # 枚举表 7 值之一
@@ -108,15 +116,17 @@ domains:                            # 业务域,≥1 项,不得为空
 tags:                               # 原 tags 保留 + 追加从 domains 移入的服务模块
   - <原 tags…>
   - <移入的服务模块>
-# 其余 frontmatter 字段(title / concepts / aliases / status / owners /
+# 其余 frontmatter 字段(title / concepts / aliases / status /
 # related_code / related_documents / created / updated 及任何未知字段):原样保留
+# owners:已有则原样保留;缺失/为空则补填默认负责人(见「owners(新必填,缺失补填)」)
 # 正文:一字不动
 ```
 
 ## 红线
 
-- **不改正文**:只改写 frontmatter 的 document_type / source_type / domains / tags 四个字段。
-- **未知字段保留**:除四个目标字段外的全部 frontmatter 字段原样保留,不删不改。
+- **不改正文**:只改写 frontmatter 的 document_type / source_type / domains / tags 四个字段(owners 缺失/为空时按规则补填默认负责人,不改写已有 owners)。
+- **未知字段保留**:除四个目标字段(及 owners 缺失补填)外的全部 frontmatter 字段原样保留,不删不改。
+- **owners 只补不改**:已有 owners 一律保留;仅缺失/为空时补填默认负责人,不覆盖、不追加。
 - **validate 不过即回滚该条**:`docs validate` 失败的条目恢复迁移前 frontmatter,列入失败清单,不带病入库。
 - **不自动跑 docs index**:索引重建仅在用户确认后执行。
 - **剔除必先经用户确认且给出归档去向**:剔除项必须移出索引目录(默认 `docs/knowledge-archive/`),禁止留在 `docs/knowledge/` 带旧值(重索引会 skip)。

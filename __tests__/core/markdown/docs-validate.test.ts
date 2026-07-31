@@ -20,6 +20,8 @@ concepts:
 status: active
 source_type: manual
 updated: 2026-07-14
+owners:
+  - team
 ---
 
 ## Summary
@@ -43,6 +45,14 @@ describe('docs validate (parseFrontmatter + validateFrontmatter)', () => {
     expect(result.valid).toBe(false);
     expect(result.skipReason).toBe('missing_required_field');
     expect(result.detail).toMatch(/title/);
+  });
+
+  it('rejects when owners is missing', () => {
+    const src = VALID.replace('owners:\n  - team\n', '');
+    const result = validateFrontmatter(parseFrontmatter(src));
+    expect(result.valid).toBe(false);
+    expect(result.skipReason).toBe('missing_required_field');
+    expect(result.detail).toMatch(/owners/);
   });
 
   it('rejects when a required list field is malformed (concepts: [])', () => {

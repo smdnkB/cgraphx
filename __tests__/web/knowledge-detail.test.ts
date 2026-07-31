@@ -83,7 +83,7 @@ function md(
     ...list('domains', opts.domains ?? ['派单']),
     ...list('concepts', opts.concepts ?? ['派单池']),
     ...list('tags', opts.tags ?? []),
-    ...list('owners', opts.owners ?? []),
+    ...list('owners', opts.owners ?? ['team']),
     ...list('aliases', opts.aliases ?? []),
     ...list('related_code', opts.relatedCode ?? []),
     ...list('related_documents', opts.related ?? []),

@@ -13,6 +13,7 @@ export const REQUIRED_FRONTMATTER_KEYS = [
   'status',
   'source_type',
   'updated',
+  'owners',
 ] as const;
 
 export const DOCUMENT_TYPES = [

@@ -2,7 +2,7 @@
  * Validate a parsed frontmatter against the markdown knowledge base rules.
  *
  * Spec §5 — two phases:
- *   1. Required fields: all 7 keys present and non-empty.
+ *   1. Required fields: all 8 keys present and non-empty.
  *   2. Enum values: document_type / status / source_type must be in their
  *      respective whitelists.
  *

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Breaking — knowledge base `owners` frontmatter is now required
+
+The markdown knowledge base validator (`cgraphx docs validate` / `docs index`)
+now treats `owners` as a required frontmatter field, alongside `title`,
+`document_type`, `domains`, `concepts`, `status`, `source_type`, and `updated`.
+A document with a missing or empty `owners` list is rejected as
+`missing_required_field` and skipped during indexing; a scalar `owners` is
+still rejected as `field_type_error`.
+
+Existing knowledge documents without `owners` must add at least one owner to
+keep validating and indexing. `knowledge-migrate` can backfill the field.
+
 ## 2.0.0
 
 cgraphx 2.0 is a rebuild focused on the three subsystems AI coding agents reuse

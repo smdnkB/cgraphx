@@ -164,6 +164,8 @@ describe('MarkdownQuery.getStats via facade (spec §3.3)', () => {
       `status: ${status}`,
       'source_type: work_context',
       'updated: 2026-06-27',
+      'owners:',
+      '  - team',
       '---',
       '',
       '## Summary',

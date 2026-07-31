@@ -76,6 +76,8 @@ function mdDoc(title: string, concepts: string[]): string {
     'status: active',
     'source_type: work_context',
     'updated: 2026-06-27',
+    'owners:',
+    '  - team',
     '---',
     '',
     '## Summary',

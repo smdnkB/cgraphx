@@ -80,7 +80,7 @@ function md(
     ...list('domains', opts.domains ?? ['Core']),
     ...list('concepts', opts.concepts ?? ['Cycle']),
     ...list('tags', opts.tags ?? []),
-    ...list('owners', opts.owners ?? []),
+    ...list('owners', opts.owners ?? ['team']),
     ...list('aliases', opts.aliases ?? []),
     ...list('related_documents', opts.related ?? []),
     `status: ${opts.status ?? 'active'}`,

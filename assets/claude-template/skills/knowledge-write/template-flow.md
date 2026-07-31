@@ -26,6 +26,8 @@ tags:
   - so-service             # 服务/模块信息放 tags，不放 domains
 status: active             # 只从一两个视角抽出、尚未补全时用 draft
 source_type: work_context
+owners:
+  - platform
 related_code:
   - so-service/so-busi/src/main/java/.../PkgInstallScene.java   # 文件级入口，不写行号
 related_documents:
