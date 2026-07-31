@@ -40,7 +40,7 @@ cgraphx docs concepts --json
 - **上下位词**:用户说"缓存",concept 里有"Redis 安装"→ 命中(Redis 是缓存的下位)
 - **英文/中文互译**:用户说"knowledge graph",concept 里有"知识图谱"→ 命中
 - **业务语境**:用户聊"订单退款",concept 里有"退订流程""订单状态机"→ 都命中
-- **实体与流程**:用户说"新装商品",实体"商品"(有 concept 主条目)与流程"单商品新装"都命中,实体主条目排前
+- **实体与流程**:用户说"新装商品",实体"商品"(有实体主条目)与流程"单商品新装"都命中,实体主条目排前
 
 **不要**只做字面子串匹配 —— "派单"匹配"派单流程"是子串,但"分派工单"匹配"派单流程"需要语义理解。你是 LLM,用你的语义理解能力,不是 grep。
 
@@ -51,7 +51,7 @@ cgraphx docs concepts --json
 - **中**:语义相关(同义/上下位/业务关联)
 - **低**:边缘相关(只是提到了相关领域)
 
-同相关度下,**有 `concept` 型主条目的实体概念排前**——它是定义枢纽,回答"X 是什么";流程/机制概念回答"怎么走",排在其后。
+同相关度下,**有实体主条目(`business-entity`)的实体概念排前**——它是定义枢纽,回答"X 是什么";流程/机制概念回答"怎么走",排在其后。
 
 **上限 10 个**。超过 10 个只取前 10,按相关度从高到低。
 
@@ -62,7 +62,7 @@ cgraphx docs concepts --json
 cgraphx docs find --concept=<concept-name> --json
 ```
 
-拿到关联文档的 path / title / summary / documentType。每个 concept 取**最相关的 1 个文档**(若都相关,最多取 2 个);**有 `documentType: "concept"` 的文档(实体主条目)必须优先取**——它是该实体的定义枢纽。
+拿到关联文档的 path / title / summary / documentType。每个 concept 取**最相关的 1 个文档**(若都相关,最多取 2 个);**有 `documentType: "business-entity"` 的文档(实体主条目)必须优先取**——它是该实体的定义枢纽。
 
 从文档 summary 里提取**一行说明**(≤ 60 字),概括这个 concept 讲什么。不要返回完整 summary。
 
@@ -72,7 +72,7 @@ cgraphx docs find --concept=<concept-name> --json
 
 ### 6. 返回格式
 
-**有命中时**(标签按代表文档的 documentType:`concept` → "实体主条目",其余 → "流程/其他"):
+**有命中时**(标签按代表文档的 documentType:`business-entity` → "实体主条目",其余 → "流程/其他"):
 
 ```
 命中 N 个概念(按相关度排序):
@@ -123,4 +123,4 @@ cgraphx docs find --concept=<concept-name> --json
 - 每个命中概念,我能不能一句话说清楚它和用户提示词的关系?说不清的降级或剔除。
 - 有没有高相关度的概念被我漏掉?(回头看一遍全量表的前 20 个高 documentCount 概念,确认没遗漏)
 - 返回的 concept 里有没有"看起来沾边其实无关"的?(剔除噪声比凑数重要)
-- 用户提示词含业务实体名词(商品、礼包、订单……)时,该实体的主条目(`documentType: "concept"`)命中了吗?排在第一了吗?表里有这个实体概念却没选到主条目作代表文档的,纠正。
+- 用户提示词含业务实体名词(商品、礼包、订单……)时,该实体的主条目(`documentType: "business-entity"`)命中了吗?排在第一了吗?表里有这个实体概念却没选到主条目作代表文档的,纠正。
