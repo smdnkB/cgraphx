@@ -1,0 +1,124 @@
+---
+name: knowledge-migrate
+description: 将存量知识库(docs/knowledge/)批量迁移到新分类体系——逐篇读内容,按内容主题判定新 document_type / source_type / 业务域(不按旧值机械映射),服务模块移入 tags,仅改写 frontmatter 四个字段(保留正文与其余全部字段);流程为 dry-run 报告 → 用户确认 → 执行 → 逐篇 docs validate(失败回滚该条)→ 剔除归档 → 索引重建提议 → 抽检。Use when 迁移知识库/分类迁移/类型迁移/frontmatter 迁移/知识库换血/migrate knowledge/taxonomy migration.
+---
+
+# 知识库迁移 (Knowledge Migrate)
+
+## 定位
+
+- **存量一次性换血,无双轨期**:分类体系换成 document_type 7 值 / source_type 5 值、domains 语义转向业务域;本 skill 是存量迁移的唯一执行载体,一次走完 报告 → 确认 → 执行 → 校验 → 剔除 → 索引 → 抽检。
+- **按内容主题判定,不按旧值机械映射**:值合法 ≠ 归属准确;同名保留值同样逐篇复核。
+- **用户确认是唯一人工闸门**:先出 dry-run 报告,不改任何文件;未确认不得执行写入。
+
+## 新分类枚举表(迁移目标)
+
+### document_type(7 值)
+
+| 值 | 含义 |
+|---|---|
+| business-entity | 业务实体 |
+| business-flow | 业务流程 |
+| mechanism | 技术机制(含架构) |
+| decision | 决策 |
+| rule | 规则 |
+| lesson | 教训 |
+| guide | 指南(含运维手册/教程/安装/FAQ/API 文档) |
+
+### source_type(5 值)
+
+| 值 | 含义 |
+|---|---|
+| work_context | 工作上下文 |
+| batch_exploration | 批量探索 |
+| review | 评审 |
+| debugging | 调查排障 |
+| manual | 手工 |
+
+## 旧值 → 新值映射表(判定依据)
+
+### document_type
+
+| 旧值 | 新值 / 判定方式 |
+|---|---|
+| concept | → business-entity |
+| exploration / finding / analysis | 按内容主题判定:讲业务流程 → business-flow;讲技术机制/架构 → mechanism;讲业务实体 → business-entity |
+| architecture | → mechanism |
+| warning | 约束类 → rule;复盘类 → lesson |
+| tutorial / runbook / installation / api / faq | → guide |
+| conversation / note | 按主题判定;确无主题 → 剔除入库(记入剔除清单) |
+
+### source_type
+
+| 旧值 | 新值 |
+|---|---|
+| ai_session | → work_context |
+| architecture_review / code_review | → review |
+| debugging | → debugging(同名保留,按新语义复核) |
+| manual / human_note / external_summary | → manual |
+
+### domains
+
+- **服务模块值迁 tags**:domains 中的服务模块值移入 tags(在原 tags 基础上追加,不覆盖)。
+- **按内容填业务域**:迁移后 domains ≥1 项(**不得留空**)。
+- **非空边界**:服务模块值迁出 domains 后,若文档无明确业务域归属,必须按内容填入合适的业务域——不得迁出空 domains。
+
+### 同名保留值复核
+
+decision / rule / lesson / guide(document_type)与 debugging / manual(source_type)是同名保留值——**值合法 ≠ 归属准确**,必须按新语义逐篇复核,不得以「值没变」为由跳过。
+
+### 判定纪律
+
+**按内容主题判定,不按旧值机械映射**:逐篇读文档内容(至少读 Summary 与标题/正文要点)再判定;判定依据浓缩为一句话记入报告表,供抽检可审。
+
+## 流程
+
+1. **定范围**:目标项目知识库(`docs/knowledge/` 全量)或用户指定文件集;域外文件不碰。
+2. **dry-run**(不改任何文件):逐篇读内容,按上面的「旧值 → 新值映射表」判定,生成**迁移报告表**(格式见下节)——每行含判定依据(一句话);主题不明者标剔除建议。
+3. **用户确认(硬检查点)**:报告交用户确认——**未确认不得执行写入**;用户对单条的修改意见直接采纳,修订报告后以确认版为执行依据。
+4. **执行**:按确认版报告批量改写 frontmatter——**仅改 document_type / source_type / domains / tags 四个字段**,保留正文与其他全部 frontmatter 字段(未知字段原样保留,见「字段改写纪律」)。
+5. **逐篇校验**:`cgraphx docs validate <file>`(或 `node dist/cli/index.js docs validate <file>`);不过的条目**回滚该条**(恢复迁移前 frontmatter)并列入失败清单。
+6. **剔除执行**:主题不明的剔除项**移出索引目录**(默认 `docs/knowledge/` → `docs/knowledge-archive/`,归档目录可在第 3 步用户确认环节改)——留在 `docs/knowledge/` 带旧值会导致重索引 skip,违反「重建索引无 skip」验收;剔除动作同样在用户确认后执行。
+7. **提议重建索引**:`cgraphx docs index`(**用户确认后**执行,全量覆盖式、事务性:失败回滚,不坏旧索引);不得自动执行。
+8. **输出**:① 抽检建议——随机抽 N 篇供人工核对(含判定依据;默认 10% 且 ≥3 篇);② 剔除清单(含归档去向);③ 失败清单(validate 不过被回滚的条目)。
+
+## 迁移报告表格式
+
+列定义(dry-run 产出,提交用户确认):
+
+| 列 | 填法 |
+|---|---|
+| 文件 | 相对项目根的路径 |
+| 旧 document_type → 新 | 旧值 → 新值;同名保留值标「已复核」 |
+| 旧 source_type → 新 | 同上 |
+| 旧 domains → 新业务域 | 迁出服务模块后保留/补填的业务域值 |
+| 移入 tags 的服务模块 | 从 domains 移入 tags 的具体值;无则 — |
+| 判定依据 | 一句话(为什么判为该新值),抽检可审 |
+| 剔除建议 | 主题不明者填「剔除」+ 理由;其余 — |
+
+## 字段改写纪律
+
+仅改四个字段,其余一律保留。改写结果形态(值取自确认版报告):
+
+```yaml
+document_type: <新 document_type>   # 枚举表 7 值之一
+source_type: <新 source_type>       # 枚举表 5 值之一
+domains:                            # 业务域,≥1 项,不得为空
+  - <按内容判定的业务域>
+tags:                               # 原 tags 保留 + 追加从 domains 移入的服务模块
+  - <原 tags…>
+  - <移入的服务模块>
+# 其余 frontmatter 字段(title / concepts / aliases / status / owners /
+# related_code / related_documents / created / updated 及任何未知字段):原样保留
+# 正文:一字不动
+```
+
+## 红线
+
+- **不改正文**:只改写 frontmatter 的 document_type / source_type / domains / tags 四个字段。
+- **未知字段保留**:除四个目标字段外的全部 frontmatter 字段原样保留,不删不改。
+- **validate 不过即回滚该条**:`docs validate` 失败的条目恢复迁移前 frontmatter,列入失败清单,不带病入库。
+- **不自动跑 docs index**:索引重建仅在用户确认后执行。
+- **剔除必先经用户确认且给出归档去向**:剔除项必须移出索引目录(默认 `docs/knowledge-archive/`),禁止留在 `docs/knowledge/` 带旧值(重索引会 skip)。
+- **域外文件不碰**:只动 `docs/knowledge/` 或用户指定文件集。
+- **迁移后 domains ≥1 项**:服务模块迁出后必须按内容补填业务域,不得迁出空 domains。
