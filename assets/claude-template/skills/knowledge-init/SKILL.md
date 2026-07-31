@@ -484,7 +484,7 @@ jq '[.[] | {name, doc_count: .documentCount}] | sort_by(-.doc_count) | .[:30]' \
 ```text
 对每个高中心性 symbol（Step 1，跨文件引用数 >= 3）：
   - 该 symbol 对应的 concept 名是否已在 markdown 知识库？
-  - 该 concept 是否已有 type: architecture/decision 的专属文档？
+  - 该 concept 是否已有 type: mechanism/decision 的专属文档？
   - NO（代码中心性高 + 业务无专属文档）→ 加入 Phase 3 cross-cutting pending
   - 边缘 case：symbol 是工具类（util/helper）跳过——不算业务 cross-cutting
 ```
@@ -656,9 +656,9 @@ cgraphx docs find --q="{name}" --limit=5 --json
 2. 查询已有概念：cgraphx docs concepts --json
 3. 复用已有概念名，新名称放 aliases
 4. 文件名 kebab-case，基于入口点命名，保存到 docs/knowledge/
-5. document_type 根据探索内容判断：流程探索→exploration，约束/陷阱→finding，架构模式→architecture，设计决策→decision
+5. document_type 根据探索内容判断：业务实体识别→business-entity，流程识别→business-flow，技术结构/机制→mechanism，约束规则→rule，陷阱/复盘教训→lesson，设计决策→decision
 6. domains 填 [{project_name}]
-7. source_type 填 ai_session
+7. source_type 填 batch_exploration（knowledge-init 批量探索建库的默认来源）
 8. related_code 填实际探索过的文件路径（grep 输出已有，直接复制）
 9. 文档正文必须包含：Summary, Context, Findings, Evidence, Impact For Future Changes
 10. **Write 后必须 `cgraphx docs validate <file>` 校验通过**（knowledge-write skill 的强制步骤）；非法则修 frontmatter 再 Write 再校验，直到合法
@@ -666,7 +666,7 @@ cgraphx docs find --q="{name}" --limit=5 --json
 完成后只返回以下 JSON（不要返回文档内容）：
 {
   "document_path": "docs/knowledge/xxx.md",
-  "document_type": "exploration",
+  "document_type": "business-flow",
   "files_explored": ["src/xxx.rs", ...],
   "symbols_explored": ["com.example.X.foo", ...],
   "concepts_found": ["ConceptA", "ConceptB"],
@@ -727,9 +727,9 @@ rg -n $LANG_TYPES "${EXCLUDES[@]}" "{entry_symbol}" | head -50
 在 docs/knowledge/ 目录下创建整合文档。
 
 document_type 建议：
-- 揭示整体架构 → architecture
+- 揭示整体架构/技术机制 → mechanism
 - 设计决策总结 → decision
-- 流程整合 → exploration
+- 流程整合 → business-flow
 
 frontmatter：
 - related_documents 填引用的已有文档
@@ -741,7 +741,7 @@ frontmatter：
 完成后返回 JSON：
 {
   "document_path": "docs/knowledge/xxx.md",
-  "document_type": "architecture",
+  "document_type": "mechanism",
   "files_explored": [...],
   "symbols_analyzed": [...],
   "concepts_found": [...],
