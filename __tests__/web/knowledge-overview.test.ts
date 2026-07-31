@@ -17,14 +17,15 @@
  *   d3 decision draft  订单 [派单池, 订单] 2026-07-08 「订单派单灰度决策」
  *   d4 lesson   active 派单 [派单池] tags[dispatch, incident] 2026-07-07
  *      「派单超时事故复盘教训」
- *   d5 concept  active 订单 [订单] 2026-07-12 「订单实体概念」(摘要含「履约」)
- *   d6 api      draft  订单 [订单] 2026-07-05 「订单查询接口」
- *   d7 warning  deprecated 基础设施 [缓存] 2026-06-30 「缓存穿透风险警示」
- *   d8 note     draft  基础设施 [缓存] 2026-07-01 「<script>alert(1)</script> 安全笔记」
+ *   d5 business-entity active 订单 [订单] 2026-07-12 「订单实体概念」(摘要含「履约」)
+ *   d6 guide    draft  订单 [订单] 2026-07-05 「订单查询接口」
+ *   d7 mechanism deprecated 基础设施 [缓存] 2026-06-30 「缓存穿透风险警示」
+ *   d8 rule     draft  基础设施 [缓存] 2026-07-01 「<script>alert(1)</script> 安全笔记」
  *   d9 guide    superseded 基础设施 [缓存, 派单池] 2026-07-15 「缓存运维指南」
  *
  * 计数:文档 9 / 概念 4(派单池 5、订单 3、缓存 3、运力 1)/ 领域 3 / 标签 2;
- * byType decision=3(最高)/ byStatus active=4、draft=3、deprecated=1、superseded=1。
+ * byType decision=3(最高)、guide=2、lesson/business-entity/mechanism/rule 各 1、
+ * business-flow=0(0 计数芯片仍渲染)/ byStatus active=4、draft=3、deprecated=1、superseded=1。
  */
 
 import * as fs from 'node:fs';
@@ -92,7 +93,7 @@ function md(
     ...list('aliases', opts.aliases ?? []),
     ...list('related_documents', opts.related ?? []),
     `status: ${opts.status ?? 'active'}`,
-    'source_type: ai_session',
+    'source_type: work_context',
     `updated: ${opts.updated ?? '2026-06-01'}`,
     '---',
     '',
@@ -130,18 +131,18 @@ async function makeMainProject(): Promise<void> {
     tags: ['dispatch', 'incident'], updated: '2026-07-07',
   }));
   writeDoc(tmp, 'd5.md', md('订单实体概念', {
-    type: 'concept', status: 'active', domains: ['订单'], concepts: ['订单'],
+    type: 'business-entity', status: 'active', domains: ['订单'], concepts: ['订单'],
     updated: '2026-07-12', summary: '订单实体概念,覆盖履约全流程。',
   }));
   writeDoc(tmp, 'd6.md', md('订单查询接口', {
-    type: 'api', status: 'draft', domains: ['订单'], concepts: ['订单'], updated: '2026-07-05',
+    type: 'guide', status: 'draft', domains: ['订单'], concepts: ['订单'], updated: '2026-07-05',
   }));
   writeDoc(tmp, 'd7.md', md('缓存穿透风险警示', {
-    type: 'warning', status: 'deprecated', domains: ['基础设施'], concepts: ['缓存'],
+    type: 'mechanism', status: 'deprecated', domains: ['基础设施'], concepts: ['缓存'],
     updated: '2026-06-30',
   }));
   writeDoc(tmp, 'd8.md', md('<script>alert(1)</script> 安全笔记', {
-    type: 'note', status: 'draft', domains: ['基础设施'], concepts: ['缓存'], updated: '2026-07-01',
+    type: 'rule', status: 'draft', domains: ['基础设施'], concepts: ['缓存'], updated: '2026-07-01',
   }));
   writeDoc(tmp, 'd9.md', md('缓存运维指南', {
     type: 'guide', status: 'superseded', domains: ['基础设施'], concepts: ['缓存', '派单池'],
@@ -159,7 +160,7 @@ async function makePagedProject(): Promise<void> {
   for (let i = 1; i <= 31; i++) {
     const nn = String(i).padStart(2, '0');
     writeDoc(tmp, `b${nn}.md`, md(`批量文档 ${nn}`, {
-      type: 'note', status: 'active', domains: ['批量'], concepts: ['批量概念'],
+      type: 'business-flow', status: 'active', domains: ['批量'], concepts: ['批量概念'],
       updated: `2026-05-${nn}`,
     }));
   }
@@ -212,12 +213,12 @@ describe('knowledge overview page (integration)', () => {
     expect(html).toContain('引用 1');
   });
 
-  it('2. renders all 17 type chips sorted by count desc (spec §3.3, §11 #4)', async () => {
+  it('2. renders all 7 new enum type chips sorted by count desc (spec §3.3, §11 #4)', async () => {
     await makeMainProject();
     const srv = await startServer();
     const html = await (await fetch(`${srv.url}/`)).text();
 
-    // 17 种类型英文原值全部渲染(0 计数也显示)。
+    // 7 种类型英文原值全部渲染(0 计数也显示)。
     for (const t of DOCUMENT_TYPES) {
       expect(html).toContain(`chip__en">${t}</span>`);
     }

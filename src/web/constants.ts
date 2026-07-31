@@ -1,7 +1,8 @@
 /**
  * web 层显示常量:标签映射(中文化)、分页页大小、类型色系归组。
  *
- * 标签映射为 spec §3.3 逐字表(plan index §7.6):芯片与徽标同时展示
+ * 标签映射为《知识库分类体系重设计-spec》§3.1 逐字表(web 需求 spec
+ * 《cgraphx-web知识库浏览》修订后的 §3.3 与本表同步):芯片与徽标同时展示
  * 「中文 + 英文原值」,URL 参数始终用英文原值。
  */
 
@@ -13,25 +14,15 @@ export const PAGE_SIZE = 30;
 /** 概念面板平铺上限,第 13 个起收进原生 <details>(plan index 第 4 节推荐)。 */
 export const CONCEPT_PANEL_TOP = 12;
 
-/** 文档类型显示标签(spec §3.3 逐字,17 条)。 */
+/** 文档类型显示标签(分类体系 spec §3.1 逐字,7 条)。 */
 export const TYPE_LABELS: Record<DocumentType, string> = {
-  concept: '实体概念',
+  'business-entity': '业务实体',
+  'business-flow': '业务流程',
+  mechanism: '技术机制',
   decision: '决策',
   rule: '规则',
   lesson: '教训',
-  warning: '警示',
-  finding: '发现',
-  analysis: '分析',
-  exploration: '探索',
-  note: '笔记',
-  runbook: '运维手册',
-  installation: '安装部署',
-  api: 'API',
-  faq: 'FAQ',
-  architecture: '架构',
   guide: '指南',
-  tutorial: '教程',
-  conversation: '对话',
 };
 
 /** 文档状态显示标签(spec §3.3 逐字,4 条)。 */
@@ -43,32 +34,21 @@ export const STATUS_LABELS: Record<DocumentStatus, string> = {
 };
 
 /**
- * 类型色系(允许局部适配:17 种按语义归 5 个色系,同页同类型同色)。
+ * 类型色系(7 种按语义归 4 个色系,同页同类型同色)。
  *
- * - entity (松绿):定义/结构类 —— concept、architecture
- * - process (蓝):操作/流程类 —— guide、tutorial、runbook、installation、api
- * - judgment (金):判断/分析类 —— decision、rule、finding、analysis
- * - lesson (锈红):教训/风险类 —— lesson、warning
- * - record (橙):记录/对话类 —— note、conversation、exploration、faq
+ * - entity (松绿):定义/结构类 —— business-entity、mechanism
+ * - process (蓝):操作/流程类 —— business-flow、guide
+ * - judgment (金):判断/约束类 —— decision、rule
+ * - lesson (锈红):教训/风险类 —— lesson
  */
-export type TypeTone = 'entity' | 'process' | 'judgment' | 'lesson' | 'record';
+export type TypeTone = 'entity' | 'process' | 'judgment' | 'lesson';
 
 export const TYPE_TONES: Record<DocumentType, TypeTone> = {
-  concept: 'entity',
-  architecture: 'entity',
+  'business-entity': 'entity',
+  mechanism: 'entity',
+  'business-flow': 'process',
   guide: 'process',
-  tutorial: 'process',
-  runbook: 'process',
-  installation: 'process',
-  api: 'process',
   decision: 'judgment',
   rule: 'judgment',
-  finding: 'judgment',
-  analysis: 'judgment',
   lesson: 'lesson',
-  warning: 'lesson',
-  note: 'record',
-  conversation: 'record',
-  exploration: 'record',
-  faq: 'record',
 };

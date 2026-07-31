@@ -10,12 +10,12 @@
  * 搭建而非 web 行为;web 生产代码只经门面消费(由 tsc + 代码审查保证)。
  *
  * fixture(3 篇,构成双向引用):
- *   main.md  decision active 派单/运力 [派单池,运力] owners[alice] aliases[DP-DECISION]
+ *   main.md  business-entity active 派单/运力 [派单池,运力] owners[alice] aliases[DP-DECISION]
  *            related_code[src/dispatch/pool.ts] created 2026-07-01 updated 2026-07-10
  *            tags[](空 → 占位) related[other.md];正文含 H2/表格/代码块/引用块/列表
  *            + 原始 HTML(<b>raw</b>、<script>alert(1)</script>)。
- *   other.md note  「其他笔记」            —— main 的出向引用目标。
- *   third.md note  「第三方引用笔记」 related[main.md] —— main 的入向引用来源。
+ *   other.md business-flow 「其他笔记」     —— main 的出向引用目标。
+ *   third.md rule 「第三方引用笔记」 related[main.md] —— main 的入向引用来源。
  */
 
 import * as crypto from 'node:crypto';
@@ -88,7 +88,7 @@ function md(
     ...list('related_code', opts.relatedCode ?? []),
     ...list('related_documents', opts.related ?? []),
     `status: ${opts.status ?? 'active'}`,
-    'source_type: ai_session',
+    'source_type: work_context',
     ...(opts.created !== undefined ? [`created: ${opts.created}`] : []),
     `updated: ${opts.updated ?? '2026-06-01'}`,
     '---',
@@ -131,16 +131,16 @@ function writeDoc(projectRoot: string, fileName: string, content: string): void 
 async function makeProject(): Promise<void> {
   initProject(tmp);
   writeDoc(tmp, 'main.md', md('派单池分配策略决策', {
-    type: 'decision', status: 'active', domains: ['派单', '运力'],
+    type: 'business-entity', status: 'active', domains: ['派单', '运力'],
     concepts: ['派单池', '运力'], tags: [], owners: ['alice'], aliases: ['DP-DECISION'],
     relatedCode: ['src/dispatch/pool.ts'], related: ['other.md'],
     created: '2026-07-01', updated: '2026-07-10', body: MAIN_BODY,
   }));
   writeDoc(tmp, 'other.md', md('其他笔记', {
-    type: 'note', status: 'active', domains: ['派单'], concepts: ['派单池'], updated: '2026-07-09',
+    type: 'business-flow', status: 'active', domains: ['派单'], concepts: ['派单池'], updated: '2026-07-09',
   }));
   writeDoc(tmp, 'third.md', md('第三方引用笔记', {
-    type: 'note', status: 'active', domains: ['派单'], concepts: ['派单池'],
+    type: 'rule', status: 'active', domains: ['派单'], concepts: ['派单池'],
     related: ['main.md'], updated: '2026-07-08',
   }));
 

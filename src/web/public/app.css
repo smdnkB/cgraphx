@@ -395,7 +395,6 @@ a.nav__item:hover {
 .chip--process.chip--on { background: var(--blue); border-color: var(--blue); }
 .chip--judgment.chip--on { background: var(--gold); border-color: var(--gold); }
 .chip--lesson.chip--on { background: var(--rust); border-color: var(--rust); }
-.chip--record.chip--on { background: var(--orange); border-color: var(--orange); }
 
 /* ---- 概念行(名称 + 篇数 + 占比条) ---- */
 
@@ -698,12 +697,11 @@ a.nav__item:hover {
   transform: scaleY(1);
 }
 
-/* 色系:同页同类型同色(17 种归 5 系,constants.ts TYPE_TONES)。 */
+/* 色系:同页同类型同色(7 种归 4 系,constants.ts TYPE_TONES)。 */
 .doc--entity { --tc: var(--pine-2); }
 .doc--process { --tc: var(--blue); }
 .doc--judgment { --tc: var(--gold); }
 .doc--lesson { --tc: var(--rust); }
-.doc--record { --tc: var(--orange); }
 
 /* 类型徽标块(中文 + 英文小标)。 */
 .tbadge {
@@ -732,7 +730,6 @@ a.nav__item:hover {
 .tbadge--process { background: var(--blue-tint); color: var(--blue); border-color: #C9DAEB; }
 .tbadge--judgment { background: var(--gold-tint); color: var(--gold); border-color: #E8D9AF; }
 .tbadge--lesson { background: var(--rust-tint); color: var(--rust); border-color: #EBCDB9; }
-.tbadge--record { background: var(--orange-tint); color: var(--orange); border-color: #ECC9B4; }
 
 .doc__titlerow {
   display: flex;
