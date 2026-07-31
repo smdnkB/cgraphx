@@ -18,7 +18,7 @@ domains:
 concepts:
   - Redis
 status: active
-source_type: human_note
+source_type: manual
 updated: 2026-07-14
 ---
 
@@ -34,7 +34,7 @@ describe('docs validate (parseFrontmatter + validateFrontmatter)', () => {
     expect(result.fields?.title).toBe('Redis 本地安装指南');
     expect(result.fields?.documentType).toBe('guide');
     expect(result.fields?.status).toBe('active');
-    expect(result.fields?.sourceType).toBe('human_note');
+    expect(result.fields?.sourceType).toBe('manual');
   });
 
   it('rejects when a required field is missing (title)', () => {
@@ -72,7 +72,7 @@ describe('docs validate (parseFrontmatter + validateFrontmatter)', () => {
   });
 
   it('rejects an invalid source_type enum', () => {
-    const src = VALID.replace('source_type: human_note', 'source_type: guessed');
+    const src = VALID.replace('source_type: manual', 'source_type: guessed');
     const result = validateFrontmatter(parseFrontmatter(src));
     expect(result.valid).toBe(false);
     expect(result.skipReason).toBe('invalid_enum_value');

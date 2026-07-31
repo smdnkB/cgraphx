@@ -74,7 +74,7 @@ function mdDoc(title: string, concepts: string[]): string {
     'concepts:',
     ...concepts.map(c => `  - ${c}`),
     'status: active',
-    'source_type: ai_session',
+    'source_type: work_context',
     'updated: 2026-06-27',
     '---',
     '',

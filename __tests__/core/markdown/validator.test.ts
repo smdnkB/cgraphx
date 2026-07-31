@@ -1,6 +1,12 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
-import { parseFrontmatterBlock } from '../../../src/core/markdown/frontmatter-parser';
+import {
+  parseFrontmatter,
+  parseFrontmatterBlock,
+} from '../../../src/core/markdown/frontmatter-parser';
 import { validateFrontmatter } from '../../../src/core/markdown/validator';
 
 function makeValid() {
@@ -13,7 +19,7 @@ function makeValid() {
       'concepts:',
       '  - X',
       'status: active',
-      'source_type: ai_session',
+      'source_type: work_context',
       'updated: 2026-06-26',
     ].join('\n'),
   );
@@ -85,9 +91,8 @@ describe('validateFrontmatter — enum values', () => {
 
   it('accepts every documented document_type', () => {
     const all = [
-      'conversation', 'exploration', 'finding', 'analysis', 'lesson',
-      'warning', 'decision', 'rule', 'architecture', 'guide', 'tutorial',
-      'runbook', 'installation', 'api', 'faq', 'note', 'concept',
+      'business-entity', 'business-flow', 'mechanism', 'decision',
+      'rule', 'lesson', 'guide',
     ];
     for (const t of all) {
       const parsed = makeValid();
@@ -96,12 +101,64 @@ describe('validateFrontmatter — enum values', () => {
     }
   });
 
-  it('accepts concept document_type for entity entries', () => {
+  it('accepts every documented source_type', () => {
+    const all = [
+      'work_context', 'batch_exploration', 'review', 'debugging', 'manual',
+    ];
+    for (const s of all) {
+      const parsed = makeValid();
+      parsed.values.set('source_type', s);
+      expect(validateFrontmatter(parsed).valid).toBe(true);
+    }
+  });
+
+  it('accepts business-entity document_type for entity entries', () => {
     const parsed = makeValid();
-    parsed.values.set('document_type', 'concept');
+    parsed.values.set('document_type', 'business-entity');
     parsed.values.set('title', '商品');
     const r = validateFrontmatter(parsed);
     expect(r.valid).toBe(true);
-    expect(r.fields?.documentType).toBe('concept');
+    expect(r.fields?.documentType).toBe('business-entity');
+  });
+
+  // 废除 document_type 值(spec §3.1)→ 非法,detail 列举全部合法值(契约消息格式)
+  it.each(['exploration', 'architecture', 'concept'])(
+    'rejects removed document_type %j and lists valid values in detail',
+    (removed) => {
+      const parsed = makeValid();
+      parsed.values.set('document_type', removed);
+      const r = validateFrontmatter(parsed);
+      expect(r.valid).toBe(false);
+      expect(r.skipReason).toBe('invalid_enum_value');
+      expect(r.detail).toBe(
+        `document_type=${removed} (valid: business-entity, business-flow, mechanism, decision, rule, lesson, guide)`,
+      );
+    },
+  );
+
+  // 废除 source_type 值(spec §3.2)→ 非法,detail 列举全部合法值
+  it.each(['ai_session', 'human_note'])(
+    'rejects removed source_type %j and lists valid values in detail',
+    (removed) => {
+      const parsed = makeValid();
+      parsed.values.set('source_type', removed);
+      const r = validateFrontmatter(parsed);
+      expect(r.valid).toBe(false);
+      expect(r.skipReason).toBe('invalid_enum_value');
+      expect(r.detail).toBe(
+        `source_type=${removed} (valid: work_context, batch_exploration, review, debugging, manual)`,
+      );
+    },
+  );
+});
+
+describe('repo knowledge doc migration (spec §3.1, §3.2)', () => {
+  it('docs/knowledge/cgraphx-web.md validates under the new enums', () => {
+    // 读仓库内真实知识文档(非 tmpdir):迁移后 frontmatter 须过新枚举世校验
+    const file = path.join(__dirname, '..', '..', '..', 'docs', 'knowledge', 'cgraphx-web.md');
+    const r = validateFrontmatter(parseFrontmatter(fs.readFileSync(file, 'utf-8')));
+    expect(r.valid).toBe(true);
+    expect(r.fields?.documentType).toBe('business-entity');
+    expect(r.fields?.sourceType).toBe('work_context');
   });
 });

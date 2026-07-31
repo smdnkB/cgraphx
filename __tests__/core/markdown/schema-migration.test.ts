@@ -50,7 +50,7 @@ const validDoc = [
   'concepts:',
   '  - 测试概念',
   'status: active',
-  'source_type: ai_session',
+  'source_type: work_context',
   'updated: 2026-06-27',
   '---',
   '',

@@ -114,7 +114,7 @@ function mdDoc(opts: {
   }
   lines.push(
     'status: active',
-    'source_type: ai_session',
+    'source_type: work_context',
     'updated: 2026-06-27',
     '---',
     '',

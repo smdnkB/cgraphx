@@ -26,7 +26,7 @@ describe('extractFromFile', () => {
         'concepts:',
         '  - 退订',
         'status: active',
-        'source_type: ai_session',
+        'source_type: work_context',
         'updated: 2026-06-26',
         'aliases:',
         '  - 退款',
@@ -70,7 +70,7 @@ describe('extractFromFile', () => {
       [
         '---',
         'title: A',
-        'document_type: note',
+        'document_type: decision',
         'status: draft',
         'source_type: manual',
         '---',
@@ -85,11 +85,12 @@ describe('extractFromFile', () => {
   });
 
   it('returns skip on invalid enum value', () => {
+    // exploration 为废除枚举值(spec §3.1),新契约下非法 → invalid_enum_value
     const { dir, file } = writeTemp(
       [
         '---',
         'title: A',
-        'document_type: random',
+        'document_type: exploration',
         'domains:',
         '  - A',
         'concepts:',

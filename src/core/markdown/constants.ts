@@ -16,23 +16,13 @@ export const REQUIRED_FRONTMATTER_KEYS = [
 ] as const;
 
 export const DOCUMENT_TYPES = [
-  'conversation',
-  'exploration',
-  'finding',
-  'analysis',
-  'lesson',
-  'warning',
-  'decision',
-  'rule',
-  'architecture',
-  'guide',
-  'tutorial',
-  'runbook',
-  'installation',
-  'api',
-  'faq',
-  'note',
-  'concept', // 实体概念主条目(知识库索引层的枢纽,如"商品"、"礼包")
+  'business-entity', // 业务实体
+  'business-flow', // 业务流程
+  'mechanism', // 技术机制(含架构)
+  'decision', // 决策
+  'rule', // 规则
+  'lesson', // 教训
+  'guide', // 指南(含运维手册/教程/安装/FAQ/API 文档)
 ] as const;
 
 export const DOCUMENT_STATUSES = [
@@ -43,13 +33,11 @@ export const DOCUMENT_STATUSES = [
 ] as const;
 
 export const SOURCE_TYPES = [
-  'ai_session',
-  'human_note',
-  'code_review',
-  'debugging',
-  'architecture_review',
-  'manual',
-  'external_summary',
+  'work_context', // 工作上下文:需求/任务流中沉淀
+  'batch_exploration', // 批量探索:knowledge-init 式项目探索
+  'review', // 评审:代码/架构评审中发现
+  'debugging', // 调查排障:问题调查中发现
+  'manual', // 手工:人工主动整理
 ] as const;
 
 export const LIST_KEYS = [

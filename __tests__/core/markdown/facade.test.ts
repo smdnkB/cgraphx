@@ -5,7 +5,7 @@
  *   - 门面条目可导入且类型正确(值导出 + 类型导出的编译期检查);
  *   - 导出面"不增不减":精确键集合,且不含 MarkdownStore /
  *     MarkdownDocumentRow(防 Row 外泄回归,data-standards「ORM 映射约定」);
- *   - getStats:计数与 fixture 一致;byType 全 17 键(缺省 0);
+ *   - getStats:计数与 fixture 一致;byType 全 7 键(缺省 0);
  *     byStatus 全 4 键;空库 latestIndexedAt 为 null。
  *
  * 真实栈:mkdtemp 临时项目 + 真实索引 + openMarkdownDb,无 mock。
@@ -57,7 +57,7 @@ import { indexMarkdownKnowledgeBase } from '../../../src/core/markdown/indexer';
 const typeChecks = (): void => {
   const dt: DocumentType = 'decision';
   const ds: DocumentStatus = 'active';
-  const st: SourceType = 'ai_session';
+  const st: SourceType = 'work_context';
   const filter: FindFilter = {
     concept: 'x',
     concepts: ['x', 'y'],
@@ -124,7 +124,7 @@ describe('markdown subsystem facade', () => {
     expect(typeof DocumentNotFoundError).toBe('function');
     expect(typeof ProjectNotInitializedError).toBe('function');
     expect(Array.isArray(DOCUMENT_TYPES)).toBe(true);
-    expect(DOCUMENT_TYPES).toHaveLength(17);
+    expect(DOCUMENT_TYPES).toHaveLength(7);
     expect(DOCUMENT_STATUSES).toHaveLength(4);
     expect(SOURCE_TYPES.length).toBeGreaterThan(0);
     expect(KNOWLEDGE_DIR).toBe('docs/knowledge');
@@ -162,7 +162,7 @@ describe('MarkdownQuery.getStats via facade (spec §3.3)', () => {
       ...concepts.map(c => `  - ${c}`),
       ...(tags.length > 0 ? ['tags:', ...tags.map(t => `  - ${t}`)] : []),
       `status: ${status}`,
-      'source_type: ai_session',
+      'source_type: work_context',
       'updated: 2026-06-27',
       '---',
       '',
@@ -222,10 +222,10 @@ describe('MarkdownQuery.getStats via facade (spec §3.3)', () => {
     expect(s.latestIndexedAt).toBeGreaterThan(0);
   });
 
-  it('byType carries all 17 keys with 0 defaults', () => {
+  it('byType carries all 7 keys with 0 defaults', () => {
     const s = q.getStats();
     expect(Object.keys(s.byType).sort()).toEqual([...DOCUMENT_TYPES].sort());
-    expect(Object.keys(s.byType)).toHaveLength(17);
+    expect(Object.keys(s.byType)).toHaveLength(7);
     expect(s.byType.decision).toBe(2);
     expect(s.byType.lesson).toBe(1);
     // 未出现的类型计数为 0
@@ -256,7 +256,7 @@ describe('MarkdownQuery.getStats via facade (spec §3.3)', () => {
       expect(s.domainCount).toBe(0);
       expect(s.tagCount).toBe(0);
       expect(s.latestIndexedAt).toBeNull();
-      expect(Object.keys(s.byType)).toHaveLength(17);
+      expect(Object.keys(s.byType)).toHaveLength(7);
       for (const t of DOCUMENT_TYPES) expect(s.byType[t]).toBe(0);
       for (const st of DOCUMENT_STATUSES) expect(s.byStatus[st]).toBe(0);
     } finally {

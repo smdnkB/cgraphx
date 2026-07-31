@@ -73,13 +73,13 @@ export function validateFrontmatter(
     }
   }
 
-  // Phase 2: enum values
+  // Phase 2: enum values —— detail 列举合法值,便于 docs validate 使用者修正
   const documentType = readScalar(parsed, 'document_type');
   if (!DOCUMENT_TYPE_SET.has(documentType)) {
     return {
       valid: false,
       skipReason: 'invalid_enum_value',
-      detail: `document_type=${documentType}`,
+      detail: `document_type=${documentType} (valid: ${DOCUMENT_TYPES.join(', ')})`,
     };
   }
   const status = readScalar(parsed, 'status');
@@ -87,7 +87,7 @@ export function validateFrontmatter(
     return {
       valid: false,
       skipReason: 'invalid_enum_value',
-      detail: `status=${status}`,
+      detail: `status=${status} (valid: ${DOCUMENT_STATUSES.join(', ')})`,
     };
   }
   const sourceType = readScalar(parsed, 'source_type');
@@ -95,7 +95,7 @@ export function validateFrontmatter(
     return {
       valid: false,
       skipReason: 'invalid_enum_value',
-      detail: `source_type=${sourceType}`,
+      detail: `source_type=${sourceType} (valid: ${SOURCE_TYPES.join(', ')})`,
     };
   }
 

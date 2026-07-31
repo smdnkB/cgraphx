@@ -12,7 +12,7 @@ describe('stripFrontmatter', () => {
     const raw = [
       '---',
       'title: 示例',
-      'document_type: note',
+      'document_type: lesson',
       '---',
       '',
       '# 正文标题',

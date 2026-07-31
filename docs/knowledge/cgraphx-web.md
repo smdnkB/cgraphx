@@ -1,8 +1,8 @@
 ---
 title: cgraphx web
-document_type: concept
+document_type: business-entity
 domains:
-  - web
+  - web 服务
 concepts:
   - cgraphx web
   - 服务基座
@@ -14,8 +14,9 @@ aliases:
 tags:
   - entity
   - architecture
+  - web
 status: active
-source_type: ai_session
+source_type: work_context
 owners:
   - liulongfei
 related_code:

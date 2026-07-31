@@ -84,7 +84,7 @@ function md(
     ...list('aliases', opts.aliases ?? []),
     ...list('related_documents', opts.related ?? []),
     `status: ${opts.status ?? 'active'}`,
-    'source_type: ai_session',
+    'source_type: work_context',
     `updated: ${opts.updated ?? '2026-06-01'}`,
     '---',
     '',
@@ -238,7 +238,8 @@ describe('MarkdownQuery.findPaged (spec §3.3)', () => {
     const badStatus = q.findPaged({ statuses: ['bogus' as never] });
     expect(badStatus).toEqual({ total: 0, items: [] });
     // 复数中夹一个非法值 → 整个维度空候选集 → 空结果
-    const mixed = q.findPaged({ documentTypes: ['decision', 'nope' as never] });
+    // (exploration 为废除枚举值,新枚举契约下非法,见 spec §3.1)
+    const mixed = q.findPaged({ documentTypes: ['decision', 'exploration' as never] });
     expect(mixed).toEqual({ total: 0, items: [] });
   });
 
@@ -337,7 +338,7 @@ describe('MarkdownQuery.findPaged (spec §3.3)', () => {
       title: 'Lesson 05',
       documentType: 'lesson',
       status: 'deprecated',
-      sourceType: 'ai_session',
+      sourceType: 'work_context',
       updatedAt: '2026-05-05',
       summary: 'Lesson 05 summary content.',
       concepts: ['Cycle', 'Retro'],

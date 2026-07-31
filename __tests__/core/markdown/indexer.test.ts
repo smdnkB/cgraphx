@@ -53,7 +53,7 @@ const validDocA = [
   '  - 退订',
   '  - 调账',
   'status: active',
-  'source_type: ai_session',
+  'source_type: work_context',
   'updated: 2026-06-26',
   'tags:',
   '  - high',
@@ -69,7 +69,7 @@ const validDocA = [
 const validDocB = [
   '---',
   'title: 订单生命周期',
-  'document_type: architecture',
+  'document_type: business-flow',
   'domains:',
   '  - 订单域',
   'concepts:',
@@ -89,7 +89,7 @@ const validDocB = [
 const invalidDoc = [
   '---',
   'title: 缺字段',
-  'document_type: note',
+  'document_type: lesson',
   'status: draft',
   'source_type: manual',
   '---',
