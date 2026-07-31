@@ -10,7 +10,6 @@
 - 反例:`update skill`(无 type、英文、零信息)/ `feat: 修复bug并优化性能`(空话)
 - **无票据关联**:需求追踪走 `docs/features/` 目录,不进标题
 - body:非琐碎提交写 body——背景一行(问题/动机)+"-" 列要点;琐碎可只留 subject
-- agent 署名:Claude 协作提交保留尾行 `Co-Authored-By: Claude <noreply@anthropic.com>`(历史多数 + 工具默认)
 
 ## 提交前检查点
 
