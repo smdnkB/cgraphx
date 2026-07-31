@@ -1079,3 +1079,697 @@ a.pager__btn:hover {
     gap: 10px;
   }
 }
+
+/* ===== 文档详情页(B-4 视觉补齐) =====
+ *
+ * 与总览页同一设计语言(§7.7 调色板 / 三字体栈):主内容 + 右栏引用 rail
+ * 两栏,右栏 sticky;以下全部为追加规则,类名来自 pages-detail.ts 的既定
+ * 输出结构,不触及壳 / 侧栏 / 总览页既有选择器。
+ */
+
+/* ---- 两栏布局(窄屏堆叠,见文末详情页响应式分区) ---- */
+
+.detail__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  gap: 32px;
+  align-items: start;
+}
+
+.detail__main {
+  min-width: 0;
+}
+
+/* ---- 返回链接 ---- */
+
+.detail__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 18px;
+  font-size: 13px;
+  color: var(--blue);
+  text-decoration: none;
+  transition: color 0.16s, transform 0.16s;
+}
+
+.detail__back:hover {
+  color: var(--pine-2);
+  transform: translateX(-3px);
+}
+
+/* ---- 头部:类型徽标 + 大标题 + alias/领域/状态辅助行 ---- */
+
+.detail__head {
+  margin-bottom: 22px;
+}
+
+/* 徽标块在详情页收为紧凑行内形态(总览卡片内的块形态不受影响)。 */
+.detail__head .tbadge {
+  display: inline-block;
+  padding: 5px 13px 4px;
+  margin-bottom: 14px;
+}
+
+.detail__head .tbadge b {
+  display: inline;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+.detail__head .tbadge i {
+  margin-left: 7px;
+}
+
+.detail__title {
+  margin: 0;
+  font-family: var(--font-disp);
+  font-size: 33px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.22;
+  color: var(--ink);
+}
+
+.detail__aux {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 11px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* alias / 领域前缀小标(纯 CSS 注入,不改 HTML 结构)。 */
+.detail__alias::before,
+.detail__domains::before {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+  opacity: 0.75;
+  margin-right: 6px;
+}
+
+.detail__alias::before { content: 'ALIAS'; }
+.detail__domains::before { content: 'DOMAIN'; }
+
+/* ---- 分区标签(文档标识 / 摘要 / 正文 共用,mono 极小字 + 尾部细线) ---- */
+
+.detail__seclab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+}
+
+.detail__seclab i {
+  font-style: normal;
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+}
+
+.detail__seclab::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ---- 文档标识区(虚线卡 + 可整选,便于回 CLI/编辑器定位) ---- */
+
+.detail__identity {
+  margin-bottom: 22px;
+  padding: 12px 16px 13px;
+  background: var(--surface-2);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  user-select: all;
+}
+
+.detail__ids {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 5px 20px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.detail__ids dt {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+.detail__ids dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.detail__docid,
+.detail__path {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  word-break: break-all;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.detail__docid {
+  color: var(--pine-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ---- 元数据网格(八组,surface 卡 + 4 列) ---- */
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 17px 26px;
+  margin: 0 0 24px;
+  padding: 17px 22px 19px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(21, 33, 27, 0.04);
+}
+
+.meta__lab {
+  margin-bottom: 7px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+}
+
+.meta__lab i {
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  opacity: 0.75;
+  margin-left: 3px;
+}
+
+.meta__val {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+
+/* 值药丸(概念 / 标签 / 领域等;相关代码用 rust 字呼应行内 code 语义)。 */
+.meta__item,
+.meta__code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  padding: 1.5px 8px;
+  border-radius: 4px;
+  color: var(--ink-2);
+}
+
+.meta__code {
+  color: var(--rust);
+  word-break: break-all;
+}
+
+.meta__empty {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.meta__val time {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink-2);
+}
+
+/* ---- 摘要块(pine-2 左栏 + pine-tint 底) ---- */
+
+.detail__summary {
+  margin-bottom: 28px;
+  padding: 13px 20px 15px;
+  background: var(--pine-tint);
+  border-left: 3px solid var(--pine-2);
+  border-radius: 0 10px 10px 0;
+}
+
+.detail__summary .detail__seclab {
+  color: var(--pine-2);
+}
+
+.detail__summary .detail__seclab::after {
+  background: rgba(29, 107, 79, 0.25);
+}
+
+.detail__summary p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--pine);
+}
+
+/* ---- 全文 prose(markdown-it 输出,唯一直出 HTML 区域) ---- */
+
+.prose {
+  font-size: 14.5px;
+  line-height: 2;
+  color: var(--ink);
+}
+
+.prose h1 {
+  margin: 36px 0 14px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-disp);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.4;
+}
+
+.prose h2 {
+  margin: 32px 0 12px;
+  padding-left: 12px;
+  border-left: 4px solid var(--orange);
+  font-family: var(--font-disp);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
+}
+
+.prose h3 {
+  margin: 24px 0 8px;
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+
+.prose h4,
+.prose h5,
+.prose h6 {
+  margin: 20px 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.prose p {
+  margin: 12px 0;
+}
+
+.prose strong {
+  font-weight: 700;
+  color: var(--pine);
+}
+
+.prose a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(47, 93, 138, 0.35);
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+
+.prose a:hover {
+  color: var(--pine-2);
+  text-decoration-color: var(--pine-2);
+}
+
+.prose ul,
+.prose ol {
+  margin: 12px 0 12px 24px;
+}
+
+.prose li {
+  margin: 6px 0;
+}
+
+.prose li::marker {
+  color: var(--pine-2);
+  font-weight: 600;
+}
+
+/* 行内 code:surface-2 底 rust 字;pre 内重置为深底浅字。 */
+.prose code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--rust);
+}
+
+.prose pre {
+  margin: 16px 0;
+  padding: 16px 20px;
+  background: var(--pine);
+  color: #D9E8DD;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.8;
+  border-radius: 10px;
+  overflow-x: auto;
+  box-shadow: 0 2px 10px rgba(22, 48, 38, 0.16);
+}
+
+.prose pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.prose pre::selection,
+.prose pre *::selection {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.prose pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.prose pre::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+}
+
+/* 引用 / 警示块:gold-tint 底 + 金色左栏(与摘要块同构,换色系)。 */
+.prose blockquote {
+  margin: 16px 0;
+  padding: 12px 18px;
+  background: var(--gold-tint);
+  border: 1px solid #E8D9AF;
+  border-left: 3px solid var(--gold);
+  border-radius: 0 8px 8px 0;
+  color: var(--gold);
+  font-size: 13.5px;
+  line-height: 1.85;
+}
+
+.prose blockquote p {
+  margin: 5px 0;
+}
+
+/* 表格:line 边框 + th surface-2 mono 小字 + 行悬停。 */
+.prose table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 13px;
+}
+
+.prose th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+}
+
+.prose td {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  transition: background 0.15s;
+}
+
+.prose tr:hover td {
+  background: var(--surface);
+}
+
+.prose hr {
+  border: 0;
+  height: 1px;
+  margin: 28px 0;
+  background: linear-gradient(90deg, transparent, var(--line) 18%, var(--line) 82%, transparent);
+}
+
+.prose img {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* ---- 源文件缺失提示(HTTP 200 下的全文区状态,警示色调克制) ---- */
+
+.detail__missing {
+  padding: 12px 16px;
+  background: var(--gold-tint);
+  border: 1px solid #E8D9AF;
+  border-left: 3px solid var(--gold);
+  border-radius: 0 8px 8px 0;
+  color: var(--gold);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.detail__missing code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid #E8D9AF;
+  padding: 1px 7px;
+  border-radius: 4px;
+  color: var(--gold);
+  word-break: break-all;
+}
+
+/* 404 / 占位错误态打磨:仅追加选择器,不动既有 .placeholder 块;总览与壳
+ * 页面不含 .placeholder,故零回归。把链接与行内 code 收进品牌错误态语言
+ * (code 与 .empty__hint code 同口径)。 */
+
+.placeholder a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(47, 93, 138, 0.4);
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+
+.placeholder a:hover {
+  color: var(--pine-2);
+  text-decoration-color: var(--pine-2);
+}
+
+.placeholder p code {
+  font-family: var(--font-mono);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 7px;
+  color: var(--pine-2);
+}
+
+/* ---- 引用 rail(右栏,sticky 避开顶栏) ---- */
+
+.refs {
+  position: sticky;
+  top: 78px;
+  min-width: 0;
+}
+
+.refs__group + .refs__group {
+  margin-top: 24px;
+}
+
+.refs__lab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+}
+
+.refs__lab::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.refs__list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 引用条目卡:悬停 pine-2 边 + 左移 + 左栏点亮(与总览文档卡同一套语言)。 */
+.refs__link {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  text-decoration: none;
+  transition: border-color 0.16s, transform 0.16s, box-shadow 0.16s;
+}
+
+.refs__link::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--pine-2);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.refs__link:hover {
+  border-color: var(--pine-2);
+  transform: translateX(-3px);
+  box-shadow: 0 3px 12px rgba(21, 33, 27, 0.07);
+}
+
+.refs__link:hover::before {
+  transform: scaleY(1);
+}
+
+.refs__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--ink);
+  transition: color 0.16s;
+}
+
+.refs__link:hover .refs__title {
+  color: var(--pine-2);
+}
+
+.refs__path {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: var(--ink-3);
+  word-break: break-all;
+}
+
+.refs__empty {
+  margin: 2px 0 0;
+  padding-left: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* ---- 详情页入场动效(轻微上浮,尊重系统减动效偏好) ---- */
+
+@keyframes detail-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+.detail__back,
+.detail__head,
+.detail__identity,
+.meta-grid,
+.detail__summary,
+.detail__fulltext,
+.refs {
+  animation: detail-rise 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+}
+
+.detail__head { animation-delay: 0.04s; }
+.detail__identity { animation-delay: 0.08s; }
+.meta-grid { animation-delay: 0.12s; }
+.detail__summary { animation-delay: 0.16s; }
+.detail__fulltext { animation-delay: 0.2s; }
+.refs { animation-delay: 0.24s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .detail__back,
+  .detail__head,
+  .detail__identity,
+  .meta-grid,
+  .detail__summary,
+  .detail__fulltext,
+  .refs {
+    animation: none;
+  }
+
+  .detail__back,
+  .refs__link,
+  .refs__link::before,
+  .refs__title {
+    transition: none;
+  }
+}
+
+/* ---- 详情页响应式(追加块,不影响总览页既有媒体规则) ---- */
+
+@media (max-width: 1080px) {
+  .detail__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .refs {
+    position: static;
+  }
+
+  .meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .detail__title {
+    font-size: 27px;
+  }
+
+  .meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail__ids {
+    grid-template-columns: 1fr;
+    gap: 2px 0;
+  }
+
+  .detail__ids dd {
+    margin-bottom: 7px;
+  }
+}

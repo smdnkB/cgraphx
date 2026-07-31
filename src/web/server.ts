@@ -7,6 +7,8 @@
  *
  * 路由骨架:
  *   GET /            知识库总览页(B-3:经 pages-overview 渲染)
+ *   GET /doc/<ident> 文档详情页(B-4:markdown 全文渲染 + 双向引用;ident 为
+ *                    文档 ID 或项目相对路径,源文件路径仅从索引 DB 解析,spec §5.2)
  *   GET /timeline    占位页(平行需求未实现)
  *   GET /assets/*    静态资产(路径穿越防护 + 扩展名白名单)
  *   其他             404 页
@@ -27,6 +29,7 @@ import { openVerifiedConnection } from './bootstrap';
 import { WebStartupError } from './errors';
 import { renderShellPage } from './layout';
 import { renderOverviewPage } from './pages-overview';
+import { renderDetailPage } from './pages-detail';
 import { escapeHtml } from './render-utils';
 
 /** 已启动的 web 服务句柄。 */
@@ -39,12 +42,14 @@ export interface WebServer {
 
 /**
  * 请求处理上下文。`localHost` 在 listen 成功后回填(port 0 时取实际端口);
- * 处理器在请求时读取,绑定完成前不会有请求到达。
+ * 处理器在请求时读取,绑定完成前不会有请求到达。`projectRoot` 为源文件读取
+ * 基准——详情页全文仅从索引 DB 解析出的路径解析到此根内(spec §5.2)。
  */
 interface HandlerContext {
   db: SqliteDatabase;
   version: string;
   localHost: string;
+  projectRoot: string;
 }
 
 /** 静态资产 Content-Type 最小表(扩展名 → MIME)。不在表内的扩展名一律 404。 */
@@ -173,6 +178,35 @@ function tryServeAsset(
 }
 
 /**
+ * 文档详情页路由(spec §3.4 / §5.2 / §11 #7)。
+ *
+ * ident = `/doc/` 之后经 decodeURIComponent 的 64 位十六进制 ID **或**项目相对
+ * 路径。不存在「给个路径就渲染」的端点:源文件路径由 renderDetailPage 从索引
+ * DB 解析(spec §5.2),路由只负责取出 ident 并转发。解码失败(非法百分号
+ * 序列)→ 404;文档未找到 / getReferences 抛 DocumentNotFoundError → 404 页
+ * (均在 renderDetailPage 内收敛为 status:404)。
+ */
+function handleDocDetail(
+  res: http.ServerResponse,
+  ctx: HandlerContext,
+  pathname: string,
+): void {
+  let ident: string;
+  try {
+    ident = decodeURIComponent(pathname.slice('/doc/'.length));
+  } catch {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+  const result = renderDetailPage(ctx.db, ctx.projectRoot, ident, {
+    version: ctx.version,
+    localHost: ctx.localHost,
+  });
+  res.writeHead(result.status, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(result.html);
+}
+
+/**
  * 构造请求处理器。闭包持有上下文(db / 版本 / 本地地址);处理器抛错
  * 统一兜底为 500 页。仅支持 GET;其它方法走「其他 → 404」。
  */
@@ -203,6 +237,10 @@ function createRequestHandler(ctx: HandlerContext): http.RequestListener {
         }
         if (pathname === '/assets' || pathname.startsWith('/assets/')) {
           tryServeAsset(res, ctx, pathname);
+          return;
+        }
+        if (pathname === '/doc' || pathname.startsWith('/doc/')) {
+          handleDocDetail(res, ctx, pathname);
           return;
         }
       }
@@ -237,6 +275,7 @@ export async function startWebServer(options: {
     db: connection.getDb(),
     version: readVersion(),
     localHost: '', // listen 成功后回填实际 host:port(顶栏只读 pill 用)。
+    projectRoot, // 详情页源文件读取基准(路径仅从索引 DB 解析到此根内)。
   };
   const server = http.createServer(createRequestHandler(ctx));
 
