@@ -3,7 +3,7 @@
 适用的 `document_type` 值：
 
 ```text
-concept
+business-entity
 ```
 
 实体主条目是知识库**索引层的枢纽**：一个业务实体（能用名词指代、有属性和生命周期、被多个流程引用，如"商品"、"礼包"、"订单"）独占一个文档。条目只做**定位与指引**——定义、黑话、跨文件才看得出的约束、代码入口；行为细节永远由 agent 去代码里读，不写进条目（不存细节，所以不会腐烂）。
@@ -13,7 +13,7 @@ concept
 ```markdown
 ---
 title: 礼包
-document_type: concept
+document_type: business-entity
 domains:
   - product
 concepts:

@@ -4,12 +4,9 @@
 
 ```text
 guide
-tutorial
-installation
-api
-faq
-note
 ```
+
+`guide` 是统一指南类型，按内容分子类（不另设 document_type）：**教程**（tutorial）/ **安装说明**（installation）/ **API 文档**（api）/ **常见问题**（faq）/ **运维手册**（runbook）。子类信息写进 `tags`（如 `tags: [runbook]`）便于筛选。
 
 ## 完整模板
 
@@ -66,3 +63,15 @@ note
 | Validation | 验证方法 | 说明如何确认操作成功，附验证命令或检查点 |
 | Troubleshooting | 故障排除 | 按症状→原因→修复的格式记录常见问题 |
 | References | 参考资料 | 链接官方文档、相关本地文档或相关代码文件 |
+
+## runbook 子类：运维手册类 guide
+
+运维手册（runbook）是 guide 的子类（用 `tags: [runbook]` 标记），在通用骨架上**必含三要素**：
+
+| 要素 | 对应章节 | 要求 |
+|------|----------|------|
+| 操作步骤 | Steps / Procedure | 有序编号，每步一个明确动作，附预期输出 |
+| 回滚方案 | Rollback | 操作失败或结果异常时如何恢复到操作前状态 |
+| 检查点 | Validation / Verification | 操作前确认前置、操作后确认生效，各给检查命令与判断标准 |
+
+可视场景补充：触发信号（Symptoms——告警/日志特征/监控指标异常）、诊断方法（Diagnosis——确认问题的检查命令与判断标准）、升级路径（Escalation——何时停止自行处理并联系谁）。

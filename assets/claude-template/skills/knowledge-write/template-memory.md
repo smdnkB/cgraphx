@@ -1,17 +1,12 @@
-# 记忆或分析类文档模板
+# 记忆类文档模板
 
 适用的 `document_type` 值：
 
 ```text
-conversation
-exploration
-finding
-analysis
+mechanism
 decision
-lesson
-warning
 rule
-architecture
+lesson
 ```
 
 ## 完整模板
@@ -50,22 +45,6 @@ architecture
 ## Open Questions
 
 将未解决的问题与已确认的发现分开跟踪。
-```
-
-## 简短对话摘要模板
-
-用于简短的 conversation 记录：
-
-```markdown
-# Conversation Memory
-
-## Summary
-
-## Decisions
-
-## Follow-ups
-
-## Reuse Guidance
 ```
 
 ## 各章节填写要点
