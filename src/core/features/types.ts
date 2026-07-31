@@ -5,6 +5,12 @@
  * 每次查询实时扫描文件系统,永不持久化——不会陈旧。
  */
 
+/** 需求阶段:由 docs/features/ 产物存在性实时派生,不写入任何文件。 */
+export const FEATURE_STAGES = ['已规格', '已规划', '已验证'] as const;
+
+/** 派生阶段类型(null = 未规格,无任何可识别产物)。 */
+export type FeatureStage = (typeof FEATURE_STAGES)[number];
+
 /** 一个需求目录的索引条目。 */
 export interface FeatureEntry {
   /** 目录名,即 feature-id(格式 YYYY-MM-DD-[业务ID-]<标题>)。 */
@@ -15,12 +21,10 @@ export interface FeatureEntry {
   title: string;
   /** 负责人(文档头部 `> 负责人:` 行);未声明为 null。 */
   owner: string | null;
-  /** 状态(文档头部 `> 状态:` 行,如 草稿/进行中/已完成);未声明为 null。 */
-  status: string | null;
+  /** 派生阶段(已规格/已规划/已验证);无可识别产物为 null(未规格)。 */
+  stage: FeatureStage | null;
   /** 仓库相对 POSIX 路径,如 docs/features/2026-07-26-X。 */
   path: string;
-  /** 元数据来源:spec 头部 / plan index 头部 / 仅目录名。 */
-  source: 'spec' | 'plan' | 'directory';
 }
 
 /** list 的过滤条件;全部可选,多条件取交集。 */
@@ -29,6 +33,6 @@ export interface FeatureFilter {
   owner?: string;
   /** 标题 / feature-id 子串匹配。 */
   q?: string;
-  /** 状态精确匹配。 */
-  status?: string;
+  /** 阶段精确匹配(已规格 / 已规划 / 已验证)。 */
+  stage?: string;
 }

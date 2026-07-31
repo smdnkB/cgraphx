@@ -12,7 +12,7 @@ import type { FeatureEntry, FeatureFilter } from './types';
 export type { FeatureEntry, FeatureFilter } from './types';
 export { scanFeatures, FEATURES_DIR } from './scanner';
 
-/** 按 owner / q / status 过滤(多条件取交集;空条件不过滤)。 */
+/** 按 owner / q / stage 过滤(多条件取交集;空条件不过滤)。 */
 export function filterFeatures(
   entries: FeatureEntry[],
   filter: FeatureFilter,
@@ -21,7 +21,7 @@ export function filterFeatures(
     if (filter.owner !== undefined && (e.owner ?? '') !== filter.owner) {
       return false;
     }
-    if (filter.status !== undefined && (e.status ?? '') !== filter.status) {
+    if (filter.stage !== undefined && (e.stage ?? '') !== filter.stage) {
       return false;
     }
     if (

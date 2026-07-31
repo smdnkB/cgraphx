@@ -14,6 +14,20 @@ still rejected as `field_type_error`.
 Existing knowledge documents without `owners` must add at least one owner to
 keep validating and indexing. `knowledge-migrate` can backfill the field.
 
+### Breaking — features status field replaced by derived stage
+
+`cgraphx features` no longer reads the hand-maintained `> 状态:` header line.
+The requirement stage is now derived live from the artifacts present in
+`docs/features/<feature-id>/`: a test report → 已验证 (verified), a `plan/` →
+已规划 (planned), a spec → 已规格 (specified), none of these → unset.
+
+- `features list` and `my-features.md`: the 状态 column is replaced by 阶段.
+- `--status` is removed and replaced by `--stage <阶段>` (exact match, no alias).
+- The JSON record field `status` is replaced by `stage`; the internal `source`
+  field is removed.
+- Pre-existing `> 状态:` header lines are ignored and left untouched;
+  负责人 / 日期 / `--mine` are unchanged.
+
 ## 2.0.0
 
 cgraphx 2.0 is a rebuild focused on the three subsystems AI coding agents reuse

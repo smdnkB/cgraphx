@@ -41,12 +41,12 @@ function renderMarkdownIndex(owner: string, rows: FeatureEntry[]): string {
     '',
     `> 负责人:${owner} · 共 ${rows.length} 个需求 · 重新生成:\`cgraphx features sync\``,
     '',
-    '| 日期 | 状态 | 标题 | 目录 |',
+    '| 日期 | 阶段 | 标题 | 目录 |',
     '|---|---|---|---|',
   ];
   for (const r of rows) {
     lines.push(
-      `| ${mdCell(r.date ?? '-')} | ${mdCell(r.status ?? '-')} | ${mdCell(r.title)} | ${mdCell(r.path)}/ |`,
+      `| ${mdCell(r.date ?? '-')} | ${mdCell(r.stage ?? '-')} | ${mdCell(r.title)} | ${mdCell(r.path)}/ |`,
     );
   }
   if (rows.length === 0) {

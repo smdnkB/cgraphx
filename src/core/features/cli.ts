@@ -3,7 +3,7 @@
  *
  * 导出 `registerFeaturesCommands(program)`,由主 CLI(src/cli/index.ts)
  * 调用一次。命令面:`cgraphx features [list]` —— 实时扫描 docs/features/,
- * 按负责人/关键词/状态定位需求目录。团队里每个人跑 `--mine` 拿自己的清单
+ * 按负责人/关键词/阶段定位需求目录。团队里每个人跑 `--mine` 拿自己的清单
  * (负责人 = git config user.name,在 write-spec/write-plan 创建时声明)。
  */
 
@@ -43,12 +43,12 @@ function padEnd(s: string, width: number): string {
 function renderTable(rows: FeatureEntry[]): string {
   const cells = rows.map((r) => [
     r.date ?? '-',
-    r.status ?? '-',
+    r.stage ?? '-',
     r.owner ?? '-',
     r.title,
     r.path,
   ]);
-  const headers = ['日期', '状态', '负责人', '标题', '目录'];
+  const headers = ['日期', '阶段', '负责人', '标题', '目录'];
   const widths = headers.map((h, i) =>
     Math.max(
       displayWidth(h),
@@ -69,7 +69,7 @@ interface ListOptions {
   mine?: boolean;
   owner?: string;
   q?: string;
-  status?: string;
+  stage?: string;
   json?: boolean;
 }
 
@@ -87,7 +87,7 @@ export function registerFeaturesCommands(program: Command): void {
     .option('--mine', '只看当前 git 用户负责的需求(负责人 = git config user.name)')
     .option('--owner <name>', '按负责人精确过滤')
     .option('--q <keyword>', '标题 / feature-id 子串过滤')
-    .option('--status <status>', '按状态精确过滤(如 草稿 / 进行中 / 已完成)')
+    .option('--stage <stage>', '按阶段精确过滤(已规格 / 已规划 / 已验证)')
     .option('--json', '输出机器可读 JSON')
     .action((pathArg: string | undefined, options: ListOptions) => {
       const projectRoot = path.resolve(pathArg || process.cwd());
@@ -111,7 +111,7 @@ export function registerFeaturesCommands(program: Command): void {
       const rows = listFeatures(projectRoot, {
         owner,
         q: options.q,
-        status: options.status,
+        stage: options.stage,
       });
 
       if (options.json) {
