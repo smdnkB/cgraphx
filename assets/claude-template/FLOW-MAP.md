@@ -17,7 +17,7 @@
                         │
                         ▼ 可选
                     write-plan
-                (手段决策:选项+推荐+用户拍板)
+                (手段:无业务可观察→plan 自主;有→回跳 spec)
                         │
                         ▼
     implementation(简单)│ subagent-implement(复杂,需 plan)
@@ -40,7 +40,7 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 - **链**:`/clarify-requirements` → `/write-spec` →(`/write-plan` 可选)
 - **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示)
-- **分工**:clarify 只锁业务边界 + 技术约束(读无界、决策有界);spec 是唯一契约,澄清总结只是输入;手段选型(同步/异步/缓存/定时任务)在 plan 结合代码定,选项 + 推荐,用户拍板
+- **分工**:clarify 只锁业务边界 + 技术约束(读无界、决策有界);spec 是唯一契约,澄清总结只是输入;手段选型在 plan 结合代码定,按业务可观察性分档——无业务可观察后果的 plan 自主并记录,有的回跳 spec 业务拍板
 - **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`plan/<前缀>-index.md` 等;spec 头部声明 `> 负责人:`,收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
 - **PRD 不在主链上**:`/write-prd` 是补充文档,任意时刻可执行,推荐功能发布后按需执行——发布后写的是实际交付的行为,不存在文档与系统漂移的问题
 
