@@ -5,6 +5,7 @@
     "skills/code-impact-docgen",
     "skills/code-impact-init",
     "skills/code-impact-markdown",
-    "skills/precommit-review"
+    "skills/precommit-review",
+    "skills/knowledge-write/template-runbook.md"
   ]
 }
