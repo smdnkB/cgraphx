@@ -201,6 +201,7 @@ cgraphx 2.0 的本质是**架构重构 + 能力裁剪 + 前端扩展**,不是从
 - **存储**:`.cgraphx/` 沿用 + markdown/timeline 共用 cgraphx.db(前缀隔离),不可拆分 DB 或改目录名。
 - **包名版本**:`cgraphx` 2.0.0。
 - **三块 CLI 接口**:沿用 codegraph 现有子命令语义,不可在实现期重设计核心语义。
+  > **2026-07-31 注**:知识库分类体系重设计(《2026-07-31-知识库分类体系重设计-spec》)对 frontmatter 枚举内容做换血式变更——document_type 17→7 值、source_type 7→5 值、domains 语义转向业务域;CLI 子命令行为语义不变(本承诺保持),枚举内容变更是显式破坏性变更,无双轨期,配套 knowledge-migrate 迁移 skill 与 hx 存量迁移。
 - **skill 源位置**:`assets/claude-template/`(程序分发资产),不可放 `.claude/skills/`(那是产物)。
 - **DB 基础层**:不含图谱 schema / migrations / queries.ts。
 - **timeline hook 不变量、dbquery 安全契约**:不可在实现期放宽。
