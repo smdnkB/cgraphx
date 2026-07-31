@@ -1,6 +1,6 @@
 ---
 name: write-plan
-description: 用户要求基于已确认的 spec、规格说明、技术边界、业务规则、代码上下文或当前上下文编写 plan/实现计划/开发计划/Agent 执行计划时使用。用于把规格契约拆成 coding agent 可执行且应忠实执行的任务清单、依赖图、风险控制、文件归档和验收步骤,默认产出 docs/features/{feature-id}/plan/ 下的 <文件前缀>-index.md、<文件前缀>-01-schema.md、<文件前缀>-02-backend.md、<文件前缀>-03-frontend.md、<文件前缀>-04-test.md 等按需文件(文件前缀算法见 SKILL 正文)。不写 PRD/spec、不直接改代码;信息不足时只补问影响计划正确性的关键问题,或将不确定内容标记为【待确认】。
+description: 用户要求基于已确认的 spec、规格说明、技术边界、业务规则、代码上下文或当前上下文编写 plan/实现计划/开发计划/Agent 执行计划时使用。用于把规格契约拆成 coding agent 可执行且应忠实执行的任务清单、依赖图、风险控制、文件归档和验收步骤,默认产出 docs/features/{feature-id}/plan/ 下的 <文件前缀>-index.md、<文件前缀>-01-schema.md、<文件前缀>-02-backend.md、<文件前缀>-03-frontend.md 等按需文件(文件前缀算法见 SKILL 正文)。不写 PRD/spec、不直接改代码;信息不足时只补问影响计划正确性的关键问题,或将不确定内容标记为【待确认】。
 ---
 
 # 编写 Plan (Write Plan)
@@ -11,11 +11,11 @@ description: 用户要求基于已确认的 spec、规格说明、技术边界�
 - **实现手段决策在本阶段做**:同步/异步、缓存、定时任务、选型 = spec 容忍度 + 现有代码 → **选项 + 权衡 + 推荐,用户拍板才锁定**。推荐 ≠ 确认。依据是 spec 的业务可观察要求和既有代码模式(优先复用,YAGNI),不是偏好。
 - **回跳规则**:手段产生 spec 信封之外的业务可观察后果(如选异步 ⇒ 用户要看到"处理中",而 spec 没写)→ 先回 write-spec 补契约,再定手段。
 - **优先级**:spec 显式契约 > plan > docs/guides/ 规范;规范与 spec 冲突时 spec 赢,例外写进风险/备注。
-- **内容边界**:plan 写具体文件/模块/接口/表/测试命令,不写实际代码改动、不写 PRD/spec。澄清总结 = 输入;spec = 唯一契约(plan 不得重新定义);implementation 只有局部工程适配空间。
+- **内容边界**:plan 写具体文件/模块/接口/表,不写实际代码改动、不写 PRD/spec、不排测试任务(测试是代码完成后的独立流程)。澄清总结 = 输入;spec = 唯一契约(plan 不得重新定义);implementation 只有局部工程适配空间。
 
 <HARD-GATE>
 缺少影响计划正确性的关键信息 → 先补问 3-5 个;不阻塞成文的标【待确认】。
-不编造代码结构、接口、表结构、任务链路、测试命令——没查到的一律【待确认】。
+不编造代码结构、接口、表结构、任务链路——没查到的一律【待确认】。
 spec 中"不可留到实现期的决策"或影响任务拆分的【待确认】,必须先解决或明确阻塞,不许留给 implementer 自行决定。
 </HARD-GATE>
 
@@ -37,15 +37,16 @@ spec 中"不可留到实现期的决策"或影响任务拆分的【待确认】,
    - 跨任务一致性:签名/命名/接口/表名/路径跨任务逐字一致;契约两端同文(T-2 输出与 T-5 输入)。
    - 可执行性:每任务有可验证完成条件(具体命令/步骤,不是"应该工作")+ 验证方式。
    - Plan 忠实度:spec 契约完整落到任务,关键方案没留给 implementer 临场决定。
-   - 规范遵循:契约级规范(表命名/字段类型/接口形态/目录分层/测试边界)已落进具体契约、无"按规范建表"式转交;plan 契约不违反规范条目,违反的已记例外;强制引用标注齐全。
+   - 规范遵循:契约级规范(表命名/字段类型/接口形态/目录分层)已落进具体契约、无"按规范建表"式转交;plan 契约不违反规范条目,违反的已记例外;强制引用标注齐全。
    - 提交粒度:标了「独立提交」的任务完成后仓库可工作(能编译、测试不红);提交规范已从 git-standards.md 结晶进 index「提交规范」节;没把强耦合任务误标独立提交。
    - 全局可读:index 看懂全局;按需文件都有真任务、无空文件;未混入代码;手段决策已拍板、超信封后果已回跳。
 6. **Plan Review**:默认派 `plan-document-reviewer` 子 agent(同目录 `plan-document-reviewer-prompt.md`),独立复核完整性/Spec 对齐/可执行性/跨任务一致性/执行契约清晰度/**规范遵循**;校准:只标真正阻塞 implementer 的问题。返回 issues → 修 → 必要时复审。跳过条件:用户明确说不用 / plan 极小 / 时间紧(在 Self-Review 里写跳过理由)。
 
 ## 拆分规则
 
-- 按依赖和风险拆,不按模板拆:数据/契约 → 后端 → 前端 → 测试(依实际依赖调整)。
-- **默认合并**(减少审查次数,写明理由):测试并入实现任务(同 implementer 写码 + 测试);同文件多章节改写归单 implementer;schema 改动 + 对应 migration 测试合一。拆开仅限:测试有独立复杂度(e2e/大集成/多 fixture)、任务过大撑爆上下文、强耦合需实时反馈。
+- 按依赖和风险拆,不按模板拆:数据/契约 → 后端 → 前端(依实际依赖调整)。
+- **默认合并**(减少审查次数,写明理由):同文件多章节改写归单 implementer;schema 改动 + 对应 migration 合一。拆开仅限:任务过大撑爆上下文、强耦合需实时反馈。
+- **测试不进 plan**:单元测试 / 接口测试是代码完成后的独立流程(`write-unit-test-spec` → `write-unit-test-code`、`write-api` → `run-api-test`,各自从 spec 派生),plan 不排测试任务、不写必测路径 / 测试命令、implementer 实现期不写新测试。plan 对测试的唯一要求是完成定义:任务提交后既有测试不被弄红(改动弄红的既有测试须同步修正)。
 - 能独立验证的尽量独立成任务;高风险任务写保护条件和回退思路。
 - **可独立提交的任务标「独立提交」**:任务完成后仓库处于可工作状态(能编译、相关测试不红)→ 标「独立提交:是」并给建议提交粒度 + commit message 主题;强耦合(完成后仓库不可工作、需后续任务才闭合)→ 不标,说明随哪个任务一起提交。判断依据写进任务,不机械地每任务都标——小步提交是为了原子化历史(好 review / revert / bisect),不是为了凑提交数。
 - 可并行任务显式成批 + 写明文件集/公共契约/测试状态互不冲突;不确定 → 串行。
@@ -68,13 +69,12 @@ docs/guides/ 存在时(init-project-guides 产出),写 plan 前按下表读规�
 |---|---|---|
 | schema(建表/改表/迁移/回填) | `data-standards.md` | `data-standards.md` |
 | 接口(API) | `interface-standards.md` | `interface-standards.md` |
-| 测试 | `testing-standards.md` | `testing-standards.md` |
 | 动代码(所有任务) | `coding-standards.md` 契约部分(命名/目录/分层) | `coding-standards.md` |
 | 提交(有「独立提交」任务时) | `git-standards.md` 提交消息规范 + 提交前检查点 | 结晶进 index「提交规范」节(plan 级,一次) |
 
 - **结晶进契约**:契约级规范落进具体契约——任务直接写合规的表名/字段/签名,"按规范建表"式转交是失败(见红线)。index.md「适用规范」节列文件 + 章节标题(不写行号)。
 - **标注是执行期规范送达的唯一载体**:有 plan 时 implementation/subagent-implement 只读「强制引用」标注的规范、不再自行识别——漏标 = 规范在执行期丢失。
-- **git-standards.md 与其他四份不同**:它不是每任务开工前读的规范(提交规范不随任务变),而是 plan 级**一次结晶进 index「提交规范」节**——提交消息格式 + 提交前检查点原文摘录。实施期提交时直接按 index 已结晶的规范写 message、过检查点,precommit 门禁仅作兜底(不再现场学习规范,消除多次提交的重复读取成本)。
+- **git-standards.md 与其他三份不同**:它不是每任务开工前读的规范(提交规范不随任务变),而是 plan 级**一次结晶进 index「提交规范」节**——提交消息格式 + 提交前检查点原文摘录。实施期提交时直接按 index 已结晶的规范写 message、过检查点,precommit 门禁仅作兜底(不再现场学习规范,消除多次提交的重复读取成本)。
 - **规范缺失 = 中断**:docs/guides/ 不存在或所需文件缺失 → 停止写 plan,列缺失文件,提示 init-project-guides 补齐;用户明确说不需要才可继续并记入风险/备注。
 
 ## index.md 必备内容
@@ -86,9 +86,8 @@ feature-id/负责人/日期/来源 spec 摘要(需求阶段由 `cgraphx features
 | 文件 | 适用 | 写什么 |
 |---|---|---|
 | `-01-schema.md` | 新表/字段/迁移/回填 | 迁移目标与**执行顺序**(需求 sql/ 增量文件的序号依此定)、兼容与回滚、数据校验;建表/改表任务按项目 `docs/guides/data-standards.md`「Schema 变更约定」组织(增量文件 + 全量写透同步);不写不可确认的完整 DDL |
-| `-02-backend.md` | 业务逻辑/API/权限/任务/队列 | 规则落点、输入输出与错误处理、幂等/重试/并发、要更新的测试 |
+| `-02-backend.md` | 业务逻辑/API/权限/任务/队列 | 规则落点、输入输出与错误处理、幂等/重试/并发 |
 | `-03-frontend.md` | 页面/表单/交互/可见性 | 用户流程、展示字段与校验、API 对接点、loading/empty/error 状态 |
-| `-04-test.md` | 独立测试任务(默认并入实现后所剩) | 必测业务路径、边界异常、测试命令、手工验收、不测的与原因 |
 
 ## 任务写法
 
@@ -97,7 +96,7 @@ feature-id/负责人/日期/来源 spec 摘要(需求阶段由 `cgraphx features
 
 - 目标: ...
 - 对应 spec 条款: ...(implementer 据此读 spec 原文,不凭任务转述猜)
-- 强制引用: ...(implementer 开工前必读的 docs/guides 文件,按映射机械标注:schema 任务 → data-standards.md;接口任务 → interface-standards.md;动代码任务 → coding-standards.md;测试任务 → testing-standards.md;都不涉及 → 无)
+- 强制引用: ...(implementer 开工前必读的 docs/guides 文件,按映射机械标注:schema 任务 → data-standards.md;接口任务 → interface-standards.md;动代码任务 → coding-standards.md;都不涉及 → 无)
 - 依赖: ...
 - 涉及范围: ...
 - 必须严格执行:
@@ -115,17 +114,17 @@ feature-id/负责人/日期/来源 spec 摘要(需求阶段由 `cgraphx features
   - ...
 ```
 
-编号可按文件域(`S-1`/`B-1`/`F-1`/`T-1`);跨文件依赖必须在 index 体现。任务足够具体让 agent 能执行,但不替 agent 写代码。
+编号可按文件域(`S-1`/`B-1`/`F-1`);跨文件依赖必须在 index 体现。任务足够具体让 agent 能执行,但不替 agent 写代码。
 
 ## No Placeholders
 
-"具体要求/完成条件/验证方式"必须写到 implementer 可直接执行。以下是 **plan 失败**:TBD/TODO/"implement later" · "add appropriate error handling"/"handle edge cases" · "write tests for the above"(无具体 case)· "similar to Task N" · 只说"做什么"不给可执行步骤/命令/验证条件 · 引用未在任何任务定义的符号 · "implementer 自行决定方案"(关键路线/口径/契约/权限不得留到实现期)。
+"具体要求/完成条件/验证方式"必须写到 implementer 可直接执行。以下是 **plan 失败**:TBD/TODO/"implement later" · "add appropriate error handling"/"handle edge cases" · "similar to Task N" · 只说"做什么"不给可执行步骤/命令/验证条件 · 引用未在任何任务定义的符号 · "implementer 自行决定方案"(关键路线/口径/契约/权限不得留到实现期)。
 
 例外:plan 期确实无法预知的(如第三方 API 实际返回结构),标【待确认】+ "implementer 跑 X 命令后锁定"——诚实标注,不是 placeholder。
 
 ## 产物位置与命名
 
-- 路径:`docs/features/<feature-id>/plan/<文件前缀>-index.md`(+ 按需 `-01-schema` / `-02-backend` / `-03-frontend` / `-04-test`)。无可写项目上下文 → 回复中直接输出同等结构正文。
+- 路径:`docs/features/<feature-id>/plan/<文件前缀>-index.md`(+ 按需 `-01-schema` / `-02-backend` / `-03-frontend`)。无可写项目上下文 → 回复中直接输出同等结构正文。
 - **feature-id**:`YYYY-MM-DD-[业务ID-]<标题>`。业务ID 可选(字母数字 + 连字符);标题允许中/英/混合,**不得**中文转英文 slug;重名追加短后缀;同目录已有 PRD/spec 优先复用同一 feature-id。
 - **文件前缀**:有业务ID = `<业务ID>-<标题>`,无 = `<标题>`。
 - 敏感字符(`/ \ : * ? " < > |`)拒绝,要求用户重命名,不自动替换。

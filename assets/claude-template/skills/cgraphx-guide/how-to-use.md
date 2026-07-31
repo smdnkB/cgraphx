@@ -45,7 +45,7 @@ npm uninstall -g cgraphx  # 卸载 CLI
 
 **1. 立规范 · `/init-project-guides`**
 
-生成 `docs/guides/` 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的**有意偏离**——「SQL 禁止 `ORDER BY`」「金额一律 `decimal(12,2)`」这类最容易偏离又没有工具兜底的约定。新项目立起步默认(注明「待演进」);已有项目从代码/git 历史挖既有约定固化成文。这些 guide 是后续任务的**强制读点**,会被 `/write-plan` 结晶成契约。
+生成 `docs/guides/` 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的**有意偏离**——「SQL 禁止 `ORDER BY`」「金额一律 `decimal(12,2)`」这类最容易偏离又没有工具兜底的约定。新项目立起步默认(注明「待演进」);已有项目从代码/git 历史挖既有约定固化成文。这些 guide 是后续任务的**强制读点**:编码/接口/数据三份会被 `/write-plan` 结晶成契约(测试规范不走 plan,由测试流程 `write-unit-test-code`/`run-api-test` 自读;Git 结晶进 plan 提交规范节)。
 
 **2. 聊业务 · 和 Claude Code 聊项目**
 
@@ -114,7 +114,7 @@ knowledge-recall(自动召回)
 
 ### 单元测试流程
 
-和开发流程平行,共享 spec 作为输入,时序任意(典型是代码先行、测试补充)。
+**需求开发完成后**的独立流程,共享 spec 作为输入(与接口测试同节奏)。
 
 - `/write-unit-test-spec` 基于 spec 产出测试规格文档(零代码依赖——该测哪些路径/边界/异常)
 - `/write-unit-test-code` 基于测试规格 + 已有实现,填实测试代码 + 跑测试 + 出报告
@@ -178,7 +178,7 @@ docs/
 │       ├── <前缀>-api-spec.md        /write-api            可选  开发完成后
 │       ├── <前缀>-测试报告.md         /run-api-test         可选  write-api 后
 │       ├── <前缀>-测试验证.jsonl      /run-api-test         可选  自动产出
-│       ├── <前缀>-单元测试-spec.md    /write-unit-test-spec 可选  spec 后
+│       ├── <前缀>-单元测试-spec.md    /write-unit-test-spec 可选  开发完成后
 │       ├── <前缀>-单元测试报告.md     /write-unit-test-code 可选  开发完成后
 │       └── <前缀>-设计文档.md         /write-design-doc     可选  发布后按需
 │

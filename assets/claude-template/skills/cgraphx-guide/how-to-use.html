@@ -406,7 +406,7 @@ footer p { margin: 0; }
   <div class="pipeline">
     <div class="step">
       <h4>立规范 · <code>/init-project-guides</code></h4>
-      <p>生成 <code>docs/guides/</code> 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的<strong>有意偏离</strong>——「SQL 禁止 ORDER BY」「金额一律 decimal(12,2)」这类最容易偏离又没有工具兜底的约定。这些 guide 是后续任务的<strong>强制读点</strong>,会被 <code>/write-plan</code> 结晶成契约。</p>
+      <p>生成 <code>docs/guides/</code> 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的<strong>有意偏离</strong>——「SQL 禁止 ORDER BY」「金额一律 decimal(12,2)」这类最容易偏离又没有工具兜底的约定。这些 guide 是后续任务的<strong>强制读点</strong>:编码/接口/数据三份会被 <code>/write-plan</code> 结晶成契约(测试规范不走 plan,由测试流程 <code>write-unit-test-code</code>/<code>run-api-test</code> 自读;Git 结晶进 plan 提交规范节)。</p>
     </div>
     <div class="step">
       <h4>聊业务 · 和 Claude Code 聊项目</h4>
@@ -487,7 +487,7 @@ footer p { margin: 0; }
   </div>
 
   <div id="tab-unit-test" class="tab-panel">
-    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">和开发流程平行,共享 spec 作为输入,时序任意<em>(典型是代码先行、测试补充)</em>。</p>
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>需求开发完成后</strong>的独立流程,共享 spec 作为输入(与接口测试同节奏)。</p>
     <ul class="phase-list">
       <li><code>/write-unit-test-spec</code> 基于 spec 产出测试规格文档<em>(零代码依赖——该测哪些路径/边界/异常)</em></li>
       <li><code>/write-unit-test-code</code> 基于测试规格 + 已有实现,填实测试代码 + 跑测试 + 出报告 <em>—— 找不到测试规格则退出要求先跑 write-unit-test-spec</em></li>
@@ -569,7 +569,7 @@ footer p { margin: 0; }
 │       ├── &lt;前缀&gt;-api-spec.md        <span class="skill">/write-api</span>            <span class="opt">可选</span>  <span class="ann">开发完成后</span>
 │       ├── &lt;前缀&gt;-测试报告.md         <span class="skill">/run-api-test</span>         <span class="opt">可选</span>  <span class="ann">write-api 后</span>
 │       ├── &lt;前缀&gt;-测试验证.jsonl      <span class="skill">/run-api-test</span>         <span class="opt">可选</span>  <span class="ann">自动产出</span>
-│       ├── &lt;前缀&gt;-单元测试-spec.md    <span class="skill">/write-unit-test-spec</span> <span class="opt">可选</span>  <span class="ann">spec 后</span>
+│       ├── &lt;前缀&gt;-单元测试-spec.md    <span class="skill">/write-unit-test-spec</span> <span class="opt">可选</span>  <span class="ann">开发完成后</span>
 │       ├── &lt;前缀&gt;-单元测试报告.md     <span class="skill">/write-unit-test-code</span> <span class="opt">可选</span>  <span class="ann">开发完成后</span>
 │       └── &lt;前缀&gt;-设计文档.md         <span class="skill">/write-design-doc</span>     <span class="post">发布后</span>  <span class="ann">按需</span>
 │

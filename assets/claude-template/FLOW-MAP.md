@@ -26,7 +26,7 @@
         ▼               ▼                        ▼
   write-api        write-unit-test-spec     交付收尾:
   → run-api-test   → write-unit-test-code   沉淀提示 → knowledge-write
-  (接口测试)     (单元测试,与开发并行或开发结束)     commit 门禁 → git-standards.md
+  (接口测试)     (单元测试,代码完成后)     commit 门禁 → git-standards.md
 
   ── 推荐发布后 · 按需(不在主链,不参与门禁); 原因: 发布前写 PRD:写的是预期,实现过程中一定会漂移,发布后 PRD 就过期了,给业务方看反而误导 ──────────────────
   write-prd(业务方/客户审阅,任意时刻可执行,推荐发布后)
@@ -48,7 +48,7 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 - **链**:`/implementation`(简单:1-3 文件 / 单模块)| `/subagent-implement`(复杂:≥3 任务跨域,主 agent 只协调、派子 agent 实现)
 - **前置**:spec 必有;subagent-implement 需 plan
-- **强制读**:规范由 plan 打「强制引用」标注(write-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md);有 plan 时 implementation / subagent-implement 只读标注,无 plan 时 implementation 自行识别;**缺失 → 中断,先 `/init-project-guides` 补齐**
+- **强制读**:规范由 plan 打「强制引用」标注(write-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation / subagent-implement 只读标注,无 plan 时 implementation 自行识别;**缺失 → 中断,先 `/init-project-guides` 补齐**
 - **小步提交**:plan 把可独立提交的任务(完成后仓库可工作)标「独立提交」并把 `git-standards.md` 提交规范结晶进 index「提交规范」节;implementation / subagent-implement 每完成一个标注任务并按规范自查后提交(原子历史,好 review / revert / bisect),precommit 门禁退化为兜底。未标注的任务不擅自提交,push 永远归用户。
 - **收尾**:沉淀提示(新增/变更实体、坑、隐式约束 → `/knowledge-write`);commit 门禁由 precommit-check hook 指向 `docs/guides/git-standards.md`,被拦 → 按 plan 已结晶的「提交前检查点」自查 staged diff(plan 无结晶时才 Read 原文件)
 
@@ -62,7 +62,7 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 ## 单元测试流程
 
 - **链**:`/write-unit-test-spec`(零代码依赖,从 spec 派生场景)→ `/write-unit-test-code`(填实测试 + 跑 + 出报告;找不到测试规格直接退出要求先跑前者)
-- **前置**:spec;与开发并行,时序任意(典型代码先行、测试补充)
+- **前置**:spec + 实现完成(代码写完后独立流程,与接口测试同节奏)
 - **产物**:feature 目录下测试规格与报告 + 项目测试目录的测试代码
 
 ## 知识库
@@ -87,9 +87,9 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 | `data-standards.md` | schema 任务(含「Schema 变更约定」) |
 | `interface-standards.md` | 接口任务 |
 | `coding-standards.md` | 所有任务(契约部分) |
-| `testing-standards.md` | 测试任务 |
+| `testing-standards.md` | plan 不读;由测试流程(`write-unit-test-code` / `run-api-test`)自读 |
 | `git-standards.md` | 有「独立提交」任务时结晶进 index「提交规范」节(plan 级,一次)+ precommit-check 门禁兜底(deny → 按已结晶的检查点自查) |
-- **执行期送达**:任务按映射打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。**git-standards.md 例外**:不是每任务强制引用,而是 plan 级结晶进 index「提交规范」节,实施期提交时直接用、门禁仅兜底——消除多次小步提交的重复读取成本。
+- **执行期送达**:任务按映射打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。**git-standards.md 例外**:不是每任务强制引用,而是 plan 级结晶进 index「提交规范」节,实施期提交时直接用、门禁仅兜底——消除多次小步提交的重复读取成本。**testing-standards.md 也不走 plan 标注**:测试不进 plan,由独立测试流程(`write-unit-test-code` / `run-api-test`)自读。
 
 ## 事后文档(发布后 · 按需,不在开发主链)
 
