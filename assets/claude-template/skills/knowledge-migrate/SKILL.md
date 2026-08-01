@@ -1,5 +1,6 @@
 ---
 name: knowledge-migrate
+disable-model-invocation: true
 description: 将存量知识库(docs/knowledge/)批量迁移到新分类体系——逐篇读内容,按内容主题判定新 document_type / source_type / 业务域(不按旧值机械映射),服务模块移入 tags,仅改写 frontmatter 四个字段(保留正文与其余全部字段;owners 现为必填,缺失时补填默认负责人);流程为 dry-run 报告 → 用户确认 → 执行 → 逐篇 docs validate(失败回滚该条)→ 剔除归档 → 索引重建提议 → 抽检。Use when 迁移知识库/分类迁移/类型迁移/frontmatter 迁移/知识库换血/migrate knowledge/taxonomy migration.
 ---
 

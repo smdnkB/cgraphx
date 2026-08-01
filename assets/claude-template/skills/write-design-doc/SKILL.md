@@ -1,5 +1,6 @@
 ---
 name: write-design-doc
+disable-model-invocation: true
 description: 功能发布后(或自测通过后)按需执行——从本地图谱知识库(docs/knowledge/)和当前 feature 目录下的 spec/plan 召回素材,合成面向研发和技术负责人的"设计文档"。默认输出到 docs/features/<feature-id>/<文件前缀>-设计文档.md。支持 HTML 和 Markdown 两种输出格式,可按章节结构进行配置。不在开发主链上,不参与流程门禁,纯事后文档合成。
 ---
 

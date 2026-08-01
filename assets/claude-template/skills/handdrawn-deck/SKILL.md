@@ -1,5 +1,6 @@
 ---
 name: handdrawn-deck
+disable-model-invocation: true
 version: 1.1.0
 description: >
   手绘白板系列演示编排器：把一段内容/一个主题拆成多页手绘信息图，

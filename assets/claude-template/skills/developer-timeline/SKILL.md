@@ -1,5 +1,6 @@
 ---
 name: developer-timeline
+disable-model-invocation: true
 description: 基于 Developer Timeline 事件流生成日报、周报、月报、阶段总结、工作复盘、交付汇报和使用习惯分析。Use when 日报/周报/月报/工作总结/最近做了什么/上周做了什么/这个月干了啥/开发历史/会话历史/使用习惯分析/效率分析/工具使用统计/工作节奏/修改过什么/最近改过/上次什么时候改/git 提交历史/开发统计。当用户问"我/你最近做了什么"或要求报告时优先用本 skill。
 ---
 

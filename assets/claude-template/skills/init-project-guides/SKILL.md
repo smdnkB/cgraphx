@@ -1,5 +1,6 @@
 ---
 name: init-project-guides
+disable-model-invocation: true
 description: 为项目初始化 docs/guides/ 规范文件模板。根据技术栈(Java/Go/TS/...)动态生成编码规范、接口规范、数据与模型规范、测试规范、Git 提交规范等速查文档。Use when 用户需要为项目建立开发规范文档体系,或新项目起步时需要规范文件骨架。
 ---
 

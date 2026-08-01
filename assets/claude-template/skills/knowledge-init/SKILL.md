@@ -1,5 +1,6 @@
 ---
 name: knowledge-init
+disable-model-invocation: true
 description: Explore an unfamiliar project automatically to build a business knowledge base. Discovers entry points via grep/Read, spawns sub-agents to explore each one in depth, saves knowledge documents to docs/knowledge/, then merges cross-cutting concepts and deep-dives. Requires knowledge-write skill. Use when the user asks to explore, understand, or map out a new project, or wants to build a knowledge base for a project from scratch.
 ---
 

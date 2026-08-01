@@ -1,5 +1,6 @@
 ---
 name: export-table-ddl
+disable-model-invocation: true
 description: 导出项目用到的全部数据库表的 DDL 到可检索目录(按工程分目录,每工程一个 INDEX.md 列表名+注释,details 目录放完整建表语句)。Use when 导出表结构/导出DDL/导出建表语句/拉表结构/批量查DDL/项目表清单/数据库表导出/dump schema/导出全部表.
 ---
 

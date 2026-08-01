@@ -1,5 +1,6 @@
 ---
 name: write-api-doc
+disable-model-invocation: true
 description: 在 feature 接口开发完毕后(可选环节),从 spec 的接口章节 + 实际代码反向提取,生成静态只读 HTML 接口文档,默认输出到 docs/features/<feature-id>/<文件前缀>-接口文档.html。覆盖本次 feature 新增的接口(严格新增,不含修改),支持 Node/Python/Java/Go/Rust/C#/PHP/Ruby 主流 web 框架。不做交互式 Swagger、不重新定义 spec。
 ---
 
