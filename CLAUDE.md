@@ -83,3 +83,7 @@ cgraphx 的 skill 流程针对 AI 辅助研发中反复出现的几类浪费,逐
 **7. 工作不可追溯。** 过了两周领导问「这个月做了什么」,只能翻 git log 和聊天记录拼凑;agent 会话里的操作(改了哪些文件、跑了什么命令、卡在哪一步)更是无痕。解法是**自动记录 + 按需汇报**:timeline 通过五个隐藏 hook 子命令自动记录 Claude Code 事件(每次约 5ms,不阻塞工作流),落到 `.cgraphx/cgraphx.db` 的 `timeline_*` 表;需要时 `/developer-timeline` 从事件流生成日报、周报、月报、阶段总结、使用习惯分析——不用回忆,不用拼凑,数据一直在。
 
 **8. 工具升级留残渣。** skill 改名或移除后,旧目录在已部署项目中永久残留,agent 仍能触发过时的旧 skill。`deprecated-assets.json`(模板根目录)列出已废弃路径,`cgraphx install` / `uninstall` 时自动清理(`src/cli/installer/claude-assets.ts` 的 `cleanDeprecatedAssets`)。新增废弃路径只需往清单加一行。
+
+## 工作内容和准则
+- 我们这个项目主要是用来开发和优化skill, 由于AI的模仿能力极强, 因此我们写skill时尽量直接展示最好案例, 避免啰嗦半天的介绍. 
+- 对于禁止内容, 主要目的是避免AI做了我们未提到的内容,倒不是怕把我们已经提出案例的内容做错
