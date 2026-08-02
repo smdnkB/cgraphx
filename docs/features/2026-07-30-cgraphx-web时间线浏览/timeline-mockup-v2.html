@@ -1,0 +1,665 @@
+<!doctype html>
+<!--
+  开发时间线页 · 静态稿 v2(2026-08-02,取代 v1)
+  v1 → v2 变化:事件流从「平铺按天」改为「日期 > 会话卡 > 事件」三层
+  (用户拍板:右侧以会话为固定分组维度);git_commit 100% 无 session_id
+  (数据事实),设独立「Git 提交」栏;子 agent 仅完成行可呈现(记录层
+  现状:无 pre 事件、内部步骤不入库),以专属行型呈现并附数据约束说明。
+
+  会话数据取自真实 DB(.cgraphx/cgraphx.db 只读查询):
+  - 8e06 = 当前会话(本对话),065b = 跨天大会话(895 事件/30 轮),
+    4256 = 今日另一会话;时间为 Asia/Shanghai 本地时区。
+
+  本稿将触发 spec 修订:§1.3 非目标「不做会话视图」翻转、§3.3 分组
+  语义更新、新增子 agent 呈现条款。修订经 /write-spec 落契约后再 plan。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>开发时间线 · cgraphx web(静态稿 v2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ========== 设计令牌(逐字取自 app.css :root) ========== */
+:root {
+  --paper: #F1F4ED;  --surface: #FBFCF8;  --surface-2: #F2F5EC;
+  --ink: #15211B;  --ink-2: #4C5B52;  --ink-3: #8A978E;  --line: #DCE3D8;
+  --pine: #163B2F;  --pine-2: #1D6B4F;  --pine-tint: #E1EFE6;
+  --blue: #2F5D8A;  --blue-tint: #E3ECF5;
+  --gold: #8A6A1F;  --gold-tint: #F5EDD9;
+  --rust: #B14E22;  --rust-tint: #F7E7DC;
+  --orange: #C4551F;  --orange-tint: #FBE9DD;
+  --font-disp: 'Space Grotesk', 'Noto Sans SC', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Noto Sans SC', system-ui, -apple-system, 'PingFang SC', 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: var(--font-body); color: var(--ink);
+  background:
+    radial-gradient(900px 500px at -5% -10%, rgba(29, 107, 79, 0.07), transparent 60%),
+    radial-gradient(800px 600px at 105% 110%, rgba(196, 85, 31, 0.06), transparent 60%),
+    var(--paper);
+  min-height: 100vh;
+}
+::selection { background: var(--pine-2); color: #fff; }
+
+/* ========== 应用壳(逐字取自 app.css) ========== */
+.shell { display: flex; min-height: 100vh; }
+.shell__nav {
+  width: 224px; flex: 0 0 224px; position: sticky; top: 0; height: 100vh;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 3px),
+    linear-gradient(170deg, rgba(22, 48, 38, 0.59), rgba(0, 0, 0, 0) 55%), var(--pine);
+  color: #E8EFE9; display: flex; flex-direction: column; padding: 22px 14px 16px;
+}
+.nav__brand { font-family: var(--font-disp); font-weight: 700; font-size: 21px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+.nav__brand-tag { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; color: #0F241C; background: var(--orange); padding: 2.5px 7px; border-radius: 4px; }
+.nav__label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em; color: #7E958A; padding: 0 10px; margin: 22px 0 6px; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav__item { display: flex; align-items: center; gap: 9px; padding: 8.5px 10px; border-radius: 7px; color: #C9D8CE; font-size: 13.5px; text-decoration: none; position: relative; transition: background 0.18s, color 0.18s; }
+.nav__item::before { content: ''; position: absolute; left: -2px; top: 22%; bottom: 22%; width: 3px; border-radius: 3px; background: var(--orange); transform: scaleY(0); transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+a.nav__item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.nav__item--active { background: rgba(255, 255, 255, 0.09); color: #fff; font-weight: 500; }
+.nav__item--active::before { transform: scaleY(1); }
+.nav__item--disabled { opacity: 0.45; cursor: not-allowed; }
+.nav__glyph { font-family: var(--font-mono); font-size: 12px; opacity: 0.75; width: 16px; text-align: center; }
+.nav__soon { margin-left: auto; font-family: var(--font-mono); font-size: 9px; font-style: normal; letter-spacing: 0.1em; border: 1px solid #4E6B5D; color: #8FA79A; padding: 1.5px 5px; border-radius: 4px; }
+.nav__foot { margin-top: auto; border-top: 1px solid rgba(255, 255, 255, 0.09); padding: 14px 10px 2px; font-family: var(--font-mono); font-size: 10.5px; line-height: 1.9; color: #87A093; }
+.shell__body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.shell__topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 36px 14px; background: linear-gradient(var(--paper) 82%, rgba(241, 244, 237, 0)); }
+.topbar__title { font-family: var(--font-disp); font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.topbar__right { display: flex; align-items: center; gap: 9px; }
+.readonly-pill { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 6px 13px; white-space: nowrap; }
+.readonly-pill__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pine-2); animation: readonly-pulse 2.2s infinite; }
+@keyframes readonly-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(29, 107, 79, 0.35); } 55% { box-shadow: 0 0 0 6px rgba(29, 107, 79, 0); } }
+.shell__main { padding: 8px 36px 80px; }
+.mock-pill { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--gold); background: var(--gold-tint); border: 1px dashed #D9C48F; border-radius: 99px; padding: 5px 12px; white-space: nowrap; }
+
+/* ========== 复用基座组件(取自 app.css) ========== */
+.filters { position: sticky; top: 78px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; max-height: calc(100vh - 100px); overflow: auto; box-shadow: 0 1px 2px rgba(21, 33, 27, 0.04); }
+.filters__head { margin-bottom: 14px; }
+.filters__head b { font-family: var(--font-disp); font-size: 14.5px; letter-spacing: -0.01em; }
+.filters__hint { font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-3); margin-top: 6px; letter-spacing: 0.03em; }
+.filters__group { margin-top: 18px; }
+.filters__lab { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.2em; color: var(--ink-3); margin-bottom: 9px; font-weight: 600; }
+.filters__lab i { font-style: normal; letter-spacing: 0.1em; opacity: 0.75; }
+.filters__chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.search-box { display: flex; align-items: center; gap: 8px; border: 1.5px solid var(--line); border-radius: 8px; padding: 8px 11px; background: #fff; transition: border-color 0.2s, box-shadow 0.2s; }
+.search-box:focus-within { border-color: var(--pine-2); box-shadow: 0 0 0 3px rgba(29, 107, 79, 0.12); }
+.search-box__glyph { color: var(--ink-3); font-size: 13px; }
+.search-box input { flex: 1; border: 0; outline: 0; font-family: var(--font-body); font-size: 12.5px; min-width: 0; background: none; color: var(--ink); }
+.chip { font-size: 12px; padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line); background: #fff; color: var(--ink-2); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: border-color 0.16s, background 0.16s, color 0.16s, transform 0.16s; }
+.chip:hover { border-color: var(--ink-3); transform: translateY(-1px); }
+.chip__en { font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-3); letter-spacing: 0.04em; }
+.chip__n { font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); }
+.chip--on { background: var(--pine); border-color: var(--pine); color: #fff; }
+.chip--on .chip__n, .chip--on .chip__en { color: rgba(255, 255, 255, 0.72); }
+.chip--prompt.chip--on { background: var(--blue); border-color: var(--blue); }
+.chip--pre.chip--on { background: var(--pine-2); border-color: var(--pine-2); }
+.chip--post.chip--on { background: #4E7D64; border-color: #4E7D64; }
+.chip--stop.chip--on { background: var(--ink-2); border-color: var(--ink-2); }
+.chip--git.chip--on { background: var(--orange); border-color: var(--orange); }
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 2px; }
+.seg__btn { border: 0; background: none; font-family: var(--font-body); font-size: 12px; color: var(--ink-2); padding: 4.5px 12px; border-radius: 6px; cursor: pointer; transition: background 0.16s, color 0.16s; }
+.seg__btn:hover { color: var(--ink); }
+.seg__btn--on { background: var(--pine); color: #fff; font-weight: 500; }
+.statbar { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(21, 33, 27, 0.04); }
+.stat { padding: 16px 22px; border-left: 1px solid var(--line); }
+.stat:first-child { border-left: 0; }
+.stat__num { font-family: var(--font-disp); font-size: 34px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: var(--pine); }
+.stat:nth-child(2) .stat__num { color: var(--blue); }
+.stat:nth-child(3) .stat__num { color: var(--gold); }
+.stat__num--tool { font-family: var(--font-mono); font-size: 27px; font-weight: 600; letter-spacing: -0.01em; }
+.stat__lab { font-size: 11.5px; color: var(--ink-2); margin-top: 7px; }
+.stat__lab i { font-style: normal; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.16em; color: var(--ink-3); display: block; margin-top: 2px; }
+.list-head { display: flex; align-items: center; justify-content: space-between; margin: 26px 0 4px; gap: 16px; flex-wrap: wrap; }
+.list-head h2 { font-family: var(--font-disp); font-size: 19px; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; margin: 0; }
+.count-badge { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--pine); background: var(--pine-tint); padding: 2.5px 9px; border-radius: 99px; }
+.empty { border: 1.5px dashed var(--line); border-radius: 14px; padding: 40px 24px 36px; text-align: center; background: rgba(251, 252, 248, 0.6); }
+.empty__glyph { width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 21px; background: var(--pine-tint); color: var(--pine-2); }
+.empty__title { font-family: var(--font-disp); font-size: 15.5px; font-weight: 700; }
+.empty__sub { font-size: 12.5px; color: var(--ink-2); margin: 8px auto 0; max-width: 340px; line-height: 1.8; }
+.empty__code { display: inline-block; margin-top: 14px; font-family: var(--font-mono); font-size: 11.5px; color: var(--pine); background: var(--pine-tint); border-radius: 7px; padding: 7px 14px; }
+.empty__btn { display: inline-block; margin-top: 14px; font-size: 12px; color: var(--blue); border: 1px dashed var(--blue); border-radius: 99px; padding: 6px 16px; cursor: pointer; background: none; }
+.empty__btn:hover { background: var(--blue-tint); }
+
+/* ========== 时间线页 · v2 新增(实现期迁入 app.css) ========== */
+.tl-layout { display: grid; grid-template-columns: 252px 1fr; gap: 28px; align-items: start; }
+.tl-main { min-width: 0; }
+
+/* 概况条第 4 格:近 7 日柱图 */
+.bars { display: flex; align-items: flex-end; gap: 6px; height: 46px; padding-top: 4px; }
+.bars__b { flex: 1; max-width: 18px; border-radius: 3px 3px 0 0; background: rgba(29, 107, 79, 0.24); transition: background 0.15s, transform 0.15s; }
+.bars__b:hover { background: var(--rust); transform: scaleY(1.04); transform-origin: bottom; }
+.bars__b--today { background: var(--pine-2); }
+.bars__b--zero { height: 3px !important; background: var(--line); }
+.bars__labs { display: flex; gap: 6px; margin-top: 5px; }
+.bars__labs span { flex: 1; max-width: 18px; text-align: center; font-family: var(--font-mono); font-size: 8.5px; color: var(--ink-3); }
+.bars__labs span.on { color: var(--orange); font-weight: 600; }
+
+/* 图例 */
+.legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-2); }
+.legend i { width: 8px; height: 8px; border-radius: 2.5px; }
+
+/* 事件类型徽章(5 类型 + 子 agent 专属行型) */
+.evbadge { display: inline-block; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.05em; padding: 3.5px 0; border-radius: 6px; text-align: center; border: 1px solid transparent; white-space: nowrap; }
+.evbadge--prompt { background: var(--blue-tint); color: var(--blue); border-color: #C9DAEB; }
+.evbadge--pre    { background: var(--pine-2); color: #fff; }
+.evbadge--post   { background: var(--pine-tint); color: var(--pine-2); border-color: #C6E0CF; }
+.evbadge--stop   { background: var(--surface-2); color: var(--ink-3); border-color: var(--line); }
+.evbadge--git    { background: var(--orange-tint); color: var(--orange); border-color: #F0CDB4; }
+.evbadge--agent  { background: var(--gold-tint); color: var(--gold); border: 1px dashed #D9C48F; }
+
+/* 日期分组头(大号日期 + 当日会话/事件统计) */
+.tl-day { display: flex; align-items: baseline; gap: 14px; margin: 34px 0 14px; }
+.tl-day:first-of-type { margin-top: 14px; }
+.tl-day b { font-family: var(--font-disp); font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+.tl-day em { font-style: normal; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
+.tl-day .daymeta { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 3px 11px; }
+.tl-day::after { content: ''; flex-basis: 100%; height: 0; }
+.tl-daywrap { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+
+/* 入场动效(尊重减动效偏好) */
+.rise { animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.rise:nth-of-type(2) { animation-delay: 0.06s; }
+.rise:nth-of-type(3) { animation-delay: 0.12s; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ── 会话卡 ── */
+.sess {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  margin-bottom: 12px; position: relative; overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+.sess::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3.5px; background: var(--pine-2); transform: scaleY(0); transform-origin: top; transition: transform 0.28s; }
+.sess:hover { border-color: #B9CBBC; box-shadow: 0 6px 22px rgba(21, 33, 27, 0.07); transform: translateX(3px); }
+.sess:hover::before { transform: scaleY(1); }
+.sess__head { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 14px 18px; cursor: pointer; list-style: none; }
+.sess__head::-webkit-details-marker { display: none; }
+.sess__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-3); flex: 0 0 auto; }
+.sess--live .sess__dot { background: var(--pine-2); animation: readonly-pulse 2.2s infinite; }
+.sess__titlewrap { min-width: 0; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.sess__title { font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.sess__id { font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); }
+.sess__tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.sess__tag--live { background: var(--pine-tint); color: var(--pine-2); border: 1px solid #C6E0CF; }
+.sess__tag--cross { background: var(--gold-tint); color: var(--gold); border: 1px dashed #D9C48F; }
+.sess__meta { display: flex; align-items: center; gap: 14px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-2); white-space: nowrap; }
+.sess__meta b { color: var(--pine); font-weight: 600; }
+.sess__chev { color: var(--ink-3); font-size: 11px; transition: transform 0.22s; }
+.sess[open] .sess__chev { transform: rotate(90deg); }
+.sess__body { border-top: 1px solid var(--line); padding: 6px 18px 14px 20px; background: linear-gradient(rgba(242, 245, 236, 0.4), transparent 120px); }
+
+/* 轮次分隔(一个 turn = prompt → tools → stop) */
+.turn { display: flex; align-items: center; gap: 10px; margin: 12px 0 7px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em; color: var(--ink-3); font-weight: 600; }
+.turn::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line), transparent); }
+
+/* 事件行(会话卡内,比 v1 更紧凑) */
+.evlist { display: flex; flex-direction: column; gap: 5px; }
+.ev { background: transparent; border: 1px solid transparent; border-radius: 9px; position: relative; transition: background 0.16s, border-color 0.16s; }
+.ev:hover { background: #fff; border-color: var(--line); }
+.ev summary { display: grid; grid-template-columns: 52px 76px 1fr 20px; gap: 12px; align-items: center; padding: 8px 12px; cursor: pointer; list-style: none; }
+.ev summary::-webkit-details-marker { display: none; }
+.ev--static > .ev__row { display: grid; grid-template-columns: 52px 76px 1fr 20px; gap: 12px; align-items: center; padding: 8px 12px; }
+.ev__time { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.ev__body { min-width: 0; }
+.ev__line { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.ev__tool { font-size: 13px; font-weight: 700; letter-spacing: -0.01em; flex: 0 0 auto; }
+.ev__path { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ev__sum { font-size: 12.5px; color: var(--ink-2); margin: 2px 0 0; line-height: 1.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev__sum .ok { color: var(--pine-2); font-weight: 500; }
+.ev__sum .dur { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
+.ev__chev { color: var(--ink-3); font-size: 10px; text-align: center; transition: transform 0.2s; }
+.ev[open] .ev__chev { transform: rotate(90deg); }
+.ev--stop .ev__chev, .ev--agent .ev__chev { visibility: visible; }
+.ev--noexp .ev__chev { visibility: hidden; }
+
+/* 子 agent 行:金色虚线左缘,与 5 类型行区分 */
+.ev--agent { border-left: 2px dashed #D9C48F; margin-left: 2px; }
+.ev--agent:hover { border-left-color: var(--gold); }
+
+/* payload 原文 */
+.ev__payload { border-top: 1px dashed var(--line); background: var(--surface-2); border-radius: 0 0 9px 9px; padding: 12px 18px 13px 156px; margin-top: -4px; }
+.ev__payload-lab { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.2em; color: var(--ink-3); margin-bottom: 7px; font-weight: 600; }
+.ev__json { margin: 0; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.85; white-space: pre-wrap; word-break: break-all; color: var(--ink-3); }
+.jk { color: var(--pine-2); } .js { color: var(--gold); } .jn { color: var(--blue); } .jb { color: var(--rust); }
+.j-trunc { color: var(--rust); font-style: normal; border-bottom: 1px dashed var(--rust); cursor: help; }
+.ev__payload-note { margin-top: 9px; font-size: 11px; color: var(--gold); line-height: 1.7; display: flex; gap: 6px; }
+.ev__payload-note::before { content: '⚠'; flex: 0 0 auto; }
+
+/* 会话内折叠条 */
+.ev-fold { border: 1px dashed var(--line); border-radius: 8px; background: none; padding: 7px 14px; text-align: center; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-2); cursor: pointer; width: 100%; margin-top: 6px; transition: border-color 0.15s, color 0.15s; }
+.ev-fold:hover { border-color: var(--pine-2); color: var(--pine-2); }
+
+/* ── Git 提交栏(无会话归属,独立呈现) ── */
+.commits { margin-top: 14px; border: 1px solid var(--line); border-left: 3px solid var(--orange); border-radius: 10px; background: rgba(251, 252, 248, 0.75); overflow: hidden; }
+.commits__head { display: flex; align-items: center; gap: 10px; padding: 10px 16px 8px; }
+.commits__head b { font-family: var(--font-disp); font-size: 12.5px; font-weight: 700; color: var(--orange); }
+.commits__head em { font-style: normal; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: var(--ink-3); }
+.commits__head .count-badge { color: var(--orange); background: var(--orange-tint); margin-left: auto; }
+.commit { display: grid; grid-template-columns: 52px 68px 1fr auto; gap: 12px; align-items: baseline; padding: 7px 16px; border-top: 1px dashed var(--line); transition: background 0.15s; }
+.commit:hover { background: var(--orange-tint); }
+.commit__time { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+.commit__hash { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--orange); }
+.commit__msg { font-size: 12.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commit__diff { font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
+.commit__diff .add { color: var(--pine-2); } .commit__diff .del { color: var(--rust); }
+.commits__empty { padding: 12px 16px; border-top: 1px dashed var(--line); font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); }
+
+/* 查询契约提示 */
+.tl-contract { margin-top: 24px; padding: 11px 16px; border: 1px dashed var(--line); border-radius: 9px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); line-height: 1.8; }
+.tl-contract b { color: var(--ink-2); font-weight: 600; }
+
+/* 附录 */
+.appendix { margin-top: 64px; }
+.appendix__lab { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; color: var(--ink-3); }
+.appendix__lab::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.appendix__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+@media (max-width: 1080px) {
+  .tl-layout { grid-template-columns: 1fr; }
+  .filters { position: static; max-height: none; }
+  .appendix__grid { grid-template-columns: 1fr; }
+  .ev__payload { padding-left: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="shell__nav">
+    <div class="nav__brand">cgraphx <span class="nav__brand-tag">WEB</span></div>
+    <div class="nav__label">LOCAL DATA</div>
+    <nav class="nav">
+      <a class="nav__item" href="#"><span class="nav__glyph">◈</span>知识库</a>
+      <a class="nav__item nav__item--active" href="#" aria-current="page"><span class="nav__glyph">≡</span>开发时间线</a>
+      <span class="nav__item nav__item--disabled"><span class="nav__glyph">⛁</span>数据库<em class="nav__soon">后续</em></span>
+    </nav>
+    <div class="nav__foot">cgraphx v2.0.0<br>local · read-only viewer</div>
+  </aside>
+
+  <div class="shell__body">
+    <header class="shell__topbar">
+      <div class="topbar__title">开发时间线</div>
+      <div class="topbar__right">
+        <span class="mock-pill">STATIC MOCKUP · v2 · 会话分组 · 仅用于范围确认</span>
+        <span class="readonly-pill"><span class="readonly-pill__dot"></span>本地 · 127.0.0.1:2468 · 只读</span>
+      </div>
+    </header>
+
+    <main class="shell__main">
+      <div class="tl-layout">
+
+        <!-- ═══ 左:筛选面板(与 v1 一致,维度不变) ═══ -->
+        <aside class="filters">
+          <div class="filters__head">
+            <b>筛选</b>
+            <div class="filters__hint">各维度可组合 · 类型全不选 = 不过滤</div>
+          </div>
+          <div class="filters__group">
+            <div class="filters__lab">时间范围 <i>TIME RANGE</i></div>
+            <div class="seg">
+              <button class="seg__btn">今天</button>
+              <button class="seg__btn seg__btn--on">近 7 天</button>
+            </div>
+            <div class="filters__hint">会话按其活跃时间是否落入范围而显隐</div>
+          </div>
+          <div class="filters__group">
+            <div class="filters__lab">事件类型 · 多选 <i>EVENT TYPE</i></div>
+            <div class="filters__chips">
+              <a class="chip chip--prompt"><span>Prompt</span><span class="chip__en">user_prompt</span><span class="chip__n">158</span></a>
+              <a class="chip chip--pre"><span>工具调用</span><span class="chip__en">pre_tool_use</span><span class="chip__n">1444</span></a>
+              <a class="chip chip--post"><span>工具完成</span><span class="chip__en">post_tool_use</span><span class="chip__n">2242</span></a>
+              <a class="chip chip--stop"><span>Stop</span><span class="chip__en">stop</span><span class="chip__n">134</span></a>
+              <a class="chip chip--git"><span>Git 提交</span><span class="chip__en">git_commit</span><span class="chip__n">45</span></a>
+            </div>
+            <div class="filters__hint">计数 = 当前时间范围内各类型事件数</div>
+          </div>
+          <div class="filters__group">
+            <div class="filters__lab">工具 <i>TOOL · 精确匹配</i></div>
+            <label class="search-box"><span class="search-box__glyph">⌕</span><input placeholder="tool_name,如 Bash"></label>
+            <div class="filters__hint">填 Agent 可专看子 agent 完成行</div>
+          </div>
+          <div class="filters__group">
+            <div class="filters__lab">文件 <i>FILE · 子串匹配</i></div>
+            <label class="search-box"><span class="search-box__glyph">⌕</span><input placeholder="路径片段,匹配 tool_args + commit_files"></label>
+          </div>
+          <div class="filters__group">
+            <div class="filters__lab">会话 <i>SESSION</i></div>
+            <label class="search-box"><span class="search-box__glyph">⌕</span><input placeholder="session_id"></label>
+            <div class="filters__hint">定位单个会话:仅该会话卡呈现</div>
+          </div>
+        </aside>
+
+        <!-- ═══ 右:概况条 + 日期分组 × 会话卡 ═══ -->
+        <div class="tl-main">
+
+          <!-- 概况数据条(spec §3.1,今日口径;活跃会话数在会话视图下更醒目) -->
+          <div class="statbar">
+            <div class="stat">
+              <div class="stat__num">96</div>
+              <div class="stat__lab">今日事件数<i>TODAY EVENTS</i></div>
+            </div>
+            <div class="stat">
+              <div class="stat__num">3</div>
+              <div class="stat__lab">今日活跃会话<i>ACTIVE SESSIONS</i></div>
+            </div>
+            <div class="stat">
+              <div class="stat__num stat__num--tool">Bash</div>
+              <div class="stat__lab">今日最常用工具<i>TOP TOOL · 31 次</i></div>
+            </div>
+            <div class="stat">
+              <div class="bars">
+                <span class="bars__b bars__b--zero" style="height:3px"  title="7月27日 周一 · 0 条"></span>
+                <span class="bars__b bars__b--zero" style="height:3px"  title="7月28日 周二 · 0 条"></span>
+                <span class="bars__b" style="height:31px" title="7月29日 周三 · 486 条"></span>
+                <span class="bars__b" style="height:46px" title="7月30日 周四 · 719 条"></span>
+                <span class="bars__b" style="height:41px" title="7月31日 周五 · 638 条"></span>
+                <span class="bars__b" style="height:18px" title="8月1日 周六 · 287 条"></span>
+                <span class="bars__b bars__b--today" style="height:7px" title="8月2日 周日(今天)· 96 条"></span>
+              </div>
+              <div class="bars__labs"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span class="on">日</span></div>
+              <div class="stat__lab">近 7 日事件量<i>LAST 7 DAYS · 共 2,226 条</i></div>
+            </div>
+          </div>
+
+          <div class="list-head">
+            <h2>事件流 <span class="count-badge">2,226 条 · 13 会话</span></h2>
+            <div class="legend">
+              <span><i style="background:var(--blue)"></i>Prompt</span>
+              <span><i style="background:var(--pine-2)"></i>工具调用</span>
+              <span><i style="background:#7FA98F"></i>工具完成</span>
+              <span><i style="background:var(--ink-3)"></i>Stop</span>
+              <span><i style="background:var(--orange)"></i>Git 提交</span>
+              <span><i style="background:var(--gold);border-radius:50%"></i>▸▸ 子Agent(仅完成行)</span>
+            </div>
+          </div>
+
+          <!-- ════ 今天 ════ -->
+          <div class="tl-daywrap rise">
+            <div class="tl-day"><b>今天</b><em>8月2日 周日</em><span class="daymeta">3 个会话 · 96 条事件 · 0 提交</span></div>
+
+            <!-- 会话卡 1:当前会话(本对话),展开态,含轮次分隔 + 子 agent 行 -->
+            <details class="sess sess--live" open>
+              <summary class="sess__head">
+                <span class="sess__dot"></span>
+                <div class="sess__titlewrap">
+                  <span class="sess__title">「我们还有一个遗留任务 docs/features/2026-07-30-cgraphx-web时间线浏览」</span>
+                  <span class="sess__id">8e06</span>
+                  <span class="sess__tag sess__tag--live">● 当前会话</span>
+                </div>
+                <div class="sess__meta">
+                  <span>20:34 起</span><span><b>2</b> 轮</span><span><b>60</b> 条</span>
+                  <span class="sess__chev">▶</span>
+                </div>
+              </summary>
+              <div class="sess__body">
+                <div class="turn">轮 2 · 20:54</div>
+                <div class="evlist">
+                  <div class="ev ev--prompt ev--static ev--noexp">
+                    <div class="ev__row">
+                      <span class="ev__time">20:54</span>
+                      <span class="evbadge evbadge--prompt">Prompt</span>
+                      <div class="ev__body">
+                        <div class="ev__line"><span class="ev__path">用户输入</span></div>
+                        <p class="ev__sum">左侧筛选维度,右侧应该有一个固定的维度,就是基于会话的…</p>
+                      </div>
+                      <span class="ev__chev">▶</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="turn">轮 1 · 20:34</div>
+                <div class="evlist">
+                  <details class="ev ev--post">
+                    <summary>
+                      <span class="ev__time">20:56</span>
+                      <span class="evbadge evbadge--post">✓ 工具完成</span>
+                      <div class="ev__body">
+                        <div class="ev__line"><b class="ev__tool">Bash</b><span class="ev__path">node -e …query timeline_events…</span></div>
+                        <p class="ev__sum"><span class="ok">exit 0</span> · 会话/轮次/子 agent 数据现实核查 <span class="dur">· 88ms</span></p>
+                      </div>
+                      <span class="ev__chev">▶</span>
+                    </summary>
+                    <div class="ev__payload">
+                      <div class="ev__payload-lab">PAYLOAD · 原文</div>
+<pre class="ev__json">{
+  <span class="jk">"tool_name"</span>: <span class="js">"Bash"</span>,
+  <span class="jk">"tool_result_summary"</span>: <span class="js">"exit 0 · stdout 31 lines"</span>,
+  <span class="jk">"duration_ms"</span>: <span class="jn">88</span>
+}</pre>
+                    </div>
+                  </details>
+
+                  <!-- 子 agent 完成行:记录层现状 = 仅此一行(无启动、无内部步骤) -->
+                  <details class="ev ev--agent" open>
+                    <summary>
+                      <span class="ev__time">20:34</span>
+                      <span class="evbadge evbadge--agent">▸▸ 子Agent</span>
+                      <div class="ev__body">
+                        <div class="ev__line"><b class="ev__tool">knowledge-recall</b><span class="ev__path">✓ 完成 · 147s</span></div>
+                        <p class="ev__sum">召回时间线相关概念 —— 知识库语义匹配,返回命中实体主条目</p>
+                      </div>
+                      <span class="ev__chev">▶</span>
+                    </summary>
+                    <div class="ev__payload">
+                      <div class="ev__payload-lab">PAYLOAD · 原文(POST_TOOL_USE / AGENT)</div>
+<pre class="ev__json">{
+  <span class="jk">"tool_name"</span>: <span class="js">"Agent"</span>,
+  <span class="jk">"description"</span>: <span class="js">"召回时间线相关概念"</span>,
+  <span class="jk">"prompt"</span>: <span class="js">"用户要推进一个遗留需求「cgraphx-web 时间线浏览」——通过本地 web 服务浏览<span class="j-trunc" title="入库时记录层已截断,展开内容即最终内容">…</span>"</span>,
+  <span class="jk">"tool_result_summary"</span>: <span class="js">"{\"success\":true,\"payload\":{}}"</span>
+}</pre>
+                      <div class="ev__payload-note">记录层现状:子 agent 仅「完成」事件入库 —— 启动时刻与内部工具步骤不记录;此行呈现的是完成时刻。branch 信息未记录,无法呈现。</div>
+                    </div>
+                  </details>
+
+                  <div class="ev ev--pre ev--static ev--noexp">
+                    <div class="ev__row">
+                      <span class="ev__time">20:34</span>
+                      <span class="evbadge evbadge--pre">工具调用</span>
+                      <div class="ev__body">
+                        <div class="ev__line"><b class="ev__tool">Bash</b><span class="ev__path">ls docs/features/2026-07-30-cgraphx-web时间线浏览/</span></div>
+                        <p class="ev__sum">列遗留需求目录</p>
+                      </div>
+                      <span class="ev__chev">▶</span>
+                    </div>
+                  </div>
+
+                  <div class="ev ev--prompt ev--static ev--noexp">
+                    <div class="ev__row">
+                      <span class="ev__time">20:34</span>
+                      <span class="evbadge evbadge--prompt">Prompt</span>
+                      <div class="ev__body">
+                        <div class="ev__line"><span class="ev__path">用户输入 · /clarify-requirements</span></div>
+                        <p class="ev__sum">我们还有一个遗留任务 docs/features/2026-07-30-cgraphx-web时间线浏览</p>
+                      </div>
+                      <span class="ev__chev">▶</span>
+                    </div>
+                  </div>
+                  <button class="ev-fold">本会话当日其余 56 条 · 展开 ▾</button>
+                </div>
+              </div>
+            </details>
+
+            <!-- 会话卡 2:折叠态 -->
+            <details class="sess">
+              <summary class="sess__head">
+                <span class="sess__dot"></span>
+                <div class="sess__titlewrap">
+                  <span class="sess__title">「handdrawn-deck 呼吸段切分器 + 文档补全」</span>
+                  <span class="sess__id">4256</span>
+                </div>
+                <div class="sess__meta">
+                  <span>12:39 – 14:45</span><span><b>2</b> 轮</span><span><b>24</b> 条</span>
+                  <span class="sess__chev">▶</span>
+                </div>
+              </summary>
+              <div class="sess__body"><div class="ev-fold">展开会话 24 条事件 ▾</div></div>
+            </details>
+
+            <!-- 会话卡 3:跨天会话,当日卡片只呈现今日事件 -->
+            <details class="sess">
+              <summary class="sess__head">
+                <span class="sess__dot"></span>
+                <div class="sess__titlewrap">
+                  <span class="sess__title">「handdrawn-deck 页面批量单元化(page 11–15)」</span>
+                  <span class="sess__id">065b</span>
+                  <span class="sess__tag sess__tag--cross">跨天 · 示当日事件</span>
+                </div>
+                <div class="sess__meta">
+                  <span>起 8/1 21:35</span><span>当日 <b>12</b> 条</span><span>全天 <b>895</b> 条 / <b>30</b> 轮</span>
+                  <span class="sess__chev">▶</span>
+                </div>
+              </summary>
+              <div class="sess__body"><div class="ev-fold">展开当日 12 条事件 ▾</div></div>
+            </details>
+
+            <!-- Git 提交栏:当日无提交 → 空态一行 -->
+            <div class="commits">
+              <div class="commits__head"><b>Git 提交</b><em>无会话归属 · 独立呈现</em><span class="count-badge">0</span></div>
+              <div class="commits__empty">今天还没有提交。</div>
+            </div>
+          </div>
+
+          <!-- ════ 昨天 ════ -->
+          <div class="tl-daywrap rise">
+            <div class="tl-day"><b>昨天</b><em>8月1日 周六</em><span class="daymeta">2 个会话 · 287 条事件 · 3 提交</span></div>
+
+            <details class="sess">
+              <summary class="sess__head">
+                <span class="sess__dot"></span>
+                <div class="sess__titlewrap">
+                  <span class="sess__title">「skill 流程纪律:直接展示最好案例,避免啰嗦介绍」</span>
+                  <span class="sess__id">0255</span>
+                </div>
+                <div class="sess__meta">
+                  <span>09:58 – 17:51</span><span><b>26</b> 轮</span><span><b>149</b> 条</span>
+                  <span class="sess__chev">▶</span>
+                </div>
+              </summary>
+              <div class="sess__body"><div class="ev-fold">展开会话 149 条事件 ▾</div></div>
+            </details>
+
+            <details class="sess">
+              <summary class="sess__head">
+                <span class="sess__dot"></span>
+                <div class="sess__titlewrap">
+                  <span class="sess__title">「handdrawn-deck 页面批量单元化(page 11–15)」</span>
+                  <span class="sess__id">065b</span>
+                  <span class="sess__tag sess__tag--cross">跨天 · 示当日事件</span>
+                </div>
+                <div class="sess__meta">
+                  <span>21:35 起</span><span>当日 <b>138</b> 条</span><span>全天 <b>895</b> 条 / <b>30</b> 轮</span>
+                  <span class="sess__chev">▶</span>
+                </div>
+              </summary>
+              <div class="sess__body"><div class="ev-fold">展开当日 138 条事件 ▾</div></div>
+            </details>
+
+            <div class="commits">
+              <div class="commits__head"><b>Git 提交</b><em>无会话归属 · 独立呈现</em><span class="count-badge">3</span></div>
+              <div class="commit">
+                <span class="commit__time">16:28</span><span class="commit__hash">8117025</span>
+                <span class="commit__msg">feat(skills): handdrawn-deck 呼吸段切分器 seg.cjs + 交付目录收敛 docs/handdrawn-deck/</span>
+                <span class="commit__diff"><span class="add">+312</span> <span class="del">−48</span></span>
+              </div>
+              <div class="commit">
+                <span class="commit__time">15:52</span><span class="commit__hash">0cce89a</span>
+                <span class="commit__msg">docs: CLAUDE.md 补「工作内容和准则」——skill 直接展示最好案例,不啰嗦介绍</span>
+                <span class="commit__diff"><span class="add">+12</span> <span class="del">−0</span></span>
+              </div>
+              <div class="commit">
+                <span class="commit__time">15:17</span><span class="commit__hash">410dd7d</span>
+                <span class="commit__msg">refactor(skills): init-project-guides 生成形态纪律——正例+来源标注取代反例画廊</span>
+                <span class="commit__diff"><span class="add">+87</span> <span class="del">−143</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ 7月31日 ════ -->
+          <div class="tl-daywrap rise">
+            <div class="tl-day"><b>7月31日</b><em>周五</em><span class="daymeta">2 个会话 · 638 条事件 · 5 提交</span></div>
+
+            <details class="sess">
+              <summary class="sess__head">
+                <span class="sess__dot"></span>
+                <div class="sess__titlewrap">
+                  <span class="sess__title">「cgraphx web 基座 + 知识库两页面实现」</span>
+                  <span class="sess__id">5028</span>
+                </div>
+                <div class="sess__meta">
+                  <span>14:20 – 17:41</span><span><b>19</b> 轮</span><span><b>428</b> 条</span>
+                  <span class="sess__chev">▶</span>
+                </div>
+              </summary>
+              <div class="sess__body"><div class="ev-fold">展开会话 428 条事件 ▾</div></div>
+            </details>
+
+            <div class="commits">
+              <div class="commits__head"><b>Git 提交</b><em>无会话归属 · 独立呈现</em><span class="count-badge">5</span></div>
+              <div class="commit">
+                <span class="commit__time">17:26</span><span class="commit__hash">7fc319f</span>
+                <span class="commit__msg">feat(web): 类型体系换血——spec 条款先行修订 + TYPE_LABELS/TYPE_TONES 7 项</span>
+                <span class="commit__diff"><span class="add">+56</span> <span class="del">−78</span></span>
+              </div>
+              <div class="commit">
+                <span class="commit__time">17:11</span><span class="commit__hash">46a7c08</span>
+                <span class="commit__msg">refactor(web): 时间呈现助手提取到 render-utils——消除两页面逐字重复</span>
+                <span class="commit__diff"><span class="add">+64</span> <span class="del">−58</span></span>
+              </div>
+              <div class="commit">
+                <span class="commit__time">16:58</span><span class="commit__hash">32ca2d6</span>
+                <span class="commit__msg">feat(web): 文档详情页——markdown-it 全文渲染、双向引用、路径边界</span>
+                <span class="commit__diff"><span class="add">+512</span> <span class="del">−21</span></span>
+              </div>
+              <div class="commit">
+                <span class="commit__time">16:20</span><span class="commit__hash">a56b3a5</span>
+                <span class="commit__msg">feat(web): 知识库总览页——五维筛选、文档列表分页、统计条</span>
+                <span class="commit__diff"><span class="add">+693</span> <span class="del">−12</span></span>
+              </div>
+              <button class="ev-fold" style="margin:8px 12px 12px; width:calc(100% - 24px)">其余 2 条提交(f763f15 web 基座 …)· 展开 ▾</button>
+            </div>
+          </div>
+
+          <div class="tl-contract">
+            <b>分组口径</b> · 日期按本地时区分组;会话卡出现在其活跃的每个日期下(跨天会话逐日呈现当日事件)·
+            会话内按轮次组织、倒序;git_commit 无 session_id(数据事实),独立成栏不猜测归属 ·
+            <b>查询契约</b> · queryEvents 上限 10,000 条/次,超限提示收窄,不静默截断
+          </div>
+
+          <!-- ═══ 附录:空状态(spec §3.4 未变) ═══ -->
+          <div class="appendix">
+            <div class="appendix__lab">附录 · 空状态三态(SPEC §3.4 · 非主页面布局)</div>
+            <div class="appendix__grid">
+              <div class="empty">
+                <div class="empty__glyph">≡</div>
+                <div class="empty__title">今天还没有开发事件</div>
+                <div class="empty__sub">timeline hooks 在你使用 Claude Code 时自动记录事件 —— 开始工作后刷新页面即可看到。</div>
+              </div>
+              <div class="empty">
+                <div class="empty__glyph">⌀</div>
+                <div class="empty__title">没有符合筛选条件的事件</div>
+                <div class="empty__sub">当前筛选组合在近 7 天内没有匹配任何会话或事件。</div>
+                <button class="empty__btn">重置筛选</button>
+              </div>
+              <div class="empty">
+                <div class="empty__glyph">⛁</div>
+                <div class="empty__title">尚未记录任何事件</div>
+                <div class="empty__sub">在目标项目接入 timeline hooks,事件将自动落入 .cgraphx/cgraphx.db:</div>
+                <div class="empty__code">$ npx cgraphx timeline install</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>
