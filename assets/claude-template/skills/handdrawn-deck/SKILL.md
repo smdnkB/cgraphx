@@ -39,7 +39,8 @@ tags: [handdrawn, deck, slideshow, presentation, orchestration, multi-page, spee
 ├── SKILL.md（本文档）        流程 / 确认单格式 / 组装规范 / 验收
 └── references/
     ├── deck-template.html    放映壳模板（深色放映台 + 16:9 画幅 + 演讲者视图 + cue 导播 + 键盘导航）
-    └── gen-script-md.cjs     逐字稿 → 可读讲稿 .md 的生成器（口播逐字插值，零漂移）
+    ├── gen-script-md.cjs     逐字稿 → 可读讲稿 .md 的生成器（口播逐字插值，零漂移）
+    └── seg.cjs               呼吸段切分器（从壳提取 segmentScript + 自检 + 切口播 + 查 stages 行数）
 ```
 
 | 角色 | skill | 管什么 | 不管什么 |
@@ -83,9 +84,10 @@ tags: [handdrawn, deck, slideshow, presentation, orchestration, multi-page, spee
 - **拆页**：把段落骨架切成 N 页——每页只承载**一个**信息结构（超过 6 个节点 → 拆页，
   不塞）；**页边界落在讲稿的自然节拍上**（一页可对应多个呼吸段，一段不要跨两页）。
   页数预算：汇报 4–8 页为宜。
-- **呼吸段**：用壳的同款 `segmentScript` 把每页口播切成呼吸段——从
-  `references/deck-template.html` 正则提取该函数用 node 跑，**禁止目测手切**
-  （必须与壳逐字一致，否则 stages 表和放映壳错位）。
+- **呼吸段**：把 `references/seg.cjs` 拷进 deck 目录跑（从同目录 `deck.html` 提取壳的
+  `segmentScript`——提取源自检断言后才切，输出每页段数 + stages 行数核对），**禁止目测手切**。
+  口播断句用 `。！？；`（恒切段）；>120 字无句末点的长段落才退按半角逗号/顿号切——
+  **全角逗号「，」不是退避分隔符**，别指望它切段。
 - **单元规划**：把该页的视觉元素按旁白节拍拆成**单元**（unit = 一组「讲到才画」的
   内容，起叙事名如 `g-db`、`g-ex1-frame`），逐段写进 **stages 表**
   （一段一行，`draw` = 该段新增单元；契约见 §5）。讲到什么画什么——
@@ -105,7 +107,8 @@ tags: [handdrawn, deck, slideshow, presentation, orchestration, multi-page, spee
 - 引擎 §5 图标治理照走：复用 → 草稿 → 稳定后沉淀（全 deck 共享一个库，
   前一页的草稿沉淀后，后一页立刻能复用）。
 
-**⑥ 组装 deck**：交付目录 `docs/handdrawn-deck-<topic>/`：
+**⑥ 组装 deck**：交付目录 `docs/handdrawn-deck/<topic>/`（全部 deck 收在这一个父目录下，
+不在 docs/ 根平铺 `handdrawn-deck-*` 兄弟目录）：
 - `notes.js`（③ 已产出；④ 已补 stages 表）；
 - 复制 `references/deck-template.html` → `deck.html`，只填脚本顶部 `PAGES` 数组
   （`{file, title, no}`，顺序即放映顺序）；**改过页 / 讲稿就 bump 壳顶部的 `V`**
@@ -137,11 +140,13 @@ tags: [handdrawn, deck, slideshow, presentation, orchestration, multi-page, spee
 
 ```
 系列：<名称>（N 页 · 布局覆盖 <X> 种，相邻不重复 ✓）
+系列级设计（全 deck 共享，拆页时一次定死，不逐页现定）：
+    色彩语义 <如 桃 = 问题侧 / 薄荷 = 解法侧> · 系列锚 <角标 / 高亮块 / 吊牌角色标注> · 标题话术 <逗号短句 / 问句体>
 
 - P1 封面 [§1 · 呼吸段 1–2 · 0.5 分]  布局：标题大字 + 涂鸦散点
     关键信息：「<一句话>」
     单元规划：seg1 → g-speaker, g-title · seg2 → g-sub, g-oss
-    图标预案：复用 ×<n>（<列出>）· 草稿 ×<m>（<哪页产出>）
+    图标预案：复用 ×<n>（<列出>）· 草稿 ×<m>（<哪页产出 → 哪几页复用>）
 - P2 <标题> [§2 · 呼吸段 1–4 · 3 分]  布局：对比分栏
     关键信息：「<一句话>」
     单元规划：seg1 → g-title, g-lh, g-bub · seg2 → g-erase, g-l1 · seg3 → g-l2, g-l3 · seg4 → …
@@ -159,9 +164,9 @@ tags: [handdrawn, deck, slideshow, presentation, orchestration, multi-page, spee
 | 放射式 | 一个核心 + 5–7 个发散点（痛点、要素） | handdrawn-ai-pains.html |
 | 闭环环形 | 流程循环、飞轮、自增强机制 | handdrawn-knowledge-loop.html |
 | 场景式 | 讲故事、摆冲突（左困境 / 右发问） | handdrawn-data-model-pain.html |
-| 横向流水线 | 阶段推进、管线（3–5 段，≠ 并列） | deck-no-redo-demo/p7-script-first.html（四阶段 + 确认勾） |
+| 横向流水线 | 阶段推进、管线（3–5 段，≠ 并列） | handdrawn-deck/no-redo-demo/p7-script-first.html（四阶段 + 确认勾） |
 | 竖向时间轴 | 历程、版本演进 | 待首例 |
-| 对比分栏 | 前后 / 有无 / 对错 | deck-no-redo-demo/p4-seed.html（左随机/右固定）· p6-engine-orch.html（双卡） |
+| 对比分栏 | 前后 / 有无 / 对错 | handdrawn-deck/no-redo-demo/p4-seed.html（左随机/右固定）· p6-engine-orch.html（双卡） |
 
 **多样性规则**：
 - 相邻两页**不得同布局**（翻页疲劳 = PPT 死因）；
@@ -211,7 +216,8 @@ tags: [handdrawn, deck, slideshow, presentation, orchestration, multi-page, spee
 
 ## 5. deck 组装规范
 
-- 交付目录：`docs/handdrawn-deck-<topic>/`，内含 `deck.html`、`notes.js`（讲稿先行：
+- 交付目录：`docs/handdrawn-deck/<topic>/`（deck 作品统一收在 `docs/handdrawn-deck/`
+  父目录下，一 deck 一子目录），内含 `deck.html`、`notes.js`（讲稿先行：
   ③ 创建，不是后置补的）、`p1-<slug>.html … pN-<slug>.html`（序号前缀保证
   文件系统排序 = 放映顺序）与逐页讲稿 .md。
 - 页面由引擎 skill 生成后**原样搬入**目录，不改内容；壳通过 `?deck=1` 让页面隐藏自带控制条。
@@ -272,6 +278,9 @@ window.DECK_NOTES = {
 - **委托要带讲稿**：逐页委托引擎时，把**该页的呼吸段 + 单元规划**（④ 的页面计划）
   一并给出——引擎按单元规划给元素分组（`unit('id')`），节拍 = 旁白节拍，
   单元 id 与 stages 表逐字一致。
+- **串行与并行**：图标预案声明了草稿图标的「产出页 → 复用页」依赖——有依赖的页
+  必须串行（产出页先画、草稿定型后复用页才能引用），无依赖的页可以并行委托。
+  系列级设计（色彩语义 / 系列锚 / 标题话术）在 ④ 一次定死，逐页执行时只执行不新定。
 - **壳摆画幅、页定内容**：壳提供 16:9 投影画幅（contain 居中 + 投影幕质感），iframe 铺满
   画幅；页内几何仍 100% 由内容页自定（引擎模板 deck 模式下按画幅视口自适应）。页自带
   `(100vh-150px)` 内缩，双重 contain 下会在画幅内留少量同底纸边——可接受，**勿为严丝合缝
