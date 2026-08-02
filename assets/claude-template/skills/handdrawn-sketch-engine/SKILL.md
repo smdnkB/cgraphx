@@ -1,6 +1,6 @@
 ---
 name: handdrawn-sketch-engine
-version: 1.3.0
+version: 1.4.3
 description: >
   用纯 HTML + rough.js 生成“白板手绘 / 涂鸦信息图 / 思维导图”风格的可视化，
   并自带逐笔绘制动画（白板手绘视频）、纸纹底、漂浮涂鸦、悬停微交互、可调抖动、
@@ -44,10 +44,15 @@ tags: [handdrawn, whiteboard, roughjs, svg, infographic, animation, chinese-font
 > hand/tag/bubble/stick/cross）已全部入库，新活走图标库，视觉向样张对齐。
 
 > 🎬 **与 deck skill 的分工**：多页系列 / 类 PPT 演示需求，由 `handdrawn-deck` skill 编排
-> （澄清目标 → 拆页 → 故事线确认 → 逐页委托本 skill 执行 → 组装放映壳）；本 skill 只管单页。
+> （讲稿先行：草稿打磨 → 框架确认 → 逐字稿确认 → 拆页与单元规划 → 逐页委托本 skill 执行
+> → 组装放映壳）；本 skill 只管单页。**deck 委托时会带该页的呼吸段 + 单元规划**
+> （deck 流程 ④ 的产出）——单元按旁白节拍分组，讲到哪段画哪组。
 > 引擎模板原生支持 deck 模式：URL 带 `?deck=1` 隐藏自带控制条、解除舞台宽度上限
-> （壳不碰几何，页面自行撑满视口），收到 `handdrawn:show` 消息即重播逐笔绘制——
-> 单页行为不受影响。
+> （壳摆 16:9 画幅，页在画幅内自适应），收到 `handdrawn:show` 消息即重播逐笔绘制。
+> 要做「旁白讲到哪、页面画到哪」的渐进绘制（deck 的 cue 导播），把内容按
+> 「讲到才画」的组包进 `unit('id')`（`<g data-unit="id">`）即可——对齐表在 deck 的
+> notes.js `stages` 里，壳发 `handdrawn:stage {show,draw}` 消息，页侧通用渲染器照单执行；
+> 不拆 unit 的页收到该消息自动忽略（整幅播放，单页/老页零影响）。
 
 ## 1. 视觉 DNA（六个旋钮 · 查表即得气质）
 
@@ -106,6 +111,7 @@ PAPER=#f3ede1
 
 **0. 对齐基线**：读 `references/reference-render.html`（布局密度 / 气质 / 质量基准）
 与 `assets/icon-library.js`（当前可用图标，按 `META.use` 语义匹配）。
+来自 deck 的委托还带**该页呼吸段与单元规划**——单元按规划分组，以旁白节拍为节拍。
 
 **1. 布局确认（硬步骤：未确认不得写码）**：先把需求拆成
 `{标题, 节点[], 连接关系, 列表项[]}`——先想“信息结构”再想“画什么”——
@@ -141,6 +147,8 @@ PAPER=#f3ede1
 ```
 
 用户确认或修正后，结构**锁定**，进入执行。
+**deck 委托例外**：handdrawn-deck 逐页委托时结构已锁在其页面计划里
+（见 handdrawn-deck §4④ / §7）——跳过本步直接进步骤 2，委托携带的页面计划即本步的确认结果。
 
 **2. 执行**：复制 `references/engine-template.html` → 只重写 `buildScene`
 （需要图标时把 `assets/icon-library.js` 追加进引擎 `<script>`；图标按 §5 治理流程取用）。
@@ -173,6 +181,10 @@ PAPER=#f3ede1
 1. **定画布**：默认 `viewBox 0 0 1280 720`（16:9）。竖图改 `720 1280` 并同步 `.board` 的 `aspect-ratio`。
 2. **建时间表 `T`**：在 `buildScene` 顶部用一个对象排好每个元素的 `delay`（秒）。原则：标题 0 → 色块 0.3 起错峰 0.15 → 图标 0.6 起 → 标签比图标晚 0.3 → 连线在两端之后 → 列表/底部收尾。整体控制在 3–5 秒。
 3. **写节点**：每个“可交互模块”建一个 `<g class="ix ix-lift">`；色块用 `H.smoothCircle` 并 `H.S.fill`；墨线画进一个临时 `w=H.mk('g')` 再 `H.S.paths(w, t)`；文字 `H.txt` 后 `H.S.text`；图标一律 `placeIcon`。
+   **该页要进 deck 做渐进绘制时**：把「讲到才画」的组再包一层 `unit('id')`——**deck 委托
+   带单元规划时照规划分组**（id 与 notes.js `stages` 表逐字一致）；无规划的自组 deck
+   则自按旁白节拍拆，id 起名贴叙事（如 `u-db`、`u-ex1`）。unit 只是容器，
+   不改视觉、不影响单页整幅播放（见 §7）。
 4. **挂顺序 = z 顺序**：`board.appendChild` 的先后即图层先后，后挂的在上。
 5. **加微交互/ambient**：模块加 `.ix-*`；ambient 层已内置，必要时在 HTML 里加漂浮涂鸦。
 6. **自检 + 导出**：跑一遍重放看节奏；调 `seed/roughness` 锁气质；满意后“下载 SVG”。
@@ -183,6 +195,14 @@ PAPER=#f3ede1
 - **打戳而非内联动画**：内容里只调 `H.S.*` / `stampGroup` 登记 delay，**测量与播放统一交给引擎** `measureAndPlay`——这样滑块重渲染时动画逻辑不丢。
 - **`getTotalLength` 必须 try/catch**：个别 path 测量会抛错，兜底 `--len:600`。
 - **stroke 元素别和 fill 混在同一个被 `H.S.paths` 扫的 wrap 里却想分别控制**：`H.S.paths` 会按“有无 fill”自动判类型；要精确控制就拆 wrap。
+- **渐进绘制（deck 协作）**：页侧只认两条约定——① 内容按「讲到才画」包进 `unit('id')`
+  （`<g data-unit>`，引擎模板内置 `unit()` 助手）；② 响应 `handdrawn:stage {show,draw,pace}`
+  消息：`draw` 的单元按序绘入（段内 `pace` 一拍一个单元，默认 0.45s）、`show` 的单元静态呈现、
+  其余隐藏。渲染器整板确定性重建（同 seed，回跳可复现）。**对齐表（哪段画哪些 unit）不在页内**，
+  归 deck 的 notes.js `stages`——页是纯渲染端，保持独立成品地位。无 `data-unit` 的页
+  收到消息即忽略（老页/单页整幅播放不受影响）。boot 完成后页向壳上报
+  `{type:'handdrawn:ready', staged}`（staged = 页内有单元），壳据此派发 stage / show，
+  缓存旧页不上报 → 壳自动降级为整幅重播。
 
 ## 8. 反模式 / 踩坑清单（血泪，照做避坑）
 
@@ -206,6 +226,9 @@ PAPER=#f3ede1
 - ❌ 中文 `$ ? %` 指望中文字体 → 缺字/丑。拉丁符号**单拎**用 `Caveat`。
 - ❌ 全图一个字号 → 平。按“字号阶梯”做对比。
 - ❌ 居中三连卡 + 渐变标题 + 玻璃拟态 → 这是 AI 默认审美，**与本 skill 的纸+墨+贴纸美学冲突**，禁用。
+- ❌ 自创 `rc.*` 原语 → 引擎（rough.js 4.6.6）的画法原语**白名单**仅 `linearPath / path / circle / ellipse / rectangle / polygon`（模板 / 金样张 / 图标库通篇只这几个）。**禁** `curvePath` 等不在其列的名字——尤其画曲线 / 弯箭头，用 `rc.path("M x1,y1 Q cx,cy x2,y2", b)` 二次贝塞尔，**不要**脑补 `rc.curvePath` / `rc.curve`。金样张没画过的能力，先回模板找合法写法，别按命名惯性臆造。
+-  以为"内容画出来了 = 成了" → `buildScene` **无兜底**：一行抛错（如上条幻觉 API）整函数死在半路，`measureAndPlay` 跑不到，全部 `.anim` 入场类挂不上 → 整页静态摊开、**逐笔绘制全丢**，肉眼看"内容都在"却是个哑动画。**别用 try/catch 吞错**掩盖（那会把"全图哑火"变成"局部缺图、更难查"）；交付前**肉眼看一遍逐笔绘制**（或确认 `.anim` 全挂上），别让静默失败溜过去。
+-  跑无头浏览器 / headless Chrome / puppeteer / playwright 做「验证」→ **耗时远大于收益**(引擎模板 / 金样张 / 图标库 已经过大量实测，单页构建只需保证 `buildScene` 语法合法 + 坐标在 viewBox 内即可)。成品验收交给**打开文件肉眼看一次**，比任何 headless 脚本都快、都可靠。
 
 ## 9. 验收清单
 
@@ -226,6 +249,8 @@ PAPER=#f3ede1
 - [ ] `seed` 固定，同一 seed 重渲染笔触不跳变；改 seed 笔触整体变化但造型稳定。
 - [ ] （用库时）`cross` 能通过 `opt.b` 换色；`tag` 能传自定义 label 且默认旋转生效；
       图标内文字（`$`/`?`/label）随 `s` 正确缩放，拉丁/中文用对字体族。
+- [ ] （该页将进 deck 渐进绘制时）内容已按「讲到才画」包进 `unit('id')`，id 贴叙事；
+      单独打开仍整幅逐笔播放（unit 不改变单页行为）。
 
 ## 10. 路线决策树 & 提示词附录
 

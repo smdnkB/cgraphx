@@ -139,6 +139,9 @@
             fill:(el,t)=>{el.setAttribute('data-anim','fill');el.setAttribute('data-delay',t.toFixed(2));}
         }
     };
+    /* 渐进绘制单元：把一组「讲到才画」的内容包进 <g data-unit="id">；
+       id 被 deck 的 notes.js stages 引用（对齐表在 notes.js，页自身不带表） */
+    const unit=id=>{const g=H.mk('g');g.setAttribute('data-unit',id);board.appendChild(g);return g;};
 
     /* ===================== 动画引擎（与内容解耦） ===================== */
     function measureAndPlay(animate){
@@ -160,40 +163,77 @@
 
     /* ===================== 内容钩子：做新图只改这里 ===================== */
     function buildScene({rc,b,board,H,animate}){
-        /* 示例场景：标题 + 左桃圆 + 右薄荷圆 + 连接箭头 + 标签（替换为你的内容） */
+        /* 示例场景：标题 + 左桃圆 + 右薄荷圆 + 连接箭头 + 标签（替换为你的内容）
+           渐进绘制约定：一组「讲到才画」的内容包进 unit('id')——deck 放映时旁白推进到哪段，
+           对应 unit 才落笔（消息 handdrawn:stage 驱动，页自身不带对齐表，见 SKILL §7） */
+        const uT=unit('u-title');
         const title=H.txt(640,80,'在这里写你的标题',46,F_HAND); title.setAttribute('class','t-display');
-        board.appendChild(title); H.S.text(title,0.0);
+        uT.appendChild(title); H.S.text(title,0.0);
 
+        const uA=unit('u-a');
         const colA=H.mk('g','ix ix-lift');
         const cA=H.smoothCircle(380,300,95,PEACH); colA.appendChild(cA); H.S.fill(cA,0.3);
         const wA=H.mk('g'); wA.appendChild(rc.circle(380,300,46,b)); wA.appendChild(rc.linearPath([[360,300],[400,300]],b)); wA.appendChild(rc.linearPath([[380,280],[380,320]],b));
         colA.appendChild(wA); H.S.paths(wA,0.6);
         const lA=H.txt(380,440,'要点 A',42,F_HAND); lA.setAttribute('class','t-display'); colA.appendChild(lA); H.S.text(lA,1.0);
-        board.appendChild(colA);
+        uA.appendChild(colA);
 
+        const uB=unit('u-b');
         const colB=H.mk('g','ix ix-lift');
         const cB=H.smoothCircle(900,300,95,MINT); colB.appendChild(cB); H.S.fill(cB,0.45);
         const wB=H.mk('g'); wB.appendChild(rc.rectangle(868,272,64,56,b)); wB.appendChild(rc.linearPath([[868,292],[932,292]],b));
         colB.appendChild(wB); H.S.paths(wB,0.75);
         const lB=H.txt(900,440,'要点 B',42,F_HAND); lB.setAttribute('class','t-display'); colB.appendChild(lB); H.S.text(lB,1.15);
-        board.appendChild(colB);
+        uB.appendChild(colB);
 
-        const wLink=H.mk('g'); H.arrow(rc,wLink,476,300,804,300,b,2.6); board.appendChild(wLink); H.S.paths(wLink,1.3);
+        const uL=unit('u-link');
+        const wLink=H.mk('g'); H.arrow(rc,wLink,476,300,804,300,b,2.6); uL.appendChild(wLink); H.S.paths(wLink,1.3);
 
+        const uF=unit('u-foot');
         const foot=H.txt(640,640,'底部说明文字 · 自动逐笔绘制',26,F_HAND); foot.setAttribute('class','t-hand');
-        board.appendChild(foot); H.S.text(foot,1.6);
+        uF.appendChild(foot); H.S.text(foot,1.6);
+    }
+
+    /* ===================== 渐进绘制渲染器（deck「讲到哪画到哪」· 通用不认表） =====================
+       show = 已讲单元（静态最终态）· draw = 当前段单元（按旁白顺序逐个绘入）· 其余隐藏。
+       页内无 data-unit（成品老页 / 未拆单元的页）→ 忽略消息，保持整幅播放。 */
+    function playStage(showList,drawList,pace){
+        const units=board.querySelectorAll('[data-unit]');
+        if(!units.length) return;
+        const showSet=new Set(showList||[]),drawSet=new Set(drawList||[]);
+        units.forEach(u=>{const id=u.getAttribute('data-unit');
+            u.style.display=(showSet.has(id)||drawSet.has(id))?'':'none';});
+        (drawList||[]).forEach((id,idx)=>{
+            const u=board.querySelector(`[data-unit="${id}"]`); if(!u) return;
+            const els=[...u.querySelectorAll('[data-anim]')]; if(!els.length) return;
+            const dmin=Math.min(...els.map(e=>parseFloat(e.getAttribute('data-delay'))||0));
+            const offset=idx*(pace||0.45);   /* 段内节拍：一个单元一拍 */
+            els.forEach(e=>{
+                const d=Math.max(0,(parseFloat(e.getAttribute('data-delay'))||0)-dmin)+offset;
+                const kind=e.getAttribute('data-anim');
+                e.style.setProperty('--delay',d.toFixed(2)+'s');
+                e.style.setProperty('--dur',(kind==='text'?0.5:kind==='fill'?0.55:0.7)+'s');
+                if(kind==='stroke'){try{e.style.setProperty('--len',e.getTotalLength()+1);}catch(err){e.style.setProperty('--len',600);}}
+                e.classList.add('anim');
+            });
+        });
     }
 
     /* ===================== 控件 ===================== */
-    let curR=1.2, raf=false;
+    let curR=1.2, raf=false, pendingStage=null;
     const slider=document.getElementById('rough'), rval=document.getElementById('roughVal');
     slider.addEventListener('input',()=>{curR=parseFloat(slider.value);rval.textContent=curR.toFixed(1);
         if(!raf){raf=true;requestAnimationFrame(()=>{renderAll(curR,false);raf=false;});}});
     document.getElementById('replay').addEventListener('click',()=>renderAll(curR,true));
-    /* deck 模式（handdrawn-deck 组装时）：翻页消息 → 重播逐笔绘制；抖动消息 → 按壳广播值重渲 */
+    /* deck 模式（handdrawn-deck 组装时）：翻页消息 → 重播逐笔绘制；渐进消息 → 按段渲染；抖动消息 → 按壳广播值重渲 */
     window.addEventListener('message',e=>{
         if(!e.data||!e.data.type) return;
         if(e.data.type==='handdrawn:show'){ renderAll(curR,true); }
+        else if(e.data.type==='handdrawn:stage'){
+            if(!board.querySelector('[data-unit]')) return;      /* 本页未拆单元：忽略，保持整幅播放 */
+            if(!window.rough){ pendingStage=e.data; return; }    /* 引擎未就绪：记下，boot 后补应用 */
+            renderAll(curR,false); playStage(e.data.show,e.data.draw,e.data.pace);
+        }
         else if(e.data.type==='handdrawn:rough'){
             if(e.data.value===curR) return;   /* 值相同：不打断首播逐笔动画 */
             curR=e.data.value; slider.value=curR; rval.textContent=curR.toFixed(1);
@@ -225,6 +265,10 @@
         if(!ok){document.getElementById('err').style.display='grid';return;}
         try{await document.fonts.ready;}catch(e){}
         renderAll(curR,true);
+        /* boot 前收到的渐进指令在这里补应用（壳的 stage-open 可能先于首渲到达） */
+        if(pendingStage){ renderAll(curR,false); playStage(pendingStage.show,pendingStage.draw,pendingStage.pace); }
+        /* 能力上报：壳据此派发 stage（支持单元）或 show（整幅）；缓存旧页不上报 → 壳自动降级 */
+        try{ parent.postMessage({type:'handdrawn:ready',staged:!!board.querySelector('[data-unit]')},'*'); }catch(e){}
     })();
 </script>
 </body>

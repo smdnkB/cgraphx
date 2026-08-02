@@ -3,151 +3,278 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>手绘演示 · handdrawn-deck</title>
+<title>手绘演示 · 放映</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Ma+Shan+Zheng&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+<!--
+  handdrawn-deck 放映壳模板 · 深色放映台版
+  ─ 拷进 deck 目录改名 deck.html，只填脚本顶部的 PAGES 数组（页清单 = 放映顺序）；
+  ─ 同目录有 notes.js（契约见 SKILL.md §5）→ 自动开演讲者视图：
+    浅色备注栏 + 跑表 + 顶栏页型徽章；无 notes.js → 退回纯放映，零配置；
+  ─ 壳提供 16:9 投影画幅（contain 居中 + 投影幕质感），页面加载为 iframe 堆叠预载 +
+    交叉淡入（翻回已看页逐笔重播），HUD 抖滑块广播 handdrawn:rough，
+    键盘穿透 iframe，深链 deck.html#N 直达第 N 页。
+-->
 <style>
   :root{
     --ink:#3a2a1c; --ink-soft:#5a4636;
     --peach:#f4c89c; --mint:#bfe2d0; --blue:#bfe2e6; --hilite:#f6cb9f; --paper:#f3ede1;
-    --hand:'Ma Shan Zheng', cursive;
-    --sym:'Caveat', cursive;
-    --display:'ZCOOL KuaiLe', cursive;
+    --hand:'Ma Shan Zheng', cursive; --sym:'Caveat', cursive; --display:'ZCOOL KuaiLe', cursive;
+    /* 壳界面用干净无衬线（与幻灯片的手绘体刻意对比；手绘感只留在投影画幅内） */
+    --ui:-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+    --late:#b23b2e;
+    /* 顶栏/HUD 实测高度（JS 量取后回写），供 16:9 画幅计算；默认值为近似值 */
+    --topbar-h:46px; --hud-h:50px;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;}
   body{
-    font-family:var(--hand); color:var(--ink); background-color:var(--paper);
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
-    overflow:hidden;
-  }
-  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
-    background:radial-gradient(120% 90% at 50% 38%, transparent 55%, rgba(70,46,24,.10) 100%);}
-
-  /* —— 舞台：iframe 铺满视口，几何 100% 交给内容页（壳只管编排/切换/HUD） —— */
-  .deck{position:fixed; inset:0; z-index:1;}
-  .stage{position:absolute; inset:0;}
-  .page{position:absolute; inset:0; width:100%; height:100%; border:0; background:transparent;
-    opacity:0; pointer-events:none; transition:opacity .35s ease;}
-  .page.on{opacity:1; pointer-events:auto;}
-
-  /* —— 页名徽章（顶部） —— */
-  .ptitle{
-    position:fixed; top:14px; left:50%; transform:translateX(-50%) rotate(-1deg); z-index:5;
-    font-family:var(--hand); font-size:16px; color:var(--ink);
-    background:var(--paper); border:2px solid var(--ink);
-    padding:5px 14px; border-radius:14px 10px 15px 9px;
-    box-shadow:3px 3px 0 var(--ink); max-width:70vw;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  .ptitle:empty{display:none;}
-
-  /* —— HUD 控制条（底部，贴纸风） —— */
-  .hud{
-    position:fixed; left:50%; bottom:18px; transform:translateX(-50%) rotate(.4deg); z-index:5;
-    display:flex; align-items:center; gap:14px;
-    background:var(--paper); border:2px solid var(--ink);
-    border-radius:18px 14px 20px 12px; box-shadow:4px 4px 0 var(--ink);
-    padding:8px 16px;
-  }
-  .hud button.nav{
-    font-family:var(--hand); font-size:18px; color:var(--ink); cursor:pointer;
-    background:var(--hilite); border:2px solid var(--ink); border-radius:12px 10px 13px 9px;
-    width:38px; height:34px; box-shadow:2px 2px 0 var(--ink);
-    transition:transform .12s ease, box-shadow .12s ease;
-  }
-  .hud button.nav:hover{transform:translate(-1px,-1px); box-shadow:3px 3px 0 var(--ink);}
-  .hud button.nav:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink);}
-  .dots{display:flex; gap:8px; align-items:center;}
-  .dot{
-    width:12px; height:12px; border-radius:50%; padding:0; cursor:pointer;
-    border:2px solid var(--ink); background:transparent; box-shadow:none;
-    transition:transform .15s ease, background .2s ease;
-  }
-  .dot:hover{transform:scale(1.25);}
-  .dot.on{background:var(--ink);}
-  .counter{font-family:var(--sym); font-weight:700; font-size:18px; min-width:52px; text-align:center;}
-  .rgh{display:flex; align-items:center; gap:8px; margin-left:4px;}
-  .rgh label{font-family:var(--hand); font-size:14px;}
-  .rgh .rval{font-family:var(--sym); font-weight:700; font-size:17px; min-width:28px; text-align:right;}
-  .rgh input[type=range]{-webkit-appearance:none; appearance:none; width:88px; height:4px; border-radius:4px; background:var(--ink); outline:none; cursor:pointer;}
-  .rgh input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--paper); border:2.5px solid var(--ink); box-shadow:1px 1px 0 var(--ink);}
-  .rgh input[type=range]::-moz-range-thumb{width:14px; height:14px; border-radius:50%; background:var(--paper); border:2.5px solid var(--ink);}
-  .help{
-    position:fixed; right:18px; bottom:22px; z-index:4;
-    font-family:var(--hand); font-size:13px; color:var(--ink-soft); transform:rotate(.6deg);
+    height:100%; font-family:var(--ui); color:#241c14; overflow:hidden;
+    background:#1c1712;
+    display:flex; flex-direction:column;
   }
 
-  /* —— 空 deck 占位 —— */
-  #empty{position:fixed; inset:0; z-index:2; display:none; place-items:center; text-align:center;
-    font-family:var(--hand); font-size:20px; color:var(--ink-soft); padding:24px;}
+  /* —— 顶栏：页号 + 标题 + 页型徽章 + 跑表 —— */
+  .topbar{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:9px 18px;
+    background:#211b15;border-bottom:1px solid rgba(255,255,255,.08);color:#f1e9dd;}
+  .ptitle{font-size:15px;font-weight:600;flex:1;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ptitle .pno{font-family:var(--sym);font-weight:700;font-size:21px;color:var(--hilite);margin-right:8px;vertical-align:-2px;}
+  .ptitle .kind{font-weight:500;font-size:12px;color:#b9ad9c;margin-left:8px;
+    border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:1px 9px;}
+  .ptitle .kind:empty{display:none;}
+  /* 跑表仅演讲者视图（有 notes.js）显示 */
+  .timer{display:none;align-items:baseline;gap:7px;font-variant-numeric:tabular-nums;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:4px 12px;}
+  body.has-notes .timer{display:flex;}
+  .timer .el{font-size:19px;font-weight:700;letter-spacing:.5px;}
+  .timer .sep{color:#9a8f7e;font-size:12px;}
+  .timer .tgt{font-size:14px;color:#c4b8a6;}
+  .timer.late{border-color:var(--late);background:rgba(178,59,46,.16);}
+  .timer.late .el{color:#ff8a7d;}
+  .timer.paused{opacity:.45;}
+
+  /* —— 中段：16:9 投影画幅 + 右备注栏 —— */
+  .middle{flex:1 1 auto;display:flex;min-height:0;}
+  .deckwrap{flex:1 1 auto;position:relative;min-width:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(120% 120% at 50% 40%, #2a2219 0%, #1c1712 70%);}
+  /* 16:9 画幅在可用区内完整 contain：宽 = min(撑满宽, 可用高×16/9)。
+     百分比宽度恒相对父宽、与高无关，故高度感知项用 vh 减顶栏/HUD 实测高。 */
+  .slidebox{position:relative;width:min(100%, calc((100vh - var(--topbar-h) - var(--hud-h)) * 1.7778));max-width:100%;
+    aspect-ratio:16/9;box-shadow:0 18px 50px rgba(0,0,0,.5);border-radius:6px;overflow:hidden;background:var(--paper);}
+  .page{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;
+    opacity:0;pointer-events:none;transition:opacity .35s ease;}
+  .page.on{opacity:1;pointer-events:auto;}
+  /* 未建页占位（PAGES[i].built===false 时显示；同纸纹底，视觉上是“还没画的那张幻灯片”） */
+  .stub{position:absolute;inset:0;display:none;place-items:center;text-align:center;padding:24px;
+    background:repeating-linear-gradient(45deg, rgba(58,42,28,.03) 0 14px, transparent 14px 28px), var(--paper);}
+  .stub.show{display:grid;}
+  .stub .card{background:var(--paper);border:2.5px solid var(--ink);border-radius:20px 16px 22px 14px;
+    box-shadow:6px 6px 0 var(--ink);padding:24px 38px;transform:rotate(-1deg);max-width:80%;}
+  .stub .bigno{font-family:var(--sym);font-weight:700;font-size:60px;line-height:1;color:var(--ink);}
+  .stub .t{font-family:var(--hand);font-size:28px;margin:4px 0 14px;color:var(--ink);}
+  .stub .tag{display:inline-block;font-family:var(--ui);font-size:13px;font-weight:600;background:var(--hilite);
+    color:var(--ink);border:2px solid var(--ink);border-radius:9px 7px 10px 6px;padding:3px 12px;box-shadow:2px 2px 0 var(--ink);transform:rotate(1.5deg);}
+
+  /* —— 右侧备注栏（浅色纸底 · 清晰无衬线） —— */
+  .notes{flex:0 0 38vw;min-width:320px;max-width:460px;display:flex;flex-direction:column;
+    background:#fbf8f1;border-left:1px solid #e2d8c6;box-shadow:-10px 0 30px rgba(0,0,0,.25);
+    transition:flex-basis .34s cubic-bezier(.4,0,.2,1), min-width .34s cubic-bezier(.4,0,.2,1), opacity .26s ease;
+    opacity:1;overflow:hidden;}
+  body.notes-off .notes{flex-basis:0;min-width:0;opacity:0;}
+  .notes .inner{display:flex;flex-direction:column;height:100%;min-width:340px;}
+  .nhead{flex:0 0 auto;padding:13px 18px 10px;border-bottom:1px solid #ece2d0;background:#fff;}
+  .nhead .row1{display:flex;align-items:center;gap:9px;}
+  .nhead .lab{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#fff;
+    background:var(--ink);border-radius:5px;padding:3px 8px;}
+  .nhead .segc{margin-left:auto;font-size:12px;color:#8a7d6a;font-variant-numeric:tabular-nums;}
+  .nhead .dur{margin-left:8px;font-size:13px;font-weight:700;color:#3a2a1c;
+    background:var(--mint);border:1.5px solid var(--ink);border-radius:7px;padding:2px 9px;font-variant-numeric:tabular-nums;}
+  .nhead .pt{font-family:var(--hand);font-size:19px;color:#3a2a1c;margin:8px 0 0;line-height:1.25;}
+  .nhead .cum{font-size:12px;color:#8a7d6a;margin-top:3px;font-variant-numeric:tabular-nums;}
+  .progress{height:5px;background:#ece2d0;margin-top:11px;border-radius:3px;overflow:hidden;}
+  .progress .bar{height:100%;width:0;background:linear-gradient(90deg, var(--peach), var(--hilite));
+    border-radius:3px;transition:width .25s linear;}
+  .nscroll{flex:1 1 auto;overflow-y:auto;padding:16px 20px 8px;}
+  /* 讲稿按「呼吸段」渲染：壳自动按句读切段（纯展示层，逐字不改）；点击标记「讲到这」 */
+  .script{display:flex;flex-direction:column;gap:13px;margin:0;padding:4px 0 14px;}
+  .seg{position:relative;font-size:16.5px;line-height:1.9;color:#2a2218;letter-spacing:.1px;
+    padding:8px 14px 8px 38px;border-radius:10px;border-left:3px solid transparent;cursor:pointer;
+    transition:background .18s ease, border-color .18s ease, transform .18s ease;
+    animation:segIn .4s cubic-bezier(.2,.8,.2,1) both;}
+  .seg .no{position:absolute;left:11px;top:10px;font-family:var(--sym);font-weight:700;font-size:15px;
+    color:#c9a87a;transition:color .18s ease;}
+  .seg:hover{background:#f4ecdc;border-left-color:var(--peach);transform:translateX(2px);}
+  .seg.mark{background:#fbe7c9;border-left-color:#e29a4d;}
+  .seg.mark .no{color:var(--ink);}
+  .script .none{color:#a4937c;font-size:15px;padding:6px 2px;}
+  @keyframes segIn{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:none;}}
+  .cue{flex:0 0 auto;margin:0;padding:11px 20px 14px;border-top:1px solid #ece2d0;background:#fffdf7;
+    font-size:13.5px;line-height:1.55;color:#7a6c57;}
+  .cue::before{content:'提示';display:inline-block;font-size:10px;font-weight:800;letter-spacing:1px;
+    color:#fff;background:var(--peach);border-radius:4px;padding:1px 7px;margin-right:8px;vertical-align:1px;}
+  .cue.empty{display:none;}
+  .nscroll::-webkit-scrollbar{width:9px;}
+  .nscroll::-webkit-scrollbar-thumb{background:#d8cbb4;border-radius:6px;border:2px solid #fbf8f1;}
+
+  /* —— 底部 HUD —— */
+  .hud{flex:0 0 auto;display:flex;align-items:center;gap:9px;padding:8px 16px;
+    background:#211b15;border-top:1px solid rgba(255,255,255,.08);color:#e8ddcd;font-size:13px;}
+  .hud button{font-family:var(--ui);font-size:13px;font-weight:600;color:#241c14;cursor:pointer;background:var(--hilite);
+    border:0;border-radius:8px;padding:6px 13px;transition:transform .12s ease, filter .15s ease, background .2s;}
+  .hud button.nav{font-family:var(--sym);font-weight:700;font-size:19px;width:38px;padding:3px 0;line-height:1;}
+  .hud button.alt{background:var(--mint);}
+  .hud button.toggle.on{background:var(--blue);box-shadow:inset 0 0 0 2px rgba(58,42,28,.5);}
+  .hud button:hover{filter:brightness(1.05);transform:translateY(-1px);}
+  .hud button:active{transform:translateY(0);}
+  .hud .dots{display:flex;gap:7px;align-items:center;}
+  .hud .dot{width:11px;height:11px;border-radius:50%;padding:0;cursor:pointer;border:2px solid #6f6455;
+    background:transparent;transition:transform .15s ease, background .2s ease, border-color .2s ease;}
+  .hud .dot:hover{transform:scale(1.25);}
+  .hud .dot.on{background:var(--hilite);border-color:var(--hilite);}
+  .hud .counter{font-variant-numeric:tabular-nums;font-weight:700;font-size:15px;min-width:54px;text-align:center;color:#f1e9dd;}
+  .hud .counter .tot{color:#9a8f7e;font-weight:600;}
+  .hud .jump{display:flex;align-items:center;gap:5px;color:#9a8f7e;}
+  .hud .jump input{width:40px;font-family:var(--ui);font-weight:700;font-size:14px;text-align:center;
+    border:1px solid rgba(255,255,255,.2);border-radius:6px;background:rgba(255,255,255,.06);color:#f1e9dd;padding:3px 0;}
+  .hud .spacer{flex:1;}
+  .hud .rgh{display:flex;align-items:center;gap:7px;color:#9a8f7e;}
+  .hud .rgh label{font-family:var(--hand);font-size:15px;color:#c4b8a6;}
+  .hud .rgh .rval{font-family:var(--sym);font-weight:700;font-size:16px;min-width:26px;text-align:right;color:#e8ddcd;}
+  .hud .rgh input[type=range]{-webkit-appearance:none;appearance:none;width:88px;height:4px;border-radius:4px;
+    background:rgba(255,255,255,.25);outline:none;cursor:pointer;}
+  .hud .rgh input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:var(--hilite);border:2px solid #241c14;box-shadow:0 1px 4px rgba(0,0,0,.4);}
+  .hud .rgh input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;
+    background:var(--hilite);border:2px solid #241c14;}
+  .hud .help{color:#8a7f6e;font-size:12px;}
+  .hud .help b{font-family:var(--sym);font-size:15px;color:#c4b8a6;}
+
+  #empty{position:fixed;inset:0;z-index:2;display:none;place-items:center;text-align:center;
+    font-family:var(--hand);font-size:20px;color:#b9ad9c;padding:24px;}
   #empty.show{display:grid;}
+
+  @media (max-width:1240px){ .hud .help{display:none;} }
+  @media (max-width:960px){ .hud .dots{display:none;} }
+  @media (max-width:860px){ .notes{flex-basis:46vw;min-width:260px;} .notes .inner{min-width:240px;} }
 </style>
 </head>
 <body>
+  <div class="topbar" id="topbar">
+    <div class="ptitle"><span class="pno" id="pno">01</span><span id="ptitletext"></span><span class="kind" id="pkind"></span></div>
+    <div class="timer" id="timer" title="T 暂停/继续跑表"><span class="el" id="elapsed">0:00</span><span class="sep">累计至</span><span class="tgt" id="target">0:00</span></div>
+  </div>
 
-  <div class="deck"><div class="stage" id="stage"></div></div>
-  <div class="ptitle" id="ptitle"></div>
+  <div class="middle">
+    <div class="deckwrap">
+      <div class="slidebox" id="slidebox">
+        <div class="stub" id="stub"><div class="card">
+          <div class="bigno" id="stubNo">—</div>
+          <div class="t" id="stubTitle">页面待建</div>
+          <span class="tag">视觉页未建 · 右侧备注可照常口播排练</span>
+        </div></div>
+      </div>
+    </div>
+
+    <aside class="notes" id="notes" style="display:none">
+      <div class="inner">
+        <div class="nhead">
+          <div class="row1"><span class="lab">演讲备注</span><span class="segc" id="segc"></span><span class="dur" id="durLabel">本页 0:00</span></div>
+          <div class="pt" id="npt"></div>
+          <div class="cum" id="cumLabel"></div>
+          <div class="progress"><div class="bar" id="progBar"></div></div>
+        </div>
+        <div class="nscroll"><div class="script" id="script"></div></div>
+        <div class="cue empty" id="cue"></div>
+      </div>
+    </aside>
+  </div>
 
   <div class="hud" id="hud">
-    <button class="nav" id="prev" title="上一页（←）">←</button>
-    <button class="nav" id="replayBtn" title="重放本页（R）">▶</button>
+    <button class="nav" id="prev" title="上一页 ←">‹</button>
+    <button class="nav alt" id="replayBtn" title="重放本页绘制 R">▶</button>
+    <button class="nav" id="next" title="下一页 →">›</button>
     <div class="dots" id="dots"></div>
-    <button class="nav" id="next" title="下一页（→）">→</button>
-    <div class="counter"><span id="cur">0</span>/<span id="total">0</span></div>
-    <div class="rgh">
+    <div class="counter"><span id="cur">0</span><span class="tot" id="total">/0</span></div>
+    <div class="jump"><span>跳</span><input id="jump" type="text" inputmode="numeric" title="输入页码回车"><span>页</span></div>
+    <div class="spacer"></div>
+    <div class="rgh" title="全局线稿抖动（实时广播到所有已加载页）">
       <label for="deckRough">抖</label>
       <input id="deckRough" type="range" min="0.3" max="3" step="0.1" value="1.2">
       <span class="rval" id="deckRoughVal">1.2</span>
     </div>
+    <button id="notesToggle" class="toggle on" title="备注侧栏 N" style="display:none">备注</button>
+    <button id="timerToggle" class="toggle on" title="跑表 T" style="display:none">跑表</button>
+    <button id="fsBtn" class="alt" title="全屏 F">全屏</button>
+    <div class="help"><b>← →</b> 翻页 · <b>↑ ↓</b> 切段 · <b>N</b> 备注 · <b>T</b> 跑表 · <b>R</b> 重放 · <b>F</b> 全屏</div>
   </div>
-  <div class="help">← → 翻页 · 空格下一页 · R 重放本页 · F 全屏</div>
   <div id="empty">空 deck —— 请在脚本顶部 <b>PAGES</b> 里填页面清单<br>（格式见 handdrawn-deck skill · §deck 组装规范）</div>
 
+<script src="notes.js" onerror="window.__noNotes=true"></script>
 <script>
-/* ============ 页面清单（deck skill 组装时填充） ============ */
+/* ============ 缓存版本号（可选） ============
+   改了页文件 / notes.js 之后 bump 这个值（并同步 <script src="notes.js?v=…"> 的 v），
+   壳会带着它重新拉取所有页，避免浏览器放旧页进来（症状：有的页进来就整幅画完）。 */
+const V='';
+
+/* ============ 页面清单（唯一手填项 · 顺序即放映顺序；built:false 放映时显示占位卡，备注照常） ============ */
 const PAGES=[
-  /* {file:'p1-cover.html',  title:'封面 · 标题'},
-     {file:'p2-xxx.html',    title:'第二页 · 标题'},
-     …… 顺序即放映顺序 */
+  {file:'p1-cover.html', title:'01 封面', no:1},
+  {file:'p2-xxx.html',   title:'02 正文', no:2},
+  // {file:'p3-xxx.html', title:'03 待定', no:3, built:false},   // 视觉页未建也能排练
 ];
 
-/* ============ 放映机 ============ */
-const stage=document.getElementById('stage'), dotsWrap=document.getElementById('dots'),
-      ptitle=document.getElementById('ptitle'), curEl=document.getElementById('cur'),
-      totalEl=document.getElementById('total');
+/* ============ 演讲备注（同目录 notes.js 提供 window.DECK_NOTES；无则退回纯放映） ============ */
+const DN=(window.DECK_NOTES&&Array.isArray(window.DECK_NOTES.pages)&&window.DECK_NOTES.pages.length)?window.DECK_NOTES:null;
+const notesByNo={}; if(DN){ DN.pages.forEach((n,i)=>{ notesByNo[n.no||(i+1)]=n; }); }
+const HAS_NOTES=!!DN;
+const KINDZH={cover:'封面', content:'正文', overview:'全景图', closing:'收尾'};
+if(HAS_NOTES){
+  document.body.classList.add('has-notes');
+  document.getElementById('notes').style.display='';
+  document.getElementById('notesToggle').style.display='';
+  document.getElementById('timerToggle').style.display='';
+}
+const cumStart=[]; let acc=0; if(DN){ DN.pages.forEach(n=>{ cumStart.push(acc); acc+=(n.sec||0); }); }
+const totalTalk=acc;
+function mmss(s){ s=Math.max(0,Math.round(s)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function noteFor(i){ const p=PAGES[i]; return notesByNo[(p&&p.no)||(i+1)]||null; }
+
+/* ============ chrome 实测高度 → 16:9 画幅 contain 计算 ============ */
+const topbarEl=document.getElementById('topbar'), hudEl=document.getElementById('hud');
+function fitChrome(){
+  const rs=document.documentElement.style;
+  rs.setProperty('--topbar-h', topbarEl.offsetHeight+'px');
+  rs.setProperty('--hud-h', hudEl.offsetHeight+'px');
+}
+fitChrome(); addEventListener('resize', fitChrome);
+
+/* ============ 放映机（iframe 堆叠预载 + 交叉淡入；翻回已载页发 handdrawn:show 重播） ============ */
+const slidebox=document.getElementById('slidebox'), stub=document.getElementById('stub'),
+      dotsWrap=document.getElementById('dots'), dr=document.getElementById('deckRough');
 const frames=[]; let cur=-1;
 
 if(!PAGES.length){ document.getElementById('empty').classList.add('show'); }
-totalEl.textContent=PAGES.length;
-
+document.getElementById('total').textContent='/'+PAGES.length;
 PAGES.forEach((p,i)=>{
-  const d=document.createElement('button');
-  d.className='dot'; d.title=(p.title||p.file);
-  d.addEventListener('click',()=>go(i));
-  dotsWrap.appendChild(d);
+  const d=document.createElement('button'); d.className='dot'; d.title=(p.title||p.file);
+  d.addEventListener('click',()=>go(i)); dotsWrap.appendChild(d);
 });
 
-function hud(){
-  dotsWrap.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on',i===cur));
-  curEl.textContent=Math.max(cur+1,0);
-  ptitle.textContent=(PAGES[cur]&&PAGES[cur].title)||'';
-}
 function ensure(n){
   let f=frames[n];
   if(!f){
-    f=document.createElement('iframe');
-    f.className='page'; f.setAttribute('scrolling','no');
-    f.src=PAGES[n].file+(PAGES[n].file.includes('?')?'&':'?')+'deck=1';
+    f=document.createElement('iframe'); f.className='page'; f.setAttribute('scrolling','no');
+    f.src=PAGES[n].file+(PAGES[n].file.includes('?')?'&':'?')+'deck=1'+(V?'&v='+V:'');
     f.addEventListener('load',()=>{
       f.dataset.ready='1';
-      /* 焦点落进页面内容后，壳的键盘监听会收不到事件 → 给页面 window 挂同一套 */
       try{ f.contentWindow.addEventListener('keydown',onKey); }catch(e){}
-      /* 新页对齐壳当前抖动值（与页面默认相同则页面侧 no-op，不打断首播动画） */
+      /* 新页对齐壳当前抖动值（值相同则页侧早退、不打断首播动画） */
       try{ f.contentWindow.postMessage({type:'handdrawn:rough',value:parseFloat(dr.value),animate:true},'*'); }catch(e){}
+      /* 当前页有渐进编排 → 渲染到播放头所在段（覆盖 boot 整幅首播）；无编排则页保持整幅播放 */
+      if(frames.indexOf(f)===cur) postStage(f,cur,playhead);
     });
-    stage.appendChild(f); frames[n]=f;
+    slidebox.insertBefore(f, stub); frames[n]=f;
   }
   return f;
 }
@@ -156,46 +283,185 @@ function go(n){
   n=Math.max(0,Math.min(PAGES.length-1,n));
   if(n===cur) return;
   if(cur>=0&&frames[cur]) frames[cur].classList.remove('on');
-  const f=ensure(n);
-  f.classList.add('on');
-  /* 已加载过的页 → 通知重播逐笔绘制；首次加载的页自己会首播 */
-  if(f.dataset.ready){ try{ f.contentWindow.postMessage({type:'handdrawn:show'},'*'); }catch(e){} }
-  cur=n; hud();
+  const p=PAGES[n];
+  if(p.built!==false){
+    stub.classList.remove('show');
+    const f=ensure(n); f.classList.add('on');
+    if(f.dataset.ready){
+      /* 有渐进编排且页上报支持单元（staged≠'0'）→ 开场态（第 1 段），播放头归零；
+         无编排 / 页无单元（含缓存了改造前的旧页）→ 整幅重播 */
+      if(stageLists(n,0)&&f.dataset.staged!=='0') postStage(f,n,0);
+      else { try{ f.contentWindow.postMessage({type:'handdrawn:show'},'*'); }catch(e){} }
+    }
+  }else{
+    if(frames[n]) frames[n].classList.remove('on');
+    document.getElementById('stubNo').textContent=String(p.no||(n+1)).padStart(2,'0');
+    document.getElementById('stubTitle').textContent=p.title||'页面待建';
+    stub.classList.add('show');
+  }
+  cur=n; playhead=0; hud();
+  resetTimer();
   history.replaceState(null,'','#'+(n+1));
 }
-
 document.getElementById('prev').addEventListener('click',()=>go(cur-1));
 document.getElementById('next').addEventListener('click',()=>go(cur+1));
-
-/* ▶ 重放本页（R 键同效） */
 function replayCur(){
-  const f=frames[cur];
-  if(f&&f.dataset.ready){ try{ f.contentWindow.postMessage({type:'handdrawn:show'},'*'); }catch(e){} }
+  const f=frames[cur]; if(!f||!f.dataset.ready) return;
+  /* 有渐进编排且页支持 → 重演播放头所在段；否则整幅重播 */
+  if(stageLists(cur,playhead)&&f.dataset.staged!=='0') postStage(f,cur,playhead);
+  else { try{ f.contentWindow.postMessage({type:'handdrawn:show'},'*'); }catch(e){} }
 }
 document.getElementById('replayBtn').addEventListener('click',replayCur);
 
-/* 全局抖动：实时广播到所有已加载页（播放权归壳，页内不再各自为政） */
-const dr=document.getElementById('deckRough'), drv=document.getElementById('deckRoughVal');
+/* ============ HUD：计数 / 顶栏 / 圆点 / 备注 ============ */
+/* 讲稿切「呼吸段」：作者换行优先分段，长段落再按句读（。！？；）切成 ~80 字的块；
+   纯展示层——段拼接后与原文逐字一致（去空白），不改 notes.js 单一数据源。 */
+function segmentScript(text){
+  if(!text) return [];
+  const paras=String(text).split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  const segs=[];
+  for(const para of paras){
+    let parts=para.match(/[^。！？；]+[。！？；]+|[^。！？；]+$/g)||[para];
+    if(parts.length===1&&parts[0].length>120){ /* 整段无句末点 → 退按逗号切 */
+      parts=para.match(/[^，、]+[，、]+|[^，、]+$/g)||parts;
+    }
+    let buf='';
+    for(const p of parts){
+      if(buf&&buf.length+p.length>80){ segs.push(buf); buf=p; } else { buf+=p; }
+    }
+    if(buf) segs.push(buf);
+  }
+  return segs;
+}
+const elScript=document.getElementById('script'); let segBtns=[], playhead=0;
+function applyPlayhead(){
+  segBtns.forEach((d,i)=>d.classList.toggle('mark',i===playhead));
+  const m=segBtns[playhead]; if(m) m.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function renderScript(text){
+  segBtns=[]; elScript.textContent='';
+  const segs=segmentScript(text);
+  const segc=document.getElementById('segc');
+  if(!segs.length){
+    const d=document.createElement('div'); d.className='none'; d.textContent='（本页暂无备注）';
+    elScript.appendChild(d); segc.textContent=''; return;
+  }
+  segs.forEach((s,i)=>{
+    const d=document.createElement('div'); d.className='seg';
+    d.style.animationDelay=Math.min(i*40,360)+'ms';
+    d.title='讲到这：点一下，页面随本段绘制（本页有渐进编排时）';
+    const no=document.createElement('span'); no.className='no'; no.textContent=i+1;
+    d.appendChild(no); d.appendChild(document.createTextNode(s));
+    d.addEventListener('click',()=>{ playhead=i; applyPlayhead(); driveStage(cur,i); });
+    elScript.appendChild(d); segBtns.push(d);
+  });
+  segc.textContent='讲稿 '+segs.length+' 段';
+  applyPlayhead();
+}
+/* ============ 渐进绘制派发（对齐表 = notes.js 的 pages[].stages；无则不派发，页整幅播放） ============ */
+function stageLists(pageIdx,segIdx){
+  const n=noteFor(pageIdx);
+  const st=n&&Array.isArray(n.stages)?n.stages:null;
+  if(!st||!st[segIdx]) return null;
+  const seen=new Set(), show=[];
+  for(let k=0;k<=segIdx;k++){ ((st[k]&&st[k].draw)||[]).forEach(id=>{ if(!seen.has(id)){ seen.add(id); show.push(id); } }); }
+  return {show, draw:(st[segIdx].draw)||[]};
+}
+function postStage(f,pageIdx,segIdx){
+  const L=stageLists(pageIdx,segIdx); if(!L||!f) return false;
+  if(f.dataset.ready){ try{ f.contentWindow.postMessage({type:'handdrawn:stage',show:L.show,draw:L.draw,pace:.45},'*'); }catch(e){} }
+  return true;
+}
+function driveStage(pageIdx,segIdx){ postStage(frames[pageIdx],pageIdx,segIdx); }
+function paintNotes(i){
+  if(!HAS_NOTES) return;
+  const n=noteFor(i);
+  document.getElementById('npt').textContent=(n&&n.title)||(PAGES[i]&&PAGES[i].title)||'';
+  renderScript((n&&n.口播)||'');
+  document.querySelector('.nscroll').scrollTop=0;
+  const cue=document.getElementById('cue');
+  if(n&&n.cue){ cue.textContent=n.cue; cue.classList.remove('empty'); } else { cue.classList.add('empty'); }
+  document.getElementById('durLabel').textContent='本页 '+mmss(n?n.sec||0:0);
+  const cs=(n?cumStart[DN.pages.indexOf(n)]:0)||0;
+  const pct=totalTalk?Math.min(100,Math.round((cs+(n?n.sec||0:0))/totalTalk*100)):0;
+  document.getElementById('cumLabel').textContent='累计 '+mmss(cs)+' → '+mmss(cs+(n?n.sec||0:0))+' · 整场 '+pct+'%';
+  document.getElementById('target').textContent=mmss(cs+(n?n.sec||0:0));
+}
+function hud(){
+  dotsWrap.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on',i===cur));
+  const p=PAGES[cur]||{}, n=noteFor(cur);
+  document.getElementById('cur').textContent=Math.max(cur+1,0);
+  document.getElementById('pno').textContent=String(p.no||(cur+1)).padStart(2,'0');
+  document.getElementById('ptitletext').textContent=(n&&n.title)||p.title||'';
+  document.getElementById('pkind').textContent=(n&&n.kind)?(KINDZH[n.kind]||n.kind):'';
+  paintNotes(cur);
+}
+
+/* ============ 抖滑块（handdrawn:rough 广播到所有已加载页） ============ */
+const drv=document.getElementById('deckRoughVal');
 function broadcastRough(){
   const v=parseFloat(dr.value); drv.textContent=v.toFixed(1);
   frames.forEach(f=>{ if(f&&f.dataset.ready){ try{ f.contentWindow.postMessage({type:'handdrawn:rough',value:v,animate:false},'*'); }catch(e){} } });
 }
 dr.addEventListener('input',broadcastRough);
 
+/* ============ 备注 / 跑表开关 ============ */
+const notesBtn=document.getElementById('notesToggle'), timerBtn=document.getElementById('timerToggle');
+function setNotes(on){ document.body.classList.toggle('notes-off',!on); notesBtn.classList.toggle('on',on); }
+notesBtn.addEventListener('click',()=>setNotes(document.body.classList.contains('notes-off')));
+let timerOn=true;
+function setTimer(on){ timerOn=on; running=on; timerBtn.classList.toggle('on',on); document.getElementById('timer').classList.toggle('paused',!on); last=performance.now(); }
+timerBtn.addEventListener('click',()=>setTimer(!timerOn));
+document.getElementById('fsBtn').addEventListener('click',()=>{
+  if(document.fullscreenElement){ document.exitFullscreen(); } else { document.documentElement.requestFullscreen().catch(()=>{}); }
+});
+
+/* ============ 跑表（elapsed 从本页累计起点起算；超时变红） ============ */
+let elapsed=0, running=true, last=performance.now();
+function tick(now){
+  if(running&&timerOn) elapsed+=(now-last)/1000; last=now;
+  if(HAS_NOTES){
+    document.getElementById('elapsed').textContent=mmss(elapsed);
+    const n=noteFor(cur), idx=DN.pages.indexOf(n), cs=idx>=0?cumStart[idx]:0, budget=cs+(n?n.sec||0:0);
+    document.getElementById('timer').classList.toggle('late', timerOn&&elapsed>budget+0.5);
+    document.getElementById('progBar').style.width=(totalTalk?Math.min(100,elapsed/totalTalk*100):0)+'%';
+  }
+  requestAnimationFrame(tick);
+}
+function resetTimer(){ const n=noteFor(cur), idx=HAS_NOTES?DN.pages.indexOf(n):-1; elapsed=idx>=0?cumStart[idx]:0; last=performance.now(); }
+requestAnimationFrame(tick);
+
+/* ============ 页侧能力上报：boot 完成后收 handdrawn:ready {staged} ============
+   壳据此在重访时决定派发 stage 还是 show——缓存了改造前的旧页（不上报）自动降级为整幅重播。 */
+addEventListener('message',e=>{
+  if(!e.data||e.data.type!=='handdrawn:ready') return;
+  const i=frames.findIndex(f=>f&&f.contentWindow===e.source);
+  if(i>=0) frames[i].dataset.staged=e.data.staged?'1':'0';
+});
+
+/* ============ 键盘（穿透 iframe：每个页加载完挂同一套监听） ============ */
+const jump=document.getElementById('jump');
+jump.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){ const n=parseInt(jump.value,10); if(n>=1&&n<=PAGES.length){ go(n-1); } jump.value=''; jump.blur(); e.preventDefault(); }
+  e.stopPropagation();
+});
 function onKey(e){
+  if(e.target===jump) return;
   if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){ e.preventDefault(); go(cur+1); }
   else if(e.key==='ArrowLeft'||e.key==='PageUp'){ e.preventDefault(); go(cur-1); }
+  /* ↑↓ = 段落推进（当前页呼吸段内移动播放头并驱动页面；不跨页，跨页走 ←→） */
+  else if(e.key==='ArrowDown'){ e.preventDefault(); if(segBtns.length){ playhead=Math.min(playhead+1,segBtns.length-1); applyPlayhead(); driveStage(cur,playhead); } }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); if(segBtns.length){ playhead=Math.max(playhead-1,0); applyPlayhead(); driveStage(cur,playhead); } }
   else if(e.key==='Home'){ go(0); }
   else if(e.key==='End'){ go(PAGES.length-1); }
   else if(e.key==='r'||e.key==='R'){ replayCur(); }
-  else if(e.key==='f'||e.key==='F'){
-    if(document.fullscreenElement){ document.exitFullscreen(); }
-    else{ document.documentElement.requestFullscreen().catch(()=>{}); }
-  }
+  else if(e.key==='n'||e.key==='N'){ if(HAS_NOTES) setNotes(document.body.classList.contains('notes-off')); }
+  else if(e.key==='t'||e.key==='T'){ if(HAS_NOTES) setTimer(!timerOn); }
+  else if(e.key==='f'||e.key==='F'){ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(()=>{}); }
 }
 addEventListener('keydown',onKey);
 
-/* 深链：#3 直达第 3 页 */
+/* ============ 启动（深链 #N 直达第 N 页） ============ */
 const start=Math.min(parseInt(location.hash.slice(1))||1, Math.max(PAGES.length,1));
 go(start-1);
 </script>

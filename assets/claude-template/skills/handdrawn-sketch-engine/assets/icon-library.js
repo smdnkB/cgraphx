@@ -32,7 +32,8 @@
    coins 硬币/成本 · stopwatch 秒表/效率 · knife 瑞士军刀/灵活 ·
    computer 显示器/播放 · hand 握笔的手/绘制 · tag 吊牌/标签 ·
    bubble 思考气泡/疑问 · stick 火柴人/用户 · cross 圆圈叉/否定 ·
-   globe 地球+定位针/地点 · db 数据库圆柱/存储 · search 放大镜/探索
+   globe 地球+定位针/地点 · db 数据库圆柱/存储 · search 放大镜/探索 ·
+   doc 折角文档/规格 · checklist 清单/计划 · check 圆圈勾/验证 · shield 盾牌/门禁
 
    —— 治理流程（详见 SKILL.md §图标治理）——
    查（按 META.use 语义匹配）→ 命中复用 placeIcon →
@@ -175,7 +176,34 @@ function search(rc,g,b){
   g.appendChild(rc.linearPath([[11,11],[34,34]],b));     // 手柄
   g.appendChild(rc.path("M-24,-16 q5,-9 14,-11",b));     // 高光
 }
-const ICONS={coins,stopwatch,knife,computer,hand,tag,bubble,stick,cross,globe,db,search};
+/* doc：折角文档 · 规格/契约/文档/PRD/spec（自 AI 研发工作流 deck 沉淀） */
+function doc(rc,g,b){
+  g.appendChild(rc.path("M-22,-30 h28 l16,16 v44 h-44 z",b));   // 纸 + 折角
+  g.appendChild(rc.path("M6,-30 v16 h16",b));                   // 折角内线
+  g.appendChild(rc.linearPath([[-12,-4],[12,-4]],b));           // 文本行 ×3
+  g.appendChild(rc.linearPath([[-12,8],[12,8]],b));
+  g.appendChild(rc.linearPath([[-12,20],[4,20]],b));
+}
+/* checklist：清单 · 计划/任务清单/验收项/强制引用标注（自 AI 研发工作流 deck 沉淀） */
+function checklist(rc,g,b){
+  g.appendChild(rc.rectangle(-24,-30,48,60,b));                 // 板
+  g.appendChild(rc.linearPath([[-13,-12],[0,-12]],b));          // 行 ×3
+  g.appendChild(rc.linearPath([[-13,2],[0,2]],b));
+  g.appendChild(rc.linearPath([[-13,16],[0,16]],b));
+  g.appendChild(rc.path("M5,-16 l4,5 8,-9",b));                 // 勾 ×2
+  g.appendChild(rc.path("M5,12 l4,5 8,-9",b));
+}
+/* check：圆圈勾 · 验证/通过/验收/测试通过（自 AI 研发工作流 deck 沉淀） */
+function check(rc,g,b){
+  g.appendChild(rc.circle(0,0,56,56,b));                        // 圈（直径 56）
+  g.appendChild(rc.path("M-13,2 l9,10 18,-21",b));              // 勾
+}
+/* shield：盾牌+勾 · 门禁/把关/提交拦截/质量闸（自 AI 研发工作流 deck 沉淀） */
+function shield(rc,g,b){
+  g.appendChild(rc.path("M0,-30 l24,8 v22 q0,20 -24,30 q-24,-10 -24,-30 v-22 z",b)); // 盾身
+  g.appendChild(rc.path("M-9,0 l7,8 13,-16",b));                // 内勾
+}
+const ICONS={coins,stopwatch,knife,computer,hand,tag,bubble,stick,cross,globe,db,search,doc,checklist,check,shield};
 const META={
   coins:{zh:'硬币 / 成本',use:'价格、预算、降本、付费',box:70,disp:1},
   stopwatch:{zh:'秒表 / 效率',use:'速度、时间、提效、性能',box:100,disp:1},
@@ -188,7 +216,11 @@ const META={
   cross:{zh:'圆圈叉 / 否定',use:'痛点、否定、错误、排除',box:16,disp:2.4},
   globe:{zh:'地球+定位针 / 地点',use:'地点、地理、远程、自由、不受城市限制、可达范围',box:80,disp:1},
   db:{zh:'数据库圆柱 / 存储',use:'数据库、表结构、DDL、存储、数据资产、知识库本体',box:34,disp:1.2},
-  search:{zh:'放大镜 / 探索',use:'查询、探索、定位问题、搜索、读知识库、排查',box:34,disp:1.3}
+  search:{zh:'放大镜 / 探索',use:'查询、探索、定位问题、搜索、读知识库、排查',box:34,disp:1.3},
+  doc:{zh:'折角文档 / 规格',use:'规格、契约、文档、PRD、spec、书面产物',box:32,disp:1.2},
+  checklist:{zh:'清单 / 计划',use:'计划、任务清单、验收项、待办、强制引用标注',box:30,disp:1.2},
+  check:{zh:'圆圈勾 / 验证',use:'验证、通过、验收、完成、测试通过',box:28,disp:1.2},
+  shield:{zh:'盾牌 / 门禁',use:'门禁、把关、提交拦截、质量闸、安全',box:30,disp:1.2}
 };
 
 /* —— 调用示例（对比“上一版硬编码”，放置只需一行） ——
