@@ -6,10 +6,9 @@
  * for that agent without baking client-specific paths into core code.
  *
  * 2.0 note: the multi-target scaffolding is retained (it cleanly separates
- * the orchestrator from per-agent file writes, and `upgrade` reaches into
- * `targets/claude.ts` directly), but only Claude Code is shipped. The other
- * 1.x agent targets (Cursor / Codex / Gemini / etc.) wrote only the
- * now-removed server config and were dropped together with it.
+ * the orchestrator from per-agent file writes), but only Claude Code is
+ * shipped. The other 1.x agent targets (Cursor / Codex / Gemini / etc.)
+ * wrote only the now-removed server config and were dropped together with it.
  */
 
 /**
@@ -68,14 +67,14 @@ export interface WriteResult {
   notes?: string[];
 }
 
-export interface InstallOptions {
-  /**
-   * Front-load prompt hook (Claude `UserPromptSubmit`) that runs
-   * `cgraphx prompt-hook`. `true` installs it, `false` removes any prior
-   * install (so opt-out round-trips), `undefined` leaves it untouched.
-   */
-  promptHook?: boolean;
-}
+/**
+ * Options for `target.install(location, opts)`. Currently empty — the
+ * 1.x/early-2.0 `promptHook` option was removed together with the dead
+ * `cgraphx prompt-hook` subcommand (see the 2.0 cleanup in targets/claude.ts).
+ * The interface (and the parameter) is retained for abstraction stability.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+export interface InstallOptions {}
 
 export interface AgentTarget {
   /** Stable id; matches the `TargetId` union. */

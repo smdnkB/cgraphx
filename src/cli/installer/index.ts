@@ -2,10 +2,9 @@
  * cgraphx Interactive Installer (2.0)
  *
  * Single target: Claude Code. Wires the bundled `.claude/` template
- * (skills / agents / commands / hooks / plugins), the cgraphx-specific
- * hooks + statusLine, and (opt-in) the front-load prompt hook into the
- * user's Claude Code configuration. Optionally registers the markdown /
- * dbquery / timeline subsystems.
+ * (skills / agents / commands / hooks / plugins) and the cgraphx-specific
+ * hooks + statusLine into the user's Claude Code configuration.
+ * Optionally registers the markdown / dbquery / timeline subsystems.
  *
  * 2.0 cut points versus 1.x: NO server config is written (no server in
  * 2.0); NO usage stats are collected; the live graph watcher / git-sync-hook
@@ -60,10 +59,8 @@ export interface RunInstallerOptions {
    * Comma-separated target list, or `auto` / `all` / `none`.
    */
   target?: string;
-  /** Skip the prompt-hook prompt; use this value directly. */
-  promptHook?: boolean;
   /**
-   * Skip every confirm and use defaults: location=local, promptHook=true.
+   * Skip every confirm and use defaults: location=local, all subsystems.
    * For scripting / CI.
    */
   yes?: boolean;
@@ -137,29 +134,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   // (~/.claude) install, so this is a constant, not a prompt.
   const location: Location = 'local';
 
-  // Step 4: front-load prompt hook (`cgraphx prompt-hook`). Opt-in via the
-  // installer prompt (default-yes): `true` writes it; `false` strips any
-  // prior install so opting out round-trips; `undefined` (the implicit
-  // default in the multi-target flow) leaves it untouched.
-  let promptHook: boolean | undefined;
-  if (opts.promptHook !== undefined) {
-    promptHook = opts.promptHook;
-  } else if (useDefaults) {
-    promptHook = true;
-  } else {
-    const ans = await clack.confirm({
-      message:
-        '⚠️  是否启用 cgraphx 前置注入?(非常不建议 —— 仅对不会主动调工具的弱 agent 有用)',
-      initialValue: false,
-    });
-    if (clack.isCancel(ans)) {
-      clack.cancel('安装已取消。');
-      process.exit(0);
-    }
-    promptHook = ans;
-  }
-
-  // Step 5: per-target install loop.
+  // Step 4: per-target install loop.
   for (const target of targets) {
     if (!target.supportsLocation(location)) {
       clack.log.warn(
@@ -167,7 +142,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
       );
       continue;
     }
-    const result = target.install(location, { promptHook });
+    const result = target.install(location, {});
     for (const file of result.files) {
       const verb = file.action === 'unchanged'
         ? 'Unchanged'
@@ -182,7 +157,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 5¼: ensure the project's `.cgraphx/` data dir exists — the work the
+  // Step 4¼: ensure the project's `.cgraphx/` data dir exists — the work the
   // removed `cgraphx init` did, folded into install. Idempotent; an unsafe root
   // ($HOME / filesystem root) is skipped with a warning so we never auto-create
   // a data dir somewhere unintended. The `.claude` config above is unaffected.
@@ -206,7 +181,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 5½: optional subsystem setup — docs / db / timeline.
+  // Step 4½: optional subsystem setup — docs / db / timeline.
   // Each is independent and runs only if the user keeps it checked.
   // Skipped silently under --yes if their preconditions aren't met
   // (e.g. docs needs docs/knowledge/ with .md files).
@@ -290,7 +265,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 6: next steps. install now initializes the data dir itself (the
+  // Step 5: next steps. install now initializes the data dir itself (the
   // removed `cgraphx init` is folded in), so the only thing left is to restart
   // the agent and, optionally, index an existing knowledge base.
   clack.note(
@@ -380,10 +355,11 @@ export function uninstallTargets(
  * which providers it hit.
  *
  * Removes what install wrote: the agent targets' hooks / statusLine /
- * prompt-hook / instructions block AND the package-owned `.claude/` assets (by
- * manifest), plus the Developer Timeline hooks. Also removes the `.cgraphx/`
- * data dir (the folded `uninit`) unless `--keep-data` — that's destructive, so
- * it's confirmed interactively unless `--yes`.
+ * instructions block AND the package-owned `.claude/` assets (by manifest),
+ * plus the Developer Timeline hooks and any dead-hook leftovers (pre-0.8
+ * auto-sync / the 2.0-removed prompt-hook). Also removes the `.cgraphx/`
+ * data dir (the folded `uninit`) unless `--keep-data` — that's destructive,
+ * so it's confirmed interactively unless `--yes`.
  */
 export async function runUninstaller(opts: RunUninstallerOptions): Promise<void> {
   const clack = await importESM('@clack/prompts');
@@ -424,7 +400,7 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
   }
 
   // Step 4: mirror what `install` did beyond the agent targets.
-  //   - install wires Developer Timeline hooks (Step 5½) → remove them here.
+  //   - install wires Developer Timeline hooks (Step 4½) → remove them here.
   //   - install creates `.cgraphx/` (folded `init`) → remove it here (folded
   //     `uninit`) unless --keep-data. Destructive (timeline / docs index data),
   //     so confirm interactively unless --yes.

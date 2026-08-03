@@ -80,7 +80,7 @@ Restart Claude Code and you're set.
 | Command | What it does |
 |---|---|
 | `cgraphx install` | One command per project: full setup |
-| `cgraphx upgrade` | Self-update via npm; re-run `install` in each project to refresh skills |
+| `cgraphx upgrade` | Run inside a project: self-update via npm + auto-refresh that project (skills/hooks/`.cgraphx/`); repeat per project |
 | `cgraphx uninstall` | Removes skills/config by manifest + deletes `.cgraphx/` (`--keep-data` to preserve) |
 
 ## Best getting-started practice

@@ -389,8 +389,8 @@ footer p { margin: 0; }
       <div class="t-note"># 重启 Claude Code 即可</div>
 
       <div class="t-sep"># ── 升级 ────────────────────────────────────</div>
-      <div class="t-line"><span class="t-prompt">$</span> cgraphx upgrade <span class="t-comment"># npm 自更新(纯换包,不动项目)</span></div>
-      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx install <span class="t-comment"># 各项目重跑,刷新 skill(自动清理旧 skill)</span></div>
+      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx upgrade <span class="t-comment"># npm 自更新 + 自动刷新本项目 skills/hooks(自动清理旧 skill)</span></div>
+      <div class="t-note"># 其他项目各自 cd 进去跑一次;只换包不动项目:cgraphx upgrade --no-install</div>
 
       <div class="t-sep"># ── 卸载 · 可选 ──────────────────────────────</div>
       <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx uninstall <span class="t-comment"># 清 .claude/ skills/配置 + 删 .cgraphx/</span></div>

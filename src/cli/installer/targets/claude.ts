@@ -4,8 +4,10 @@
  *   - `hooks.UserPromptSubmit` (context-monitor) — appends a hook that
  *     runs the bundled `context-monitor.cjs` asset.
  *   - `hooks.PreToolUse` (precommit-check on Bash) — guards `git commit`.
- *   - `hooks.UserPromptSubmit` (front-load prompt hook) — runs
- *     `cgraphx prompt-hook`; opt-in via the installer prompt.
+ *   - dead-hook cleanup — strips leftovers of removed subcommands: the
+ *     pre-0.8 `codegraph mark-dirty` / `sync-if-dirty` auto-sync hooks and
+ *     the 2.0-removed `cgraphx prompt-hook` front-load hook (install
+ *     self-heals them; uninstall sweeps them too).
  *   - `statusLine` — points at the bundled `claude-hud` asset.
  *   - `.claude/` template (skills / agents / commands / hooks / plugins)
  *     deployed into the project's `.claude/` directory (local scope only).
@@ -80,7 +82,7 @@ class ClaudeCodeTarget implements AgentTarget {
     return { installed, alreadyConfigured, configPath: settingsPath };
   }
 
-  install(loc: Location, opts: InstallOptions): WriteResult {
+  install(loc: Location, _opts: InstallOptions): WriteResult {
     const files: WriteResult['files'] = [];
     const notes: string[] = [];
 
@@ -98,32 +100,24 @@ class ClaudeCodeTarget implements AgentTarget {
     //    merges in.
     files.push(writePrecommitHookEntry(loc));
 
-    // 3. Strip stale auto-sync hooks left by a pre-0.8 install
-    //    (`codegraph mark-dirty` / `sync-if-dirty`). Both subcommands are
-    //    gone from the CLI; cleaning up on install makes an upgrade
-    //    self-healing. Only surfaced when something was actually removed.
-    const hookCleanup = cleanupLegacyHooks(loc);
+    // 3. Strip hooks left behind by removed subcommands: the pre-0.8
+    //    auto-sync pair (`codegraph mark-dirty` / `sync-if-dirty`) and the
+    //    2.0-removed `cgraphx prompt-hook` front-load hook (early-2.0
+    //    installers offered it; the subcommand it pointed at is gone, so a
+    //    leftover entry errors on every prompt). Cleaning up on install
+    //    makes an upgrade self-healing. Only surfaced when something was
+    //    actually removed.
+    const hookCleanup = cleanupDeadHooks(loc);
     if (hookCleanup.action === 'removed') files.push(hookCleanup);
 
-    // 4. Front-load prompt hook (`cgraphx prompt-hook`). Opt-in via the
-    //    installer prompt: `promptHook === true` writes it; `=== false`
-    //    strips any prior install so opting out round-trips; `undefined`
-    //    leaves it untouched.
-    if (opts.promptHook === true) {
-      files.push(writePromptHookEntry(loc));
-    } else if (opts.promptHook === false) {
-      const removed = removePromptHookEntry(loc);
-      if (removed.action === 'removed') files.push(removed);
-    }
-
-    // 5. Instructions block in `.claude/CLAUDE.md` — upsert the workflow
+    // 4. Instructions block in `.claude/CLAUDE.md` — upsert the workflow
     //    guidance (sourced from the template-root CLAUDE.md asset). Idempotent,
     //    preserves surrounding user content, and (same markers) replaces any
     //    stale 1.x server-pointer block, so an upgrade self-heals.
     const instructions = writeInstructionsEntry(loc);
     if (instructions.action !== 'kept') files.push(instructions);
 
-    // 6. Deploy the bundled `.claude/` template (skills / agents / commands
+    // 5. Deploy the bundled `.claude/` template (skills / agents / commands
     //    / hooks / plugins) into the project's `.claude/` directory. Local
     //    only — global installs don't seed a per-project workspace. Existing
     //    files are overwritten (skills are tools maintained by cgraphx, not
@@ -150,9 +144,9 @@ class ClaudeCodeTarget implements AgentTarget {
     //    it points at claude-hud.
     files.push(removeCgraphxSettings(loc));
 
-    // 2. Strip stale auto-sync hooks a pre-0.8 install left (same helper
-    //    install uses for self-heal).
-    const hookCleanup = cleanupLegacyHooks(loc);
+    // 2. Strip hooks of removed subcommands (pre-0.8 auto-sync + the
+    //    2.0-removed prompt-hook) — same helper install uses for self-heal.
+    const hookCleanup = cleanupDeadHooks(loc);
     if (hookCleanup.action === 'removed') files.push(hookCleanup);
 
     // 3. Strip the cgraphx instructions block if present.
@@ -218,9 +212,11 @@ function settingsHasCgraphxMarker(settings: SettingsJson): boolean {
 /**
  * Commands cgraphx owns in Claude `settings.json`. Used for detection
  * AND for surgical uninstall (drop only these; preserve sibling user
- * hooks). The context-monitor / precommit-check / prompt-hook commands
- * are the install-time writes; the legacy `codegraph mark-dirty` /
- * `sync-if-dirty` strings recognize hooks a pre-0.8 install wrote.
+ * hooks). The context-monitor / precommit-check commands are the
+ * install-time writes; the `cgraphx prompt-hook` string recognizes the
+ * 2.0-removed front-load hook (early-2.0 installers offered it); the
+ * legacy `codegraph mark-dirty` / `sync-if-dirty` strings recognize
+ * hooks a pre-0.8 install wrote.
  */
 function isCgraphxHookCommand(command: string): boolean {
   return (
@@ -294,26 +290,28 @@ function removeCgraphxSettings(loc: Location): WriteResult['files'][number] {
 }
 
 /**
- * True when a Claude Code hook `command` is one of the auto-sync hooks
- * a pre-0.8 install wrote. Both subcommands were later removed from the
- * CLI, so a Stop hook left pointing at `sync-if-dirty` fails every turn.
- * Recognized by substring so an `npx @colbymchenry/codegraph …` form is
- * also caught.
+ * True when a Claude Code hook `command` points at a subcommand that no
+ * longer exists — a "dead hook" that only ever errors at runtime:
+ *   - the pre-0.8 auto-sync pair (`codegraph mark-dirty` /
+ *     `sync-if-dirty`) — recognized by substring so an
+ *     `npx @colbymchenry/codegraph …` form is also caught;
+ *   - the 2.0-removed `cgraphx prompt-hook` front-load hook, which
+ *     early-2.0 installers still offered as an opt-in.
  */
-function isLegacyCodegraphHookCommand(command: unknown): boolean {
+function isDeadHookCommand(command: unknown): boolean {
   if (typeof command !== 'string') return false;
   return (
     command.includes('codegraph mark-dirty') ||
-    command.includes('codegraph sync-if-dirty')
+    command.includes('codegraph sync-if-dirty') ||
+    command.includes(PROMPT_HOOK_COMMAND)
   );
 }
 
 /**
- * Remove stale codegraph auto-sync hooks (`mark-dirty` / `sync-if-dirty`)
- * that a pre-0.8 install wrote. Reused by both `install` (an upgrade
- * self-heals) and `uninstall`.
+ * Remove dead hooks (see `isDeadHookCommand`). Reused by both `install`
+ * (an upgrade self-heals) and `uninstall`.
  */
-function cleanupLegacyHooks(loc: Location): WriteResult['files'][number] {
+function cleanupDeadHooks(loc: Location): WriteResult['files'][number] {
   const file = settingsJsonPath(loc);
   if (!fs.existsSync(file)) return { path: file, action: 'not-found' };
 
@@ -330,7 +328,7 @@ function cleanupLegacyHooks(loc: Location): WriteResult['files'][number] {
     for (const group of groups) {
       if (!group || !Array.isArray(group.hooks)) continue;
       const before = group.hooks.length;
-      group.hooks = group.hooks.filter((h) => !isLegacyCodegraphHookCommand((h as { command?: unknown })?.command));
+      group.hooks = group.hooks.filter((h) => !isDeadHookCommand((h as { command?: unknown })?.command));
       if (group.hooks.length !== before) removedAny = true;
     }
   }
@@ -353,11 +351,12 @@ function cleanupLegacyHooks(loc: Location): WriteResult['files'][number] {
 const CONTEXT_MONITOR_COMMAND = 'node $CLAUDE_PROJECT_DIR/.claude/hooks/context-monitor/context-monitor.cjs';
 const CLAUDE_HUD_COMMAND = 'node $CLAUDE_PROJECT_DIR/.claude/plugins/claude-hud/dist/index.js';
 const PRECOMMIT_CHECK_COMMAND = 'node $CLAUDE_PROJECT_DIR/.claude/hooks/precommit-check/precommit-check.cjs';
+/**
+ * The 2.0-removed front-load hook command. No longer written by install —
+ * kept for recognizing leftovers: `isCgraphxHookCommand` (detect /
+ * uninstall) and `isDeadHookCommand` (self-heal cleanup) both match it.
+ */
 const PROMPT_HOOK_COMMAND = 'cgraphx prompt-hook';
-
-function isPromptHookCommand(command: unknown): boolean {
-  return typeof command === 'string' && command.includes(PROMPT_HOOK_COMMAND);
-}
 
 /**
  * Append cgraphx's context-monitor entry to `hooks.UserPromptSubmit` and
@@ -484,94 +483,6 @@ export function writePrecommitHookEntry(loc: Location): WriteResult['files'][num
 
   writeJsonFile(file, settings);
   return { path: file, action: created ? 'created' : 'updated' };
-}
-
-/**
- * Write the front-load `UserPromptSubmit` hook into Claude `settings.json` —
- * a `command` hook that runs `cgraphx prompt-hook`. Idempotent: if our
- * command is already wired under UserPromptSubmit the file is left
- * byte-for-byte untouched and reported `unchanged`. Sibling hooks (the
- * user's own, or other events) are preserved. Opt-in — the installer only
- * calls this when the user accepts the prompt.
- *
- * Exported because `cgraphx upgrade` reaches in directly to self-heal the
- * hook on already-configured global Claude installs.
- */
-export function writePromptHookEntry(loc: Location): WriteResult['files'][number] {
-  const file = settingsJsonPath(loc);
-  const created = !fs.existsSync(file);
-  const settings = readJsonFile(file) as SettingsJson;
-
-  if (!settings.hooks || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks)) {
-    settings.hooks = {};
-  }
-  if (!Array.isArray(settings.hooks.UserPromptSubmit)) settings.hooks.UserPromptSubmit = [];
-
-  const already = settings.hooks.UserPromptSubmit.some(
-    (g) => g && Array.isArray(g.hooks) && g.hooks.some((h) => isPromptHookCommand((h as { command?: unknown })?.command)),
-  );
-  if (already) return { path: file, action: 'unchanged' };
-
-  settings.hooks.UserPromptSubmit.push({
-    hooks: [{ type: 'command', command: PROMPT_HOOK_COMMAND }],
-  });
-  writeJsonFile(file, settings);
-  return { path: file, action: created ? 'created' : 'updated' };
-}
-
-/**
- * Strip the front-load `UserPromptSubmit` hook this installer writes. Used
- * by `uninstall`, and by `install` when the user opts out, so the choice
- * round-trips.
- */
-export function removePromptHookEntry(loc: Location): WriteResult['files'][number] {
-  return removeHookCommandsMatching(loc, isPromptHookCommand);
-}
-
-/**
- * Drop hook commands matching `match` from every event in settings.json.
- * Surgical at the command level; prunes emptied groups / events / `hooks`.
- * Returns `unchanged` when nothing matched.
- */
-function removeHookCommandsMatching(
-  loc: Location,
-  match: (command: unknown) => boolean,
-): WriteResult['files'][number] {
-  const file = settingsJsonPath(loc);
-  if (!fs.existsSync(file)) return { path: file, action: 'not-found' };
-
-  const settings = readJsonFile(file) as SettingsJson;
-  const hooks = settings.hooks;
-  if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) {
-    return { path: file, action: 'unchanged' };
-  }
-
-  let removedAny = false;
-  for (const event of Object.keys(hooks)) {
-    const groups = hooks[event];
-    if (!Array.isArray(groups)) continue;
-    for (const group of groups) {
-      if (!group || !Array.isArray(group.hooks)) continue;
-      const before = group.hooks.length;
-      group.hooks = group.hooks.filter((h) => !match((h as { command?: unknown })?.command));
-      if (group.hooks.length !== before) removedAny = true;
-    }
-  }
-
-  if (!removedAny) return { path: file, action: 'unchanged' };
-
-  for (const event of Object.keys(hooks)) {
-    const groups = hooks[event];
-    if (!Array.isArray(groups)) continue;
-    hooks[event] = groups.filter(
-      (g) => !(g && Array.isArray(g.hooks) && g.hooks.length === 0),
-    );
-    if (hooks[event].length === 0) delete hooks[event];
-  }
-  if (Object.keys(hooks).length === 0) delete settings.hooks;
-
-  writeJsonFile(file, settings);
-  return { path: file, action: 'removed' };
 }
 
 /**

@@ -78,7 +78,7 @@ cgraphx install           # 部署 skills → .claude/ + 接入 hooks + 初始�
 | 命令 | 作用 |
 |---|---|
 | `cgraphx install` | 项目内一条命令接入全部能力 |
-| `cgraphx upgrade` | npm 自更新;升级后到各项目重跑 `install` 刷新 skill |
+| `cgraphx upgrade` | 在项目目录内执行:npm 自更新 + 自动刷新本项目(skills/hooks/`.cgraphx/`);其他项目各自进去跑一次 |
 | `cgraphx uninstall` | 按清单移除 skills/配置 + 删 `.cgraphx/`(`--keep-data` 保留数据) |
 
 ## 最佳起步实践

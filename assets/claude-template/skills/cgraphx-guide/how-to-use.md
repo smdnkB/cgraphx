@@ -24,8 +24,8 @@ cgraphx install
 ### 升级
 
 ```bash
-cgraphx upgrade           # npm 自更新(纯换包,不动项目)
-cgraphx install           # 到各项目重跑,刷新 skill(自动清理已改名/移除的旧 skill)
+cgraphx upgrade           # 在项目目录内执行:npm 自更新 + 自动刷新本项目 skills/hooks(自动清理已改名/移除的旧 skill)
+                          # 其他项目各自 cd 进去跑一次;只换包不动项目:cgraphx upgrade --no-install
 ```
 
 ### 卸载 · 可选

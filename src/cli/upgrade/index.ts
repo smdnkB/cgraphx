@@ -1,5 +1,5 @@
 /**
- * `cgraphx upgrade` — npm-only self-update.
+ * `cgraphx upgrade` — npm-only self-update + project refresh.
  *
  * cgraphx ships as an npm package, so the single supported download channel is
  * the npm registry: upgrading shells out to `npm install -g cgraphx@<ver>`.
@@ -10,8 +10,17 @@
  * Detection (`detectInstallMethod`) only distinguishes what matters here:
  *   - **npm**   — installed via `npm i -g cgraphx` (or a local `npm i`); the
  *                 upgrade performs `npm install -g cgraphx@<ver>`.
- *   - **npx**   — ephemeral; nothing to upgrade (next `npx` fetches latest).
+ *   - **npx**   — ephemeral; nothing to pull (next `npx` fetches latest).
  *   - **other** — source checkout / anything else; guided back to npm.
+ *
+ * Since 2.0.x, `upgrade` is meant to be run INSIDE a project directory: after
+ * the package pull it automatically refreshes the project by running `install`
+ * with the freshly-installed CLI (`node <fresh-entry> install -y`), so one
+ * command brings both the CLI and the current project up to date. Guards:
+ * unsafe roots ($HOME / filesystem root) skip the install with a warning; a
+ * directory with no `.cgraphx/` / `.claude/` asks for confirmation first
+ * (non-interactive stdin declines); `--no-install` restores the old
+ * package-only behavior.
  */
 
 import * as path from 'path';
@@ -119,6 +128,21 @@ export function stripV(v: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Windows spawn quirk
+// ---------------------------------------------------------------------------
+
+/**
+ * Since the April-2024 security fix (CVE-2024-27980, Node ≥ 20.12), spawning
+ * a `.bat`/`.cmd` file WITHOUT `shell: true` throws EINVAL on Windows.
+ * `npm` / `npx` resolve to `npm.cmd` / `npx.cmd` there, so every spawn of
+ * them needs the shell. All arg vectors involved are hard-coded (no user
+ * input), so `shell: true` carries no injection risk here.
+ */
+function needsShell(cmd: string): boolean {
+  return process.platform === 'win32' && /\.(cmd|bat)$/i.test(cmd);
+}
+
+// ---------------------------------------------------------------------------
 // Latest-version resolution (npm registry)
 // ---------------------------------------------------------------------------
 
@@ -130,7 +154,10 @@ export function stripV(v: string): string {
  */
 export async function resolveLatestVersion(): Promise<string> {
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const r = spawnSync(npm, ['view', NPM_PACKAGE, 'version'], { encoding: 'utf-8' });
+  const r = spawnSync(npm, ['view', NPM_PACKAGE, 'version'], {
+    encoding: 'utf-8',
+    shell: needsShell(npm),
+  });
   const version = (r.stdout ?? '').trim();
   if (r.status !== 0 || !/^\d+\.\d+\.\d+/.test(version)) {
     throw new Error(
@@ -138,6 +165,80 @@ export async function resolveLatestVersion(): Promise<string> {
     );
   }
   return normalizeVersion(version);
+}
+
+/**
+ * The global npm `node_modules` root (`npm root -g`) — where a global
+ * `npm install -g cgraphx@…` puts the fresh package. Returns null when npm
+ * can't answer (non-zero exit / blank output); callers degrade to a
+ * "run `cgraphx install` yourself" hint rather than guessing.
+ */
+export function resolveNpmGlobalRoot(platform: NodeJS.Platform): string | null {
+  const npm = platform === 'win32' ? 'npm.cmd' : 'npm';
+  const r = spawnSync(npm, ['root', '-g'], {
+    encoding: 'utf-8',
+    shell: platform === 'win32' && needsShell(npm),
+  });
+  if (r.status !== 0) return null;
+  const root = (r.stdout ?? '').split(/\r?\n/).find((l) => l.trim().length > 0)?.trim();
+  return root ? root : null;
+}
+
+// ---------------------------------------------------------------------------
+// Project-install planning (pure — fully unit-testable)
+// ---------------------------------------------------------------------------
+
+export type ProjectInstallPlan =
+  | { cmd: string; args: string[] }
+  | { unavailable: string };
+
+export interface PlanProjectInstallInput {
+  method: InstallMethod;
+  /** Whether a package pull actually happened (false = up-to-date / npx). */
+  pulled: boolean;
+  projectRoot: string;
+  /** The running CLI's entry file (`__filename` of dist/cli/index.js). */
+  currentCliEntry: string;
+  /** `process.execPath` — the node binary to run the fresh CLI with. */
+  nodeExecPath: string;
+  /** `npm root -g` result; only consulted for a pulled global npm install. */
+  npmGlobalRoot: string | null;
+}
+
+/**
+ * Decide how to run the project `install` after the upgrade. The install must
+ * run from the FRESH package (its bundled `.claude-template/` assets are what
+ * we're refreshing to), so after a pull we point at the just-installed entry:
+ *
+ *   - npm global → `<npm root -g>/cgraphx/dist/cli/index.js`
+ *   - npm local  → `<projectRoot>/node_modules/cgraphx/dist/cli/index.js`
+ *
+ * When no pull happened (already up to date) — and always for npx, whose
+ * running process IS the fetched package — the current entry is the right one.
+ * `other` (source checkout) has no supported automatic path.
+ */
+export function planProjectInstall(input: PlanProjectInstallInput): ProjectInstallPlan {
+  const { method } = input;
+  if (method.kind === 'other') {
+    return { unavailable: method.reason };
+  }
+  if (!input.pulled || method.kind === 'npx') {
+    return {
+      cmd: input.nodeExecPath,
+      args: [input.currentCliEntry, 'install', '-y'],
+    };
+  }
+  if (method.scope === 'local') {
+    const entry = path.join(
+      input.projectRoot, 'node_modules', NPM_PACKAGE, 'dist', 'cli', 'index.js',
+    );
+    return { cmd: input.nodeExecPath, args: [entry, 'install', '-y'] };
+  }
+  if (!input.npmGlobalRoot) {
+    return { unavailable: 'could not resolve the npm global root (`npm root -g` failed)' };
+  }
+  const entry = path.join(input.npmGlobalRoot, NPM_PACKAGE, 'dist', 'cli', 'index.js');
+  return { cmd: input.nodeExecPath, args: [entry, 'install', '-y'] };
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +252,11 @@ export interface UpgradeOptions {
   check?: boolean;
   /** Reinstall even if already on the resolved version. */
   force?: boolean;
+  /**
+   * Refresh the current project after the pull (default true). Commander's
+   * `--no-install` sets this to false, restoring package-only behavior.
+   */
+  install?: boolean;
 }
 
 /** Injectable side-effects so the orchestrator stays unit-testable. */
@@ -158,12 +264,28 @@ export interface UpgradeDeps {
   currentVersion: string;
   method: InstallMethod;
   resolveLatest: (pin?: string) => Promise<string>;
-  /** Run a command inheriting stdio; returns its exit code (-1 = spawn failed). */
+  /** Run the package-pull command (npm) with inherited stdio; exit code (-1 = spawn failed). */
   run: (cmd: string, args: string[], env?: NodeJS.ProcessEnv) => number;
   log: (msg: string) => void;
   warn: (msg: string) => void;
   error: (msg: string) => void;
   platform: NodeJS.Platform;
+  /** The directory upgrade was invoked in — the project to refresh. */
+  projectRoot: string;
+  /** Why projectRoot is an unsafe root ($HOME / filesystem root), or null when fine. */
+  unsafeRootReason: (dir: string) => string | null;
+  /** Whether dir looks like a cgraphx-connected project (`.cgraphx/` or `.claude/` present). */
+  projectMarkerPresent: (dir: string) => boolean;
+  /** Confirm installing in an unrecognized dir; must return false when stdin isn't interactive. */
+  confirmInstall: (message: string) => Promise<boolean>;
+  /** The running CLI entry file (`__filename`). */
+  currentCliEntry: string;
+  /** The node binary to run the fresh CLI with (`process.execPath`). */
+  nodeExecPath: string;
+  /** `npm root -g`, or null when it can't be resolved. Only called when needed. */
+  npmGlobalRoot: () => string | null;
+  /** Run the project-install child with inherited stdio in cwd; exit code (-1 = spawn failed). */
+  runInstall: (cmd: string, args: string[], cwd: string) => number;
 }
 
 const c = {
@@ -173,18 +295,6 @@ const c = {
   yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
   cyan: (s: string) => `\x1b[36m${s}\x1b[0m`,
 };
-
-/** The honest, additive reminder shown after a successful upgrade. */
-export function reindexAdvisory(): string {
-  // upgrade is a pure binary swap — it touches no project's `.claude/` config
-  // or `.cgraphx/` data. To pick up this version's skills / hooks / workflow
-  // guidance (and any markdown-parser improvements), re-run install per project.
-  return [
-    c.dim('upgrade 只更新了 CLI 本体,没有改动任何项目的配置。'),
-    c.dim('要让各项目用上这一版的 skills / hooks / 工作方式与解析改进,请到项目内重跑:'),
-    `  ${c.cyan('cgraphx install')}    ${c.dim('# 刷新 .claude/ skills、配置与 .claude/CLAUDE.md')}`,
-  ].join('\n');
-}
 
 /**
  * Returns the process exit code (0 = success / nothing to do, 1 = failure).
@@ -209,40 +319,106 @@ export async function runUpgrade(opts: UpgradeOptions, deps: UpgradeDeps): Promi
   if (opts.check) {
     if (updateAvailable) {
       deps.log(c.yellow(`An update is available: ${currentDisplay} → ${latest}`));
-      deps.log(c.dim('Run `cgraphx upgrade` to install it.'));
+      deps.log(c.dim('Run `cgraphx upgrade` inside a project directory to install it and refresh the project.'));
     } else {
       deps.log(c.green(`You’re on the latest version (${currentDisplay}).`));
     }
     return 0;
   }
 
+  // -------------------------------------------------------------------------
+  // Step 1: pull the package (unless already up to date and not forced/pinned).
+  // -------------------------------------------------------------------------
+  let pulled = false;
+
   if (!updateAvailable && !opts.force && !opts.version) {
     deps.log(c.green(`Already up to date (${currentDisplay}).`));
-    deps.log(c.dim('Use `--force` to reinstall, or `cgraphx upgrade <version>` to change versions.'));
+  } else {
+    switch (method.kind) {
+      case 'npm': {
+        // npm version specs have no leading "v" (`@0.9.8`, not `@v0.9.8` — the
+        // latter resolves as a nonexistent dist-tag).
+        const code = upgradeNpm(method, opts.version ? stripV(latest) : 'latest', deps);
+        if (code !== 0) return code;
+        pulled = true;
+        break;
+      }
+      case 'npx':
+        // npx fetched this CLI on demand — there is nothing to pull; the
+        // running process is the version the project gets refreshed with.
+        deps.log(c.dim('npx fetches on demand — nothing to pull.'));
+        break;
+      default:
+        deps.warn(`This cgraphx isn't an npm install (${method.reason}).`);
+        deps.log(c.dim(`Install / upgrade via npm:  npm install -g ${NPM_PACKAGE}@latest`));
+        deps.log(c.dim('(Running from a source checkout? `git pull && npm run build`, then `cgraphx install` in each project.)'));
+        return 0;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 2: refresh the current project (`install -y` with the fresh CLI).
+  // -------------------------------------------------------------------------
+  if (opts.install === false) {
+    deps.log(c.dim('Skipped the project refresh (--no-install). Run `cgraphx install` inside each project to update its skills / hooks.'));
     return 0;
   }
 
-  // npm-only dispatch: npm performs the real update; npx fetches on demand
-  // (nothing to do); anything else is guided back to npm.
-  switch (method.kind) {
-    case 'npm': {
-      // npm version specs have no leading "v" (`@0.9.8`, not `@v0.9.8` — the
-      // latter resolves as a nonexistent dist-tag).
-      const code = upgradeNpm(method, opts.version ? stripV(latest) : 'latest', deps);
-      // Future: when a release changes the `.cgraphx/cgraphx.db` data model, a
-      // schema-migration step would hook in here (after `code === 0`). None yet.
-      return code;
-    }
-    case 'npx':
-      deps.log(c.green('npx always runs the latest version on demand — nothing to upgrade.'));
-      deps.log(c.dim(`Force a fresh fetch with: npx ${NPM_PACKAGE}@latest`));
-      return 0;
-    default:
-      deps.warn(`This cgraphx isn't an npm install (${method.reason}).`);
-      deps.log(c.dim(`Install / upgrade via npm:  npm install -g ${NPM_PACKAGE}@latest`));
-      deps.log(c.dim('(Running from a source checkout? `git pull && npm run build`.)'));
-      return 0;
+  return runProjectInstallStep(deps, pulled);
+}
+
+/**
+ * The project-refresh half of upgrade. Exit codes: 0 = refreshed, or skipped
+ * for an advisory reason (unsafe root / declined / unresolvable entry) — the
+ * CLI update itself succeeded either way; 1 = the install was attempted and
+ * failed.
+ */
+async function runProjectInstallStep(deps: UpgradeDeps, pulled: boolean): Promise<number> {
+  const { projectRoot } = deps;
+
+  const unsafeReason = deps.unsafeRootReason(projectRoot);
+  if (unsafeReason) {
+    deps.warn(`Skipped the project refresh: the current directory looks like ${unsafeReason}.`);
+    deps.log(c.dim('Run `cgraphx install` inside a real project root to refresh its .claude/ skills and hooks.'));
+    return 0;
   }
+
+  if (!deps.projectMarkerPresent(projectRoot)) {
+    const ok = await deps.confirmInstall(
+      '当前目录没有 .cgraphx/ 或 .claude/,不像是已接入 cgraphx 的项目根目录。install 会在此目录创建它们——确认继续?(建议 cd 到项目根目录再跑 `cgraphx upgrade`)',
+    );
+    if (!ok) {
+      deps.log(c.dim('Skipped the project refresh. Run `cgraphx install` inside your project when ready.'));
+      return 0;
+    }
+  }
+
+  const globalRoot = pulled && deps.method.kind === 'npm' && deps.method.scope === 'global'
+    ? deps.npmGlobalRoot()
+    : null;
+  const plan = planProjectInstall({
+    method: deps.method,
+    pulled,
+    projectRoot,
+    currentCliEntry: deps.currentCliEntry,
+    nodeExecPath: deps.nodeExecPath,
+    npmGlobalRoot: globalRoot,
+  });
+  if ('unavailable' in plan) {
+    deps.warn(`Couldn't auto-run the project install (${plan.unavailable}).`);
+    deps.log(c.dim('Run `cgraphx install` inside the project to refresh it.'));
+    return 0;
+  }
+
+  deps.log('');
+  deps.log(c.bold(`Refreshing project install in ${projectRoot} ...`));
+  const code = deps.runInstall(plan.cmd, plan.args, projectRoot);
+  if (code !== 0) {
+    deps.error(`CLI 更新成功,但项目 install 失败(exit ${code})——请到项目内手动重跑 \`cgraphx install\`。`);
+    return 1;
+  }
+  deps.log(c.green('✓ 完成——CLI 与当前项目都已对齐到当前版本。重启 agent 以加载新技能。'));
+  return 0;
 }
 
 function upgradeNpm(
@@ -264,9 +440,7 @@ function upgradeNpm(
     }
     return 1;
   }
-  deps.log('');
-  deps.log(c.green('✓ Upgrade complete.'));
-  deps.log(reindexAdvisory());
+  deps.log(c.green('✓ Package updated.'));
   return 0;
 }
 
@@ -275,7 +449,22 @@ function upgradeNpm(
 // ---------------------------------------------------------------------------
 
 export function defaultRun(cmd: string, args: string[], env?: NodeJS.ProcessEnv): number {
-  const r = spawnSync(cmd, args, { stdio: 'inherit', env: env ?? process.env });
+  const r = spawnSync(cmd, args, {
+    stdio: 'inherit',
+    env: env ?? process.env,
+    shell: needsShell(cmd),
+  });
+  if (r.error) return -1;
+  return r.status ?? -1;
+}
+
+/** Like `defaultRun`, but pinned to the project directory being refreshed. */
+export function defaultRunInstall(cmd: string, args: string[], cwd: string): number {
+  const r = spawnSync(cmd, args, {
+    stdio: 'inherit',
+    cwd,
+    shell: needsShell(cmd),
+  });
   if (r.error) return -1;
   return r.status ?? -1;
 }

@@ -24,7 +24,7 @@
  * the contract; the content is cgraphx's responsibility.
  *
  * Uninstall policy: the template files are NOT removed on uninstall —
- * `cgraphx uninstall` only removes hooks / statusLine / prompt-hook entries
+ * `cgraphx uninstall` only removes hooks / statusLine entries
  * from settings.json. (Removing user files is destructive; a separate
  * `--purge-claude-assets` flag is a later-stage decision.)
  */

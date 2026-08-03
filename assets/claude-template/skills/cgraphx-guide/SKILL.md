@@ -69,7 +69,7 @@ npm install -g cgraphx               # 装 CLI(Node ≥ 20 且 < 25)
 cd /your/project && cgraphx install  # 建 .cgraphx/ + 部署 skills/commands 到 .claude/ + 写 hooks/statusLine
 ```
 
-`cgraphx install` 只作用于当前项目(项目级,写项目内 `.claude/` 与 `.cgraphx/`);升级 CLI(`cgraphx upgrade`)后到各项目重跑一次即可刷新。
+`cgraphx install` 只作用于当前项目(项目级,写项目内 `.claude/` 与 `.cgraphx/`);升级用 `cgraphx upgrade`,在项目目录内执行——自动更新 CLI 并刷新当前项目;其他项目各自 cd 进去跑一次。
 
 接手陌生项目时可选第四步:`/knowledge-init` 派子 agent 自动探索、建业务知识库到 `docs/knowledge/`。
 

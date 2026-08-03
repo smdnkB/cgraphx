@@ -28,6 +28,40 @@ The requirement stage is now derived live from the artifacts present in
 - Pre-existing `> 状态:` header lines are ignored and left untouched;
   负责人 / 日期 / `--mine` are unchanged.
 
+### Changed — `upgrade` now refreshes the project it runs in
+
+`cgraphx upgrade` is now meant to be run inside a project directory. After
+pulling the latest package it automatically re-runs the project `install`
+with the freshly installed CLI, so one command brings both the CLI and the
+current project's `.claude/` skills / hooks and `.cgraphx/` up to date — the
+old "go re-run `cgraphx install` in every project" reminder is gone.
+
+- Already on the latest version → the pull is skipped but the project
+  refresh still runs (idempotent); `--check` remains purely read-only.
+- Unsafe directories ($HOME / a filesystem root) skip the refresh with a
+  warning; a directory with no `.cgraphx/` or `.claude/` asks for
+  confirmation first (non-interactive stdin declines).
+- `--no-install` restores the previous package-only behavior.
+
+### Removed — dead "前置注入 prompt-hook" installer option
+
+The `cgraphx prompt-hook` subcommand was removed together with the 1.x code
+graph, but the installer still offered to wire it as an opt-in — a dangling
+hook that errored (`unknown command`) on every prompt submission, and which
+`install -y` even forced on. The installer question and the
+`install --prompt-hook <bool>` flag are gone; `install` now self-heals
+leftover `hooks.UserPromptSubmit → "cgraphx prompt-hook"` entries (uninstall
+already stripped them). Pinning back to an old release still runs that old
+installer's behavior — nothing this release can do about old binaries.
+
+### Fixed — Windows `npm` / `npx` spawns no longer fail with EINVAL
+
+Since the CVE-2024-27980 hardening (Node ≥ 20.12), spawning `.cmd` shims
+without `shell: true` throws EINVAL on Windows, which broke every npm
+invocation `upgrade` makes there (`npm view`, `npm install -g`,
+`npm root -g`). All npm spawns now pass `shell: true` on Windows (hardcoded
+arg vectors only — no user input reaches the shell).
+
 ## 2.0.0
 
 cgraphx 2.0 is a rebuild focused on the three subsystems AI coding agents reuse

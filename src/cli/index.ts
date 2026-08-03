@@ -38,6 +38,7 @@ import { registerWebCommand } from '../web';
 
 import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
+import { getCodeGraphDir, unsafeIndexRootReason } from '../core/directory';
 
 // -----------------------------------------------------------------------------
 // Node.js version floor.
@@ -77,6 +78,31 @@ if (process.argv.length === 2) {
     });
 } else {
   main();
+}
+
+// Dynamic import helper — tsc compiles import() to require() in CJS mode,
+// which fails for ESM-only packages (@clack/prompts). Same trick as the
+// installer.
+// eslint-disable-next-line @typescript-eslint/no-implied-eval
+const importESM = new Function('specifier', 'return import(specifier)') as
+  (specifier: string) => Promise<typeof import('@clack/prompts')>;
+
+/**
+ * Confirmation gate for `upgrade`'s auto project-install when the current
+ * directory doesn't look like a cgraphx project (no `.cgraphx/` / `.claude/`).
+ * Non-interactive stdin declines (safe default for scripts); a cancelled
+ * prompt or a prompt failure also declines — upgrade degrades to
+ * "package updated, run install yourself", never crashes on a prompt.
+ */
+async function confirmProjectInstall(message: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+  try {
+    const clack = await importESM('@clack/prompts');
+    const ans = await clack.confirm({ message, initialValue: false });
+    return clack.isCancel(ans) ? false : ans;
+  } catch {
+    return false;
+  }
 }
 
 function main(): void {
@@ -152,23 +178,30 @@ function main(): void {
   // ===========================================================================
   program
     .command('upgrade [version]')
-    .description('Update cgraphx to the latest release (or a specific version)')
+    .description('Update cgraphx and refresh the current project (pull the package, then auto-run install)')
     .option('--check', 'Check whether an update is available without installing')
     .option('-f, --force', 'Reinstall even if already on the target version')
+    .option('--no-install', 'Only update the package; skip refreshing the current project')
     .action(
       async (
         versionArg: string | undefined,
-        options: { check?: boolean; force?: boolean },
+        options: { check?: boolean; force?: boolean; install?: boolean },
       ) => {
         const up = await import('./upgrade');
+        const projectRoot = process.cwd();
         const method = up.detectInstallMethod({
           filename: __filename,
           platform: process.platform,
-          cwd: process.cwd(),
+          cwd: projectRoot,
         });
         const pin = versionArg || process.env.CGRAPHX_VERSION || undefined;
         const code = await up.runUpgrade(
-          { version: pin, check: options.check, force: options.force },
+          {
+            version: pin,
+            check: options.check,
+            force: options.force,
+            install: options.install,
+          },
           {
             currentVersion: packageJson.version,
             method,
@@ -178,6 +211,16 @@ function main(): void {
             warn: (m: string) => console.log(chalk.yellow(m)),
             error: (m: string) => console.error(chalk.red(m)),
             platform: process.platform,
+            projectRoot,
+            unsafeRootReason: (dir: string) => unsafeIndexRootReason(dir),
+            projectMarkerPresent: (dir: string) =>
+              fs.existsSync(getCodeGraphDir(dir)) ||
+              fs.existsSync(path.join(dir, '.claude')),
+            confirmInstall: confirmProjectInstall,
+            currentCliEntry: __filename,
+            nodeExecPath: process.execPath,
+            npmGlobalRoot: () => up.resolveNpmGlobalRoot(process.platform),
+            runInstall: up.defaultRunInstall,
           },
         );
         process.exit(code);
@@ -203,27 +246,17 @@ function main(): void {
     .option('-t, --target <ids>', 'Target agent(s) (2.0 ships only Claude)')
     .option(
       '-y, --yes',
-      'Non-interactive: use defaults (prompt-hook on, no prompts)',
-    )
-    .option(
-      '--prompt-hook <bool>',
-      'Wire the front-load prompt hook (true) or skip it (false)',
+      'Non-interactive: use defaults (all subsystems, no prompts)',
     )
     .action(
       async (opts: {
         target?: string;
         yes?: boolean;
-        promptHook?: string;
       }) => {
         const { runInstallerWithOptions } = await import('./installer');
-        const promptHook =
-          opts.promptHook === undefined
-            ? undefined
-            : opts.promptHook === 'true';
         try {
           await runInstallerWithOptions({
             target: opts.target,
-            promptHook,
             yes: opts.yes,
           });
         } catch (err) {
