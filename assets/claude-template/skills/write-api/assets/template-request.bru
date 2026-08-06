@@ -62,9 +62,9 @@ tests {
         expect(body.data).to.exist;
     });
 
-    # 写接口额外写 DB 副作用预期注释,供 S6 AI 核实参考:
-    # DB 预期:users 表新增一行,name=测试用户,email=test@example.com
-    # DB 预期:user_profile 表同步新增一行,user_id=本次返回的 id
+    // 写接口额外写 DB 副作用预期注释,供 /run-api-test R4 AI 核实参考:
+    // DB 预期:users 表新增一行,name=测试用户,email=test@example.com
+    // DB 预期:user_profile 表同步新增一行,user_id=本次返回的 id
 }
 
 docs {

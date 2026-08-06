@@ -78,17 +78,17 @@ tests {
         expect(body.data).to.exist;
     });
 
-    # 写接口额外写 DB 副作用预期注释,供下游 /run-api-test 的 R4 AI 核实参考:
-    # DB 预期:users 表新增一行,name=测试用户,email=test@example.com
-    # DB 鄄期:user_profile 表同步新增一行,user_id=本次返回的 id
+    // 写接口额外写 DB 副作用预期注释,供下游 /run-api-test 的 R4 AI 核实参考:
+    // DB 预期:users 表新增一行,name=测试用户,email=test@example.com
+    // DB 预期:user_profile 表同步新增一行,user_id=本次返回的 id
 }
 ```
 
 ### 断言内容要求
 
-- **HTTP 状态码断言** — 每个场景都要(正常场景通常 200/201,异常场景可能 400/404/409)
-- **响应体关键字段断言** — 从 spec 接口语义或代码返回结构提取,用 `JSON.parse(res.getBody())` 取 body
-- **写接口额外写 DB 副作用预期注释** — 用 `#` 注释,写预期会写/改/删哪些表哪些字段,供 `/run-api-test` R4 AI 核实参考
+- **HTTP 状态码断言** — 每个场景都要;正常场景通常 200/201;**异常场景不得默认 200**——状态码从 interface-standards.md 错误码约定取(可能是 400/404/409,也可能是项目特有业务码,如虎翼业务异常返回 HTTP 510),约定没写标【待确认】交用户,不拍脑袋
+- **响应体关键字段断言** — 从 spec 接口语义或代码返回结构提取,用 `JSON.parse(res.getBody())` 取 body;字段名与嵌套层级以代码实际返回结构为准(含 `opp_key` 这类 snake_case、封装层是否还有一层嵌套),不凭驼峰习惯猜
+- **写接口额外写 DB 副作用预期注释** — 用 `//` 注释,写预期会写/改/删哪些表哪些字段,供 `/run-api-test` R4 AI 核实参考
 
 ## 入参写真实值,不变量化
 

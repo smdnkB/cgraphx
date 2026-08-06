@@ -73,8 +73,8 @@ write-api S3 生成 .bru 时,在 tests 段写 DB 副作用预期注释(格式见
 ```
 tests {
     ...
-    # DB 预期:users 表新增一行,name=测试用户,email=test@example.com
-    # DB 预期:user_profile 表同步新增一行,user_id=本次返回的 id
+    // DB 预期:users 表新增一行,name=测试用户,email=test@example.com
+    // DB 预期:user_profile 表同步新增一行,user_id=本次返回的 id
 }
 ```
 
