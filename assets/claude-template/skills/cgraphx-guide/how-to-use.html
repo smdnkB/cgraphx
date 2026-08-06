@@ -406,7 +406,7 @@ footer p { margin: 0; }
   <div class="pipeline">
     <div class="step">
       <h4>立规范 · <code>/init-project-guides</code></h4>
-      <p>生成 <code>docs/guides/</code> 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的<strong>有意偏离</strong>——「SQL 禁止 ORDER BY」「金额一律 decimal(12,2)」这类最容易偏离又没有工具兜底的约定。这些 guide 是后续任务的<strong>强制读点</strong>:编码/接口/数据三份会被 <code>/write-plan</code> 结晶成契约(测试规范不走 plan,由测试流程 <code>write-unit-test-code</code>/<code>run-api-test</code> 自读;Git 结晶进 plan 提交规范节)。</p>
+      <p>生成 <code>docs/guides/</code> 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的<strong>有意偏离</strong>——「SQL 禁止 ORDER BY」「金额一律 decimal(12,2)」这类最容易偏离又没有工具兜底的约定。这些 guide 是后续任务的<strong>强制读点</strong>:编码/接口/数据三份会被 <code>/write-plan</code> 结晶成契约(测试规范不走 plan,由 <code>write-unit-test-code</code> 执行前自读,内容全是单测向,接口测试规范由 <code>write-api</code> 读 <code>interface-standards.md</code> 送达;Git 结晶进 plan 提交规范节)。</p>
     </div>
     <div class="step">
       <h4>聊业务 · 和 Claude Code 聊项目</h4>

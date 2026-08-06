@@ -33,7 +33,7 @@
   write-design-doc(设计文档,自测通过后)
   write-api-doc(接口文档,接口开发完毕后)
 
-guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementation / subagent-implement 执行标注,仅无 plan 时自识别)· write-api 独立读接口规范 · commit 门禁 → git-standards;缺失 → init-project-guides 先补(中断)
+guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementation / subagent-implement 执行标注,仅无 plan 时自识别)· write-api 独立读接口规范 · write-unit-test-code 独立读测试规范 · commit 门禁 → git-standards;缺失 → init-project-guides 先补(中断)
 ```
 
 ## 设计流程
@@ -63,6 +63,7 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 - **链**:`/write-unit-test-spec`(零代码依赖,从 spec 派生场景)→ `/write-unit-test-code`(填实测试 + 跑 + 出报告;找不到测试规格直接退出要求先跑前者)
 - **前置**:spec + 实现完成(代码写完后独立流程,与接口测试同节奏)
+- **强制读**:write-unit-test-code 执行前读 `docs/guides/testing-standards.md`(缺失 → `/init-project-guides` 中断)
 - **产物**:feature 目录下测试规格与报告 + 项目测试目录的测试代码
 
 ## 知识库
@@ -87,9 +88,9 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 | `data-standards.md` | schema 任务(含「Schema 变更约定」) |
 | `interface-standards.md` | 接口任务 |
 | `coding-standards.md` | 所有任务(契约部分) |
-| `testing-standards.md` | plan 不读;由测试流程(`write-unit-test-code` / `run-api-test`)自读 |
+| `testing-standards.md` | plan 不读;`write-unit-test-code` 执行前自读(内容全是单测向);接口测试规范由 `write-api` 读 `interface-standards.md` 送达 |
 | `git-standards.md` | 有「独立提交」任务时结晶进 index「提交规范」节(plan 级,一次)+ precommit-check 门禁兜底(deny → 按已结晶的检查点自查) |
-- **执行期送达**:任务按映射打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。**git-standards.md 例外**:不是每任务强制引用,而是 plan 级结晶进 index「提交规范」节,实施期提交时直接用、门禁仅兜底——消除多次小步提交的重复读取成本。**testing-standards.md 也不走 plan 标注**:测试不进 plan,由独立测试流程(`write-unit-test-code` / `run-api-test`)自读。
+- **执行期送达**:任务按映射打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。**git-standards.md 例外**:不是每任务强制引用,而是 plan 级结晶进 index「提交规范」节,实施期提交时直接用、门禁仅兜底——消除多次小步提交的重复读取成本。**testing-standards.md 也不走 plan 标注**:测试不进 plan,内容全是单测向(框架/目录命名/单测集成边界/Mock/fixture/覆盖),由 `write-unit-test-code` 执行前自读(缺失 → 提示 `/init-project-guides` 补齐);接口测试规范走 `write-api` 读 `interface-standards.md`,`run-api-test` 不另读规范。
 
 ## 事后文档(发布后 · 按需,不在开发主链)
 

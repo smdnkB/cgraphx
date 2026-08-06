@@ -76,7 +76,7 @@ cgraphx 的 skill 流程针对 AI 辅助研发中反复出现的几类浪费,逐
 
 **4. 需求理解偏差。** 拿到模糊需求直接开写,做完发现理解错了,是另一种返工。`/clarify-requirements` 在写任何文档和代码之前先锁业务边界和技术约束——像员工接领导任务:先确认意图、识别任务类型、针对性提问,必要时挑战假设,而不是拿到一句话就开始干。
 
-**5. 规范靠人记。** 编码规范、接口规范、数据规范、提交规范,写了没人看、看了记不住。解法是**规范在执行期自动送达**:`/init-project-guides` 生成 `docs/guides/` → `/write-plan` 按任务类型打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试 → testing-standards.md)→ implementation / subagent-implement 执行时只读标注的规范,不需要人主动想起来;commit 门禁(precommit-check hook)在 `git commit` 前拦截,指向 `git-standards.md` 自查。
+**5. 规范靠人记。** 编码规范、接口规范、数据规范、提交规范,写了没人看、看了记不住。解法是**规范在执行期自动送达**:`/init-project-guides` 生成 `docs/guides/` → `/write-plan` 按任务类型打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试规范不进 plan,由 write-unit-test-code 执行前自读)→ implementation / subagent-implement 执行时只读标注的规范,不需要人主动想起来;commit 门禁(precommit-check hook)在 `git commit` 前拦截,指向 `git-standards.md` 自查。
 
 **6. 开发流程到「写完代码」就断了。** 市面上的 AI 辅助研发工具(包括开源的)基本只覆盖到代码生成为止——接口写完、代码提交,流程就结束了;测试是人的事,手动录接口、手动跑、手动验。cgraphx 把接口测试织进了 skill 流程:`/write-api` 从 spec 的接口章节自动生成 bruno 测试用例(.bru + 内嵌断言 + 真实参数),`/run-api-test` 跑测试并强制核实写接口的 DB 副作用(HTTP 200 ≠ 通过,不查数据等于没测)。从 spec → 代码 → 测试用例生成 → 执行 → DB 验证 → 出报告,是闭环而不是断链。
 

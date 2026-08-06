@@ -45,7 +45,7 @@ npm uninstall -g cgraphx  # 卸载 CLI
 
 **1. 立规范 · `/init-project-guides`**
 
-生成 `docs/guides/` 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的**有意偏离**——「SQL 禁止 `ORDER BY`」「金额一律 `decimal(12,2)`」这类最容易偏离又没有工具兜底的约定。新项目立起步默认(注明「待演进」);已有项目从代码/git 历史挖既有约定固化成文。这些 guide 是后续任务的**强制读点**:编码/接口/数据三份会被 `/write-plan` 结晶成契约(测试规范不走 plan,由测试流程 `write-unit-test-code`/`run-api-test` 自读;Git 结晶进 plan 提交规范节)。
+生成 `docs/guides/` 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的**有意偏离**——「SQL 禁止 `ORDER BY`」「金额一律 `decimal(12,2)`」这类最容易偏离又没有工具兜底的约定。新项目立起步默认(注明「待演进」);已有项目从代码/git 历史挖既有约定固化成文。这些 guide 是后续任务的**强制读点**:编码/接口/数据三份会被 `/write-plan` 结晶成契约(测试规范不走 plan,由 `write-unit-test-code` 执行前自读,内容全是单测向,接口测试规范由 `write-api` 读 `interface-standards.md` 送达;Git 结晶进 plan 提交规范节)。
 
 **2. 聊业务 · 和 Claude Code 聊项目**
 
