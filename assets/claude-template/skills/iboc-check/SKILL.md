@@ -1,0 +1,115 @@
+---
+name: iboc-check
+disable-model-invocation: true
+description: 代码开发完成后的文档收口补账:核实 docs/features/ 下本人 git 提交过的需求,补主 spec 头部(feature-id/负责人/日期),再循环补全缺失的单元测试规格/单元测试报告/收口档案。Use when 开发完成后补文档 / 老需求补头部 / 补单测产物 / 补收口档案 / 文档收口 / iboc-check.
+---
+
+# IBOC Check(文档收口补账)
+
+## 定位
+
+局方项目代码开发完成后的**事后文档补账**:老需求多在规范建立前做,spec 无头部、单测产物与收口档案参差。两步走——先**纠正**(只给本人提交过的需求补头部),再**补全**(按清单循环补缺的文档)。
+
+**主 agent 是统帅不是先锋**:归属核实、补头部、清单、提交留在主 agent;补全重活(读 spec/实现代码、写测试、跑测试、写档案)逐需求派隔离上下文的 filler 子 agent——单需求 spec→测试代码→收口档案全链不占主上下文,多需求互不累积。
+
+## HARD-GATE
+
+- **只动头部块** —— 补缺失行 + 删多余字段(如状态);不碰正文、不改文件名、不新建 spec;无主 spec 的需求只提示「无法补充」,补 spec 是 `/write-spec` 的事
+- **只处理有 git 提交记录的需求** —— `docs/features/<目录>` 未提交的不处理,不猜归属
+- **归属清单必须用户确认** —— git 作者命中只是候选,是不是自己的由用户最终拍板
+- **不覆盖既有头部行** —— 头部行已存在则跳过该行,只补缺失的
+- **子 skill 守各自边界** —— filler 子 agent 只在自己需求内编排执行,不越权替子 skill 做判断
+- **一需求一子 agent,串行派任** —— git index 与测试运行是共享资源,不并行
+- **子 agent 不提交** —— 提交点必须和 sanity check 闸门同侧,主 agent 验证通过后才提交
+
+## 流程
+
+### 1. 归属核实
+
+- 取当前用户:`git config user.name`
+- 对 `docs/features/` 每个目录跑 `git log --format='%an' -- docs/features/<目录名>` 取作者集:
+  - 无提交记录 → 跳过,不处理
+  - 作者集含当前用户 → 进候选清单
+- **候选清单显示给用户确认**(目录名 + 日期 + 提交作者),用户剔除的移出清单
+
+### 2. 补头部(只加不改)
+
+对确认后的每个需求目录,找主 spec(`<前缀>-spec.md` 或 `spec.md`):
+
+- **无主 spec** → 记入「无法补充清单」,收尾时提示,不创建文件
+- **有主 spec** → 在文件头部(标题行后,对齐既有 `> ` 块)补缺失的行:
+
+```markdown
+> feature-id: 2026-08-03-审批引擎会签与重发能力
+> 负责人: liulongfei
+> 日期: 2026-08-03
+```
+
+三行取值:需求目录名 / `git config user.name` / 目录名日期前缀(**不是当前日期**), 同时删除其他多余字段,比如状态。
+
+### 3. 生成工作清单
+
+执行 `cgraphx features sync`,读 `.cgraphx/my-features.md`——头部补对后,这里应包含当前 git 用户的全部需求。为每个需求建一条待办,进入补全循环。
+
+### 4. 补全循环(逐需求派 filler 子 agent)
+
+逐需求核三样,缺什么补什么:
+
+| 产物 | 文件名 | 缺失时调用 |
+|---|---|---|
+| 单元测试规格 | `<前缀>-单元测试-spec.md` | `/write-unit-test-spec` |
+| 单元测试报告 | `<前缀>-单元测试报告.md` | `/write-unit-test-code`(依赖规格;规格刚补完接着跑) |
+| 收口档案 | `收口档案.md` 或 `<前缀>-收口档案.md` | `/end` |
+
+每条待办是独立任务,补全重活不进主上下文——**派 filler 子 agent**:
+
+- 三样齐全 → 待办直接完成,不派
+- 有缺失 → Read `./filler-prompt.md` + 拼任务三件套(需求 / 缺失产物 / 上下文)→ Agent tool 派 `general-purpose`,在隔离上下文按依赖顺序补全(规格 → 报告 → 档案)
+- **串行**:一需求一子 agent,跑完一个再派下一个(git index 与测试运行是共享资源,不并行)
+- **status 协议**:DONE → sanity check → 提交;DONE_WITH_CONCERNS → 辨因处理(correctness/scope 先解决,observation 记录);NEEDS_CONTEXT → 补 context 重派;BLOCKED → 记「受阻」进下一条(补账任务相互独立,一个卡住不拖其他)
+- **sanity check(主 agent,每需求)**:声称补出的产物真实存在 + git status 只含该需求的文件;不过 → 派修或记录,不提交
+
+**小步提交(每需求独立,主 agent 提交)**:sanity check 通过后,主 agent 按子 agent 报告的「改动文件」清单精确 stage,独立提交,再进下一条:
+
+- 提交范围:该需求 `docs/features/<目录>/` 下本次改动(补的头部 + 补出的规格/报告/收口档案)+ write-unit-test-code 产出的测试文件;不混入其他需求、不夹带无关文件
+- commit message:项目有 `docs/guides/git-standards.md` 按其规范;没有则参考 `docs: <需求标题> 文档补账`
+- 被 precommit 门禁拦截 → 按提示自查 staged diff 后重试(`CGRAPHX_PRECOMMIT_REVIEWED=1`)
+- 该需求无任何改动(三样齐全且头部已全)→ 不产生提交
+
+### 5. 收尾汇报
+
+- 补了头部的需求数;「无法补充清单」(无主 spec 的,提示可走 `/write-spec` 补)
+- 每条待办的补全结果:补了什么 / 已齐全跳过 / 子 skill 报告的失败与待确认项 / 受阻跳过
+- 提交清单:每需求一笔(需求 + commit message);push 归用户
+- 下一步交用户,不自动继续
+
+## 派任模板
+
+Read 模板 + 拼任务三件套成 prompt,派 `general-purpose`:
+
+- `./filler-prompt.md` —— 每条有缺失产物的待办派一次;三件套 = ① 需求(feature-id + 目录 + 文件前缀)② 缺失产物清单 ③ 上下文(git 用户名、对该需求的已知说明)
+
+## 边界场景
+
+- **未提交的需求目录** → 不处理,不猜归属
+- **无主 spec** → 提示无法补充,不代写
+- **头部行部分存在** → 只补缺失行,不改已有值(负责人已有值也不覆盖)
+- **git 作者命中但用户否认** → 移出清单,不处理
+- **补了头部仍不在 my-features.md** → 提示用户检查头部行格式,不硬改
+- **filler 子 agent BLOCKED** → 记「受阻」进下一条,不卡死整队
+
+## 不做的事
+
+- 不新建 spec、不改正文、不改文件名(纠正只在头部块:补缺失行 + 删多余字段)
+- 不处理未提交的需求目录
+- 不自动确认归属清单
+- 不写业务实现代码(子 skill 也不写)
+- 不碰他人需求(归属过滤 + 用户确认双保险)
+- 不 push(只提交,push 归用户)
+
+## 和其他 skill 的关系
+
+- **implementation / subagent-implement**:上游,代码开发完成后才轮到本 skill
+- **write-unit-test-spec / write-unit-test-code / end**:由 filler 子 agent 在隔离上下文内按需调用
+- **subagent-implement**:同款 controller/子 agent 模式(隔离派任 + 提交归 controller);这里更轻——无 plan/spec 审查,一需求一子 agent
+- **features sync**:头部补正是它的数据修正——负责人取自 spec 头部,头部缺失时「按人找需求」失效
