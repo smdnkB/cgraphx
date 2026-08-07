@@ -3,6 +3,8 @@
  *
  * 单一职责:把 <project>/docs/features/ 下的每个子目录解析成一个
  * FeatureEntry。头部元数据(负责人/日期)优先级:spec 文件头部 > plan/index 头部 > 目录名。
+ * spec 候选按主 spec 优先(文件长度升序)遍历,取第一个头部读出负责人的——
+ * 避免派生 spec(api-spec/单元测试-spec)遮蔽主 spec 导致负责人丢失。
  *
  * 头部行约定(与 write-spec / write-plan 的产物头部一致):
  *
@@ -68,8 +70,21 @@ function hasPlanIndex(featureDir: string): boolean {
 }
 
 /**
+ * spec 候选排序:主 spec 优先。主 spec `<前缀>-spec.md`(或 `spec.md`)恒短于
+ * 同前缀的派生 spec(`<前缀>-api-spec.md` / `<前缀>-单元测试-spec.md`,文件名多一段),
+ * 按「长度升序、同名再按字典序」排,主 spec 必排最前。
+ */
+function compareSpecCandidates(a: string, b: string): number {
+  return a.length - b.length || a.localeCompare(b);
+}
+
+/**
  * 在一个 feature 目录里找元数据文件(读 负责人/日期 用):先 *-spec.md(或 spec.md),
  * 再 plan/*-index.md(或 plan/index.md)。都没有 → null(仅目录名可解析)。
+ *
+ * spec 候选按主 spec 优先遍历,取第一个头部读出负责人的——主 spec 头部残缺时
+ * 仍可能从其他候选读出,且派生 spec 不再遮蔽主 spec(api-spec 的 'a' 字典序
+ * 曾排在主 spec 的 's' 前,导致负责人恒丢失)。
  */
 function findMetaFile(featureDir: string): string | null {
   let entries: string[];
@@ -78,17 +93,21 @@ function findMetaFile(featureDir: string): string | null {
   } catch {
     return null;
   }
-  const spec = entries
+  const specs = entries
     .filter((n) => n.endsWith('-spec.md') || n === 'spec.md')
-    .sort()[0];
-  if (spec) {
-    return path.join(featureDir, spec);
+    .sort(compareSpecCandidates);
+  let mainSpec: string | null = null;
+  for (const name of specs) {
+    const file = path.join(featureDir, name);
+    if (mainSpec === null) mainSpec = file;
+    if (readHeaderMeta(file).owner !== null) return file;
   }
+  if (mainSpec !== null) return mainSpec;
   try {
     const planEntries = fs.readdirSync(path.join(featureDir, 'plan'));
     const index = planEntries
       .filter((n) => n.endsWith('-index.md') || n === 'index.md')
-      .sort()[0];
+      .sort(compareSpecCandidates)[0];
     if (index) {
       return path.join(featureDir, 'plan', index);
     }
