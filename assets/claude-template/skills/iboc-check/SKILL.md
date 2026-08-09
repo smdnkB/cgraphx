@@ -1,14 +1,14 @@
 ---
 name: iboc-check
 disable-model-invocation: true
-description: 代码开发完成后的文档收口补账:核实 docs/features/ 下本人 git 提交过的需求,补主 spec 头部(feature-id/负责人/日期),再循环补全缺失的单元测试规格/单元测试报告/收口档案。Use when 开发完成后补文档 / 老需求补头部 / 补单测产物 / 补收口档案 / 文档收口 / iboc-check.
+description: 代码开发完成后的文档收口补账:核实 docs/features/ 下本人 git 提交过的需求,补主 spec 头部(feature-id/负责人/日期),再循环补全缺失的单元测试规格/单元测试报告/设计文档/收口档案。Use when 开发完成后补文档 / 老需求补头部 / 补单测产物 / 补设计文档 / 补收口档案 / 文档收口 / iboc-check.
 ---
 
 # IBOC Check(文档收口补账)
 
 ## 定位
 
-局方项目代码开发完成后的**事后文档补账**:老需求多在规范建立前做,spec 无头部、单测产物与收口档案参差。两步走——先**纠正**(只给本人提交过的需求补头部),再**补全**(按清单循环补缺的文档)。
+局方项目代码开发完成后的**事后文档补账**:老需求多在规范建立前做,spec 无头部、单测产物、设计文档与收口档案参差。两步走——先**纠正**(只给本人提交过的需求补头部),再**补全**(按清单循环补缺的文档)。
 
 **主 agent 是统帅不是先锋**:归属核实、补头部、清单、提交留在主 agent;补全重活(读 spec/实现代码、写测试、跑测试、写档案)逐需求派隔离上下文的 filler 子 agent——单需求 spec→测试代码→收口档案全链不占主上下文,多需求互不累积。
 
@@ -53,28 +53,29 @@ description: 代码开发完成后的文档收口补账:核实 docs/features/ �
 
 ### 4. 补全循环(逐需求派 filler 子 agent)
 
-逐需求核三样,缺什么补什么:
+逐需求核四样,缺什么补什么:
 
 | 产物 | 文件名 | 缺失时调用 |
 |---|---|---|
 | 单元测试规格 | `<前缀>-单元测试-spec.md` | `/write-unit-test-spec` |
 | 单元测试报告 | `<前缀>-单元测试报告.md` | `/write-unit-test-code`(依赖规格;规格刚补完接着跑) |
+| 设计文档 | `<前缀>-设计文档.md` | `/write-design-doc` |
 | 收口档案 | `收口档案.md` 或 `<前缀>-收口档案.md` | `/end` |
 
 每条待办是独立任务,补全重活不进主上下文——**派 filler 子 agent**:
 
-- 三样齐全 → 待办直接完成,不派
-- 有缺失 → Read `./filler-prompt.md` + 拼任务三件套(需求 / 缺失产物 / 上下文)→ Agent tool 派 `general-purpose`,在隔离上下文按依赖顺序补全(规格 → 报告 → 档案)
+- 四样齐全 → 待办直接完成,不派
+- 有缺失 → Read `./filler-prompt.md` + 拼任务三件套(需求 / 缺失产物 / 上下文)→ Agent tool 派 `general-purpose`,在隔离上下文按依赖顺序补全(规格 → 报告 → 设计文档 → 档案)
 - **串行**:一需求一子 agent,跑完一个再派下一个(git index 与测试运行是共享资源,不并行)
 - **status 协议**:DONE → sanity check → 提交;DONE_WITH_CONCERNS → 辨因处理(correctness/scope 先解决,observation 记录);NEEDS_CONTEXT → 补 context 重派;BLOCKED → 记「受阻」进下一条(补账任务相互独立,一个卡住不拖其他)
 - **sanity check(主 agent,每需求)**:声称补出的产物真实存在 + git status 只含该需求的文件;不过 → 派修或记录,不提交
 
 **小步提交(每需求独立,主 agent 提交)**:sanity check 通过后,主 agent 按子 agent 报告的「改动文件」清单精确 stage,独立提交,再进下一条:
 
-- 提交范围:该需求 `docs/features/<目录>/` 下本次改动(补的头部 + 补出的规格/报告/收口档案)+ write-unit-test-code 产出的测试文件;不混入其他需求、不夹带无关文件
+- 提交范围:该需求 `docs/features/<目录>/` 下本次改动(补的头部 + 补出的规格/报告/设计文档/收口档案)+ write-unit-test-code 产出的测试文件;不混入其他需求、不夹带无关文件
 - commit message:项目有 `docs/guides/git-standards.md` 按其规范;没有则参考 `docs: <需求标题> 文档补账`
 - 被 precommit 门禁拦截 → 按提示自查 staged diff 后重试(`CGRAPHX_PRECOMMIT_REVIEWED=1`)
-- 该需求无任何改动(三样齐全且头部已全)→ 不产生提交
+- 该需求无任何改动(四样齐全且头部已全)→ 不产生提交
 
 ### 5. 收尾汇报
 
@@ -110,6 +111,6 @@ Read 模板 + 拼任务三件套成 prompt,派 `general-purpose`:
 ## 和其他 skill 的关系
 
 - **implementation / subagent-implement**:上游,代码开发完成后才轮到本 skill
-- **write-unit-test-spec / write-unit-test-code / end**:由 filler 子 agent 在隔离上下文内按需调用
+- **write-unit-test-spec / write-unit-test-code / write-design-doc / end**:由 filler 子 agent 在隔离上下文内按需调用
 - **subagent-implement**:同款 controller/子 agent 模式(隔离派任 + 提交归 controller);这里更轻——无 plan/spec 审查,一需求一子 agent
 - **features sync**:头部补正是它的数据修正——负责人取自 spec 头部,头部缺失时「按人找需求」失效
