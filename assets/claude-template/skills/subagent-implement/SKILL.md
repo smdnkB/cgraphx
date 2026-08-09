@@ -24,7 +24,7 @@ description: 复杂 plan 的子 agent 实现流程 — 主 agent 作为 controll
 3. 全部完成 → 派 quality-reviewer 整体审查(必派、仅一次、在自审+sanity check 之后)
    → 不通过:主 agent 微修或派 fix 子 agent → 重审
 
-4. 收尾:汇报 + 沉淀提示 + 未提交任务的 commit/PR 交用户决定(push 永远归用户)
+4. 收尾:汇报 + 沉淀提示 + 交付讲解提示 + 未提交任务的 commit/PR 交用户决定(push 永远归用户)
 ```
 
 ### 派任:四件套注入
@@ -88,7 +88,8 @@ Read 模板 + 任务/审查目标拼成 prompt,派 `general-purpose`:
 
 1. 汇报:完成清单 / 修复历史 / 剩余风险 / plan 忠实度(`PLAN_FOLLOWED` / `PLAN_ADAPTED` / 是否出现并解决过 `PLAN_CONFLICT`)
 2. 知识沉淀提示(确有内容才问):本次交付让某业务实体参与了新业务或出现新实体(实体 = 名词可指代、有属性和生命周期的业务对象)→ 新建/更新实体主条目(`business-entity`),流程条目在 concepts 声明该实体;或踩坑/隐式约束/取舍决策/跨文件关系值得复用。列候选清单问用户;确认 → 走 `knowledge-write` 完整流程。不要自己直接 Write .md
-3. 提示收尾:已按 plan「独立提交」标注提交的任务清单 + 未提交任务的 commit / PR 交用户决定;push 永远归用户。停下等用户
+3. 交付讲解提示(有实质代码改动才问):整体交付含新增接口/流程或改动既有逻辑 → 问"是否用 write-delivery-guide 生成本次整体交付的讲解?"确认 → 对**本次整体交付**(不是单个子任务)走 `write-delivery-guide` 完整流程;琐碎改动不提
+4. 提示收尾:已按 plan「独立提交」标注提交的任务清单 + 未提交任务的 commit / PR 交用户决定;push 永远归用户。停下等用户
 
 ## 红线(绝对不能做)
 

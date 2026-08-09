@@ -76,7 +76,7 @@ knowledge-recall(自动召回)
    ▼              ▼                   ▼
 /write-api    /write-unit-test-spec  交付收尾:
 → /run-api-test → /write-unit-test-code  /knowledge-write 沉淀
-  接口测试       单元测试              commit 门禁
+  接口测试       单元测试              /write-delivery-guide 讲解 + commit 门禁
 
 ── 发布后 · 按需(不在主链,不参与门禁)──────────────────
 /write-prd(业务方审阅)  /write-design-doc(设计文档)  /write-api-doc(接口文档)
@@ -98,6 +98,8 @@ knowledge-recall(自动召回)
 - **必经** `/implementation`(简单:1-3 文件/单模块)或 `/subagent-implement`(复杂:≥3 任务跨域,派子 agent 隔离上下文)
 
 > 日常默认 2 步:澄清 + 实现。spec 是唯一契约——「没有任何业务义务存在于 spec 之外」,变更时只改 spec 一处,下游重新派生。
+
+> **交付收尾**:实现收尾会提示两件事——沉淀(`/knowledge-write`,沉淀业务决策/实体到 `docs/knowledge/`)和讲解(`/write-delivery-guide`,有实质代码改动时提示生成本次交付的故事线讲解,归档进需求目录、可重生成)。
 
 ---
 
@@ -180,6 +182,7 @@ docs/
 │       ├── <前缀>-测试验证.jsonl      /run-api-test         可选  自动产出
 │       ├── <前缀>-单元测试-spec.md    /write-unit-test-spec 可选  开发完成后
 │       ├── <前缀>-单元测试报告.md     /write-unit-test-code 可选  开发完成后
+│       ├── <前缀>-交付讲解.md         /write-delivery-guide 可选  交付时
 │       └── <前缀>-设计文档.md         /write-design-doc     可选  发布后按需
 │
 ├── knowledge/   业务知识库(跨需求共享)

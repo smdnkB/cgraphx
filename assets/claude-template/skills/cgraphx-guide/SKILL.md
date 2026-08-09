@@ -34,7 +34,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
 | **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/knowledge-init`(接手陌生项目时建业务知识库) |
 | **日常做需求 · 必经 2 步** | `/clarify-requirements` 澄清 → `/implementation`(简单)或 `/subagent-implement`(复杂)实现 |
-| **日常做需求 · 复杂按需** | `/write-prd`、`/write-spec`、`/write-plan`、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
+| **日常做需求 · 复杂按需** | `/write-prd`、`/write-spec`、`/write-plan`、`/knowledge-write`(沉淀到 `docs/knowledge/`)、`/write-delivery-guide`(交付讲解,实现收尾提示触发) |
 | **工作回顾 · 按需** | `/developer-timeline`(日/周/月报)、`/write-design-doc`(发布后合成设计文档) |
 | **卸载 · 可选** | `cgraphx uninstall`(清项目 `.claude/` 内包自带的 skills/配置 + 删 `.cgraphx/`)、`npm uninstall -g cgraphx` |
 
@@ -53,6 +53,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/knowledge-init` | 接手陌生项目,派子 agent 自动探索、建业务知识库 |
 | `/knowledge-write` | 把业务决策 / 概念沉淀成 md 到 `docs/knowledge/` |
 | `/write-design-doc` | 发布后按需,从知识库合成面向人类阅读的设计文档(HTML 或 Markdown) |
+| `/write-delivery-guide` | 交付后生成/重生成「交付讲解」——业务故事线讲解,让人看懂 AI 写的代码(实现收尾自动提示) |
 | `/developer-timeline` | 生成日报 / 周报 / 月报 / 阶段总结 / 交付汇报 |
 
 ### agent 自动调用(用户不主动敲,agent 用来加载项目上下文)
