@@ -9,7 +9,7 @@
 2.0 是一次破坏性重构:1.x 得名所由来代码图谱层已被**整体移除**(没有 `explore`/`query`/`callers`/`index`/`sync`,没有 MCP server,没有遥测)。在假设任何 1.x 行为之前,请先看 `CHANGELOG.md`。由此带来的本仓库现状:
 
 - 根目录下的 `.cgraphx/` 只是运行时数据;`.claude/` 和 `.mcp.json` 是被 gitignore 的 1.x 使用环境产物。
-- `src/web/` 是刻意保留的占位(未来的 `cgraphx web` 本地服务);MVP 阶段不要在这里构建 UI。
+- `src/web/` 是 `cgraphx web` 本地只读浏览服务的实现(经门面 `registerWebCommand` 注册为顶层命令;只读,不写 DB)。
 - 1.* 版本源代码在 ` /Users/smdnk/objects/ai/codegraph `
 
 - 没有配置 lint 脚本。
@@ -37,11 +37,11 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 
 **分层(约定强制,见 spec §3.1):** `src/core/` 承载全部业务逻辑与基础设施,且永远不得依赖 `src/cli/` 或 `src/web/`;`cli` 和 `web` 都只依赖 `core`。
 
-**CLI 入口(`src/cli/index.ts`):** Node 版本下限硬拦截(可用 `CGRAPHX_ALLOW_UNSAFE_NODE` 覆盖)、fatal handler、无参数时进入交互式安装器,然后构建 commander 程序。四个子系统通过各自 `cli.ts` 导出的 `registerDocsCommands` / `registerDbCommands` / `registerTimelineCommands` / `registerFeaturesCommands` 自行注册。新的顶层命令(`init`、`status`、`uninit`、`upgrade`、`install`、`uninstall`)在 `index.ts` 内联注册;子系统子命令归各自子系统的 `cli.ts`。ANSI 颜色是手写的转义序列("避免 chalk 的 ESM 问题")—— 不要引入 chalk。
+**CLI 入口(`src/cli/index.ts`):** Node 版本下限硬拦截(可用 `CGRAPHX_ALLOW_UNSAFE_NODE` 覆盖)、fatal handler、无参数时进入交互式安装器,然后构建 commander 程序。子系统命令组(docs/db/timeline/features)通过各自 `cli.ts` 导出的 `registerDocsCommands` / `registerDbCommands` / `registerTimelineCommands` / `registerFeaturesCommands` 自行注册,`web` 顶层命令经 web 门面注册。`index.ts` 内联注册的顶层命令只有 `upgrade` / `version` / `install` / `uninstall` —— `init` / `status` / `uninit` 已折叠进 `install` / `uninstall`,不存在独立的数据层命令;子系统子命令归各自子系统的 `cli.ts`。ANSI 颜色是手写的转义序列("避免 chalk 的 ESM 问题")—— 不要引入 chalk。
 
 **子系统形态(docs/db/timeline 三个遵循):** 公共门面 `index.ts`(外部调用方必须用它 —— 不得直接伸手进内部模块)、`cli.ts`、`types.ts`、`errors.ts` 中的类型化错误层级、`constants.ts`,以及用于幂等 schema 应用的 `schema.sql` + `schema-bootstrap.ts`。`features` 是轻形态:无 DB、无 schema,索引是 `docs/features/` 目录树的实时派生视图(`list` 查询 / `sync` 全量重写本地个人索引 `.cgraphx/my-features.md`,负责人取 git 用户,write-spec/write-plan 创建时在头部声明 `> 负责人:`)。
 
-**共享 DB(`src/core/db/`):** 每个目标项目一个 SQLite 文件 `.cgraphx/cgraphx.db`,将 `node:sqlite` 的 `DatabaseSync` 包装成 better-sqlite3 风格的接口(`prepare/exec/pragma/transaction`,statement 提供 `run/get/all/iterate`)。基础层与 schema 无关;每个子系统拥有自己的前缀表(`markdown_*`、`timeline_*`)并自行应用 schema。`cgraphx init` 应用 markdown + timeline 两套 schema,已初始化时为空操作;`cgraphx status` 只读、从不应用 schema、从不读 1.x 的图表(`nodes`/`edges`/`files`),未初始化时退出码为 2。
+**共享 DB(`src/core/db/`):** 每个目标项目一个 SQLite 文件 `.cgraphx/cgraphx.db`,将 `node:sqlite` 的 `DatabaseSync` 包装成 better-sqlite3 风格的接口(`prepare/exec/pragma/transaction`,statement 提供 `run/get/all/iterate`)。基础层与 schema 无关;每个子系统拥有自己的前缀表(`markdown_*`、`timeline_*`)并自行应用 schema。`cgraphx install` 在部署资产的同时创建 `.cgraphx/` 并应用 markdown + timeline 两套 schema(幂等,已初始化时为空操作);`cgraphx uninstall` 默认连 `.cgraphx/` 一起删除(`--keep-data` 保留)。「未初始化退出码 2」的约定由 web 启动错误沿用(`src/web/errors.ts`);1.x 遗留的图表表(`nodes`/`edges`/`files`)由 `db/migrate.ts` 一次性清除,别处无人读写。
 
 **docs:** 索引带 frontmatter 的 markdown;查询用 LIKE 而非 FTS5,以兼容 CJK。流水线:`frontmatter-parser` → `validator` → `extractor`/`summary-extractor` → `indexer` → `store`/`query`;去重分两层(入口名、概念名)。
 
@@ -49,7 +49,7 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 
 **timeline:** 通过五个**隐藏的**顶层 hook 子命令记录 Claude Code 事件(`timeline-user-prompt-hook`、`timeline-pre-tool-use-hook`、`timeline-post-tool-use-hook`、`timeline-stop-hook`、`timeline-git-commit-hook`),由 `cgraphx timeline install` 接入目标项目。每个 hook 都是短生命周期进程(打开 DB → INSERT → 退出,约 5ms,必须 await —— 绝不 fire-and-forget);`turn_id` 通过 `.cgraphx/timeline-current-turn.json` 状态文件在各自独立的 hook 进程间传递,读取方必须容忍该文件缺失/损坏(优雅降级,绝不阻塞 hook)。
 
-**安装器(`src/cli/installer/`)+ 资产:** `cgraphx install` 将 `assets/claude-template/`(skills/agents/commands/hooks/plugins)部署进目标项目的 `.claude/`(全局或本地)并接入 timeline hook;2.0 刻意**不**写 `.mcp.json`。模板通过在构建时拷贝到 `dist/.claude-template/` 随包分发。
+**安装器(`src/cli/installer/`)+ 资产:** `cgraphx install` 将 `assets/claude-template/`(skills/agents/commands/hooks/plugins)部署进目标项目的 `.claude/`(全局或本地)、接入 timeline hook、创建 `.cgraphx/` 并应用 schema(即被折叠的旧 `init`);2.0 刻意**不**写 `.mcp.json`。模板通过在构建时拷贝到 `dist/.claude-template/` 随包分发。
 
 ## 易踩的坑
 
