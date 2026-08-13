@@ -16,6 +16,7 @@ import { execSync } from 'node:child_process';
 
 import { DatabaseConnection } from '../db';
 import { HOOK_EVENTS_TO_COMMANDS } from './constants';
+import { cleanDebrisCgraphxDirs } from './debris';
 
 export interface InstallReport {
   projectRoot: string;
@@ -24,6 +25,8 @@ export interface InstallReport {
   writtenHookEvents: string[];
   gitHookWritten: boolean;
   skipped: string[];
+  /** 本次安装顺手清理掉的碎片 `.cgraphx/` 目录(仅含 turn 文件的空壳)。 */
+  debrisRemoved: string[];
 }
 
 export interface UninstallReport {
@@ -173,6 +176,16 @@ export function installTimelineHooks(
     }
   }
 
+  // 存量碎片清理(spec §3.4):按签名精确匹配删除 cwd 漂移 bug 时代散落的
+  // 空壳 `.cgraphx/`。幂等;失败只报 stderr,绝不中断安装。
+  let debrisRemoved: string[] = [];
+  try {
+    debrisRemoved = cleanDebrisCgraphxDirs(resolvedRoot);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[timeline] debris clean failed: ${msg}\n`);
+  }
+
   return {
     projectRoot: resolvedRoot,
     settingsPath,
@@ -180,6 +193,7 @@ export function installTimelineHooks(
     writtenHookEvents: written,
     gitHookWritten,
     skipped,
+    debrisRemoved,
   };
 }
 
