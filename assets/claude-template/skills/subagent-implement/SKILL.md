@@ -1,6 +1,6 @@
 ---
 name: subagent-implement
-description: 复杂 plan 的子 agent 实现流程 — 主 agent 作为 controller,按依赖批次派 implementer 子 agent 实现 + 按风险做 spec 审查,所有任务完成后派 final quality reviewer 整体审查。Use when 执行计划/跑计划/按 plan 实现/派子 agent 实现/复杂实现/多任务实现/系统化实现/subagent 实现。
+description: 大规模 plan 的子 agent 实现流程 — 主 agent 作为 controller,按依赖批次派 implementer 子 agent 实现 + 按风险做 spec 审查,所有任务完成后派 final quality reviewer 整体审查。Use when 执行计划/跑计划/按 plan 实现/派子 agent 实现/复杂实现/多任务实现/系统化实现/subagent 实现。
 ---
 
 # Subagent-Implement
@@ -9,7 +9,8 @@ description: 复杂 plan 的子 agent 实现流程 — 主 agent 作为 controll
 
 - **主 agent 是统帅不是先锋**:只协调、把关、收口;实现全部派隔离上下文的 implementer 子 agent。
 - **质量靠结构,不靠自觉**:四件套注入让执行者无法漂移,sanity check 把每任务关,quality-reviewer 把最终关。
-- **门槛**:有 plan(或明确任务清单)+ ≥3 个任务 + 跨多文件域,或主 agent 上下文装不下。单文件/单模块/1-2 个任务 → 走 `implementation`;任务强耦合(后任务依赖前任务实时反馈)→ 走 `implementation`。
+- **门槛**:有 plan(或明确任务清单)+ 需求规模达「明显大」(跨 ≥3 个相互独立的模块、预估变更文件 ≥10、任务可独立派任),或主 agent 上下文装不下。单点/单模块/小规模变更 → 走 `implementation`;任务强耦合(后任务依赖前任务实时反馈)→ 走 `implementation`。反例:小全栈需求(加 1 字段 + 改 1 接口 + 1 页面展示,跨 3 域)→ `implementation`,不进本流程。
+- **拆细防线**:plan 任务明显过细(大量「改 1 字段 / 加 1 参数」级微任务)→ 先向用户提出合并建议再派任。
 
 ## 流程
 

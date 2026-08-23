@@ -20,7 +20,7 @@
                 (手段:无业务可观察→plan 自主;有→回跳 spec)
                         │
                         ▼
-    implementation(简单)│ subagent-implement(复杂,需 plan)
+    implementation(小规模)│ subagent-implement(大规模,需 plan)
                         │
         ┌───────────────┼────────────────────────┐
         ▼               ▼                        ▼
@@ -47,7 +47,7 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 ## 开发流程
 
-- **链**:`/implementation`(简单:1-3 文件 / 单模块)| `/subagent-implement`(复杂:≥3 任务跨域,主 agent 只协调、派子 agent 实现)
+- **链**:`/implementation`(小规模:单点 / 1-3 文件 / 单模块)| `/subagent-implement`(大规模:预估变更文件 ≥10 且跨 ≥3 独立模块,需 plan,主 agent 只协调、派子 agent 实现);判据是需求规模,不是任务量;拿不准 → implementation,write-plan 的 index「执行方式建议」是终判
 - **前置**:spec 必有;subagent-implement 需 plan
 - **强制读**:规范由 plan 打「强制引用」标注(write-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation / subagent-implement 只读标注,无 plan 时 implementation 自行识别;**缺失 → 中断,先 `/init-project-guides` 补齐**
 - **小步提交**:plan 把可独立提交的任务(完成后仓库可工作)标「独立提交」并把 `git-standards.md` 提交规范结晶进 index「提交规范」节;implementation / subagent-implement 每完成一个标注任务并按规范自查后提交(原子历史,好 review / revert / bisect),precommit 门禁退化为兜底。未标注的任务不擅自提交,push 永远归用户。

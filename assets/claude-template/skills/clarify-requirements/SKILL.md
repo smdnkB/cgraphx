@@ -28,7 +28,7 @@ description: 用户给一段话描述(模糊想法/领导式指令/产品想法/
 4. **确认初步理解** —— 结构化复述(意图/怀疑的目标/受影响区域/初步范围)+ "**这是你的意思吗?有什么要补充或纠正?**" 用户没明确说"没补充"之前,不进锁定。
 5. **澄清业务边界** —— 目标/参与者/场景/包含与排除/数据归属/权限/异常/成功标准;**口径**(统计维度/时间范围/过滤/去重)与**容忍度**(延迟/新鲜度/一致性预期/中间状态感知)必须锁定;需领导拍板的规则标记"业务决策"。
 6. **识别技术约束与影响(不选手段)** —— 只收三类:① 用户声明的技术约束(如实记录,不代展开);② 兼容性边界(旧 API/旧数据/旧调用方哪些不动);③ 影响半径与风险(blast radius/直接调用方/风险等级,HIGH/CRITICAL 先警告再定)。业务方案可给 2-3 选项 + 推荐,推荐不是锁定;手段选项不在此辩论,记入总结。
-7. **总结并停止** —— 输出澄清总结(见「决策分层」),下一步交用户选,不自动继续;总结指向实现时按规模推荐 `/implementation`(简单)或 `/subagent-implement`(复杂)。
+7. **总结并停止** —— 输出澄清总结(见「决策分层」),下一步交用户选,不自动继续;总结指向实现时按「下游实现 skill 选择」三档粗筛推荐(明显小 → `/implementation`;明显大 → plan 后 `/subagent-implement`;拿不准 → 建议先过 plan,不硬判)。
 
 ## 任务类型路由
 
@@ -98,7 +98,7 @@ description: 用户给一段话描述(模糊想法/领导式指令/产品想法/
 - **留给 plan 的手段决策**(识别到但不在此拍板;纯工程手段 plan 自主定,有业务可观察后果的 plan 会回跳 spec 业务拍板)
 - **必须在 spec 前解决的问题** / **后续阶段的决策**
 - **下游就绪判断**:Spec 可写否 / Plan 可写否 / 是否需先探索
-- **用户控制的下一步**:`/write-spec` · `/write-plan` · 开始实现(`/implementation` 简单 / `/subagent-implement` 复杂) · `/write-prd`(发布后按需) · `/write-api-doc`(接口开发完毕后,可选) · `/write-design-doc`(发布后按需)
+- **用户控制的下一步**:`/write-spec` · `/write-plan` · 开始实现(`/implementation` 明显小 / `/subagent-implement` 明显大,需 plan;拿不准 → 先过 `/write-plan` 终判) · `/write-prd`(发布后按需) · `/write-api-doc`(接口开发完毕后,可选) · `/write-design-doc`(发布后按需)
 
 不要把 agent 推荐但用户未确认的写进"已锁定"。
 
@@ -108,15 +108,19 @@ description: 用户给一段话描述(模糊想法/领导式指令/产品想法/
 
 ## 下游实现 skill 选择
 
-| 维度 | `/implementation` | `/subagent-implement` |
-|---|---|---|
-| 任务量 | 1-2 个简单任务 | ≥3 个任务 |
-| 文件域 | 单文件/单模块 | 跨 schema/backend/frontend/test 多域 |
-| 有 plan | 不必,可基于 spec/上下文直接做 | 需要 |
-| 上下文压力 | 不会挤爆主 agent | 会挤爆,需隔离 |
-| 审查 | 主 agent 自审 | 按风险派 spec-reviewer + 最终 quality-reviewer |
+判断依据是**需求规模**(变更面宽度 × 单 agent 上下文能否装下),不是任务量——任务量是拆解产物,任何需求都拆得出 ≥3 个任务;跨域数也不是信号,小全栈需求天然跨 schema/backend/frontend 三域。
 
-默认:简单(单点/1-3 文件)→ `/implementation`;复杂(多任务/跨域)→ `/subagent-implement`;边界情况看 plan 是否存在 + 任务独立性。事后文档(发布后按需):`/write-prd`(业务方审阅)· `/write-api-doc`(接口开发完毕,仅新增接口)· `/write-design-doc`(设计文档)。
+| 档位 | 条件 | 推荐 |
+|---|---|---|
+| 明显小 | 单点变更 / 1-3 文件 / 单模块 | `/implementation` |
+| 明显大 | 预估变更文件 ≥10 **且** 跨 ≥3 个相互独立的模块 | plan 后 `/subagent-implement` |
+| 拿不准 | 其余情形 | 只推荐 `/write-plan`,不硬判实现方式 |
+
+- 默认倾向:拿不准 → implementation 方向(子 agent 有结构性开销,只在单上下文装不下、任务又相互独立时才值)。
+- 反例:小全栈需求(加 1 字段 + 改 1 接口 + 1 页面展示,跨 3 域)→ `/implementation`——跨域、拆得出 ≥3 任务,都不是走 subagent 的理由。
+- `/subagent-implement` 仍需 plan 前置;write-plan 出 index「执行方式建议」做终判,此处粗筛只给方向。
+
+事后文档(发布后按需):`/write-prd`(业务方审阅)· `/write-api-doc`(接口开发完毕,仅新增接口)· `/write-design-doc`(设计文档)。
 
 ## 红线(绝对不能做)
 

@@ -33,7 +33,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 |---|---|
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
 | **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/knowledge-init`(接手陌生项目时建业务知识库) |
-| **日常做需求 · 必经 2 步** | `/clarify-requirements` 澄清 → `/implementation`(简单)或 `/subagent-implement`(复杂)实现 |
+| **日常做需求 · 必经 2 步** | `/clarify-requirements` 澄清 → `/implementation`(小规模)或 `/subagent-implement`(大规模)实现 |
 | **日常做需求 · 复杂按需** | `/write-prd`、`/write-spec`、`/write-plan`、`/knowledge-write`(沉淀到 `docs/knowledge/`)、`/write-delivery-guide`(交付讲解,实现收尾提示触发) |
 | **工作回顾 · 按需** | `/developer-timeline`(日/周/月报)、`/write-design-doc`(发布后合成设计文档) |
 | **卸载 · 可选** | `cgraphx uninstall`(清项目 `.claude/` 内包自带的 skills/配置 + 删 `.cgraphx/`)、`npm uninstall -g cgraphx` |
@@ -48,8 +48,8 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/write-prd` | 要给业务方 / 领导确认业务文档 |
 | `/write-spec` | 写技术规格(归档业务行为 / 规则 / 接口 / 数据,作为 plan 的稳定输入) |
 | `/write-plan` | 拆执行计划(给 agent 执行) |
-| `/implementation` | 简单任务实现(主会话顺序做) |
-| `/subagent-implement` | 复杂多任务实现(派子 agent,隔离上下文) |
+| `/implementation` | 小规模需求实现(主会话顺序做) |
+| `/subagent-implement` | 大规模需求实现(派子 agent,隔离上下文;判据是需求规模,不是任务量) |
 | `/knowledge-init` | 接手陌生项目,派子 agent 自动探索、建业务知识库 |
 | `/knowledge-write` | 把业务决策 / 概念沉淀成 md 到 `docs/knowledge/` |
 | `/write-design-doc` | 发布后按需,从知识库合成面向人类阅读的设计文档(HTML 或 Markdown) |

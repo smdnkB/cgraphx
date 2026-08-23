@@ -70,7 +70,7 @@ knowledge-recall(自动召回)
         │                                        │
         │            ┌───────────────────────────┘
         ▼            ▼
-  /implementation(简单) 或 /subagent-implement(复杂)
+  /implementation(小规模) 或 /subagent-implement(大规模)
         │
    ┌────┴─────────────────────────────┐
    ▼              ▼                   ▼
@@ -94,8 +94,8 @@ knowledge-recall(自动召回)
 
 - **必经** `/clarify-requirements` 澄清意图、业务边界、技术约束(不拍板实现手段)
 - **核心** `/write-spec` 写技术规格——唯一契约,归档业务行为/规则/接口/数据/权限/异常/验收
-- **可选** `/write-plan` 拆执行计划(大需求/跨模块;手段选型在这一步结合代码定——纯工程手段 plan 自主,有业务可观察后果的回跳 spec 业务拍板)
-- **必经** `/implementation`(简单:1-3 文件/单模块)或 `/subagent-implement`(复杂:≥3 任务跨域,派子 agent 隔离上下文)
+- **可选** `/write-plan` 拆执行计划(大需求/跨模块;手段选型在这一步结合代码定——纯工程手段 plan 自主,有业务可观察后果的回跳 spec 业务拍板;index 出「执行方式建议」为实现方式终判)
+- **必经** `/implementation`(小规模:单点/1-3 文件/单模块)或 `/subagent-implement`(大规模:预估变更文件 ≥10 且跨 ≥3 独立模块,派子 agent 隔离上下文);判据是需求规模,不是任务量
 
 > 日常默认 2 步:澄清 + 实现。spec 是唯一契约——「没有任何业务义务存在于 spec 之外」,变更时只改 spec 一处,下游重新派生。
 

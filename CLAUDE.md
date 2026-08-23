@@ -23,7 +23,7 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 
 **skill 主线**(`assets/claude-template/skills/` 下共 20+ 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
 
-- 需求主线:`/clarify-requirements`(必经,澄清意图/业务边界/技术边界)→ `/write-spec`(核心,技术规格契约)→ `/write-plan`(可选,大需求)→ `/implementation`(简单任务)或 `/subagent-implement`(复杂多任务)。日常默认两步:澄清 + 实现。
+- 需求主线:`/clarify-requirements`(必经,澄清意图/业务边界/技术边界)→ `/write-spec`(核心,技术规格契约)→ `/write-plan`(可选,大需求)→ `/implementation`(小规模)或 `/subagent-implement`(大规模;判据是需求规模——≥10 文件且 ≥3 独立模块,不是任务量)。日常默认两步:澄清 + 实现。
 - 平行支线:接口测试(`/write-api` → `/run-api-test`,写接口必须查 DB 验数据)、单元测试(`/write-unit-test-spec` → `/write-unit-test-code`)、知识沉淀(`/knowledge-write` 触发,`knowledge-recall` / `knowledge-api` 由 agent 自动召回)、DB schema 知识(`/export-table-ddl` 导出 + `db-query` 探索回写)。
 
 **`docs/` 目录约定(skill 与程序的契约,目标项目内):**
