@@ -105,12 +105,12 @@ knowledge-recall(自动召回)
 
 ### 接口测试流程
 
-**需求开发完成后**,从 spec 到测试报告的全自动闭环。
+**需求开发完成后**,从 spec 到测试报告的全自动闭环。测试产物基于开源工具 **bruno**:`docs/bruno/` collection 可用 bruno app(GUI)直接打开,可视化浏览、手工调试接口;自动化执行依赖其 CLI(`@usebruno/cli`),需 `npm install -g @usebruno/cli`(每机器一次,也可项目本地装;未装时 `/run-api-test` 报错退出并指向该命令)。
 
 - `/write-api` 基于 spec 接口章节自动生成 bruno 测试接口(.bru + 内嵌断言 + 真实参数 + 多环境配置)
 - `/run-api-test` 跑测试 + 核实写接口 DB 副作用 + 出报告——**写接口必须查 DB 验数据,HTTP 200 ≠ 通过**
 
-> 产物落在 `docs/bruno/`(接口定义,bruno app 可直接打开)+ `docs/features/<前缀>/`(测试规格 + 报告)。两个 skill 顺序依赖,但 run-api-test 也可独立跑(针对已有 .bru)。失败只报告不修代码不重跑,交用户决定。
+> 产物落在 `docs/bruno/` + `docs/features/<前缀>/`(测试规格 + 报告)。两个 skill 顺序依赖,但 run-api-test 也可独立跑(针对已有 .bru)。失败只报告不修代码不重跑,交用户决定。
 
 ---
 

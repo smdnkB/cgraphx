@@ -50,6 +50,8 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/write-plan` | 拆执行计划(给 agent 执行) |
 | `/implementation` | 小规模需求实现(主会话顺序做) |
 | `/subagent-implement` | 大规模需求实现(派子 agent,隔离上下文;判据是需求规模,不是任务量) |
+| `/write-api` | 基于 spec 接口章节生成 bruno 测试接口(.bru + 断言 + 真实参数 + 多环境配置) |
+| `/run-api-test` | 跑接口测试 + 核实写接口 DB 副作用 + 出报告(写接口必查 DB;失败只报告不修代码) |
 | `/knowledge-init` | 接手陌生项目,派子 agent 自动探索、建业务知识库 |
 | `/knowledge-write` | 把业务决策 / 概念沉淀成 md 到 `docs/knowledge/` |
 | `/write-design-doc` | 发布后按需,从知识库合成面向人类阅读的设计文档(HTML 或 Markdown) |

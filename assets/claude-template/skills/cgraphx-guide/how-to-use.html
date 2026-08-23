@@ -477,13 +477,13 @@ footer p { margin: 0; }
   </div>
 
   <div id="tab-api-test" class="tab-panel">
-    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>需求开发完成后</strong>,从 spec 到测试报告的全自动闭环。</p>
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>需求开发完成后</strong>,从 spec 到测试报告的全自动闭环。测试产物基于开源工具 <strong>bruno</strong>:<code>docs/bruno/</code> collection 可用 bruno app(GUI)直接打开,可视化浏览、手工调试接口;自动化执行依赖其 CLI(<code>@usebruno/cli</code>),需 <code>npm install -g @usebruno/cli</code>(每机器一次,也可项目本地装;未装时 <code>/run-api-test</code> 报错退出并指向该命令)。</p>
     <ul class="phase-list">
       <li><code>/write-api</code> 基于 spec 接口章节自动生成 bruno 测试接口<em>(.bru + 内嵌断言 + 真实参数 + 多环境配置)</em></li>
       <li><code>/run-api-test</code> 跑测试 + 核实写接口 DB 副作用 + 出报告 <em>—— <strong>写接口必须查 DB 验数据,HTTP 200 ≠ 通过</strong></em></li>
     </ul>
     <div class="highlight">
-      <p>产物落在 <code>docs/bruno/</code>(接口定义,bruno app 可直接打开)+ <code>docs/features/&lt;前缀&gt;/</code>(测试规格 + 报告)。两个 skill 顺序依赖,但 run-api-test 也可独立跑(针对已有 .bru)。失败只报告不修代码不重跑,交用户决定。</p>
+      <p>产物落在 <code>docs/bruno/</code> + <code>docs/features/&lt;前缀&gt;/</code>(测试规格 + 报告)。两个 skill 顺序依赖,但 run-api-test 也可独立跑(针对已有 .bru)。失败只报告不修代码不重跑,交用户决定。</p>
     </div>
   </div>
 
