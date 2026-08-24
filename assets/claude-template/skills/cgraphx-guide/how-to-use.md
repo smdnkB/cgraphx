@@ -177,9 +177,9 @@ docs/
 │       ├── <前缀>-spec.md            /write-spec           必有  唯一契约
 │       ├── plan/                     /write-plan           可选  大需求
 │       ├── <前缀>-需求文档.md         /write-prd            可选  发布后按需
-│       ├── <前缀>-api-spec.md        /write-api            可选  开发完成后
-│       ├── <前缀>-测试报告.md         /run-api-test         可选  write-api 后
-│       ├── <前缀>-测试验证.jsonl      /run-api-test         可选  自动产出
+│       ├── <前缀>-接口测试-spec.md    /write-api            可选  开发完成后
+│       ├── <前缀>-接口测试报告.md     /run-api-test         可选  write-api 后
+│       ├── <前缀>-接口测试验证.jsonl  /run-api-test         可选  自动产出
 │       ├── <前缀>-单元测试-spec.md    /write-unit-test-spec 可选  开发完成后
 │       ├── <前缀>-单元测试报告.md     /write-unit-test-code 可选  开发完成后
 │       ├── <前缀>-交付讲解.md         /write-delivery-guide 可选  交付时

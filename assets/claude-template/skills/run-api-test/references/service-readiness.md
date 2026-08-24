@@ -4,7 +4,7 @@
 
 按以下优先级检测,**任一通过即视为就绪**:
 
-1. **测试规格声明的服务地址** — `<文件前缀>-api-spec.md` §1 接口清单声明的"服务地址"(由 write-api S2 生成)能 TCP 连通
+1. **接口测试规格声明的服务地址** — `<文件前缀>-接口测试-spec.md` §1 接口清单声明的"服务地址"(由 write-api S2 生成)能 TCP 连通
 2. **bruno env 的 baseUrl** — `docs/bruno/environments/local.bru` 里的 `baseUrl`(或对应服务端口变量)能 TCP 连通
 
 两者都失败 → 视为未就绪,进入暂停等待。

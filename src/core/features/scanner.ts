@@ -4,7 +4,7 @@
  * 单一职责:把 <project>/docs/features/ 下的每个子目录解析成一个
  * FeatureEntry。头部元数据(负责人/日期)优先级:spec 文件头部 > plan/index 头部 > 目录名。
  * spec 候选按主 spec 优先(文件长度升序)遍历,取第一个头部读出负责人的——
- * 避免派生 spec(api-spec/单元测试-spec)遮蔽主 spec 导致负责人丢失。
+ * 避免派生 spec(接口测试-spec/单元测试-spec,含旧名 api-spec)遮蔽主 spec 导致负责人丢失。
  *
  * 头部行约定(与 write-spec / write-plan 的产物头部一致):
  *
@@ -71,7 +71,8 @@ function hasPlanIndex(featureDir: string): boolean {
 
 /**
  * spec 候选排序:主 spec 优先。主 spec `<前缀>-spec.md`(或 `spec.md`)恒短于
- * 同前缀的派生 spec(`<前缀>-api-spec.md` / `<前缀>-单元测试-spec.md`,文件名多一段),
+ * 同前缀的派生 spec(`<前缀>-接口测试-spec.md` / `<前缀>-单元测试-spec.md`,
+ * 含旧名 `<前缀>-api-spec.md`,文件名多一段),
  * 按「长度升序、同名再按字典序」排,主 spec 必排最前。
  */
 function compareSpecCandidates(a: string, b: string): number {
@@ -123,7 +124,8 @@ function findMetaFile(featureDir: string): string | null {
  *
  * 优先级 已验证 > 已规划 > 已规格,三个里程碑各自独立探测(允许跨阶,
  * 如 spec + 测试报告但无 plan → 已验证)。已验证只看测试「报告」(run-api-test
- * 的 *-测试报告.md / write-unit-test-code 的 *-单元测试报告.md),测试「规格」不算。
+ * 的 *-接口测试报告.md / write-unit-test-code 的 *-单元测试报告.md;2026-08 改名前
+ * 的旧名 *-测试报告.md 仍识别,存量产物不回退),测试「规格」不算。
  */
 function deriveStage(featureDir: string): FeatureStage | null {
   let entries: string[];
@@ -133,7 +135,10 @@ function deriveStage(featureDir: string): FeatureStage | null {
     return null;
   }
   const hasReport = entries.some(
-    (n) => n.endsWith('-单元测试报告.md') || n.endsWith('-测试报告.md'),
+    (n) =>
+      n.endsWith('-单元测试报告.md') ||
+      n.endsWith('-接口测试报告.md') ||
+      n.endsWith('-测试报告.md'),
   );
   if (hasReport) return '已验证';
   if (hasPlanIndex(featureDir)) return '已规划';

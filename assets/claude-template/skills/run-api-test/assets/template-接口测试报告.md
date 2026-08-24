@@ -1,6 +1,6 @@
 # 接口测试报告模板
 
-适用于 `run-api-test` skill 在 R5 生成。默认输出到 `docs/features/<feature-id>/<文件前缀>-测试报告.md`。
+适用于 `run-api-test` skill 在 R5 生成。默认输出到 `docs/features/<feature-id>/<文件前缀>-接口测试报告.md`。
 
 本模板由 skill 在 R5 填充:汇总 + 逐接口结果 + 失败原因分类 + 下一步建议。
 
@@ -22,7 +22,7 @@
 
 > feature-id: <feature-id>
 > 生成时间: <YYYY-MM-DD HH:MM>
-> 关联测试规格: <文件前缀>-api-spec.md
+> 关联接口测试规格: <文件前缀>-接口测试-spec.md
 > 关联 .bru 集合: docs/bruno/<服务>/<需求前缀>/
 
 ## 1. 汇总
@@ -400,10 +400,10 @@ Content-Type: application/json
 
 ## 6. 产物清单
 
-- 测试规格: `<文件前缀>-api-spec.md`
+- 接口测试规格: `<文件前缀>-接口测试-spec.md`
 - .bru collection: `docs/bruno/<服务>/<需求前缀>/<接口名>/`
 - Markdown 报告: 本文件
-- JSONL 验证记录: `<文件前缀>-测试验证.jsonl`
+- JSONL 验证记录: `<文件前缀>-接口测试验证.jsonl`
 ```
 
 ## 填写说明

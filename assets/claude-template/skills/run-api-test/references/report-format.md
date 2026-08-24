@@ -1,11 +1,11 @@
-# R5 测试报告规范
+# R5 接口测试报告规范
 
 ## 产物(两类)
 
 | 产物 | 路径 | 用途 |
 |---|---|---|
-| Markdown 报告 | `docs/features/<feature-id>/<文件前缀>-测试报告.md` | 给人看:汇总 + 逐场景详细结果 + 失败汇总 + DB 核实小结 + 下一步建议 |
-| JSONL 验证记录 | `docs/features/<feature-id>/<文件前缀>-测试验证.jsonl` | AI 逐接口 DB 验证记录,供下游 skill 程序化处理 |
+| Markdown 报告 | `docs/features/<feature-id>/<文件前缀>-接口测试报告.md` | 给人看:汇总 + 逐场景详细结果 + 失败汇总 + DB 核实小结 + 下一步建议 |
+| JSONL 验证记录 | `docs/features/<feature-id>/<文件前缀>-接口测试验证.jsonl` | AI 逐接口 DB 验证记录,供下游 skill 程序化处理 |
 
 **JSON 中间结果**(R3 `bru run --output` 产的)临时,**不归档**——跑完即丢。
 
@@ -17,7 +17,7 @@
 
 ## Markdown 报告章节
 
-完整骨架见 `assets/template-test-report.md`。AI 生成时按以下章节填:
+完整骨架见 `assets/template-接口测试报告.md`。AI 生成时按以下章节填:
 
 ### §1. 汇总
 
@@ -91,7 +91,7 @@
 
 ### §6. 产物清单
 
-固定四项:测试规格、.bru collection、Markdown 报告(本文件)、JSONL 验证记录。
+固定四项:接口测试规格、.bru collection、Markdown 报告(本文件)、JSONL 验证记录。
 
 ## JSONL 字段
 
@@ -111,7 +111,7 @@
 
 查询接口 `db_verification.required = false, conclusion = "not_required"`。
 
-完整示例见 `assets/template-test-verify.jsonl`。
+完整示例见 `assets/template-接口测试验证.jsonl`。
 
 ## 状态枚举
 

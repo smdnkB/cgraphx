@@ -36,8 +36,8 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 
 | skill | 关系 | 说明 |
 |---|---|---|
-| `write-api` | 上游 | 产 .bru + 测试规格 + environments;本 skill 消费这些产物跑测试,不调它也不改 .bru |
-| `write-api-doc` | 独立并列 | 不互相调用;本 skill 产测试报告 + JSONL,write-api-doc 产 HTML 接口文档 |
+| `write-api` | 上游 | 产 .bru + 接口测试规格 + environments;本 skill 消费这些产物跑测试,不调它也不改 .bru |
+| `write-api-doc` | 独立并列 | 不互相调用;本 skill 产接口测试报告 + JSONL,write-api-doc 产 HTML 接口文档 |
 | `db-query` | 复用 | R4 核实写接口 DB 副作用;受 db-query 既有只读约束 |
 | `implementation` / `subagent-implement` | 下游 | 测试失败后由用户决定是否调起修 bug |
 | `write-design-doc` | 独立 | 发布后按需产设计文档 |
@@ -58,8 +58,8 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 - 文件名不得包含 `/`、`:`、`*`、`?`、`"`、`<`、`>`、`|`
 
 产物文件名(归用户指定的 feature 目录):
-- Markdown 报告:`docs/features/<feature-id>/<文件前缀>-测试报告.md`
-- JSONL 验证记录:`docs/features/<feature-id>/<文件前缀>-测试验证.jsonl`
+- Markdown 报告:`docs/features/<feature-id>/<文件前缀>-接口测试报告.md`
+- JSONL 验证记录:`docs/features/<feature-id>/<文件前缀>-接口测试验证.jsonl`
 
 格式见 `references/report-format.md`。
 
@@ -72,7 +72,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
       ↓
 用户给的是什么?
       ├─ 指定了需求(feature-id / spec / 需求名)
-      │   → AI 查该需求的 <文件前缀>-api-spec.md,拿到接口清单 + 场景
+      │   → AI 查该需求的 <文件前缀>-接口测试-spec.md,拿到接口清单 + 场景
       │   → 提示用户确认"本次测试需求 X,涉及 N 接口 M 场景,确认?"
       │   → 用户确认后进入 R1
       │
@@ -80,7 +80,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
       │   → skill 主动问"测哪个需求?"
       │   → AI 扫 docs/bruno/<服务>*/<需求前缀>/<接口名>/ 哪些存在,列出测过该接口的需求
       │   → 列出来让用户选(若 0 个需求,提示用户先跑 /write-api)
-      │   → 选定后,AI 查该需求 api-spec.md 拿该接口的场景
+      │   → 选定后,AI 查该需求 接口测试-spec.md 拿该接口的场景
       │   → 提示用户确认后进入 R1
       │
       └─ 都没指定
@@ -101,10 +101,10 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 
 - **前置**:触发逻辑锁定一个 feature-id
 - **行为**:按 `references/test-scope.md` 拿到本次测试的 .bru 清单
-  - 查 `<文件前缀>-api-spec.md` 拿接口清单 + 场景 + .bru 路径
+  - 查 `<文件前缀>-接口测试-spec.md` 拿接口清单 + 场景 + .bru 路径
   - 交叉校验 .bru 文件实际存在
   - 显示测试范围给用户确认
-- **校验失败**(api-spec 不存在 / .bru 缺失)→ 报错并退出
+- **校验失败**(接口测试规格不存在 / .bru 缺失)→ 报错并退出
 - **用户取消** → 退出
 - **结果**:得到本次跑的 .bru 清单
 
@@ -131,15 +131,15 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 - **db-query skill 失败** → 该接口记"无法核实" + 状态 `失败-DB副作用`,**不阻塞其他接口**
 - **结果**:逐接口 DB 核实记录写入 JSONL
 
-### R5. 产出测试报告
+### R5. 产出接口测试报告
 
 - **前置**:R3 + R4 完成
 - **行为**:按 `references/report-format.md` 汇总产出
-  - Markdown 报告 `<文件前缀>-测试报告.md`(汇总 + 逐接口结果 + 失败分类 + DB 核实小结 + 下一步建议)
+  - Markdown 报告 `<文件前缀>-接口测试报告.md`(汇总 + 逐接口结果 + 失败分类 + DB 核实小结 + 下一步建议)
     - **按接口聚合**:同接口的场景先展示摘要，再展示详情
     - **展示级别**:主场景/涉及业务规则的异常=详细展示；简单边界=简单展示；失败场景=必须详细展示
     - **约束**:一个接口最多 2 个详细展示的场景
-  - JSONL `<文件前缀>-测试验证.jsonl`(R4 写接口记录 + R5 补齐查询接口记录)
+  - JSONL `<文件前缀>-接口测试验证.jsonl`(R4 写接口记录 + R5 补齐查询接口记录)
   - JSON 中间结果丢弃
 - **报告归属**:归用户指定的 feature 目录,即使接口关联多 feature 也不混
 - **结果**:报告落盘;skill 结束
@@ -148,10 +148,10 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 
 | 场景 | 行为 |
 |---|---|
-| 用户指定需求但 api-spec 不存在 | 报"需求 X 无测试规格,请先跑 /write-api"并退出 |
+| 用户指定需求但接口测试规格不存在 | 报"需求 X 无接口测试规格,请先跑 /write-api"并退出 |
 | 用户指定接口但 .bru 不存在 | 报"接口 Y 无 .bru,请先跑 /write-api"并退出 |
 | 用户指定接口但扫目录发现 0 个需求测过 | 提示"未在 docs/bruno/ 下找到测过接口 Y 的需求,请先跑 /write-api" |
-| api-spec §5 列出的 .bru 实际不存在 | 报"需求 X 接口 Y 场景 Z 的 .bru 缺失,请先跑 /write-api"并退出 |
+| 接口测试规格 §5 列出的 .bru 实际不存在 | 报"需求 X 接口 Y 场景 Z 的 .bru 缺失,请先跑 /write-api"并退出 |
 | 本地服务未启动 | 暂停 + 提示用户启动,等待回车继续 |
 | env 文件缺失 | 报"环境缺失,请先跑 /write-api"并退出,不自动生成 |
 | 服务起了但接口 404 | 记 `失败-HTTP`,标注可能路由未注册或路径不对 |
@@ -164,7 +164,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 ## 质量检查
 
 跑完后自检:
-- 报告归指定的 feature 目录(`<文件前缀>-测试报告.md` + `<文件前缀>-测试验证.jsonl`)
+- 报告归指定的 feature 目录(`<文件前缀>-接口测试报告.md` + `<文件前缀>-接口测试验证.jsonl`)
 - 写接口 DB 核实到位,不存在"只看 HTTP 200 就算过"的写接口
 - 服务未就绪时没盲跑,没产 connection refused 失败报告
 - 失败接口有原因分类(数据问题 / 代码 bug / 服务问题 / 断言过严)
@@ -177,7 +177,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 ## 收尾
 
 提示用户:
-1. 测试报告位置(`<文件前缀>-测试报告.md`)
+1. 接口测试报告位置(`<文件前缀>-接口测试报告.md`)
 2. 通过 / 失败 / 跳过汇总
 3. 失败接口清单 + 原因分类
 4. 下一步建议:

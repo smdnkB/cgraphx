@@ -10,7 +10,7 @@ bru run docs/bruno/<服务>/<接口名>/ --env local --output <临时 JSON 路�
 
 | 参数 | 说明 |
 |---|---|
-| 路径参数 | R1 清单涉及的接口目录(从 api-spec §5 取),不是全项目 `docs/bruno/` |
+| 路径参数 | R1 清单涉及的接口目录(从接口测试规格 §5 取),不是全项目 `docs/bruno/` |
 | `--env local` | 使用 `docs/bruno/environments/local.bru` 的变量(用户切换时透传 `--env staging` / `--env production`) |
 | `--output <path>` | JSON 中间结果输出路径(临时,跑完即丢,不归档) |
 | `-r` | 递归跑目录下所有 .bru |

@@ -1,6 +1,6 @@
 # 接口测试规格模板
 
-适用于 feature 编码完成后,由 `write-api` skill 在 S2 生成。默认输出到 `docs/features/<feature-id>/<文件前缀>-api-spec.md`。
+适用于 feature 编码完成后,由 `write-api` skill 在 S2 生成。默认输出到 `docs/features/<feature-id>/<文件前缀>-接口测试-spec.md`。
 
 本模板由 AI 在 S2 填充:§1 接口清单的"服务"和"通用"列由 AI 判断(见 SKILL.md 的 S2 prompt 指引),用户可在 S3 前手动校正。
 

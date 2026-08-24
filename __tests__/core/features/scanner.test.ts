@@ -17,8 +17,10 @@ function mkFeature(
   opts: {
     spec?: string;
     planIndex?: string;
-    report?: 'unit' | 'api';
+    // 'api' = 旧名 *-测试报告.md(2026-08 改名前的存量产物),'apiNew' = 新名 *-接口测试报告.md
+    report?: 'unit' | 'api' | 'apiNew';
     unitTestSpec?: boolean;
+    apiTestSpec?: boolean;
   } = {},
 ): void {
   const dir = path.join(root, 'docs', 'features', name);
@@ -38,10 +40,19 @@ function mkFeature(
     fs.writeFileSync(path.join(dir, `${name}-单元测试报告.md`), '报告', 'utf-8');
   } else if (opts.report === 'api') {
     fs.writeFileSync(path.join(dir, `${name}-测试报告.md`), '报告', 'utf-8');
+  } else if (opts.report === 'apiNew') {
+    fs.writeFileSync(path.join(dir, `${name}-接口测试报告.md`), '报告', 'utf-8');
   }
   if (opts.unitTestSpec === true) {
     fs.writeFileSync(
       path.join(dir, `${name}-单元测试-spec.md`),
+      '规格',
+      'utf-8',
+    );
+  }
+  if (opts.apiTestSpec === true) {
+    fs.writeFileSync(
+      path.join(dir, `${name}-接口测试-spec.md`),
       '规格',
       'utf-8',
     );
@@ -163,6 +174,16 @@ describe('deriveStage (spec §阶段枚举与派生口径, §异常与边界场�
   it('spec + api report without plan → 已验证 (cross-stage)', () => {
     mkFeature('2026-07-01-a', { spec: '> 负责人: x\n', report: 'api' });
     expect(scanFeatures(root)[0]).toMatchObject({ stage: '已验证' });
+  });
+
+  it('spec + api report with new name (-接口测试报告.md) → 已验证', () => {
+    mkFeature('2026-07-01-a', { spec: '> 负责人: x\n', report: 'apiNew' });
+    expect(scanFeatures(root)[0]).toMatchObject({ stage: '已验证' });
+  });
+
+  it('api test spec (new name) without report → stays 已规格 (spec ≠ verified)', () => {
+    mkFeature('2026-07-01-a', { spec: '> 负责人: x\n', apiTestSpec: true });
+    expect(scanFeatures(root)[0]).toMatchObject({ stage: '已规格' });
   });
 
   it('unit test spec without report → stays 已规格 (spec ≠ verified)', () => {
