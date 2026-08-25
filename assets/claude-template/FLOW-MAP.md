@@ -27,7 +27,10 @@
   write-api        write-unit-test-spec     交付收尾:
   → run-api-test   → write-unit-test-code   沉淀提示 → knowledge-write
   (接口测试)     (单元测试,代码完成后)     交付讲解提示 → write-delivery-guide
-                                           commit 门禁 → git-standards.md
+  ↓ 推荐(非硬前置)                          commit 门禁 → git-standards.md
+  write-ui-test
+  → run-ui-test
+  (UI 功能测试)
 
   ── 推荐发布后 · 按需(不在主链,不参与门禁); 原因: 发布前写 PRD:写的是预期,实现过程中一定会漂移,发布后 PRD 就过期了,给业务方看反而误导 ──────────────────
   write-prd(业务方/客户审阅,任意时刻可执行,推荐发布后)
@@ -59,6 +62,13 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 - **前置**:spec + 实现完成;run-api-test 也可独立跑已有 .bru
 - **强制读**:write-api 执行前读 `docs/guides/interface-standards.md`(缺失 → `/init-project-guides` 中断)
 - **产物**:`docs/bruno/<服务>/<需求前缀>/`(bruno app 可直接打开)+ feature 目录下测试规格与报告
+- **后续**:接口通过后推荐跑 `/write-ui-test` → `/run-ui-test`(UI 功能测试,非硬前置)
+
+## UI 功能测试流程
+
+- **链**:`/write-ui-test`(从 spec 派生用例,一功能点一用例)→ `/run-ui-test`(Playwright MCP 驱动浏览器执行 + 截图 + 报告;**不验库,只看 UI 表现**)
+- **前置**:spec + 实现完成 + 目标项目已装 Playwright MCP;推荐在接口测试后跑(非硬前置);服务启动 / 测试数据 / headed 与否归人工
+- **产物**:`docs/features/<feature-id>/ui功能测试/`(用例规格 + 报告 + 按功能点命名的截图)
 
 ## 单元测试流程
 
