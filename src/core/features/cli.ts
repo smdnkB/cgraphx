@@ -13,6 +13,7 @@ import type { Command } from 'commander';
 
 import { listFeatures } from './index';
 import { gitUserName, syncMyFeatures } from './sync';
+import { resolveProjectRoot } from '../directory';
 import type { FeatureEntry } from './types';
 
 /** 终端显示宽度:CJK / 全角字符按 2 列计,其余 1 列(表格对齐用)。 */
@@ -90,7 +91,7 @@ export function registerFeaturesCommands(program: Command): void {
     .option('--stage <stage>', '按阶段精确过滤(已规格 / 已规划 / 已验证)')
     .option('--json', '输出机器可读 JSON')
     .action((pathArg: string | undefined, options: ListOptions) => {
-      const projectRoot = path.resolve(pathArg || process.cwd());
+      const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
 
       let owner: string | undefined = options.owner;
       if (options.mine) {
@@ -145,7 +146,7 @@ export function registerFeaturesCommands(program: Command): void {
       '重新生成本人需求索引 → .cgraphx/my-features.md(本地文件,不进 git)',
     )
     .action((pathArg: string | undefined) => {
-      const projectRoot = path.resolve(pathArg || process.cwd());
+      const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
       try {
         const result = syncMyFeatures(projectRoot);
         console.log(

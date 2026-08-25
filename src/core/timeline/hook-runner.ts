@@ -8,7 +8,7 @@
 import { NO_TIMELINE_ENV, PERF_WARN_MS } from './constants';
 import { recordEvent, type EventEnricher } from './recorder';
 import { readStdinJson, extractHookPayload } from './payload';
-import { resolveTimelineProjectRoot } from './project-root';
+import { resolveProjectRoot } from '../directory';
 import type { TimelineEventInput } from './types';
 
 export interface HookRunResult {
@@ -58,7 +58,7 @@ export async function runHook(
 
   const payload = extractHookPayload(raw);
   // 项目根向上回溯(spec 2026-08-13):子目录 cwd 下事件仍写进根库。
-  const projectRoot = resolveTimelineProjectRoot(payload.cwd ?? process.cwd());
+  const projectRoot = resolveProjectRoot(payload.cwd ?? process.cwd());
 
   const event = await buildEvent(payload);
   if (!event) return;

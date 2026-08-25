@@ -194,6 +194,40 @@ export function createDirectory(projectRoot: string): void {
 }
 
 /**
+ * 项目根解析 —— db / docs / features / web / timeline 各子系统缺省项目根
+ * 的统一入口。
+ *
+ * 背景(spec:2026-08-13-timeline项目根回溯修复、2026-08-24-项目根解析拉齐):
+ * Claude Code 会话的工作目录会随 agent `cd` 漂移,把「当前目录」直接当项目
+ * 根,会导致子目录下找不到 `.cgraphx/` 配置、读写散落。
+ *
+ * 规则:从解析起点逐级向上,第一个「已初始化」目录(见 isInitialized:
+ * `.cgraphx/cgraphx.db` 存在,裸 `.cgraphx/` 目录不算)即项目根,就近优先
+ * (monorepo 子项目根不被仓库级根吞并);到文件系统根仍无命中则回退起点
+ * 本身 —— 未初始化路径行为与「把 cwd 当根」完全一致。
+ *
+ * 任何异常都按「未命中」处理,绝不抛出 —— 解析失败最坏退化为把起点当根,
+ * 不得使命令行为劣于现状。
+ */
+export function resolveProjectRoot(startDir: string): string {
+  const start = path.resolve(startDir);
+  let current = start;
+  // dirname 链在文件系统根自然终止(parent === current);深度上限仅作
+  // 防御性兜底,防御性保护不构成行为语义。
+  for (let depth = 0; depth < 128; depth++) {
+    try {
+      if (isInitialized(current)) return current;
+    } catch {
+      // 按未命中处理,继续向上(如并发删除导致 stat 失败)。
+    }
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return start;
+}
+
+/**
  * Remove the .cgraphx directory
  */
 export function removeDirectory(projectRoot: string): void {

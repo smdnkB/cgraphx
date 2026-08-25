@@ -29,6 +29,7 @@ import {
 } from './index';
 import { initDbProfiles } from './init';
 import { validateIdentifier } from './identifiers';
+import { resolveProjectRoot } from '../directory';
 
 // ─── Output formats ───────────────────────────────────────────────────────
 
@@ -186,7 +187,7 @@ export function registerDbCommands(program: Command): void {
         process.exitCode = 5;
         return;
       }
-      const projectRoot = process.cwd();
+      const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const format = parseFormat(options.format);
         if (mode === 'ddl' && options.table) {
@@ -211,7 +212,7 @@ export function registerDbCommands(program: Command): void {
     .description('List configured DB profiles (never returns passwords)')
     .option('--format <format>', 'Output format (always json)', 'json')
     .action(async (options: { format?: string }) => {
-      const projectRoot = process.cwd();
+      const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const format = parseFormat(options.format);
         const result = await listProfiles({}, projectRoot);
@@ -226,7 +227,7 @@ export function registerDbCommands(program: Command): void {
     .description('Create .cgraphx/db-profiles.json template with example MySQL + PostgreSQL profiles')
     .option('--force', 'Overwrite the file if it already exists')
     .action((options: { force?: boolean }) => {
-      const projectRoot = process.cwd();
+      const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const report = initDbProfiles(projectRoot, { force: options.force === true });
         if (report.action === 'already-exists') {
@@ -250,7 +251,7 @@ async function runQueryAndExit(
   input: { sql: string; profile?: string; limit?: number },
   formatStr: string | undefined,
 ): Promise<void> {
-  const projectRoot = process.cwd();
+  const projectRoot = resolveProjectRoot(process.cwd());
   try {
     const format = parseFormat(formatStr);
     const result = await runQuery(input, projectRoot);

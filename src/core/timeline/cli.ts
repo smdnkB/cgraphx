@@ -29,7 +29,7 @@ import type { Command } from 'commander';
 
 import { queryEvents, getEventById, getEventStats } from './indexer';
 import { installTimelineHooks, uninstallTimelineHooks } from './installer';
-import { resolveTimelineProjectRoot } from './project-root';
+import { resolveProjectRoot } from '../directory';
 import { TimelineSchemaError, StoreQueryError } from './errors';
 import { assertEventType } from './payload';
 import type { EventType, TimelineEvent, TimelineStats } from './types';
@@ -221,7 +221,7 @@ export function registerTimelineCommands(program: Command): void {
       format?: string;
     }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
-      const projectRoot = resolveTimelineProjectRoot(process.cwd());
+      const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const format = opts.format === 'table' ? 'table' : 'json';
         const filter = {
@@ -251,7 +251,7 @@ export function registerTimelineCommands(program: Command): void {
     .description('Show full detail for one event by id')
     .action(async (idArg: string) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
-      const projectRoot = resolveTimelineProjectRoot(process.cwd());
+      const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const id = parseInt(idArg, 10);
         if (!Number.isFinite(id) || id <= 0) throw new ArgError(`Invalid id: ${idArg}`);
@@ -277,7 +277,7 @@ export function registerTimelineCommands(program: Command): void {
     .option('--format <format>', 'json (default) | table', 'json')
     .action(async (opts: { since?: string; until?: string; by?: string; format?: string }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
-      const projectRoot = resolveTimelineProjectRoot(process.cwd());
+      const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const format = opts.format === 'table' ? 'table' : 'json';
         const filter = {
@@ -318,7 +318,7 @@ export function registerTimelineCommands(program: Command): void {
     .option('--format <format>', 'json (default) | table', 'json')
     .action(async (opts: { limit?: number; format?: string }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
-      const projectRoot = resolveTimelineProjectRoot(process.cwd());
+      const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const format = opts.format === 'table' ? 'table' : 'json';
         const events = await queryEvents(projectRoot, { limit: opts.limit ?? 20 });
@@ -339,7 +339,7 @@ export function registerTimelineCommands(program: Command): void {
     .option('--purge-first', 'Remove existing timeline hooks before installing (clean slate)')
     .action(async (opts: { purgeFirst?: boolean }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
-      const projectRoot = resolveTimelineProjectRoot(process.cwd());
+      const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const report = installTimelineHooks(projectRoot, { purgeFirst: opts.purgeFirst === true });
         process.stdout.write(JSON.stringify(report, null, 2) + '\n');
@@ -355,7 +355,7 @@ export function registerTimelineCommands(program: Command): void {
     .option('--purge', 'Also DROP all timeline_* tables (data loss)')
     .action(async (opts: { purge?: boolean }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
-      const projectRoot = resolveTimelineProjectRoot(process.cwd());
+      const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const report = uninstallTimelineHooks(projectRoot, { purgeData: opts.purge === true });
         process.stdout.write(JSON.stringify(report, null, 2) + '\n');

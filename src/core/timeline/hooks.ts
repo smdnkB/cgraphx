@@ -11,7 +11,7 @@
 
 import { runHook } from './hook-runner';
 import { extractHookPayload } from './payload';
-import { resolveTimelineProjectRoot } from './project-root';
+import { resolveProjectRoot } from '../directory';
 import { summarizeToolResponse } from './post-tool-summary';
 import { WRITE_TOOLS_WHITELIST } from './constants';
 import type { TimelineEventInput } from './types';
@@ -108,7 +108,7 @@ export async function userPromptHook(): Promise<void> {
     // downstream pre/post/stop hooks in this turn can read it back.
     const turn_id = payload.turn_id ?? randomUUID();
     // 项目根向上回溯:cwd 漂移进子目录时 turn 文件仍落在根上(spec 2026-08-13)。
-    const projectRoot = resolveTimelineProjectRoot(payload.cwd ?? process.cwd());
+    const projectRoot = resolveProjectRoot(payload.cwd ?? process.cwd());
     writeCurrentTurn(projectRoot, {
       turn_id,
       session_id: payload.session_id ?? null,
@@ -134,7 +134,7 @@ export async function preToolUseHook(): Promise<void> {
     // 项目根向上回溯(spec 2026-08-13),与 user_prompt hook 写入侧一致。
     const turn_id = await readCurrentTurnId(
       payload.session_id ?? null,
-      resolveTimelineProjectRoot(payload.cwd ?? process.cwd()),
+      resolveProjectRoot(payload.cwd ?? process.cwd()),
     );
     return {
       event_type: 'pre_tool_use',
@@ -154,7 +154,7 @@ export async function postToolUseHook(): Promise<void> {
     // 项目根向上回溯(spec 2026-08-13),与 user_prompt hook 写入侧一致。
     const turn_id = await readCurrentTurnId(
       payload.session_id ?? null,
-      resolveTimelineProjectRoot(payload.cwd ?? process.cwd()),
+      resolveProjectRoot(payload.cwd ?? process.cwd()),
     );
     return {
       event_type: 'post_tool_use',
@@ -205,7 +205,7 @@ export async function stopHook(): Promise<void> {
     const turn_id = await readCurrentTurnId(
       payload.session_id ?? null,
       // 项目根向上回溯(spec 2026-08-13),与 user_prompt hook 写入侧一致。
-      resolveTimelineProjectRoot(payload.cwd ?? process.cwd()),
+      resolveProjectRoot(payload.cwd ?? process.cwd()),
     );
     return {
       event_type: 'stop',
@@ -264,7 +264,7 @@ export async function gitCommitHook(): Promise<void> {
     const { recordEvent } = await import('./recorder');
     // info.cwd 是 git 仓库根;项目可能初始化在其子目录,向上回溯找真根
     // (spec 2026-08-13)。事件自身的 cwd 字段仍记录真实 git 根。
-    await recordEvent(resolveTimelineProjectRoot(info.cwd), {
+    await recordEvent(resolveProjectRoot(info.cwd), {
       event_type: 'git_commit',
       commit_hash: info.hash,
       commit_message: info.message,

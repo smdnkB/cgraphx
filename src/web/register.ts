@@ -13,6 +13,7 @@ import type { Command } from 'commander';
 
 import { startWebServer, type WebServer } from './server';
 import { exitCodeForWebError } from './errors';
+import { resolveProjectRoot } from '../core/directory';
 
 /** 把 `cgraphx web` 挂到 commander 程序上。 */
 export function registerWebCommand(program: Command): void {
@@ -21,7 +22,7 @@ export function registerWebCommand(program: Command): void {
     .description('Start the local read-only web viewer (knowledge base)')
     .option('-p, --port <port>', 'port to listen on (default 2468)', '2468')
     .action(async (pathArg: string | undefined, options: { port: string }) => {
-      const projectRoot = path.resolve(pathArg ?? process.cwd());
+      const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
 
       // 端口解析:Number + 整数 + [1,65535]。CLI 层拒绝 0(0 仅测试经
       // startWebServer 直传使用)。非法 → stderr + exitCode 1(参数错误)。

@@ -17,6 +17,7 @@ import { parseFrontmatter } from './frontmatter-parser';
 import { validateFrontmatter } from './validator';
 import { MarkdownQuery } from './query';
 import { openMarkdownDb } from './schema-bootstrap';
+import { resolveProjectRoot } from '../directory';
 import type {
   ConceptSummary,
   DedupResponse,
@@ -53,7 +54,7 @@ export function registerDocsCommands(program: Command): void {
     )
     .option('--json', 'Output machine-readable JSON instead of progress text')
     .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
-      const projectRoot = pathArg ? path.resolve(pathArg) : process.cwd();
+      const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
 
       if (options.json) {
         const report = await indexMarkdownKnowledgeBase(projectRoot);
@@ -105,7 +106,7 @@ export function registerDocsCommands(program: Command): void {
         pathArg: string | undefined,
         options: { sort?: string; limit?: number; json?: boolean },
       ) => {
-        const projectRoot = pathArg ? path.resolve(pathArg) : process.cwd();
+        const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
         try {
           const sort = (options.sort ?? 'doc-count') as 'doc-count' | 'name';
           const limit = options.limit; // may be undefined → no limit
@@ -163,7 +164,7 @@ export function registerDocsCommands(program: Command): void {
           json?: boolean;
         },
       ) => {
-        const projectRoot = pathArg ? path.resolve(pathArg) : process.cwd();
+        const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
         const filter = {
           concept: options.concept,
           domain: options.domain,
@@ -199,7 +200,7 @@ export function registerDocsCommands(program: Command): void {
         pathArg: string | undefined,
         options: { json?: boolean },
       ) => {
-        const projectRoot = pathArg ? path.resolve(pathArg) : process.cwd();
+        const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
         try {
           const docRef = normalizeDocRef(docIdOrPath, projectRoot);
           const view = withQuery(projectRoot, q => q.getReferences(docRef));
@@ -228,7 +229,7 @@ export function registerDocsCommands(program: Command): void {
         pathArg: string | undefined,
         options: { names: string; json?: boolean },
       ) => {
-        const projectRoot = pathArg ? path.resolve(pathArg) : process.cwd();
+        const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
         const names = options.names
           .split(',')
           .map(s => s.trim())
@@ -269,7 +270,7 @@ export function registerDocsCommands(program: Command): void {
           json?: boolean;
         },
       ) => {
-        const projectRoot = pathArg ? path.resolve(pathArg) : process.cwd();
+        const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
 
         // Mutually exclusive: exactly one of --add / --check / --list / --clear.
         const modes: Array<'add' | 'check' | 'list' | 'clear'> = [];
@@ -332,7 +333,7 @@ export function registerDocsCommands(program: Command): void {
         pathArg: string | undefined,
         options: { json?: boolean },
       ) => {
-        const projectRoot = pathArg ? path.resolve(pathArg) : process.cwd();
+        const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
         try {
           const docRef = normalizeDocRef(docIdOrPath, projectRoot);
           const detail = withQuery(projectRoot, q => q.getDocumentDetail(docRef));
@@ -435,7 +436,7 @@ function registerListCommand<T>(
     .description(description)
     .option('--json', 'Output JSON')
     .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
-      const projectRoot = pathArg ? path.resolve(pathArg) : process.cwd();
+      const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
       try {
         const rows = withQuery(projectRoot, run);
         if (options.json) {
