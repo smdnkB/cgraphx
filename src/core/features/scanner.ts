@@ -69,6 +69,17 @@ function hasPlanIndex(featureDir: string): boolean {
   }
 }
 
+/** ui功能测试/ 子目录里是否有 UI 功能测试报告(*-ui功能测试报告.md)。 */
+function hasUiTestReport(featureDir: string): boolean {
+  try {
+    return fs
+      .readdirSync(path.join(featureDir, 'ui功能测试'))
+      .some((n) => n.endsWith('-ui功能测试报告.md'));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * spec 候选排序:主 spec 优先。主 spec `<前缀>-spec.md`(或 `spec.md`)恒短于
  * 同前缀的派生 spec(`<前缀>-接口测试-spec.md` / `<前缀>-单元测试-spec.md`,
@@ -124,8 +135,9 @@ function findMetaFile(featureDir: string): string | null {
  *
  * 优先级 已验证 > 已规划 > 已规格,三个里程碑各自独立探测(允许跨阶,
  * 如 spec + 测试报告但无 plan → 已验证)。已验证只看测试「报告」(run-api-test
- * 的 *-接口测试报告.md / write-unit-test-code 的 *-单元测试报告.md;2026-08 改名前
- * 的旧名 *-测试报告.md 仍识别,存量产物不回退),测试「规格」不算。
+ * 的 *-接口测试报告.md / write-unit-test-code 的 *-单元测试报告.md / run-ui-test
+ * 的 ui功能测试/*-ui功能测试报告.md(子目录产物);2026-08 改名前的旧名
+ * *-测试报告.md 仍识别,存量产物不回退),测试「规格」不算。
  */
 function deriveStage(featureDir: string): FeatureStage | null {
   let entries: string[];
@@ -134,12 +146,13 @@ function deriveStage(featureDir: string): FeatureStage | null {
   } catch {
     return null;
   }
-  const hasReport = entries.some(
-    (n) =>
-      n.endsWith('-单元测试报告.md') ||
-      n.endsWith('-接口测试报告.md') ||
-      n.endsWith('-测试报告.md'),
-  );
+  const hasReport =
+    entries.some(
+      (n) =>
+        n.endsWith('-单元测试报告.md') ||
+        n.endsWith('-接口测试报告.md') ||
+        n.endsWith('-测试报告.md'),
+    ) || hasUiTestReport(featureDir);
   if (hasReport) return '已验证';
   if (hasPlanIndex(featureDir)) return '已规划';
   const hasSpec = entries.some(

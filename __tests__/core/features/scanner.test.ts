@@ -21,6 +21,9 @@ function mkFeature(
     report?: 'unit' | 'api' | 'apiNew';
     unitTestSpec?: boolean;
     apiTestSpec?: boolean;
+    // UI 功能测试产物落在 ui功能测试/ 子目录(与接口/单元测试的顶层产物不同)
+    uiReport?: boolean;
+    uiTestSpec?: boolean;
   } = {},
 ): void {
   const dir = path.join(root, 'docs', 'features', name);
@@ -53,6 +56,23 @@ function mkFeature(
   if (opts.apiTestSpec === true) {
     fs.writeFileSync(
       path.join(dir, `${name}-接口测试-spec.md`),
+      '规格',
+      'utf-8',
+    );
+  }
+  if (opts.uiReport === true || opts.uiTestSpec === true) {
+    fs.mkdirSync(path.join(dir, 'ui功能测试'), { recursive: true });
+  }
+  if (opts.uiReport === true) {
+    fs.writeFileSync(
+      path.join(dir, 'ui功能测试', `${name}-ui功能测试报告.md`),
+      '报告',
+      'utf-8',
+    );
+  }
+  if (opts.uiTestSpec === true) {
+    fs.writeFileSync(
+      path.join(dir, 'ui功能测试', `${name}-ui功能测试-spec.md`),
       '规格',
       'utf-8',
     );
@@ -188,6 +208,33 @@ describe('deriveStage (spec §阶段枚举与派生口径, §异常与边界场�
 
   it('unit test spec without report → stays 已规格 (spec ≠ verified)', () => {
     mkFeature('2026-07-01-a', { spec: '> 负责人: x\n', unitTestSpec: true });
+    expect(scanFeatures(root)[0]).toMatchObject({ stage: '已规格' });
+  });
+
+  it('spec + ui report (in ui功能测试/ subdir, no plan) → 已验证', () => {
+    mkFeature('2026-07-01-a', { spec: '> 负责人: x\n', uiReport: true });
+    expect(scanFeatures(root)[0]).toMatchObject({ stage: '已验证' });
+  });
+
+  it('spec + plan + ui report → 已验证', () => {
+    mkFeature('2026-07-01-a', {
+      spec: '> 负责人: x\n',
+      planIndex: '# plan\n',
+      uiReport: true,
+    });
+    expect(scanFeatures(root)[0]).toMatchObject({ stage: '已验证' });
+  });
+
+  it('ui test spec without report → stays 已规格 (spec ≠ verified)', () => {
+    mkFeature('2026-07-01-a', { spec: '> 负责人: x\n', uiTestSpec: true });
+    expect(scanFeatures(root)[0]).toMatchObject({ stage: '已规格' });
+  });
+
+  it('empty ui功能测试/ directory → does not affect stage', () => {
+    const dir = path.join(root, 'docs', 'features', '2026-07-01-a');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'a-spec.md'), '> 负责人: x\n', 'utf-8');
+    fs.mkdirSync(path.join(dir, 'ui功能测试'), { recursive: true });
     expect(scanFeatures(root)[0]).toMatchObject({ stage: '已规格' });
   });
 
