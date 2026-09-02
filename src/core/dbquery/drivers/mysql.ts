@@ -88,7 +88,7 @@ export async function createMysqlConnection(profile: DBProfile): Promise<DriverC
   }
 
   return {
-    async execute(sql: string, timeoutMs: number, params?: unknown[]): Promise<RawResult> {
+    async execute(sql: string, timeoutMs: number, params?: unknown[], _limit?: number): Promise<RawResult> {
       if (!conn) throw new DriverError('MySQL connection not initialized');
       try {
         const [rows, fields] = params && params.length > 0

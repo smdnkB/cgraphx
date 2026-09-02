@@ -46,6 +46,13 @@ export function templateProfilesContent(): string {
       database: 'your_database',
       schema: 'public',
     },
+    'example-http': {
+      description: '示例 HTTP 配置 — 经只读查询接口访问无法直连的库(如生产)',
+      type: 'http',
+      url: 'http://127.0.0.1:8080/workflow/dbquery',
+      headers: { Authorization: 'Bearer CHANGE_ME' },
+      schema: 'public',
+    },
   };
   return JSON.stringify(obj, null, 2) + '\n';
 }

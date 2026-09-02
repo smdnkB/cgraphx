@@ -16,6 +16,7 @@ import { formatQueryResult, formatProfilesResult, formatTablesResult, extractMys
 import { mysqlSchemaQuery, postgresSchemaQuery, postgresConstraintDefsSql, postgresIndexDefsSql, postgresTableCommentSql } from './queries';
 import { createMysqlConnection } from './drivers/mysql';
 import { createPostgresConnection } from './drivers/postgres';
+import { createHttpConnection } from './drivers/http';
 import {
   ConfigNotFoundError,
   SubsystemDisabledError,
@@ -34,10 +35,28 @@ import type {
   QueryStatus,
   DriverConnection,
   DBProfile,
+  SchemaPayload,
 } from './types';
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+/** Resolve a driver connection by profile type. */
+function selectDriver(profile: DBProfile): Promise<DriverConnection> {
+  if (profile.type === 'mysql') return createMysqlConnection(profile);
+  if (profile.type === 'postgres') return createPostgresConnection(profile);
+  return createHttpConnection(profile);
+}
+
+/** Wrap a structured SchemaPayload (from http executeSchema) into a SchemaResult. */
+function wrapSchemaPayload(payload: SchemaPayload, profileName: string, durationMs: number): SchemaResult {
+  switch (payload.kind) {
+    case 'tables': return { tables: payload.tables, profile: profileName, durationMs };
+    case 'ddl': return { table: payload.table, ddl: payload.ddl, profile: profileName, durationMs };
+    case 'indexes': return { table: payload.table, indexes: payload.indexes, profile: profileName, durationMs };
+    case 'table-comment': return { table: payload.table, comment: payload.comment, profile: profileName, durationMs };
+  }
 }
 
 function elapsedMs(start: number): number {
@@ -121,13 +140,10 @@ export async function runQuery(input: QueryInput, projectRoot: string): Promise<
   }
 
   // 5. Execute via driver.
-  const driver: DriverConnection =
-    profile.type === 'mysql'
-      ? await createMysqlConnection(profile)
-      : await createPostgresConnection(profile);
+  const driver: DriverConnection = await selectDriver(profile);
 
   try {
-    const raw = await driver.execute(safety.normalizedSql, QUERY_TIMEOUT_MS);
+    const raw = await driver.execute(safety.normalizedSql, QUERY_TIMEOUT_MS, undefined, safety.effectiveLimit);
     const truncated = safety.effectiveLimit > 0 && raw.rows.length >= safety.effectiveLimit;
     const result = formatQueryResult(raw, profile.name, elapsedMs(start), truncated);
     logQuery(projectRoot, {
@@ -181,18 +197,36 @@ export async function runSchema(input: SchemaInput, projectRoot: string): Promis
 
   const table = input.table ?? '';
 
-  // Pick SQL template.
-  const parametrized =
-    profile.type === 'mysql'
-      ? mysqlSchemaQuery(mode, table, profile.database)
-      : postgresSchemaQuery(mode, table, profile.schema ?? 'public');
-
-  const driver: DriverConnection =
-    profile.type === 'mysql'
-      ? await createMysqlConnection(profile)
-      : await createPostgresConnection(profile);
+  const driver: DriverConnection = await selectDriver(profile);
 
   try {
+    // HTTP driver delegates schema introspection to the remote endpoint.
+    if (driver.executeSchema) {
+      const payload = await driver.executeSchema({
+        mode,
+        table: input.table,
+        schema: profile.schema,
+        timeoutMs: QUERY_TIMEOUT_MS,
+      });
+      const result = wrapSchemaPayload(payload, profile.name, elapsedMs(start));
+      logQuery(projectRoot, {
+        timestamp: nowIso(),
+        profile: profile.name,
+        mode,
+        sql: undefined,
+        durationMs: elapsedMs(start),
+        rowCount: 'tables' in result ? result.tables.length : 0,
+        status: 'ok',
+      });
+      return result;
+    }
+
+    // DB drivers (mysql/postgres) — pick dialect SQL template and run locally.
+    const parametrized =
+      profile.type === 'mysql'
+        ? mysqlSchemaQuery(mode, table, profile.database)
+        : postgresSchemaQuery(mode, table, profile.schema ?? 'public');
+
     // ddl: MySQL uses SHOW CREATE TABLE (single query, server-rendered DDL);
     // PG assembles from column query + pg_get_constraintdef + table comment.
     if (mode === 'ddl') {
@@ -246,7 +280,7 @@ export async function runSchema(input: SchemaInput, projectRoot: string): Promis
     });
     return result;
   } catch (err) {
-    recordAndRethrow(projectRoot, start, mode, profile.name, parametrized.sql, err);
+    recordAndRethrow(projectRoot, start, mode, profile.name, undefined, err);
   } finally {
     await driver.close();
   }

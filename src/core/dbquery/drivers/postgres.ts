@@ -86,7 +86,7 @@ export async function createPostgresConnection(profile: DBProfile): Promise<Driv
   }
 
   return {
-    async execute(sql: string, _timeoutMs: number, params?: unknown[]): Promise<RawResult> {
+    async execute(sql: string, _timeoutMs: number, params?: unknown[], _limit?: number): Promise<RawResult> {
       if (!client) throw new DriverError('PostgreSQL client not initialized');
       try {
         const result: QueryResult<QueryResultRow> = params

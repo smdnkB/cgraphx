@@ -1,6 +1,6 @@
 ---
 name: db-query
-description: 数据库探索方法论 — 通过 cgraphx db CLI 查数据(MySQL + PostgreSQL),沉淀业务知识到 docs/schema-knowledge/。Use when 查数据库/查数据/SQL查询/查表/表结构/DDL/查表结构/验证数据/获取测试数据。
+description: 数据库探索方法论 — 通过 cgraphx db CLI 查数据(MySQL + PostgreSQL 直连,或经 HTTP 只读查询接口访问无法直连的库),沉淀业务知识到 docs/schema-knowledge/。Use when 查数据库/查数据/SQL查询/查表/表结构/DDL/查表结构/验证数据/获取测试数据。
 ---
 
 ## 工具(由 cgraphx 提供,通过 CLI 调用)
@@ -29,7 +29,24 @@ cgraphx db <subcommand> [options]
 - 禁用整个子系统:`CGRAPHX_DB_QUERY_DISABLED=1` 或 profiles 文件里 `"enabled": false`(禁用时所有命令输出 "数据库无法连接,请以代码中查询为准" 到 stderr,exit code 4,不实际连库)
 - 退出码:0 成功 / 2 配置错误 / 3 安全拦截(写操作) / 4 连接/超时/禁用 / 5 参数错误
 
-profiles 文件结构:每个 profile 含 `type`(mysql/postgres)、连接参数、可选 `description`。**密码永不输出**。
+profiles 文件结构:每个 profile 含 `type`(`mysql`/`postgres`/`http`)、连接参数、可选 `description`。**密码/token 永不输出**。
+
+### 三种 type
+
+- **mysql/postgres**(直连):配 `host/port/user/password/database`(+postgres 的 `schema`)。用于能直连的库(如测试库)。
+- **http**(经只读查询接口):配 `url`(接口地址)、`headers`(鉴权,如 `{"Authorization":"Bearer <token>"}`)、`schema`(默认 schema)。用于**只能经项目 HTTP 接口访问、不能直连的库**(如生产库)。接口须实现固定契约:POST 传 `{mode,sql,args,limit,schema,table}` 返回 `{code:200,data:{columns,rows}}` 或裸 `{columns,rows}`;schema 模式(tables/ddl/indexes/table-comment)由接口内部拼方言 SQL 返回结构化结果。**token 过期需手动换**。
+
+#### http profile 配置示例
+
+```json
+"flowable-production": {
+  "type": "http",
+  "url": "http://生产域名/workflow/dbquery",
+  "headers": { "Authorization": "Bearer <生产token>" },
+  "schema": "zqpd_sch",
+  "description": "生产库(经HTTP接口)"
+}
+```
 
 ## 使用原则
 

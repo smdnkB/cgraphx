@@ -41,7 +41,7 @@ import {
 } from './types';
 import { ConfigNotFoundError } from './errors';
 
-const VALID_DRIVERS: ReadonlySet<DriverKind> = new Set(['mysql', 'postgres']);
+const VALID_DRIVERS: ReadonlySet<DriverKind> = new Set(['mysql', 'postgres', 'http']);
 
 interface LoadedFile {
   source: ConfigSource;
@@ -97,11 +97,49 @@ function normalizeProfileEntry(
   if (!raw || typeof raw !== 'object') {
     return { profile: null, error: `profile "${name}" is not an object (${sourcePath})` };
   }
-  const { type, host, port, user, password, database, schema, description } = raw;
+  const { type, host, port, user, password, database, schema, description, url, headers } = raw;
 
   if (!type || !VALID_DRIVERS.has(type)) {
-    return { profile: null, error: `profile "${name}": type must be 'mysql' or 'postgres' (got: ${String(type)})` };
+    return { profile: null, error: `profile "${name}": type must be 'mysql', 'postgres', or 'http' (got: ${String(type)})` };
   }
+
+  // HTTP driver — requires url; host/user/password/database unused.
+  if (type === 'http') {
+    if (typeof url !== 'string' || !url) {
+      return { profile: null, error: `profile "${name}": missing required field "url" for type=http` };
+    }
+    let normalizedHeaders: Record<string, string> | undefined;
+    if (headers !== undefined) {
+      if (typeof headers !== 'object' || headers === null || Array.isArray(headers)) {
+        return { profile: null, error: `profile "${name}": "headers" must be an object for type=http` };
+      }
+      normalizedHeaders = {};
+      for (const [k, v] of Object.entries(headers)) {
+        if (typeof v !== 'string') {
+          return { profile: null, error: `profile "${name}": header "${k}" must be a string` };
+        }
+        normalizedHeaders[k] = v;
+      }
+    }
+    return {
+      profile: {
+        name,
+        description: typeof description === 'string' ? description : undefined,
+        type,
+        host: '',
+        port: 0,
+        user: '',
+        password: '',
+        database: '',
+        url,
+        headers: normalizedHeaders,
+        schema,
+      },
+      error: null,
+    };
+  }
+
+  // mysql / postgres — require host/user/password/database.
   if (typeof host !== 'string' || !host) {
     return { profile: null, error: `profile "${name}": missing required field "host"` };
   }
