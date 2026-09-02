@@ -16,7 +16,7 @@
 ---
 req_id: <簇名>
 簇: <目标标识/路径>
-status: 未收口
+status: 已收口
 mode: poor
 created: "<YYYY-MM-DD>"
 git_range: "<首SHA>..<末SHA>"
