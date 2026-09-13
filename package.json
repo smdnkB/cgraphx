@@ -1,6 +1,6 @@
 {
   "name": "cgraphx",
-  "version": "2.0.1",
+  "version": "2.0.6",
   "description": "Local markdown knowledge base, read-only database query, and developer timeline toolkit for Claude Code.",
   "bin": {
     "cgraphx": "./dist/cli/index.js"
