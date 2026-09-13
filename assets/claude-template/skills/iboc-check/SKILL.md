@@ -139,3 +139,6 @@ Read 模板 + 拼任务三件套成 prompt,派 `general-purpose`:
 - **write-unit-test-spec / write-unit-test-code / end**:由 filler 子 agent 在隔离上下文内按需调用
 - **subagent-implement**:同款 controller/子 agent 模式(隔离派任 + 提交归 controller);这里更轻——无 plan/spec 审查,一需求一子 agent
 - **features sync**:头部补正是它的数据修正——负责人取自 spec 头部,头部缺失时「按人找需求」失效
+
+## 结束后
+- 必须核实单元测试报告中执行情况, 各种情况导致的未执行或者测试不通过 必须提醒用户
