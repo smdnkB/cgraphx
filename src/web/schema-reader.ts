@@ -120,7 +120,7 @@ export function listProjects(projectRoot: string): ProjectSummary[] | null {
   for (const ent of entries) {
     if (!ent.isDirectory()) continue;
     if (ent.name.startsWith('.') || ent.name.startsWith('_')) continue; // 跳过隐藏/临时
-    const summary = summarizeProject(root, ent.name);
+    const summary = summarizeProject(projectRoot, ent.name);
     projects.push(summary);
   }
   // 按工程名稳定排序。
@@ -128,8 +128,12 @@ export function listProjects(projectRoot: string): ProjectSummary[] | null {
   return projects;
 }
 
-/** 单工程概览:读 INDEX.md 统计 ✓ 表数;INDEX 不可读 → tableCount=-1。 */
-function summarizeProject(root: string, projectName: string): ProjectSummary {
+/**
+ * 单工程概览:读 INDEX.md 统计 ✓ 表数;INDEX 不可读 → tableCount=-1。
+ * 工程目录不存在 → 仍返回 summary(tableCount 为降级计数或 0,indexReadable=false)。
+ */
+export function summarizeProject(projectRoot: string, projectName: string): ProjectSummary {
+  const root = schemaRoot(projectRoot);
   const tables = readTableListFromIndex(root, projectName);
   if (tables === null) {
     // INDEX 不可读:降级扫 ddl/ 目录文件名,tableCount 取文件数,indexReadable=false。

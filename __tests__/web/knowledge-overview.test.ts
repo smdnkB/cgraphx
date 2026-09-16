@@ -388,7 +388,7 @@ describe('knowledge overview page (integration)', () => {
     expect(noMatch).not.toContain('知识库为空');
   });
 
-  it('10. shell navigation: three entries, database entry not clickable (spec §3.2, §11 #12)', async () => {
+  it('10. shell navigation: three entries, database entry clickable to schema (spec §3.2, §11 #12; 2026-09-16 数据库预览激活)', async () => {
     await makeMainProject();
     const srv = await startServer();
     const html = await (await fetch(`${srv.url}/`)).text();
@@ -397,10 +397,12 @@ describe('knowledge overview page (integration)', () => {
     expect(html).toContain('href="/timeline"');
     expect(html).toContain('开发时间线');
     expect(html).toContain('数据库');
-    expect(html).toContain('后续');
-    // 数据库项为灰置 span(无 <a> 包裹)。
-    expect(html).toContain('nav__item--disabled');
-    expect(html).not.toMatch(/<a[^>]*>[^<]*数据库/);
+    // 第三入口「数据库」激活为模型知识库预览(2026-09-16-cgraphx-web数据库预览),
+    // 从灰置 span 改为可点击 <a href="/schema">。
+    expect(html).toContain('href="/schema"');
+    expect(html).not.toContain('nav__item--disabled');
+    // 数据库项为 <a>(可点击);glyph span 在 <a> 内,故匹配需容忍中间标签。
+    expect(html).toMatch(/<a[^>]*href="\/schema"[^>]*>[\s\S]*数据库/);
     // 顶栏只读标识:本地地址 + 只读性质。
     expect(html).toContain('本地 · 127.0.0.1:');
     expect(html).toContain('只读');

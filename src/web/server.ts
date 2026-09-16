@@ -27,10 +27,17 @@ import type { AddressInfo } from 'node:net';
 import type { SqliteDatabase } from '../core/db';
 import { openVerifiedConnection } from './bootstrap';
 import { WebStartupError } from './errors';
-import { renderShellPage } from './layout';
+import { renderShellPage, type ShellActive } from './layout';
 import { renderOverviewPage } from './pages-overview';
 import { renderDetailPage } from './pages-detail';
 import { renderTimelinePage } from './pages-timeline';
+import {
+  renderSchemaProjectsPage,
+  renderSchemaTablesPage,
+  renderSchemaDdlPage,
+  renderSchemaInsightsPage,
+} from './pages-schema';
+import { listTables, listProjects } from './schema-reader';
 import { escapeHtml } from './render-utils';
 
 /** 已启动的 web 服务句柄。 */
@@ -80,7 +87,7 @@ function readVersion(): string {
 function sendHtml(
   res: http.ServerResponse,
   status: number,
-  opts: { title: string; active: 'knowledge' | 'timeline' | 'none'; contentHtml: string },
+  opts: { title: string; active: ShellActive; contentHtml: string },
   ctx: HandlerContext,
 ): void {
   res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -202,6 +209,118 @@ function handleDocDetail(
 }
 
 /**
+ * schema-knowledge 预览路由(spec §3.2-3.6 / §5.2 / §11 #9,2026-09-16-cgraphx-web数据库预览)。
+ *
+ * 纯文件系统派生,**不经 db**(契约 C):处理器用 ctx.projectRoot 调 pages-schema,
+ * 不用 ctx.db。路由不接受任意文件路径参数:工程名/表名格式非法(含 `..` / `/`)→
+ * 404(不调 render);合法但工程不存在 → 详情页 render 返回 status:404;
+ * ddl 文件缺失 → status:200 + 缺失提示(spec §3.4 / §8)。
+ *
+ * 路由形态:
+ *   GET /schema                       工程列表(单工程自动 302 折叠;零工程/目录不存在 → 空态)
+ *   GET /schema/<工程>                表清单
+ *   GET /schema/<工程>/insights       经验沉淀(`insights` 保留词,优先于 <表> 判定)
+ *   GET /schema/<工程>/<表>           单表 DDL 详情(返回 { status, html },走 handleDocDetail 同款 writeHead)
+ */
+function handleSchema(
+  res: http.ServerResponse,
+  ctx: HandlerContext,
+  pathname: string,
+): void {
+  const ctxSchema = { version: ctx.version, localHost: ctx.localHost };
+  const rest = pathname.slice('/schema/'.length); // 去掉前缀,可能为空
+
+  // GET /schema
+  if (rest === '') {
+    // 单工程自动折叠:仅一个工程 → 302 重定向到该工程表清单(手段决策 8);
+    // 多工程 → 工程列表;零工程/目录不存在 → 空态(由 renderProjectsPage 处理)。
+    const projects = listProjects(ctx.projectRoot);
+    const single = projects !== null && projects.length === 1 ? projects[0] : null;
+    if (single !== null && single !== undefined) {
+      res.writeHead(302, { Location: `/schema/${encodeURIComponent(single.name)}` });
+      res.end();
+      return;
+    }
+    const html = renderSchemaProjectsPage(ctx.projectRoot, ctxSchema);
+    sendHtml(res, 200, { title: '模型知识库', active: 'schema', contentHtml: html }, ctx);
+    return;
+  }
+
+  // 解析 <工程>[/<表或 insights>]:工程名是第一个 / 之前的部分。
+  const slashIdx = rest.indexOf('/');
+  const projectNameEncoded = slashIdx === -1 ? rest : rest.slice(0, slashIdx);
+  const tail = slashIdx === -1 ? '' : rest.slice(slashIdx + 1);
+
+  let projectName: string;
+  try {
+    projectName = decodeURIComponent(projectNameEncoded);
+  } catch {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+  // 格式非法(含 ../)→ 路由层 404,不调 render(契约 B 分层)。
+  if (!isSafeSchemaName(projectName)) {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+
+  // GET /schema/<工程>(表清单)
+  if (tail === '') {
+    // 工程不存在 → 404(契约 B 分层);listTables 返回 null 即工程不存在。
+    if (listTables(ctx.projectRoot, projectName) === null) {
+      sendNotFound(res, ctx, pathname);
+      return;
+    }
+    const html = renderSchemaTablesPage(ctx.projectRoot, projectName, ctxSchema);
+    sendHtml(res, 200, { title: projectName, active: 'schema', contentHtml: html }, ctx);
+    return;
+  }
+
+  // GET /schema/<工程>/insights(经验沉淀,保留词优先于 <表>)
+  if (tail === 'insights') {
+    // 工程不存在 → 404。
+    if (listTables(ctx.projectRoot, projectName) === null) {
+      sendNotFound(res, ctx, pathname);
+      return;
+    }
+    const html = renderSchemaInsightsPage(ctx.projectRoot, projectName, ctxSchema);
+    sendHtml(res, 200, { title: '经验沉淀', active: 'schema', contentHtml: html }, ctx);
+    return;
+  }
+
+  // GET /schema/<工程>/<表>(DDL 详情)
+  let tableName: string;
+  try {
+    tableName = decodeURIComponent(tail);
+  } catch {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+  if (!isSafeSchemaName(tableName)) {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+  const result = renderSchemaDdlPage(ctx.projectRoot, projectName, tableName, ctxSchema);
+  // 走 handleDocDetail 同款 writeHead + end,不走 sendHtml(防双重 writeHead)。
+  res.writeHead(result.status, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(result.html);
+}
+
+/**
+ * 单层名合法性(用于路由层工程名/表名校验,与 schema-reader.isSafeName 同口径)。
+ *
+ * 拒绝:空 / `.` / `..` / 含路径分隔符 / 含 `..` 子串 / 含 NUL。格式非法 →
+ * 路由层 404(spec §5.2 / §11 #9,不进 render)。
+ */
+function isSafeSchemaName(name: string): boolean {
+  if (name === '' || name === '.' || name === '..') return false;
+  if (name.includes('/') || name.includes('\\')) return false;
+  if (name.includes('\0')) return false;
+  if (name.includes('..')) return false;
+  return true;
+}
+
+/**
  * 构造请求处理器。闭包持有上下文(db / 版本 / 本地地址);处理器抛错
  * 统一兜底为 500 页。仅支持 GET;其它方法走「其他 → 404」。
  */
@@ -238,6 +357,10 @@ function createRequestHandler(ctx: HandlerContext): http.RequestListener {
         }
         if (pathname === '/assets' || pathname.startsWith('/assets/')) {
           tryServeAsset(res, ctx, pathname);
+          return;
+        }
+        if (pathname === '/schema' || pathname.startsWith('/schema/')) {
+          handleSchema(res, ctx, pathname);
           return;
         }
         if (pathname === '/doc' || pathname.startsWith('/doc/')) {
