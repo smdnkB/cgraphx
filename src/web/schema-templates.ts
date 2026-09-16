@@ -276,13 +276,24 @@ export function renderDdlContent(m: DdlPageModel): string {
     </section>`;
 }
 
+/**
+ * 高价值经验标签:默认展开。其余标签(定位/样本/其他)默认折叠,点开看。
+ * 「其他」多为字段释义(无六类标签的行),价值密度低,折叠避免淹没重点。
+ */
+const HIGH_VALUE_TAGS: ReadonlySet<InsightTag> = new Set<InsightTag>(['陷阱', '性能', '关系', '索引']);
+
+/** 「其他」分组的说明标注(多为字段释义,提示价值密度)。 */
+function tagAnnotation(tag: InsightTag): string {
+  if (tag === '其他') return ' <span class="insight-group__note">多为字段释义,价值密度较低</span>';
+  return '';
+}
+
 /** 经验沉淀页主区。 */
 export function renderInsightsContent(m: InsightsPageModel): string {
   if (m.groups.length === 0) {
     return `
     <section class="schema-list">
       <div class="schema-list__head">
-        <a class="schema-back" href="${escapeHtml(m.backHref)}">‹ 返回表清单</a>
         <h1>经验沉淀</h1>
         <span class="schema-project-tag">${escapeHtml(m.projectName)}</span>
       </div>
@@ -294,26 +305,36 @@ export function renderInsightsContent(m: InsightsPageModel): string {
       const items = g.items
         .map((i) => `
           <li class="insight-item">
+            <span class="insight-item__dot insight-item__dot--${i.tag}" title="${escapeHtml(i.tag)}"></span>
             <a class="insight-item__table" href="${escapeHtml(i.tableHref)}">${escapeHtml(i.table)}</a>
             <span class="insight-item__text">${i.text}</span>
           </li>`)
         .join('');
-      return `
+      const isOpen = HIGH_VALUE_TAGS.has(g.tag);
+      // 高价值标签用 <section> 默认展开;低价值用 <details> 默认折叠(点开看)。
+      if (isOpen) {
+        return `
         <section class="insight-group insight-group--${g.tag}">
-          <h2 class="insight-group__lab">${escapeHtml(g.tag)} <i>(${g.items.length})</i></h2>
+          <h2 class="insight-group__lab">${escapeHtml(g.tag)} <i>(${g.items.length})</i>${tagAnnotation(g.tag)}</h2>
           <ul class="insight-list">${items}
           </ul>
         </section>`;
+      }
+      return `
+        <details class="insight-group insight-group--${g.tag} insight-group--collapsed">
+          <summary class="insight-group__lab">${escapeHtml(g.tag)} <i>(${g.items.length})</i>${tagAnnotation(g.tag)}</summary>
+          <ul class="insight-list">${items}
+          </ul>
+        </details>`;
     })
     .join('');
   return `
     <section class="schema-list">
       <div class="schema-list__head">
-        <a class="schema-back" href="${escapeHtml(m.backHref)}">‹ 返回表清单</a>
         <h1>经验沉淀</h1>
         <span class="schema-project-tag">${escapeHtml(m.projectName)}</span>
       </div>
-      <p class="schema-list__hint">共 ${m.totalCount} 条经验,来自 ${escapeHtml(m.projectName)} 各表 DISCOVERED 块,按标签聚合。</p>
+      <p class="schema-list__hint">共 ${m.totalCount} 条经验,来自 ${escapeHtml(m.projectName)} 各表 DISCOVERED 块,按标签聚合。陷阱/性能/关系/索引 默认展开,其余折叠。</p>
       <div class="insight-grid">${groups}
       </div>
     </section>`;

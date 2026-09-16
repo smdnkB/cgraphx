@@ -2257,3 +2257,106 @@ a.pager__btn:hover {
 .tcard__tag--性能 { color: var(--blue); }
 .tcard__tag--索引 { color: var(--gold); }
 .tcard__tag--样本 { color: var(--orange); }
+
+/* ---------- 经验沉淀页(高价值展开 + 其余折叠)---------- */
+.insight-group {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
+}
+.insight-group--collapsed {
+  padding: 0;
+}
+.insight-group--collapsed > summary {
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-disp);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pine);
+  padding: 14px 18px;
+  border-radius: 8px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.insight-group--collapsed > summary::-webkit-details-marker {
+  display: none;
+}
+.insight-group--collapsed[open] > summary {
+  border-bottom-left: 2px solid var(--line);
+  margin-bottom: 0;
+}
+.insight-group__lab {
+  font-family: var(--font-disp);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pine);
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.insight-group__lab i {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.insight-group__note {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-weight: 400;
+  margin-left: 6px;
+}
+.insight-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.insight-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.insight-item:last-child {
+  border-bottom: none;
+}
+.insight-item__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  background: var(--ink-3);
+}
+.insight-item__dot--陷阱 { background: var(--rust); }
+.insight-item__dot--性能 { background: var(--blue); }
+.insight-item__dot--关系 { background: var(--pine-2); }
+.insight-item__dot--索引 { background: var(--gold); }
+.insight-item__dot--定位 { background: var(--ink-3); }
+.insight-item__dot--样本 { background: var(--orange); }
+.insight-item__dot--其他 { background: var(--line); }
+.insight-item__table {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--pine-2);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 1px 6px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.insight-item__table:hover { text-decoration: underline; }
+.insight-item__text { flex: 1; word-break: break-all; }
