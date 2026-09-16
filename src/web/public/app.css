@@ -2079,17 +2079,31 @@ a.pager__btn:hover {
 }
 
 /* 经验沉淀 */
+/* 瀑布流(columns):项按内容高度在多列流式排布,无同行拉伸(不似 grid 的 stretch)。
+   break-inside: avoid 防项跨列断裂;margin-bottom 替代 gap 作列内项间距。 */
 .insight-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 18px;
+  column-count: 3;
+  column-gap: 18px;
   margin-top: 16px;
+}
+@media (max-width: 1200px) {
+  .insight-grid { column-count: 2; }
+}
+@media (max-width: 760px) {
+  .insight-grid { column-count: 1; }
 }
 .insight-group {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px 18px;
+  margin: 0 0 18px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  display: inline-block;
+  width: 100%;
+  box-sizing: border-box;
 }
 .insight-group--陷阱 { border-left: 4px solid var(--rust); }
 .insight-group--性能 { border-left: 4px solid var(--blue); }
