@@ -45,6 +45,16 @@ export interface TableItemModel {
   href: string;
 }
 
+/** 工程切换 tab(表清单页顶部,多工程时出现)。 */
+export interface ProjectTabModel {
+  /** 工程名。 */
+  name: string;
+  /** 该工程的表清单链接:/schema/<工程>。 */
+  href: string;
+  /** 是否当前激活工程。 */
+  active: boolean;
+}
+
 /** 表清单页视图。 */
 export interface TablesPageModel {
   /** 工程名(展示用)。 */
@@ -55,8 +65,10 @@ export interface TablesPageModel {
   tables: TableItemModel[];
   /** 经验沉淀页链接:/schema/<工程>/insights。 */
   insightsHref: string;
-  /** 返回工程列表链接。 */
+  /** 返回工程列表链接(空态/兜底用;多工程 tab 时一般不显示)。 */
   backHref: string;
+  /** 工程切换 tab 列表。仅多工程时填充(单工程为空数组 → 不渲染 tab 区)。 */
+  projectTabs: ProjectTabModel[];
 }
 
 /** DDL 详情页视图。 */
@@ -157,6 +169,15 @@ export function renderProjectsContent(m: ProjectsPageModel): string {
 
 /** 表清单页主区。 */
 export function renderTablesContent(m: TablesPageModel): string {
+  // 工程切换 tab:仅多工程时渲染(单工程 projectTabs 为空 → 不渲染,页面更净)。
+  const tabsHtml = m.projectTabs.length === 0
+    ? ''
+    : `<nav class="proj-tabs">${m.projectTabs
+        .map((t) => {
+          const cls = t.active ? 'proj-tabs__tab proj-tabs__tab--active' : 'proj-tabs__tab';
+          return `<a class="${cls}" href="${escapeHtml(t.href)}">${escapeHtml(t.name)}</a>`;
+        })
+        .join('')}</nav>`;
   const indexNotice = m.indexReadable
     ? ''
     : '<p class="schema-notice">INDEX.md 不可读,已按 ddl/ 目录文件名列出(无表注释)。</p>';
@@ -174,10 +195,10 @@ export function renderTablesContent(m: TablesPageModel): string {
   return `
     <section class="schema-list">
       <div class="schema-list__head">
-        <a class="schema-back" href="${escapeHtml(m.backHref)}">‹ 返回工程列表</a>
         <h1>${escapeHtml(m.projectName)}</h1>
         <a class="schema-insights-link" href="${escapeHtml(m.insightsHref)}">经验沉淀 →</a>
       </div>
+      ${tabsHtml}
       ${indexNotice}
       ${listHtml}
     </section>`;

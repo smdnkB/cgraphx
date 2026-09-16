@@ -97,21 +97,30 @@ export function renderSchemaProjectsPage(projectRoot: string, ctx: SchemaPageCtx
 }
 
 /**
- * 表清单页。projectName 格式非法由路由层拦(不进本函数);工程不存在 → 渲染 404 壳。
+ * 表清单页(= 工程详情页,2026-09-16 页面层级缩减后)。
  *
- * 注:本函数返回纯 string(走 sendHtml,status 由路由层定)。
- * 路由层对工程不存在应判 404,但因本函数无法回传 status,改为返回 200 + 404 文案壳;
- * 实际工程不存在由路由层先用 listTables 判定后 sendNotFound——见 T-3 路由实现。
+ * 多工程时顶部渲染工程切换 tab(点切到另一工程的表清单,URL 变 /schema/<工程>);
+ * 单工程时 tab 区隐藏(页面更净)。projectName 格式非法由路由层拦(不进本函数);
+ * 工程不存在 → 渲染 404 壳(路由层应已先判,此为兜底)。
  */
 export function renderSchemaTablesPage(
   projectRoot: string,
   projectName: string,
   ctx: SchemaPageCtx,
 ): string {
-  // 工程不存在时,这里仍渲染一个壳(兜底;路由层应已先判)。
   const tables = listTables(projectRoot, projectName);
   const projectMeta = summarizeProject(projectRoot, projectName);
   const indexReadable = projectMeta.indexReadable;
+
+  // 工程切换 tab:取全部工程,多工程时填充(单工程留空 → 模板不渲染 tab 区)。
+  const allProjects = listProjects(projectRoot) ?? [];
+  const projectTabs = allProjects.length > 1
+    ? allProjects.map((p) => ({
+        name: p.name,
+        href: projectHref(p.name),
+        active: p.name === projectName,
+      }))
+    : [];
 
   const model: TablesPageModel = {
     projectName,
@@ -123,6 +132,7 @@ export function renderSchemaTablesPage(
     })),
     insightsHref: insightsHref(projectName),
     backHref: '/schema',
+    projectTabs,
   };
   return renderShellPage({
     title: projectName,

@@ -232,17 +232,19 @@ function handleSchema(
 
   // GET /schema
   if (rest === '') {
-    // 单工程自动折叠:仅一个工程 → 302 重定向到该工程表清单(手段决策 8);
-    // 多工程 → 工程列表;零工程/目录不存在 → 空态(由 renderProjectsPage 处理)。
+    // 始终重定向到首个工程(单工程也重定向;页面层级缩减后工程列表不再独立成页,
+    // 多工程切换器内嵌在表清单页顶部)。零工程/目录不存在 → 渲染空态引导。
     const projects = listProjects(ctx.projectRoot);
-    const single = projects !== null && projects.length === 1 ? projects[0] : null;
-    if (single !== null && single !== undefined) {
-      res.writeHead(302, { Location: `/schema/${encodeURIComponent(single.name)}` });
-      res.end();
-      return;
+    if (projects !== null && projects.length >= 1) {
+      const first = projects[0];
+      if (first !== undefined) {
+        res.writeHead(302, { Location: `/schema/${encodeURIComponent(first.name)}` });
+        res.end();
+        return;
+      }
     }
+    // 零工程 / 目录不存在 → 空态页(引导 export-table-ddl)。
     const html = renderSchemaProjectsPage(ctx.projectRoot, ctxSchema);
-    // 页面函数已返回完整壳 HTML,直接 writeHead+end 输出,不走 sendHtml(否则双重套壳)。
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);
     return;

@@ -2134,3 +2134,31 @@ a.pager__btn:hover {
   white-space: nowrap;
 }
 .insight-item__table:hover { text-decoration: underline; }
+
+/* 工程切换 tab(表清单页顶部,多工程时) */
+.proj-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+  padding-bottom: 0;
+}
+.proj-tabs__tab {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-2);
+  text-decoration: none;
+  padding: 8px 14px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.1s, border-color 0.1s;
+}
+.proj-tabs__tab:hover {
+  color: var(--pine-2);
+}
+.proj-tabs__tab--active {
+  color: var(--pine);
+  font-weight: 600;
+  border-bottom-color: var(--pine-2);
+}
