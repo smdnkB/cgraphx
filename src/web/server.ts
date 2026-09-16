@@ -242,7 +242,9 @@ function handleSchema(
       return;
     }
     const html = renderSchemaProjectsPage(ctx.projectRoot, ctxSchema);
-    sendHtml(res, 200, { title: '模型知识库', active: 'schema', contentHtml: html }, ctx);
+    // 页面函数已返回完整壳 HTML,直接 writeHead+end 输出,不走 sendHtml(否则双重套壳)。
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
     return;
   }
 
@@ -272,7 +274,8 @@ function handleSchema(
       return;
     }
     const html = renderSchemaTablesPage(ctx.projectRoot, projectName, ctxSchema);
-    sendHtml(res, 200, { title: projectName, active: 'schema', contentHtml: html }, ctx);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
     return;
   }
 
@@ -284,7 +287,8 @@ function handleSchema(
       return;
     }
     const html = renderSchemaInsightsPage(ctx.projectRoot, projectName, ctxSchema);
-    sendHtml(res, 200, { title: '经验沉淀', active: 'schema', contentHtml: html }, ctx);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
     return;
   }
 
