@@ -7,6 +7,7 @@
  */
 
 import type { DocumentType, DocumentStatus } from '../core/markdown';
+import type { EventType } from '../core/timeline';
 
 /** 列表页大小(plan index 第 4 节推荐:服务端分页 30/页)。 */
 export const PAGE_SIZE = 30;
@@ -51,4 +52,41 @@ export const TYPE_TONES: Record<DocumentType, TypeTone> = {
   decision: 'judgment',
   rule: 'judgment',
   lesson: 'lesson',
+};
+
+// ----- 时间线页显示常量(spec §3.2 / §3.3 / §9 #4)--------------------------
+
+/**
+ * 5 种 timeline 事件类型的有序列表(spec §3.2 标签顺序,与设计稿 v2 chip 顺序一致)。
+ * core/timeline 只导出 EventType 联合类型,无运行时有序数组——本数组为 web 层展示口径。
+ */
+export const TIMELINE_EVENT_TYPES = [
+  'user_prompt',
+  'pre_tool_use',
+  'post_tool_use',
+  'stop',
+  'git_commit',
+] as const satisfies readonly EventType[];
+
+/** 时间线事件类型中文显示标签(spec §3.2 逐字)。 */
+export const EVENT_TYPE_LABELS: Record<EventType, string> = {
+  user_prompt: 'Prompt',
+  pre_tool_use: '工具调用',
+  post_tool_use: '工具完成',
+  stop: 'Stop',
+  git_commit: 'Git 提交',
+};
+
+/**
+ * 事件类型对应的 chip 色调(对齐设计稿 v2 的 `.chip--prompt/pre/post/stop/git`)。
+ * 同时用于事件行 evbadge 与 chip。
+ */
+export type EventTone = 'prompt' | 'pre' | 'post' | 'stop' | 'git';
+
+export const EVENT_TYPE_CHIP_TONE: Record<EventType, EventTone> = {
+  user_prompt: 'prompt',
+  pre_tool_use: 'pre',
+  post_tool_use: 'post',
+  stop: 'stop',
+  git_commit: 'git',
 };

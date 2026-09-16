@@ -82,8 +82,10 @@ describe('startWebServer', () => {
     const timeline = await fetch(`${srv.url}/timeline`);
     expect(timeline.status).toBe(200);
     const timelineBody = await timeline.text();
-    expect(timelineBody).toContain('平行需求');
-    expect(timelineBody).toContain('2026-07-30-cgraphx-web时间线浏览');
+    // 真实时间线页:标题 + 导航 active(timeline)+ 壳结构;空库 fixture → timeline-empty 空态。
+    expect(timelineBody).toContain('开发时间线');
+    expect(timelineBody).toContain('class="shell"');
+    expect(timelineBody).toContain('cgraphx timeline install');
 
     const nope = await fetch(`${srv.url}/nope`);
     expect(nope.status).toBe(404);

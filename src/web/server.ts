@@ -9,7 +9,7 @@
  *   GET /            知识库总览页(B-3:经 pages-overview 渲染)
  *   GET /doc/<ident> 文档详情页(B-4:markdown 全文渲染 + 双向引用;ident 为
  *                    文档 ID 或项目相对路径,源文件路径仅从索引 DB 解析,spec §5.2)
- *   GET /timeline    占位页(平行需求未实现)
+ *   GET /timeline    开发时间线页(经 pages-timeline 渲染;门面 async,分支用 .then/.catch)
  *   GET /assets/*    静态资产(路径穿越防护 + 扩展名白名单)
  *   其他             404 页
  *   处理器抛错       500 页(可读原因,禁输出堆栈)
@@ -30,6 +30,7 @@ import { WebStartupError } from './errors';
 import { renderShellPage } from './layout';
 import { renderOverviewPage } from './pages-overview';
 import { renderDetailPage } from './pages-detail';
+import { renderTimelinePage } from './pages-timeline';
 import { escapeHtml } from './render-utils';
 
 /** 已启动的 web 服务句柄。 */
@@ -119,13 +120,7 @@ function sendInternalError(res: http.ServerResponse, ctx: HandlerContext, err: u
 }
 
 /** /timeline 占位页:平行需求尚未实现。 */
-function renderTimelinePlaceholder(): string {
-  return `
-    <section class="placeholder">
-      <h1>开发时间线</h1>
-      <p>开发时间线属平行需求,尚未实现(feature-id: 2026-07-30-cgraphx-web时间线浏览)。</p>
-    </section>`;
-}
+// 2026-09-16:T-5 替换为真实开发时间线页(renderTimelinePage);保留注释占位以备异常态。
 
 /**
  * 静态资产服务。从 `path.join(__dirname, 'public')` 提供(dist 与 src 布局
@@ -227,12 +222,18 @@ function createRequestHandler(ctx: HandlerContext): http.RequestListener {
           return;
         }
         if (pathname === '/timeline') {
-          sendHtml(
-            res,
-            200,
-            { title: '开发时间线', active: 'timeline', contentHtml: renderTimelinePlaceholder() },
-            ctx,
-          );
+          // 门面 queryEvents/getEventStats 为 async(renderTimelinePage 返回 Promise);
+          // .then/.catch 兜底:async 错误进 500 页,外层同步 try/catch 覆盖同步抛错路径。
+          renderTimelinePage(url.searchParams, {
+            version: ctx.version,
+            localHost: ctx.localHost,
+            projectRoot: ctx.projectRoot,
+          })
+            .then((html) => {
+              res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+              res.end(html);
+            })
+            .catch((err) => sendInternalError(res, ctx, err));
           return;
         }
         if (pathname === '/assets' || pathname.startsWith('/assets/')) {
