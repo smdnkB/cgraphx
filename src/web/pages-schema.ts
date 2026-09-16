@@ -158,7 +158,15 @@ export function renderSchemaTablesPage(
     insightsMap.set(g.table, g.insights);
   }
 
-  const tableModels: TableCardModel[] = (tables ?? []).map((t) => {
+  // 表卡片排序:有 DISCOVERED 经验的表排前面,经验条目多的更前(更值得关注);
+  // 同经验数按表名稳定排序(字母升序,可预测)。
+  const sortedTables = (tables ?? []).slice().sort((a, b) => {
+    const ac = insightsMap.get(a.name)?.length ?? 0;
+    const bc = insightsMap.get(b.name)?.length ?? 0;
+    return bc - ac || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  });
+
+  const tableModels: TableCardModel[] = sortedTables.map((t) => {
     const insights = insightsMap.get(t.name) ?? [];
     // 标签计数:按 INSIGHT_TAG_ORDER 顺序,统计每个标签条目数。
     const tagCounts: TableTagCount[] = INSIGHT_TAG_ORDER.map((tag) => ({
