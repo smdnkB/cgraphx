@@ -263,9 +263,11 @@ function toEventRow(e: TimelineEvent): EventRowModel {
 
 /** git_commit 事件 → CommitRowModel。 */
 function toCommitRow(e: TimelineEvent): CommitRowModel {
+  // hash 截短到 8 位(短 hash,与 git log --oneline 一致);完整 40 位会挤爆行布局。
+  const fullHash = e.commit_hash ?? '';
   return {
     time: cardTime(Date.parse(e.ts)),
-    hash: e.commit_hash ?? '',
+    hash: fullHash.length > 8 ? fullHash.slice(0, 8) : fullHash,
     message: e.commit_message ?? '',
     insertions: e.commit_insertions ?? 0,
     deletions: e.commit_deletions ?? 0,
@@ -314,7 +316,8 @@ interface SessionSummary {
   lastMs: number;
   fullCount: number;
   turnIds: Set<string>;
-  firstPrompt: string | null;
+  /** 最后一条 user_prompt —— 用作会话标题,反映本会话当前在做的核心工作。 */
+  lastPrompt: string | null;
 }
 
 /** 一次性遍历事件建 Map<session_id, summary>(排除 git_commit——它们入独立栏)。 */
@@ -325,7 +328,7 @@ function buildSessionSummaries(events: TimelineEvent[]): Map<string, SessionSumm
     const sid = e.session_id ?? '__no_session__';
     let s = map.get(sid);
     if (s === undefined) {
-      s = { firstMs: Number.MAX_SAFE_INTEGER, lastMs: 0, fullCount: 0, turnIds: new Set(), firstPrompt: null };
+      s = { firstMs: Number.MAX_SAFE_INTEGER, lastMs: 0, fullCount: 0, turnIds: new Set(), lastPrompt: null };
       map.set(sid, s);
     }
     const ms = Date.parse(e.ts);
@@ -333,23 +336,24 @@ function buildSessionSummaries(events: TimelineEvent[]): Map<string, SessionSumm
     if (ms > s.lastMs) s.lastMs = ms;
     s.fullCount += 1;
     if (e.turn_id !== null) s.turnIds.add(e.turn_id);
-    if (s.firstPrompt === null && e.event_type === 'user_prompt' && e.prompt_text !== null) {
-      s.firstPrompt = e.prompt_text;
+    // events 为 ts DESC(最新在前),遍历中先见最新;取最后一条 user_prompt = 首个遇到的 prompt
+    if (s.lastPrompt === null && e.event_type === 'user_prompt' && e.prompt_text !== null) {
+      s.lastPrompt = e.prompt_text;
     }
   }
   return map;
 }
 
-/** 会话标题(首条 user_prompt 截断;无则 tool_name;再无则 session_id 前 8 位)。 */
+/** 会话标题(最后一条 user_prompt 截断;无则 tool_name;再无则 session_id 前 8 位)。 */
 function sessionTitle(sid: string, s: SessionSummary, fallbackTool: string | null): string {
-  if (s.firstPrompt !== null) return truncate(s.firstPrompt, 40);
+  if (s.lastPrompt !== null) return truncate(s.lastPrompt, 40);
   if (fallbackTool !== null) return fallbackTool;
   return sid === '__no_session__' ? '无会话归属' : sid.slice(0, 8);
 }
 
 /**
  * 四级分桶:events → DayGroupModel[](日期 > 会话 > 轮次 > 事件)。
- * 输入须已按 ts DESC 排序(桶内保持该序)。返回按日期倒序(今天在前)。
+ * 输入为 ts DESC 排序;桶内每组 reverse 成 ASC(最早在上),日期分组倒序(今天在前)。
  */
 function bucketEvents(
   events: TimelineEvent[],
@@ -407,7 +411,9 @@ function bucketEvents(
       const isCrossDay = s !== undefined && localDateStr(new Date(s.firstMs)) !== localDateStr(new Date(s.lastMs));
       const isLive = s !== undefined && s.lastMs === overallMaxMs && overallMaxMs > 0;
 
-      // L3:轮次(按 turn_id 分;null → 未分轮次尾桶)
+      // L3:轮次(按 turn_id 分;null → 未分轮次尾桶)。
+      // daySessionEvents 为 ts DESC(最新在前),按 turn_id 分桶后每组内仍是 DESC;
+      // 用户期望会话内时间正序(最早在上、最新在下),故每组内 reverse 成 ASC。
       const byTurn = new Map<string, TimelineEvent[]>();
       let nullTurnEvents: TimelineEvent[] = [];
       for (const e of daySessionEvents) {
@@ -423,15 +429,16 @@ function bucketEvents(
         }
       }
 
-      // 轮次按首事件 ts(即该轮在 daySessionEvents 中的最早 ts)ASC 排,编号 1..M;渲染倒序(M..1)。
+      // 轮次按首事件 ts ASC 排(最早轮在前),编号 1..M;每组内事件 reverse 成 ASC(最早事件在上)。
       const turnFirstMs = new Map<string, number>();
       for (const [tid, arr] of byTurn) {
-        turnFirstMs.set(tid, Date.parse(arr[arr.length - 1]!.ts)); // arr DESC,最早在末尾
+        // arr 为 DESC(最新在前),最早 = 末尾
+        turnFirstMs.set(tid, Date.parse(arr[arr.length - 1]!.ts));
       }
       const orderedTurnIds = [...byTurn.keys()].sort((a, b) => {
         const ta = turnFirstMs.get(a) ?? 0;
         const tb = turnFirstMs.get(b) ?? 0;
-        return ta - tb; // ASC
+        return ta - tb; // ASC:最早轮在前
       });
 
       const turns: TurnGroupModel[] = orderedTurnIds.map((tid, idx) => {
@@ -439,11 +446,11 @@ function bucketEvents(
         const firstMs = turnFirstMs.get(tid) ?? 0;
         return {
           label: `轮 ${idx + 1} · ${pad2(new Date(firstMs).getHours())}:${pad2(new Date(firstMs).getMinutes())}`,
-          events: arr.map(toEventRow),
+          events: [...arr].reverse().map(toEventRow), // DESC → ASC:最早事件在上
         };
-      }).reverse(); // 倒序:最新轮在前
+      });
       if (nullTurnEvents.length > 0) {
-        turns.push({ label: '未分轮次', events: nullTurnEvents.map(toEventRow) });
+        turns.push({ label: '未分轮次', events: [...nullTurnEvents].reverse().map(toEventRow) });
       }
 
       const turnCount = byTurn.size + (nullTurnEvents.length > 0 ? 1 : 0);
@@ -451,7 +458,7 @@ function bucketEvents(
 
       return {
         sessionId: sid === '__no_session__' ? '(无会话)' : sid,
-        title: sessionTitle(sid, s ?? { firstMs: 0, lastMs: 0, fullCount: 0, turnIds: new Set(), firstPrompt: null }, fallbackTool),
+        title: sessionTitle(sid, s ?? { firstMs: 0, lastMs: 0, fullCount: 0, turnIds: new Set(), lastPrompt: null }, fallbackTool),
         turnCount,
         eventCount: daySessionEvents.length,
         fullCount: isCrossDay && s ? s.fullCount : null,

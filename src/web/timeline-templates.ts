@@ -404,8 +404,8 @@ function renderCommitsBar(commits: CommitRowModel[]): string {
     .map(
       (c) => `<div class="commit">
             <time class="commit__time" datetime="${escapeHtml(c.time.datetime)}">${escapeHtml(c.time.text)}</time>
-            <span class="commit__hash">${escapeHtml(c.hash)}</span>
-            <span class="commit__msg">${escapeHtml(c.message)}</span>
+            <span class="commit__hash" title="${escapeHtml(c.hash)}">${escapeHtml(c.hash)}</span>
+            <span class="commit__msg" title="${escapeHtml(c.message)}">${escapeHtml(c.message)}</span>
             <span class="commit__diff"><span class="add">+${c.insertions}</span> <span class="del">-${c.deletions}</span></span>
           </div>`,
     )
