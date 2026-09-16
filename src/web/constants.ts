@@ -90,3 +90,26 @@ export const EVENT_TYPE_CHIP_TONE: Record<EventType, EventTone> = {
   stop: 'stop',
   git_commit: 'git',
 };
+
+// ----- schema-knowledge 模型知识库预览(2026-09-16-cgraphx-web数据库预览)-----
+
+/**
+ * schema-knowledge 根目录(相对 projectRoot)。
+ *
+ * export-table-ddl skill 建基线的产物目录:每工程一个子目录,内含 INDEX.md +
+ * ddl/*.sql(DDL 本体 + 末尾 DISCOVERED 块)。web 仅只读消费,不连库、不进
+ * `.cgraphx/cgraphx.db`(spec §4.1:纯目录树实时派生,形态同 features 子系统)。
+ */
+export const SCHEMA_KNOWLEDGE_DIR = 'docs/schema-knowledge';
+
+/**
+ * 经验标签枚举(as const 数组 + 联合类型,不用 TS enum——coding-standards「选型」)。
+ *
+ * DISCOVERED 块内 `-- [标签]` 行首前缀的六类固定标签;`其他` 为聚合兜底,
+ * 收纳无标签行 / 非六类标签(如 `[流程]`)/ 块未闭合残余(spec §3.5 容错)。
+ */
+export const INSIGHT_TAGS = ['定位', '关系', '陷阱', '样本', '索引', '性能', '其他'] as const;
+
+/** 经验标签类型。 */
+export type InsightTag = (typeof INSIGHT_TAGS)[number];
+
