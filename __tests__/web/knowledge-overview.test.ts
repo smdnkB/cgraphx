@@ -396,13 +396,13 @@ describe('knowledge overview page (integration)', () => {
     expect(html).toContain('知识库</a>');
     expect(html).toContain('href="/timeline"');
     expect(html).toContain('开发时间线');
-    expect(html).toContain('数据库');
-    // 第三入口「数据库」激活为模型知识库预览(2026-09-16-cgraphx-web数据库预览),
+    expect(html).toContain('模型知识库');
+    // 第三入口「模型知识库」激活为 schema-knowledge 预览(2026-09-16-cgraphx-web数据库预览),
     // 从灰置 span 改为可点击 <a href="/schema">。
     expect(html).toContain('href="/schema"');
     expect(html).not.toContain('nav__item--disabled');
-    // 数据库项为 <a>(可点击);glyph span 在 <a> 内,故匹配需容忍中间标签。
-    expect(html).toMatch(/<a[^>]*href="\/schema"[^>]*>[\s\S]*数据库/);
+    // 模型知识库项为 <a>(可点击);glyph span 在 <a> 内,故匹配需容忍中间标签。
+    expect(html).toMatch(/<a[^>]*href="\/schema"[^>]*>[\s\S]*模型知识库/);
     // 顶栏只读标识:本地地址 + 只读性质。
     expect(html).toContain('本地 · 127.0.0.1:');
     expect(html).toContain('只读');

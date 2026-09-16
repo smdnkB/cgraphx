@@ -1,7 +1,7 @@
 /**
  * 应用壳模板(spec §3.2 / §11 #12,视觉基线 plan index §7.7)。
  *
- * 深松绿侧栏三入口(知识库 / 开发时间线 / 数据库「后续」灰置不可点)+
+ * 深松绿侧栏三入口(知识库 / 开发时间线 / 模型知识库)+
  * 顶栏(页面标题 + 只读 pill「本地 · <host:port> · 只读」)。
  * 字体经 Google Fonts 引入(Space Grotesk / Noto Sans SC / JetBrains Mono,
  * display=swap),字体栈尾部系统字体兜底(离线仅视觉降级)。
@@ -65,7 +65,7 @@ export function renderShellPage(opts: {
     <nav class="nav">
       ${navItem('知识库', '◈', '/', 'knowledge', active)}
       ${navItem('开发时间线', '≡', '/timeline', 'timeline', active)}
-      ${navItem('数据库', '⛁', '/schema', 'schema', active)}
+      ${navItem('模型知识库', '⛁', '/schema', 'schema', active)}
     </nav>
     <div class="nav__foot">cgraphx v${escapeHtml(version)}<br>local · read-only viewer</div>
   </aside>
