@@ -2135,30 +2135,125 @@ a.pager__btn:hover {
 }
 .insight-item__table:hover { text-decoration: underline; }
 
-/* 工程切换 tab(表清单页顶部,多工程时) */
-.proj-tabs {
+
+/* ---------- 侧栏二级菜单(模型知识库展开的工程子项)---------- */
+.nav__children {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 18px;
-  padding-bottom: 0;
+  flex-direction: column;
+  margin: 2px 0 6px;
+  padding-left: 28px;
+  border-left: 1px solid var(--line);
+  margin-left: 14px;
 }
-.proj-tabs__tab {
-  font-family: var(--font-mono);
+.nav__child {
   font-size: 13px;
   color: var(--ink-2);
   text-decoration: none;
-  padding: 8px 14px;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.1s, border-color 0.1s;
+  padding: 6px 12px;
+  border-radius: 4px;
+  line-height: 1.4;
+  word-break: break-all;
 }
-.proj-tabs__tab:hover {
+.nav__child:hover {
   color: var(--pine-2);
+  background: var(--surface-2);
 }
-.proj-tabs__tab--active {
+.nav__child--active {
   color: var(--pine);
   font-weight: 600;
-  border-bottom-color: var(--pine-2);
+  background: var(--pine-tint);
 }
+
+/* ---------- 表卡片网格(模型知识库首页)---------- */
+.tcard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+  margin-top: 8px;
+}
+.tcard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.tcard:hover {
+  border-color: var(--pine-2);
+  background: var(--pine-tint);
+}
+.tcard__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.tcard__name {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--pine);
+  font-weight: 600;
+  word-break: break-all;
+}
+.tcard__comment {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 0;
+  line-height: 1.5;
+}
+.tcard__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.tcard__badge {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.tcard__badge--陷阱 { color: var(--rust); border-color: var(--rust); background: var(--rust-tint); }
+.tcard__badge--性能 { color: var(--blue); border-color: var(--blue); background: var(--blue-tint); }
+.tcard__badge--关系 { color: var(--pine-2); border-color: var(--pine-2); background: var(--pine-tint); }
+.tcard__badge--索引 { color: var(--gold); border-color: var(--gold); background: var(--gold-tint); }
+.tcard__badge--定位 { color: var(--ink-2); border-color: var(--ink-3); }
+.tcard__badge--样本 { color: var(--orange); border-color: var(--orange); background: var(--orange-tint); }
+.tcard__badge--其他 { color: var(--ink-3); }
+.tcard__snippets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tcard__snippets li {
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  padding-left: 8px;
+  border-left: 2px solid var(--line);
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tcard__tag {
+  font-style: normal;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--pine-2);
+  font-weight: 600;
+  margin-right: 2px;
+}
+.tcard__tag--陷阱 { color: var(--rust); }
+.tcard__tag--性能 { color: var(--blue); }
+.tcard__tag--索引 { color: var(--gold); }
+.tcard__tag--样本 { color: var(--orange); }

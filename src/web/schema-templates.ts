@@ -35,40 +35,52 @@ export interface ProjectsPageModel {
   empty: 'kb-missing' | 'no-project' | 'none';
 }
 
-/** 表清单页:单项表。 */
-export interface TableItemModel {
+/** 表卡片首页:单项表的标签计数。 */
+export interface TableTagCount {
+  /** 标签。 */
+  tag: InsightTag;
+  /** 该标签下经验条目数。 */
+  count: number;
+}
+
+/** 表卡片首页:单项表卡片。 */
+export interface TableCardModel {
   /** 表名。 */
   name: string;
   /** 表注释(INDEX.md 第二列);无则空串。 */
   comment: string;
   /** 进入 DDL 详情页的链接:/schema/<工程>/<表>。 */
   href: string;
+  /** 各标签经验条目数(展示用,计数徽标)。 */
+  tagCounts: TableTagCount[];
+  /** 前 N 条经验摘要(已 escapeHtml,展示用;无经验则空数组)。 */
+  insightSnippets: string[];
 }
 
-/** 工程切换 tab(表清单页顶部,多工程时出现)。 */
-export interface ProjectTabModel {
-  /** 工程名。 */
-  name: string;
-  /** 该工程的表清单链接:/schema/<工程>。 */
+/** 侧栏二级菜单子项(模型知识库展开的工程 + 经验沉淀)。 */
+export interface NavChildModel {
+  /** 显示名(工程名 / "经验沉淀")。 */
+  label: string;
+  /** 链接:/schema/<工程> 或 /schema/<工程>/insights。 */
   href: string;
-  /** 是否当前激活工程。 */
+  /** 是否当前激活。 */
   active: boolean;
 }
 
-/** 表清单页视图。 */
+/** 侧栏二级菜单视图:父项"模型知识库"下的子项列表。 */
+export interface NavChildrenModel {
+  /** 子项(各工程 + 经验沉淀项)。 */
+  items: NavChildModel[];
+}
 export interface TablesPageModel {
   /** 工程名(展示用)。 */
   projectName: string;
   /** INDEX 不可读降级标志(展示"INDEX 不可读,已列出 ddl/ 文件")。 */
   indexReadable: boolean;
-  /** 表清单。空 → 空态。 */
-  tables: TableItemModel[];
-  /** 经验沉淀页链接:/schema/<工程>/insights。 */
+  /** 表卡片。空 → 空态。 */
+  tables: TableCardModel[];
+  /** 经验沉淀页链接:/schema/<工程>/insights(顶部入口)。 */
   insightsHref: string;
-  /** 返回工程列表链接(空态/兜底用;多工程 tab 时一般不显示)。 */
-  backHref: string;
-  /** 工程切换 tab 列表。仅多工程时填充(单工程为空数组 → 不渲染 tab 区)。 */
-  projectTabs: ProjectTabModel[];
 }
 
 /** DDL 详情页视图。 */
@@ -167,40 +179,66 @@ export function renderProjectsContent(m: ProjectsPageModel): string {
     </section>`;
 }
 
-/** 表清单页主区。 */
+/** 侧栏二级菜单(模型知识库展开的子项)。 */
+export function renderNavChildren(m: NavChildrenModel): string {
+  return m.items
+    .map((c) => {
+      const cls = c.active ? 'nav__child nav__child--active' : 'nav__child';
+      const aria = c.active ? ' aria-current="page"' : '';
+      return `<a class="${cls}" href="${escapeHtml(c.href)}"${aria}>${escapeHtml(c.label)}</a>`;
+    })
+    .join('');
+}
+
+/** 表卡片首页主区。 */
 export function renderTablesContent(m: TablesPageModel): string {
-  // 工程切换 tab:仅多工程时渲染(单工程 projectTabs 为空 → 不渲染,页面更净)。
-  const tabsHtml = m.projectTabs.length === 0
-    ? ''
-    : `<nav class="proj-tabs">${m.projectTabs
-        .map((t) => {
-          const cls = t.active ? 'proj-tabs__tab proj-tabs__tab--active' : 'proj-tabs__tab';
-          return `<a class="${cls}" href="${escapeHtml(t.href)}">${escapeHtml(t.name)}</a>`;
-        })
-        .join('')}</nav>`;
   const indexNotice = m.indexReadable
     ? ''
     : '<p class="schema-notice">INDEX.md 不可读,已按 ddl/ 目录文件名列出(无表注释)。</p>';
-  const items = m.tables
-    .map((t) => `
-        <a class="table-row" href="${escapeHtml(t.href)}">
-          <span class="table-row__name">${escapeHtml(t.name)}</span>
-          <span class="table-row__comment">${escapeHtml(t.comment)}</span>
-        </a>`)
+  if (m.tables.length === 0) {
+    return `
+    <section class="schema-list">
+      <div class="schema-list__head">
+        <h1>${escapeHtml(m.projectName)}</h1>
+      </div>
+      ${indexNotice}
+      <p class="schema-notice">该工程下未发现 DDL 文件。</p>
+    </section>`;
+  }
+  const cards = m.tables
+    .map((t) => {
+      // 标签计数徽标(仅 count>0 的标签)。
+      const badges = t.tagCounts
+        .filter((c) => c.count > 0)
+        .map((c) => `<span class="tcard__badge tcard__badge--${c.tag}">${escapeHtml(c.tag)} ${c.count}</span>`)
+        .join('');
+      const badgesHtml = badges === '' ? '' : `<div class="tcard__badges">${badges}</div>`;
+      // 前 N 条经验摘要(无经验则空)。
+      const snippetsHtml = t.insightSnippets.length === 0
+        ? ''
+        : `<ul class="tcard__snippets">${t.insightSnippets
+            .map((s) => `<li>${s}</li>`)
+            .join('')}</ul>`;
+      const commentHtml = t.comment === '' ? '' : `<p class="tcard__comment">${escapeHtml(t.comment)}</p>`;
+      return `
+        <a class="tcard" href="${escapeHtml(t.href)}">
+          <div class="tcard__head">
+            <span class="tcard__name">${escapeHtml(t.name)}</span>
+          </div>
+          ${commentHtml}
+          ${badgesHtml}
+          ${snippetsHtml}
+        </a>`;
+    })
     .join('');
-  const listHtml = m.tables.length === 0
-    ? '<p class="schema-notice">该工程下未发现 DDL 文件。</p>'
-    : `<div class="table-list">${items}
-      </div>`;
   return `
     <section class="schema-list">
       <div class="schema-list__head">
         <h1>${escapeHtml(m.projectName)}</h1>
-        <a class="schema-insights-link" href="${escapeHtml(m.insightsHref)}">经验沉淀 →</a>
       </div>
-      ${tabsHtml}
       ${indexNotice}
-      ${listHtml}
+      <div class="tcard-grid">${cards}
+      </div>
     </section>`;
 }
 

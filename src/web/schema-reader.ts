@@ -310,6 +310,31 @@ export function listInsights(
   projectRoot: string,
   projectName: string,
 ): Insight[] | null {
+  const byTable = listInsightsByTable(projectRoot, projectName);
+  if (byTable === null) return null;
+  const all: Insight[] = [];
+  for (const group of byTable) {
+    all.push(...group.insights);
+  }
+  return all;
+}
+
+/** 按表分组的一组经验(表卡片首页用)。 */
+export interface TableInsights {
+  /** 表名。 */
+  table: string;
+  /** 该表的全部经验条目(无 DISCOVERED 块则空数组)。 */
+  insights: Insight[];
+}
+
+/**
+ * 提取工程内全部 DISCOVERED 经验,**按表分组**(表卡片首页用:每张表的经验
+ * 标签计数 + 摘要)。无经验表也返回(insights 为空数组)。工程不存在/越界 → null。
+ */
+export function listInsightsByTable(
+  projectRoot: string,
+  projectName: string,
+): TableInsights[] | null {
   if (!isSafeName(projectName)) return null;
   const root = schemaRoot(projectRoot);
   const projectDir = path.resolve(root, projectName);
@@ -324,13 +349,15 @@ export function listInsights(
   }
 
   const tableNames = listDdlFiles(root, projectName);
-  const insights: Insight[] = [];
+  const groups: TableInsights[] = [];
   for (const table of tableNames) {
     const detail = readDdlDetail(projectRoot, projectName, table);
-    if (!detail.exists || detail.discovered === null) continue;
-    insights.push(...parseInsightsFromBlock(detail.discovered, table));
+    const insights = detail.exists && detail.discovered !== null
+      ? parseInsightsFromBlock(detail.discovered, table)
+      : [];
+    groups.push({ table, insights });
   }
-  return insights;
+  return groups;
 }
 
 /**

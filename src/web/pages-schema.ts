@@ -20,7 +20,9 @@ import {
   listTables,
   readDdlDetail,
   listInsights,
+  listInsightsByTable,
   summarizeProject,
+  type Insight,
 } from './schema-reader';
 import { type InsightTag } from './constants';
 import { renderShellPage, type ShellActive } from './layout';
@@ -30,12 +32,16 @@ import {
   renderTablesContent,
   renderDdlContent,
   renderInsightsContent,
+  renderNavChildren,
   INSIGHT_TAG_ORDER,
   type ProjectsPageModel,
   type TablesPageModel,
   type DdlPageModel,
   type InsightsPageModel,
   type InsightGroupModel,
+  type NavChildModel,
+  type TableCardModel,
+  type TableTagCount,
 } from './schema-templates';
 
 /** 页面壳上下文(与 knowledge/timeline 页同构,供 layout 用)。 */
@@ -68,6 +74,39 @@ function insightsHref(projectName: string): string {
   return `/schema/${encodeURIComponent(projectName)}/insights`;
 }
 
+/** 表卡片首页经验摘要最多条数(前 N 条)。 */
+const CARD_SNIPPET_LIMIT = 3;
+
+/**
+ * 组装侧栏二级菜单 HTML(模型知识库展开的子项:各工程 + 经验沉淀)。
+ *
+ * schema 所有页面调 renderShellPage 时注入。当前工程项 + (若匹配)经验沉淀项高亮。
+ * 工程列表获取失败 → 返回空串(不渲染子项,基座不展开)。
+ */
+function buildNavChildren(
+  projectRoot: string,
+  currentProject: string | null,
+  currentView: 'tables' | 'ddl' | 'insights' | null,
+): string {
+  const projects = listProjects(projectRoot);
+  if (projects === null || projects.length === 0) return '';
+  const items: NavChildModel[] = projects.map((p) => ({
+    label: p.name,
+    href: projectHref(p.name),
+    active: currentView !== 'insights' && p.name === currentProject,
+  }));
+  // 经验沉淀子项:链接指向当前工程(无当前工程时指向首工程)。
+  const insightsProject = currentProject ?? projects[0]?.name ?? '';
+  if (insightsProject !== '') {
+    items.push({
+      label: '经验沉淀',
+      href: insightsHref(insightsProject),
+      active: currentView === 'insights' && currentProject !== null,
+    });
+  }
+  return renderNavChildren({ items });
+}
+
 /** 工程列表页。projects=null(目录不存在)或空 → 空态(引导 export-table-ddl)。 */
 export function renderSchemaProjectsPage(projectRoot: string, ctx: SchemaPageCtx): string {
   const projects = listProjects(projectRoot);
@@ -97,11 +136,11 @@ export function renderSchemaProjectsPage(projectRoot: string, ctx: SchemaPageCtx
 }
 
 /**
- * 表清单页(= 工程详情页,2026-09-16 页面层级缩减后)。
+ * 表卡片首页(= 工程详情页)。
  *
- * 多工程时顶部渲染工程切换 tab(点切到另一工程的表清单,URL 变 /schema/<工程>);
- * 单工程时 tab 区隐藏(页面更净)。projectName 格式非法由路由层拦(不进本函数);
- * 工程不存在 → 渲染 404 壳(路由层应已先判,此为兜底)。
+ * 每张卡片:表名 + 表注释 + 标签计数徽标 + 前 N 条经验摘要,点击进 DDL 详情页。
+ * 工程切换器移至侧栏二级菜单(模型知识库展开的工程子项)。projectName 格式非法
+ * 由路由层拦(不进本函数);工程不存在 → 渲染 404 壳(路由层应已先判,此为兜底)。
  */
 export function renderSchemaTablesPage(
   projectRoot: string,
@@ -112,27 +151,38 @@ export function renderSchemaTablesPage(
   const projectMeta = summarizeProject(projectRoot, projectName);
   const indexReadable = projectMeta.indexReadable;
 
-  // 工程切换 tab:取全部工程,多工程时填充(单工程留空 → 模板不渲染 tab 区)。
-  const allProjects = listProjects(projectRoot) ?? [];
-  const projectTabs = allProjects.length > 1
-    ? allProjects.map((p) => ({
-        name: p.name,
-        href: projectHref(p.name),
-        active: p.name === projectName,
-      }))
-    : [];
+  // 按表聚合经验(表卡片的标签计数 + 摘要数据源)。
+  const insightsByTable = listInsightsByTable(projectRoot, projectName) ?? [];
+  const insightsMap = new Map<string, Insight[]>();
+  for (const g of insightsByTable) {
+    insightsMap.set(g.table, g.insights);
+  }
+
+  const tableModels: TableCardModel[] = (tables ?? []).map((t) => {
+    const insights = insightsMap.get(t.name) ?? [];
+    // 标签计数:按 INSIGHT_TAG_ORDER 顺序,统计每个标签条目数。
+    const tagCounts: TableTagCount[] = INSIGHT_TAG_ORDER.map((tag) => ({
+      tag,
+      count: insights.filter((i) => i.tag === tag).length,
+    }));
+    // 前 N 条经验摘要(escapeHtml,展示用)。
+    const insightSnippets = insights
+      .slice(0, CARD_SNIPPET_LIMIT)
+      .map((i) => `<em class="tcard__tag tcard__tag--${i.tag}">${escapeHtml(i.tag)}</em> ${escapeHtml(i.text)}`);
+    return {
+      name: t.name,
+      comment: t.comment,
+      href: tableHref(projectName, t.name),
+      tagCounts,
+      insightSnippets,
+    };
+  });
 
   const model: TablesPageModel = {
     projectName,
     indexReadable,
-    tables: (tables ?? []).map((t) => ({
-      name: t.name,
-      comment: t.comment,
-      href: tableHref(projectName, t.name),
-    })),
+    tables: tableModels,
     insightsHref: insightsHref(projectName),
-    backHref: '/schema',
-    projectTabs,
   };
   return renderShellPage({
     title: projectName,
@@ -140,6 +190,7 @@ export function renderSchemaTablesPage(
     contentHtml: renderTablesContent(model),
     version: ctx.version,
     localHost: ctx.localHost,
+    navChildren: buildNavChildren(projectRoot, projectName, 'tables'),
   });
 }
 
@@ -166,6 +217,7 @@ export function renderSchemaDdlPage(
         contentHtml: renderNotFoundContent(`工程 ${projectName} 不存在`),
         version: ctx.version,
         localHost: ctx.localHost,
+        navChildren: buildNavChildren(projectRoot, null, null),
       }),
     };
   }
@@ -188,6 +240,7 @@ export function renderSchemaDdlPage(
       contentHtml: renderDdlContent(model),
       version: ctx.version,
       localHost: ctx.localHost,
+      navChildren: buildNavChildren(projectRoot, projectName, 'ddl'),
     }),
   };
 }
@@ -207,6 +260,7 @@ export function renderSchemaInsightsPage(
       contentHtml: renderNotFoundContent(`工程 ${projectName} 不存在`),
       version: ctx.version,
       localHost: ctx.localHost,
+      navChildren: buildNavChildren(projectRoot, null, null),
     });
   }
 
@@ -241,6 +295,7 @@ export function renderSchemaInsightsPage(
     contentHtml: renderInsightsContent(model),
     version: ctx.version,
     localHost: ctx.localHost,
+    navChildren: buildNavChildren(projectRoot, projectName, 'insights'),
   });
 }
 

@@ -34,6 +34,10 @@ function navItem(label: string, glyph: string, href: string | null, key: ShellAc
  * `contentHtml` 为调用方已组装好的可信 HTML(其中的动态值由调用方自行
  * escapeHtml);title / version / localHost 在此统一转义。
  *
+ * `navChildren`:某一级项的二级子菜单 HTML(调用方预渲染,基座只做容器)。
+ * 当前仅 schema 模块用——「模型知识库」激活时,子项(各工程 + 经验沉淀)
+ * 在侧栏该项下方展开。基座不感知子项数据(分层:基座不依赖 schema-reader)。
+ *
  * @param localHost 顶栏只读 pill 展示的本地地址(形如 `127.0.0.1:2468`,
  *        port 0 启动时取实际端口)。
  */
@@ -43,8 +47,13 @@ export function renderShellPage(opts: {
   contentHtml: string;
   version: string;
   localHost: string;
+  /** 「模型知识库」项下的二级子菜单 HTML(schema 模块预渲染;其他页不传)。 */
+  navChildren?: string;
 }): string {
-  const { title, active, contentHtml, version, localHost } = opts;
+  const { title, active, contentHtml, version, localHost, navChildren } = opts;
+  const schemaChildren = navChildren !== undefined && navChildren !== ''
+    ? `<div class="nav__children">${navChildren}</div>`
+    : '';
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -66,6 +75,7 @@ export function renderShellPage(opts: {
       ${navItem('知识库', '◈', '/', 'knowledge', active)}
       ${navItem('开发时间线', '≡', '/timeline', 'timeline', active)}
       ${navItem('模型知识库', '⛁', '/schema', 'schema', active)}
+      ${schemaChildren}
     </nav>
     <div class="nav__foot">cgraphx v${escapeHtml(version)}<br>local · read-only viewer</div>
   </aside>
