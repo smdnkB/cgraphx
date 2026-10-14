@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### Added — `cgraphx task`: session ↔ development task binding
+
+A new `task` subsystem binds Claude Code sessions to development tasks so
+timeline events can be grouped per task.
+
+- New command group `cgraphx task list | use | current | clear | show`
+  (「task」 here means a development task, unrelated to Claude Code's Task tool).
+- Tasks and bindings live in new `task_*` tables in `.cgraphx/cgraphx.db`.
+- Optional external task source: `.cgraphx/task-source.json` points at an
+  HTTP endpoint listing tasks; without it, tasks are created manually by name.
+- A requirement spec can declare its task in the header (`> 任务: <值>`);
+  editing files under that `docs/features/<feature-id>/` directory auto-binds
+  the current session to the declared task.
+- Two hidden hooks are wired by `cgraphx install`: `task-session-start-hook`
+  (SessionStart) and `task-post-tool-use-hook` (PostToolUse).
+
+### Changed — timeline capture enhancements
+
+- New `session_start` / `session_end` event types, recorded by two new hidden
+  hooks `timeline-session-start-hook` / `timeline-session-end-hook`.
+- `git_commit` events now record `session_id` and the current branch in
+  `metadata.branch`.
+- `Skill` tool summaries now carry the skill name.
+- Turn state is isolated per session in `.cgraphx/turns/<session>.json`; the
+  old shared `.cgraphx/timeline-current-turn.json` is removed by `install`.
+- The human-readable summary of `stop` events (the end of one conversation
+  turn) is now `turn ended` / `turn ended (Nms)` instead of `session ended`,
+  which is reserved for `session_end`.
+
+Already-installed projects must re-run `cgraphx install` to wire the new hooks.
+
 ### Breaking — knowledge base `owners` frontmatter is now required
 
 The markdown knowledge base validator (`cgraphx docs validate` / `docs index`)

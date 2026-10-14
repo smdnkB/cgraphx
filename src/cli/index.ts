@@ -32,6 +32,7 @@ import { registerDocsCommands } from '../core/markdown/cli';
 import { registerDbCommands } from '../core/dbquery/cli';
 import { registerTimelineCommands } from '../core/timeline/cli';
 import { registerFeaturesCommands } from '../core/features/cli';
+import { registerTaskCommands } from '../core/task/cli';
 // 组合根例外(仅此一处):cli/index.ts 作为组装入口可经 web 门面接入
 // `cgraphx web`;src/web/ 自身只依赖 src/core/,不反向依赖 cli。
 import { registerWebCommand } from '../web';
@@ -161,6 +162,7 @@ function main(): void {
   registerDbCommands(program);
   registerTimelineCommands(program);
   registerFeaturesCommands(program);
+  registerTaskCommands(program);
 
   // web — 本地只读浏览服务(顶层命令,经 web 门面注册;组合根例外见上方 import)。
   registerWebCommand(program);

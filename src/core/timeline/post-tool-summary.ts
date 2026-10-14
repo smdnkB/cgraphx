@@ -104,6 +104,13 @@ export function summarizeToolResponse(
     payload: {},
   };
 
+  // Skill:skill 名取自调用参数(tool_input.skill),不论响应形态如何都不写 response_preview。
+  if (toolName === 'Skill') {
+    const a = toolArgs && typeof toolArgs === 'object' ? toolArgs as Record<string, unknown> : null;
+    summary.payload.skill = a && typeof a.skill === 'string' ? a.skill : undefined;
+    return JSON.stringify(summary);
+  }
+
   if (toolResponse === null || typeof toolResponse !== 'object') {
     if (typeof toolResponse === 'string') {
       summary.payload.response_preview = truncate(toolResponse);

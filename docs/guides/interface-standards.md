@@ -22,8 +22,9 @@
 - dbquery 参数错误(--mode 非法 / --table 缺失 / 标识符非法)= 5
 - **新命令**:用 `exitCodeForError(err)` 映射错误类到固定编号,不在 action 里散落 `process.exitCode = n` 字面量
 
-## Hook 子命令契约(timeline-*-hook ×5)
+## Hook 子命令契约(timeline-*-hook ×7)
 
 - 隐藏顶层命令,由目标项目 Claude Code hooks 调起
 - 短生命周期:打开 DB → INSERT → 退出(约 5ms);**必须 await,绝不 fire-and-forget**
-- Fail-silent:任何异常吞掉不阻塞宿主;turn_id 状态文件(`.cgraphx/timeline-current-turn.json`)读取方容忍缺失 / 损坏,优雅降级
+- Fail-silent:任何异常吞掉不阻塞宿主;turn_id 状态文件(`.cgraphx/turns/<会话>.json`,按会话隔离)读取方容忍缺失 / 损坏,优雅降级
+- task hook(`task-session-start-hook` / `task-post-tool-use-hook`):同为隐藏命令、fail-silent、退出码恒 0;允许向 stdout 输出 `hookSpecificOutput` JSON 回传上下文

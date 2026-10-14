@@ -10,7 +10,9 @@ export type EventType =
   | 'pre_tool_use'
   | 'post_tool_use'
   | 'stop'
-  | 'git_commit';
+  | 'git_commit'
+  | 'session_start'
+  | 'session_end';
 
 export interface TimelineEventInput {
   ts?: string; // ISO 8601 UTC ms; defaults to now

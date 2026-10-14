@@ -17,6 +17,7 @@ import { execSync } from 'node:child_process';
 import { DatabaseConnection } from '../db';
 import { HOOK_EVENTS_TO_COMMANDS } from './constants';
 import { cleanDebrisCgraphxDirs } from './debris';
+import { LEGACY_TURN_STATE_FILENAME } from './turn-state';
 
 export interface InstallReport {
   projectRoot: string;
@@ -159,6 +160,16 @@ export function installTimelineHooks(
 
   settings.hooks = hooks;
   writeSettings(settingsPath, settings);
+
+  // 旧版全项目共享的 turn 状态文件:新逻辑按会话隔离、不再读写它,安装时顺手清理。
+  // 失败只报 stderr,不中断安装。
+  const legacyTurnFile = path.join(resolvedRoot, '.cgraphx', LEGACY_TURN_STATE_FILENAME);
+  try {
+    if (fs.existsSync(legacyTurnFile)) fs.rmSync(legacyTurnFile, { force: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[timeline] legacy turn-state remove failed: ${msg}\n`);
+  }
 
   // Git post-commit hook
   let gitHookWritten = false;

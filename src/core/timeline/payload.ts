@@ -36,13 +36,15 @@ export interface HookPayload {
   tool_response?: unknown;
   stop_hook_active?: boolean;
   /**
-   * Turn id surfaced by Claude Code, when the host includes one in the payload
-   * (B-1). Most Claude Code versions today do NOT populate this, so the
-   * user-prompt hook generates a UUID v4 itself and writes it to a per-turn
-   * file — see hooks.ts `readCurrentTurnId`. When the host DOES send a
-   * turn_id, the hook honors it verbatim (no overwrite).
+   * 宿主在 payload 中给出的 turn id(B-1)。目前多数 Claude Code 版本不带,
+   * user-prompt hook 会自行生成 UUID v4 并写入本会话的 turn 状态文件
+   * (见 turn-state.ts);宿主给出时原样沿用,不覆盖。
    */
   turn_id?: string | null;
+  /** SessionStart 的启动来源(startup / resume / clear / compact 等)。 */
+  source?: string;
+  /** SessionEnd 的结束原因。 */
+  reason?: string;
 }
 
 export function extractHookPayload(raw: unknown): HookPayload {
@@ -57,6 +59,8 @@ export function extractHookPayload(raw: unknown): HookPayload {
     tool_response: obj.tool_response,
     stop_hook_active: typeof obj.stop_hook_active === 'boolean' ? obj.stop_hook_active : undefined,
     turn_id: typeof obj.turn_id === 'string' ? obj.turn_id : null,
+    source: typeof obj.source === 'string' ? obj.source : undefined,
+    reason: typeof obj.reason === 'string' ? obj.reason : undefined,
   };
 }
 
@@ -68,6 +72,8 @@ export function assertEventType(s: string): EventType | null {
     'post_tool_use',
     'stop',
     'git_commit',
+    'session_start',
+    'session_end',
   ];
   return (valid as string[]).includes(s) ? (s as EventType) : null;
 }

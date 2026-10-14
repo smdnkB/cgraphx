@@ -1,0 +1,163 @@
+/**
+ * 任务解析与列表(spec §5.1、§5.2、§6.2)。
+ *
+ * 解析序号沿用 spec §5.2:
+ *   1 纯数字且等于本地 id → 2 等于接口任务 external_id → 3 已配置接口:刷新一次后再按 external_id
+ *   → 4 等于手动任务 name → 5/6 未配置接口或带 --manual:按名称新建手动任务 → 7 报错。
+ * findTask 只走 1、2、4(不联网、不新建)。
+ */
+
+import { resolveSessionId } from './binding';
+import { TaskArgError, TaskSourceUnavailableError } from './errors';
+import { openTaskDb } from './schema-bootstrap';
+import { fetchRemoteTasks, loadTaskSourceConfig } from './source';
+import { TaskStore } from './store';
+import type { TaskItem, TaskListResult, TaskSourceConfig } from './types';
+
+/** 按序 1(本地 id)→ 2(接口任务 external_id)→ 4(手动任务 name)查找;都不中返回 null。 */
+export function findTask(store: TaskStore, value: string): TaskItem | null {
+  const v = value.trim();
+  if (!v) return null;
+  if (/^\d+$/.test(v)) {
+    const byId = store.getTaskById(Number(v));
+    if (byId) return byId;
+  }
+  return store.findApiTaskByExternalId(v) ?? store.findManualTaskByName(v);
+}
+
+/**
+ * 自行开关连接的 findTask:按本地 id → 接口编号 → 手动任务名称查找,不联网、不新建。
+ *
+ * @throws TaskConfigError 项目未初始化。
+ */
+export function findTaskByValue(projectRoot: string, value: string): TaskItem | null {
+  const conn = openTaskDb(projectRoot);
+  try {
+    return findTask(new TaskStore(conn.getDb()), value);
+  } finally {
+    conn.close();
+  }
+}
+
+/**
+ * 解析 `task use` 的参数为任务,严格按 spec §5.2 的顺序,先命中先用。
+ *
+ * @throws TaskArgError 参数为空,或已配置接口、不带 manual 且接口中找不到。
+ * @throws TaskSourceUnavailableError 已配置接口、不带 manual 且拉取失败。
+ * @throws TaskConfigError 配置文件非法或项目未初始化。
+ */
+export async function resolveTaskForUse(
+  projectRoot: string,
+  value: string,
+  opts: { manual?: boolean } = {},
+): Promise<TaskItem> {
+  const v = value.trim();
+  if (!v) throw new TaskArgError('任务编号或名称为空;用法:cgraphx task use <编号或名称>');
+  const manual = opts.manual === true;
+  const config = loadTaskSourceConfig(projectRoot);
+
+  const conn = openTaskDb(projectRoot);
+  try {
+    const store = new TaskStore(conn.getDb());
+
+    // 序 1:本地 id
+    if (/^\d+$/.test(v)) {
+      const byId = store.getTaskById(Number(v));
+      if (byId) return byId;
+    }
+
+    // 序 2:已缓存的接口任务 external_id
+    const cached = store.findApiTaskByExternalId(v);
+    if (cached) return cached;
+
+    // 序 3:已配置接口 → 拉取一次并 upsert 后再找
+    if (config) {
+      try {
+        await refreshFromSource(store, config);
+        const fetched = store.findApiTaskByExternalId(v);
+        if (fetched) return fetched;
+      } catch (err) {
+        if (!(err instanceof TaskSourceUnavailableError) || !manual) throw err;
+        process.stderr.write(`[task] 任务接口不可用:${err.reason};继续按 --manual 解析\n`);
+      }
+    }
+
+    // 序 4:手动任务 name
+    const byName = store.findManualTaskByName(v);
+    if (byName) return byName;
+
+    // 序 5、6:未配置接口,或带 --manual → 按名称新建(同名复用)
+    if (!config || manual) {
+      return store.ensureManualTask(v, new Date().toISOString());
+    }
+
+    // 序 7
+    throw new TaskArgError(`接口中找不到任务 ${v};核对编号,或加 --manual 建手动任务`);
+  } finally {
+    conn.close();
+  }
+}
+
+/**
+ * 解析需求目录 spec 头部声明的任务值(spec §6.2),不发网络请求。
+ * 先 findTask;未命中时,已配置接口就以 external_id = name = value 建接口任务占位,
+ * 否则按名称新建(复用)手动任务。
+ */
+export function resolveDeclaredTask(store: TaskStore, value: string, configured: boolean): TaskItem {
+  const hit = findTask(store, value);
+  if (hit) return hit;
+  const v = value.trim();
+  if (!v) throw new TaskArgError('需求目录声明的任务值为空');
+  const now = new Date().toISOString();
+  return configured ? store.ensureApiPlaceholder(v, now) : store.ensureManualTask(v, now);
+}
+
+/**
+ * 列出任务(spec §5.1)。未配置接口或 local 为 true → 只读本地;
+ * 已配置 → 拉取并 upsert,失败时不抛错,warning 写明原因并展示本地缓存。
+ */
+export async function listTasks(
+  projectRoot: string,
+  opts: { local?: boolean } = {},
+): Promise<TaskListResult> {
+  const config = opts.local === true ? null : loadTaskSourceConfig(projectRoot);
+
+  const conn = openTaskDb(projectRoot);
+  try {
+    const store = new TaskStore(conn.getDb());
+
+    let warning: string | null = null;
+    if (config) {
+      try {
+        await refreshFromSource(store, config);
+      } catch (err) {
+        if (!(err instanceof TaskSourceUnavailableError)) throw err;
+        warning = `任务接口不可用:${err.reason};已显示本地缓存`;
+      }
+    }
+
+    const sessionId = resolveSessionId();
+    const currentTaskId = sessionId ? (store.getOpenBinding(sessionId)?.taskId ?? null) : null;
+    return { tasks: store.listTasks(), currentTaskId, warning };
+  } finally {
+    conn.close();
+  }
+}
+
+/**
+ * 拉取接口任务并在一个事务里逐条 upsert;接口不再返回的任务保留不删。
+ * 非法条目被跳过时在 stderr 警告。
+ */
+async function refreshFromSource(store: TaskStore, config: TaskSourceConfig): Promise<void> {
+  const { tasks, skipped } = await fetchRemoteTasks(config);
+  if (skipped > 0) {
+    process.stderr.write(
+      `[task] 任务接口返回 ${skipped} 条缺少 id / name 的条目,已跳过;请让接口方按契约补齐必填字段\n`,
+    );
+  }
+  if (tasks.length === 0) return;
+  const now = new Date().toISOString();
+  store.transaction(() => {
+    for (const task of tasks) store.upsertApiTask(task, now);
+  });
+}

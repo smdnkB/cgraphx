@@ -397,6 +397,8 @@ export class TimelineStore {
         post_tool_use: 0,
         stop: 0,
         git_commit: 0,
+        session_start: 0,
+        session_end: 0,
       };
       for (const r of byTypeRows) {
         byType[r.event_type as EventType] = r.c;

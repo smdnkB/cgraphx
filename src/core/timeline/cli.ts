@@ -9,12 +9,9 @@
  *   - cgraphx timeline install
  *   - cgraphx timeline uninstall
  *
- * Hidden hook entry points (spec §3.3):
- *   - cgraphx timeline-user-prompt-hook
- *   - cgraphx timeline-pre-tool-use-hook
- *   - cgraphx timeline-post-tool-use-hook
- *   - cgraphx timeline-stop-hook
- *   - cgraphx timeline-git-commit-hook
+ * 隐藏 hook 入口(spec §3.3):Claude Code hook 子命令按 HOOK_EVENTS_TO_COMMANDS
+ * 逐项注册(user-prompt / pre-tool-use / post-tool-use / stop / session-start /
+ * session-end),另加 git post-commit 用的 timeline-git-commit-hook。
  *
  * Exit codes (spec §5.5):
  *   0  success (incl. "no matching events")
@@ -32,14 +29,37 @@ import { installTimelineHooks, uninstallTimelineHooks } from './installer';
 import { resolveProjectRoot } from '../directory';
 import { TimelineSchemaError, StoreQueryError } from './errors';
 import { assertEventType } from './payload';
+import { HOOK_EVENTS_TO_COMMANDS, GIT_COMMIT_SUBCOMMAND, type HookEventName } from './constants';
+import { describeEvent, truncate } from './describe';
 import type { EventType, TimelineEvent, TimelineStats } from './types';
 import {
   userPromptHook,
   preToolUseHook,
   postToolUseHook,
   stopHook,
+  sessionStartHook,
+  sessionEndHook,
   gitCommitHook,
 } from './hooks';
+
+// 摘要逻辑已移至 describe.ts(门面同源导出);此处保留再导出,兼容既有直接引用。
+export { describeEvent } from './describe';
+
+/**
+ * Claude Code hook 事件名 → 处理函数;子命令名只从 HOOK_EVENTS_TO_COMMANDS 取。
+ * 键类型由 HOOK_EVENTS_TO_COMMANDS 推出,新增事件漏配处理函数时编译期报错。
+ */
+const HOOK_HANDLERS: Record<HookEventName, () => Promise<void>> = {
+  UserPromptSubmit: userPromptHook,
+  PreToolUse: preToolUseHook,
+  PostToolUse: postToolUseHook,
+  Stop: stopHook,
+  SessionStart: sessionStartHook,
+  SessionEnd: sessionEndHook,
+};
+
+/** `--type` 可接受的事件类型(帮助文本与报错共用)。 */
+const EVENT_TYPES_HELP = 'user_prompt | pre_tool_use | post_tool_use | stop | git_commit | session_start | session_end';
 
 class ArgError extends Error {}
 
@@ -79,41 +99,6 @@ export function renderEventsTable(events: TimelineEvent[]): string {
   const all = [header, ...rows];
   const widths = header.map((_, i) => Math.max(...all.map(r => String(r[i] ?? '').length)));
   return all.map(r => r.map((c, i) => String(c).padEnd(widths[i]!)).join('  ')).join('\n');
-}
-
-export function describeEvent(e: TimelineEvent): string {
-  switch (e.event_type) {
-    case 'user_prompt':
-      return truncate(e.prompt_text ?? '', 120);
-    case 'pre_tool_use':
-    case 'post_tool_use':
-      return describeToolArgs(e.tool_name, e.tool_args);
-    case 'git_commit': {
-      const parts: string[] = [];
-      if (e.commit_hash) parts.push(e.commit_hash.slice(0, 7));
-      if (e.commit_message) parts.push(truncate(e.commit_message, 100));
-      if (e.commit_files.length > 0) parts.push(`(${e.commit_files.length} files)`);
-      return parts.join(' ');
-    }
-    case 'stop':
-      return e.duration_ms !== null ? `session ended (${e.duration_ms}ms)` : 'session ended';
-  }
-}
-
-function describeToolArgs(toolName: string | null, args: unknown): string {
-  if (!toolName || !args || typeof args !== 'object') return '';
-  const r = args as Record<string, unknown>;
-  if (typeof r.file_path === 'string') return r.file_path;
-  if (typeof r.path === 'string') return r.path;
-  if (typeof r.command === 'string') return truncate(r.command, 120);
-  if (typeof r.url === 'string') return r.url;
-  if (typeof r.query === 'string') return truncate(r.query, 120);
-  return '';
-}
-
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1) + '…';
 }
 
 function renderStats(s: TimelineStats): string {
@@ -202,7 +187,7 @@ export function registerTimelineCommands(program: Command): void {
     .description('Query timeline events by time window, type, tool, file, or session')
     .option('--since <date>', 'Start time (ISO 8601 or relative like 7d/12h/30m/now)')
     .option('--until <date>', 'End time (ISO 8601 or relative)')
-    .option('--type <type>', 'Event type: user_prompt | pre_tool_use | post_tool_use | stop | git_commit')
+    .option('--type <type>', `Event type: ${EVENT_TYPES_HELP}`)
     .option('--tool <name>', 'Exact tool_name (Edit/Bash/Read/...)')
     .option('--file <path>', 'Substring match on tool_args.file_path or commit_files')
     .option('--session <id>', 'Exact session_id')
@@ -365,34 +350,25 @@ export function registerTimelineCommands(program: Command): void {
       }
     });
 
-  // ─── Hidden hook entry points (spec §3) ────────────────────────────────
-  // All async — fire-and-forget on hook trigger; exit 0 when the work is done.
+  // ─── 隐藏 hook 入口(spec §3) ─────────────────────────────────────────
+  // 全部 await 到写库完成再退出,退出码恒为 0。
+
+  for (const { event, subcommand } of HOOK_EVENTS_TO_COMMANDS) {
+    const handler = HOOK_HANDLERS[event];
+    program
+      .command(subcommand, { hidden: true })
+      .action(async () => { await handler(); });
+  }
 
   program
-    .command('timeline-user-prompt-hook', { hidden: true })
-    .action(async () => { await userPromptHook(); });
-
-  program
-    .command('timeline-pre-tool-use-hook', { hidden: true })
-    .action(async () => { await preToolUseHook(); });
-
-  program
-    .command('timeline-post-tool-use-hook', { hidden: true })
-    .action(async () => { await postToolUseHook(); });
-
-  program
-    .command('timeline-stop-hook', { hidden: true })
-    .action(async () => { await stopHook(); });
-
-  program
-    .command('timeline-git-commit-hook', { hidden: true })
+    .command(GIT_COMMIT_SUBCOMMAND, { hidden: true })
     .action(async () => { await gitCommitHook(); });
 }
 
 function parseType(s: string | undefined): EventType | undefined {
   if (!s) return undefined;
   const t = assertEventType(s);
-  if (!t) throw new ArgError(`Invalid --type: ${s}. Must be one of user_prompt, pre_tool_use, post_tool_use, stop, git_commit`);
+  if (!t) throw new ArgError(`Invalid --type: ${s}. Must be one of ${EVENT_TYPES_HELP.split(' | ').join(', ')}`);
   return t;
 }
 
