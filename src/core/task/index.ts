@@ -10,6 +10,8 @@ export { loadTaskSourceConfig, fetchRemoteTasks } from './source';
 export { findTaskByValue, resolveTaskForUse, resolveDeclaredTask, listTasks } from './resolve';
 export { bindSession, getCurrentBinding, clearBinding, resolveSessionId } from './binding';
 export { autoBindFromFeatureDir, getTaskDetail } from './feature-link';
+export { listTaskSummaries, getTaskReport, computeSegmentStats } from './report';
+export { classifyArtifactPath } from './artifacts';
 export { taskSessionStartHook, taskPostToolUseHook } from './hooks';
 export { installTaskHooks, uninstallTaskHooks } from './installer';
 export {
@@ -18,6 +20,9 @@ export {
   TASK_SOURCE_TIMEOUT_MS,
   TASK_SOURCES,
   BIND_SOURCES,
+  ACTIVE_GAP_MS,
+  ARTIFACT_CATEGORIES,
+  REFERENCE_CATEGORIES,
 } from './constants';
 export type {
   TaskSource,
@@ -31,10 +36,19 @@ export type {
   CurrentBinding,
   AutoBindOutcome,
   TaskDetail,
+  SegmentStats,
+  TaskTotals,
+  TaskSummary,
+  SegmentReport,
+  ArtifactCategory,
+  ArtifactGroup,
+  ReferenceReport,
+  TaskReport,
 } from './types';
 export {
   TaskError,
   TaskConfigError,
+  TaskNotEnabledError,
   TaskArgError,
   TaskStoreError,
   TaskSourceUnavailableError,

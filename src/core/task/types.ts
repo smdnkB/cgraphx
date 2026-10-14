@@ -5,7 +5,7 @@
  */
 
 import type { TimelineEvent } from '../timeline';
-import type { BIND_SOURCES, TASK_SOURCES } from './constants';
+import type { ARTIFACT_CATEGORIES, BIND_SOURCES, TASK_SOURCES } from './constants';
 
 export type TaskSource = (typeof TASK_SOURCES)[number];
 export type BindSource = (typeof BIND_SOURCES)[number];
@@ -85,4 +85,82 @@ export interface TaskDetail {
   eventCounts: Record<string, number>;
   /** 归属事件明细(按 ts 升序,截取前 limit 条);未要求时为 null。 */
   events: TimelineEvent[] | null;
+}
+
+// ── 任务报告(web 只读浏览;口径见 cgraphx-web开发任务浏览 spec §3–§7)──
+
+export type ArtifactCategory = (typeof ARTIFACT_CATEGORIES)[number];
+
+/** 一条绑定段的统计。无事件或仅 1 条事件时 activeMs / workMs 为 0。 */
+export interface SegmentStats {
+  eventCount: number;
+  commitCount: number;
+  activeMs: number;
+  workMs: number;
+  /** 段内最早 / 最晚归属事件 ts;无事件为 null。 */
+  firstTs: string | null;
+  lastTs: string | null;
+}
+
+/** 任务合计:各绑定段求和(并行会话重叠不扣除)。 */
+export interface TaskTotals {
+  /** 不同 session_id 个数。 */
+  sessionCount: number;
+  bindingCount: number;
+  eventCount: number;
+  commitCount: number;
+  activeMs: number;
+  workMs: number;
+  /** 全部归属事件最大 ts;无归属事件为 null。 */
+  lastActivityAt: string | null;
+}
+
+export interface TaskSummary {
+  task: TaskItem;
+  /** 至少一条 unboundAt 为 null 的绑定。 */
+  inProgress: boolean;
+  /** 从未绑定过会话为 null。 */
+  totals: TaskTotals | null;
+  /** 任一绑定段命中 EVENTS_PER_BINDING_LIMIT。 */
+  truncated: boolean;
+}
+
+export interface SegmentReport {
+  binding: TaskBinding;
+  stats: SegmentStats;
+  /** 段内最早的 eventLimitPerSegment 条归属事件,ts/id 升序。 */
+  events: TimelineEvent[];
+  /** stats.eventCount - events.length。 */
+  hiddenEventCount: number;
+}
+
+export interface ArtifactGroup {
+  category: ArtifactCategory;
+  /** 项目相对 POSIX 路径,升序去重。 */
+  paths: string[];
+}
+
+export interface ReferenceReport {
+  /** 只含 REFERENCE_CATEGORIES 中非空的类别,按 ARTIFACT_CATEGORIES 顺序。 */
+  groups: ArtifactGroup[];
+  /** cgraphx docs 命令中按概念查询的概念名,去重,按首次出现顺序。 */
+  concepts: string[];
+  /** 既被参考又在产出中的文件数(这些文件不进 groups)。 */
+  overlapCount: number;
+}
+
+export interface TaskReport {
+  task: TaskItem;
+  /** 主 spec 头部声明本任务的需求目录(项目相对 POSIX,如 docs/features/<id>)。 */
+  featureDirs: string[];
+  inProgress: boolean;
+  totals: TaskTotals | null;
+  /** 一条绑定段一项,按 bound_at、id 升序。 */
+  segments: SegmentReport[];
+  /** 全部归属事件按 event_type 计数。 */
+  eventCounts: Record<string, number>;
+  /** 非空类别,按 ARTIFACT_CATEGORIES 顺序。 */
+  outputs: ArtifactGroup[];
+  references: ReferenceReport;
+  truncated: boolean;
 }

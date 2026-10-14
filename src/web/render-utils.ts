@@ -54,3 +54,18 @@ export function docTime(raw: string | null): TimeModel | null {
 export function epochTime(ms: number): TimeModel {
   return { datetime: new Date(ms).toISOString(), text: formatLocalDateTime(ms) };
 }
+
+/** 时长显示(开发任务页 spec §3.3):向下取整到分钟;≥1h → `<h>h <m>m`,否则 `<m>m`;0 → `0m`。 */
+export function formatDuration(ms: number): string {
+  const totalMin = Math.max(0, Math.floor(ms / 60_000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** 任务页时间(spec §3.3):进程本地时区;与 nowMs 同年 → `MM-DD HH:mm`,否则 `YYYY-MM-DD HH:mm`。 */
+export function formatTaskTime(iso: string, nowMs: number): string {
+  const d = new Date(Date.parse(iso));
+  const md = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return d.getFullYear() === new Date(nowMs).getFullYear() ? md : `${d.getFullYear()}-${md}`;
+}

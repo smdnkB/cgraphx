@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added — cgraphx web: development tasks page
+
+- New sidebar entry 「开发任务」 with a task list (`/tasks`) and a task detail
+  page (`/tasks/<id>`), read through the task facade only.
+- Per-task totals: sessions, commits, active time (events split on gaps over
+  1 hour) and work time (first-to-last event), summed across bindings.
+- Detail page shows outputs (committed / edited files plus the linked
+  requirement directory) and references (files and knowledge concepts the
+  sessions read, inferred from tool calls and commands), with links into the
+  knowledge base, system map and schema pages.
+- Strictly read-only: projects without task tables show an install hint and no
+  table is created; external task sources are never called.
+
 ### Added — `cgraphx task`: session ↔ development task binding
 
 A new `task` subsystem binds Claude Code sessions to development tasks so

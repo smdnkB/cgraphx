@@ -18,3 +18,12 @@ export const TASK_SOURCES = ['api', 'manual'] as const;
 
 /** 绑定来源:显式绑定 / 需求目录自动绑定。 */
 export const BIND_SOURCES = ['cli', 'feature_dir'] as const;
+
+/** 活跃时长断点:相邻归属事件间隔超过此值即断开(与 task-history agent 的去间隔活跃时长一致)。 */
+export const ACTIVE_GAP_MS = 60 * 60 * 1000;
+
+/** 产出分类(数组顺序即判定与展示顺序)。 */
+export const ARTIFACT_CATEGORIES = ['feature-doc', 'knowledge', 'schema', 'diagram', 'api-test', 'code'] as const;
+
+/** 参考只列的类别(代码文件不列)。 */
+export const REFERENCE_CATEGORIES = ['feature-doc', 'knowledge', 'schema', 'diagram'] as const;

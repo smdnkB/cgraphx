@@ -2490,3 +2490,47 @@ a.codemap__concept:hover { background: var(--pine-2); color: #fff; }
   font-size: 12px;
   color: var(--gold);
 }
+
+/* ===== 开发任务页(2026-10-14-cgraphx-web开发任务浏览)=====
+   复用基座令牌与既有组件:.schema-list__head / .schema-back / .detail__seclab / .placeholder /
+   .codemap__concept(概念标签)/ .turn .evlist .ev* .commit(时间线页事件行与提交行)。 */
+.tasks { max-width: 1100px; margin: 0 auto; padding: 24px 28px 48px; }
+.tasks .schema-back { display: inline-block; margin-bottom: 12px; }
+.tasks__tablewrap { overflow-x: auto; }
+.tasks__table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.tasks__table th { text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 600; color: var(--ink-3); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tasks__table td { padding: 10px 12px; border-top: 1px dashed var(--line); white-space: nowrap; color: var(--ink-2); }
+.tasks__table tbody tr:hover { background: var(--surface-2); }
+.tasks__num { text-align: right; font-family: var(--font-mono); }
+.tasks__mono { font-family: var(--font-mono); font-size: 12px; }
+.tasks__name { font-weight: 700; color: var(--pine); text-decoration: none; }
+.tasks__name:hover { text-decoration: underline; }
+.tasks__tag { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 999px; font-size: 11px; color: var(--pine-2); background: var(--pine-tint); vertical-align: 1px; }
+.tasks__tag--plain { margin-left: 0; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); }
+.tasks__hint { margin: 10px 0 0; font-size: 12px; color: var(--ink-3); }
+.tasks__note { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--gold); background: var(--gold-tint); font-size: 12px; color: var(--gold); }
+.tasks__dim { color: var(--ink-3); }
+.tasks__empty { margin: 4px 0; font-size: 13px; color: var(--ink-3); }
+.tasks__info { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 20px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.tasks__info dt { color: var(--ink-3); }
+.tasks__info dd { margin: 0; color: var(--ink); word-break: break-all; }
+.tasks__box { margin-bottom: 18px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.tasks__stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.tasks__stat { min-width: 110px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
+.tasks__stat b { display: block; font-family: var(--font-disp); font-size: 20px; color: var(--pine); }
+.tasks__stat span { font-size: 12px; color: var(--ink-3); }
+.tasks__group { margin-top: 10px; font-size: 13px; }
+.tasks__group summary { cursor: pointer; }
+.tasks__count { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+.tasks__files { margin: 4px 0 0; padding-left: 18px; }
+.tasks__files li { margin: 2px 0; }
+.tasks__path { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); word-break: break-all; }
+.tasks__link { color: var(--blue); text-decoration: none; }
+.tasks__link:hover { text-decoration: underline; }
+.tasks__seg { margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.tasks__seghead { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 9px 14px; background: var(--surface-2); font-size: 13px; }
+.tasks__segstats { color: var(--ink-2); }
+.tasks__segbody { padding: 8px 14px 12px; border-top: 1px dashed var(--line); }
+.tasks__segbody > summary { cursor: pointer; font-size: 12px; color: var(--ink-2); }
+.tasks__segbody .evlist + .evlist { margin-top: 5px; }
+@media (max-width: 720px) { .tasks { padding: 16px; } .tasks__info { grid-template-columns: 1fr; } }

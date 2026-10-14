@@ -13,6 +13,8 @@
  *   GET /map         系统地图首页(经 pages-codemap 渲染,2026-10-14-cgraphx-web系统地图)
  *   GET /map/system/<name>、/map/flow/<name>
  *                    系统交互 / 流程视图页(名字非法或视图不存在 → 404)
+ *   GET /tasks       开发任务列表页(经 pages-tasks 渲染,2026-10-14-cgraphx-web开发任务浏览)
+ *   GET /tasks/<id>  任务详情页(id 须为纯数字本地 id;否则或任务不存在 → 404)
  *   GET /assets/*    静态资产(路径穿越防护 + 扩展名白名单)
  *   其他             404 页
  *   处理器抛错       500 页(可读原因,禁输出堆栈)
@@ -42,6 +44,7 @@ import {
 } from './pages-schema';
 import { listTables, listProjects } from './schema-reader';
 import { renderCodemapHomePage, renderCodemapViewPage } from './pages-codemap';
+import { renderTaskDetailPage, renderTasksListPage } from './pages-tasks';
 import { isSafeCodemapName, type CodemapKind } from './codemap-reader';
 import { escapeHtml } from './render-utils';
 
@@ -379,6 +382,41 @@ function isSafeSchemaName(name: string): boolean {
 }
 
 /**
+ * 开发任务路由:
+ *   GET /tasks、/tasks/   列表页
+ *   GET /tasks/<纯数字>   详情页(任务不存在 → 404)
+ *   其余 /tasks/*         404
+ * 门面 async,按 /timeline 分支同款 .then/.catch 兜底 500。
+ */
+function handleTasks(res: http.ServerResponse, ctx: HandlerContext, pathname: string): void {
+  const pageCtx = { version: ctx.version, localHost: ctx.localHost, projectRoot: ctx.projectRoot };
+  if (pathname === '/tasks' || pathname === '/tasks/') {
+    renderTasksListPage(pageCtx)
+      .then((html) => {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(html);
+      })
+      .catch((err) => sendInternalError(res, ctx, err));
+    return;
+  }
+  const m = /^\/tasks\/(\d+)$/.exec(pathname);
+  if (m?.[1] === undefined) {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+  renderTaskDetailPage(ctx.db, Number(m[1]), pageCtx)
+    .then((result) => {
+      if (result.status === 404) {
+        sendNotFound(res, ctx, pathname);
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(result.html);
+    })
+    .catch((err) => sendInternalError(res, ctx, err));
+}
+
+/**
  * 构造请求处理器。闭包持有上下文(db / 版本 / 本地地址);处理器抛错
  * 统一兜底为 500 页。仅支持 GET;其它方法走「其他 → 404」。
  */
@@ -423,6 +461,10 @@ function createRequestHandler(ctx: HandlerContext): http.RequestListener {
         }
         if (pathname === '/map' || pathname.startsWith('/map/')) {
           handleCodemap(res, ctx, pathname);
+          return;
+        }
+        if (pathname === '/tasks' || pathname.startsWith('/tasks/')) {
+          handleTasks(res, ctx, pathname);
           return;
         }
         if (pathname === '/doc' || pathname.startsWith('/doc/')) {

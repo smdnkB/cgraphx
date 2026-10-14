@@ -29,15 +29,18 @@ related_code:
   - src/web/markdown.ts
   - src/web/constants.ts
   - src/core/markdown/index.ts
+  - src/web/pages-tasks.ts
+related_documents:
+  - docs/knowledge/开发任务浏览.md
 created: 2026-07-31
-updated: 2026-07-31
+updated: 2026-10-15
 ---
 
 # cgraphx web
 
 ## Summary
 
-cgraphx web 是 cgraphx 2.0 `src/web/` 层的首个实装:`cgraphx web [project-path]` 顶层命令启动的**本地、只读、面向浏览器**的服务,让团队成员在浏览器里浏览目标项目的 docs 知识库与 timeline 开发事件流(又称 web 本地服务 / web 端 / 本地浏览服务)。服务对象是**人**,不是程序——不为 HTTP API 设计稳定契约,不是 1.x 被移除的 MCP server 的复活。与 CLI 的边界:web 与 CLI 是 core 的两个平行消费方,共享同一个 `.cgraphx/cgraphx.db`,web 不调用 CLI 进程。
+cgraphx web 是 cgraphx 2.0 `src/web/` 层的首个实装:`cgraphx web [project-path]` 顶层命令启动的**本地、只读、面向浏览器**的服务,让团队成员在浏览器里浏览目标项目的 docs 知识库、timeline 开发事件流、模型知识库(表结构)、系统地图(代码地图)与开发任务(又称 web 本地服务 / web 端 / 本地浏览服务)。服务对象是**人**,不是程序——不为 HTTP API 设计稳定契约,不是 1.x 被移除的 MCP server 的复活。与 CLI 的边界:web 与 CLI 是 core 的两个平行消费方,共享同一个 `.cgraphx/cgraphx.db`,web 不调用 CLI 进程。
 
 ## 命名与边界
 
@@ -75,3 +78,10 @@ cgraphx web 是 cgraphx 2.0 `src/web/` 层的首个实装:`cgraphx web [project-
 
 - 时间线子需求实现后,基座契约(应用壳、预检、错误态)可能需要小幅扩展,届时以知识库 spec 为基线增量修订。
 - db(dbquery)子系统对接在导航中以"后续"灰置占位,涉及凭据与只读安全模型,另议。
+
+## 2026-10-15 补充:开发任务页与只读读取
+
+- 侧栏第 5 入口「开发任务」(`/tasks`),流程见 `docs/knowledge/开发任务浏览.md`。
+- web 读 task 数据只能用 task 门面的只读函数(`listTaskSummaries` / `getTaskReport`,经 `openTaskDbReadOnly`)。task 的常规打开路径会执行 schema 应用,对没有 task 表的老项目等于建表;web 启动预检仍只要求 markdown / timeline 两套 schema。
+- 上方 Open Questions 中「时间线子需求实现后」一条已过时:时间线、模型知识库、系统地图、开发任务页均已实现。
+

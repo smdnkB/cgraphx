@@ -317,7 +317,7 @@ function renderTlPills(m: TimelineContentModel): string {
 }
 
 /** 单事件行(L4):有 payload 用 <details> 展开,无则静态行。 */
-function renderEventRow(e: EventRowModel): string {
+export function renderEventRow(e: EventRowModel): string {
   const toneCls = e.isSubagent ? 'agent' : e.tone;
   const badgeLabel = e.isSubagent ? '▸▸ 子Agent' : escapeHtml(e.label);
   const badge = `<span class="evbadge evbadge--${toneCls}">${badgeLabel}</span>`;
@@ -347,7 +347,7 @@ function renderEventRow(e: EventRowModel): string {
 }
 
 /** 轮次(L3):轮次标签 + 事件列表。 */
-function renderTurnGroup(t: TurnGroupModel): string {
+export function renderTurnGroup(t: TurnGroupModel): string {
   const events = t.events.map(renderEventRow).join('\n          ');
   return `
           <div class="turn">${escapeHtml(t.label)}</div>
@@ -392,6 +392,16 @@ function renderSessionCard(s: SessionCardModel): string {
 }
 
 /** git_commit 独立栏(无会话归属,不猜归属;当日 0 提交 → 空态一行)。 */
+/** 单条提交行(时间线页 git 栏与开发任务页会话块共用)。 */
+export function renderCommitRow(c: CommitRowModel): string {
+  return `<div class="commit">
+            <time class="commit__time" datetime="${escapeHtml(c.time.datetime)}">${escapeHtml(c.time.text)}</time>
+            <span class="commit__hash" title="${escapeHtml(c.hash)}">${escapeHtml(c.hash)}</span>
+            <span class="commit__msg" title="${escapeHtml(c.message)}">${escapeHtml(c.message)}</span>
+            <span class="commit__diff"><span class="add">+${c.insertions}</span> <span class="del">-${c.deletions}</span></span>
+          </div>`;
+}
+
 function renderCommitsBar(commits: CommitRowModel[]): string {
   if (commits.length === 0) {
     return `
@@ -400,16 +410,7 @@ function renderCommitsBar(commits: CommitRowModel[]): string {
           <div class="commits__empty">当日还没有提交。</div>
         </div>`;
   }
-  const rows = commits
-    .map(
-      (c) => `<div class="commit">
-            <time class="commit__time" datetime="${escapeHtml(c.time.datetime)}">${escapeHtml(c.time.text)}</time>
-            <span class="commit__hash" title="${escapeHtml(c.hash)}">${escapeHtml(c.hash)}</span>
-            <span class="commit__msg" title="${escapeHtml(c.message)}">${escapeHtml(c.message)}</span>
-            <span class="commit__diff"><span class="add">+${c.insertions}</span> <span class="del">-${c.deletions}</span></span>
-          </div>`,
-    )
-    .join('\n          ');
+  const rows = commits.map(renderCommitRow).join('\n          ');
   return `
         <div class="commits">
           <div class="commits__head"><b>Git 提交</b><em>无会话归属 · 独立呈现</em><span class="count-badge">${commits.length}</span></div>

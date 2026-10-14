@@ -1,0 +1,310 @@
+<!doctype html>
+<!--
+  线框 v3 · cgraphx web 开发任务浏览(低保真)
+  feature-id: 2026-10-14-cgraphx-web开发任务浏览
+  v2 → v3 变化:
+  - 详情页新增「参考」栏(用户要求看到任务读了哪些代码地图 / 知识库):Read/Grep/Glob 路径 + Bash 命令文本中的现存路径
+    + cgraphx docs 概念查询;限知识库 / 代码地图 / 数据库结构 / 需求文档;已算产出的不重复;标注「按命令记录推断」
+  v1 → v2 变化:
+  - 详情页会话块定为「一条绑定一块」(线框 v1 方案对照拍板 A:每段能看清绑定来源);删除方案对照开关
+  示例数据:会话 id、事件数、时间、commit、改动文件取自本仓库 2026-10-14 的真实 timeline
+    (会话 b1ac8f3c… 与 f3b0b9c4…,时间已换算为 UTC+8);活跃/工作时长按 1h 断点实算。
+    本地库暂无任务,任务名与绑定区间(含 21:00 切走、21:40 切回)为示意;
+    「从未绑定」的任务用占位 <外部编号> 表示。
+    参考栏:从会话 b1ac8f3c… 的真实命令文本匹配得出(该会话无 cgraphx docs 概念查询,概念行为占位 <概念>)。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>线框 v3 · 开发任务浏览</title>
+<style>
+  /* 低保真:只用灰度,不用项目设计令牌;注意力放在布局与交互上 */
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: #222; background: #f4f4f4; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 16px; background: #fff; border-bottom: 1px solid #ccc; }
+  header h1 { font-size: 15px; margin: 0; }
+  .states button, .opts button, .pages a { font: inherit; padding: 3px 10px; border: 1px solid #999; background: #fff; color: #222; cursor: pointer; text-decoration: none; border-radius: 3px; }
+  .opts { padding: 2px 8px; background: #e6e6e6; border-radius: 3px; }
+  .states button[aria-pressed="true"], .opts button[aria-pressed="true"], .pages a.on { background: #333; color: #fff; border-color: #333; }
+  .layout { display: grid; grid-template-columns: 1fr 280px; gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .frame { background: #fff; border: 2px solid #555; min-height: 480px; display: grid; grid-template-columns: 140px 1fr; }
+  .side { border-right: 1px dashed #999; padding: 12px; }
+  .side div { padding: 4px 6px; color: #666; }
+  .side .cur { background: #ddd; color: #222; font-weight: 600; }
+  .main { padding: 16px; position: relative; min-width: 0; }
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 12px; }
+  .box { border: 1px solid #999; padding: 10px; margin-bottom: 10px; }
+  .box h3 { font-size: 13px; margin: 0 0 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 6px; border-bottom: 1px dotted #bbb; white-space: nowrap; }
+  th { color: #555; font-weight: 600; border-bottom: 1px solid #999; }
+  td.num { text-align: right; }
+  .tw { overflow-x: auto; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; padding: 5px 4px; border-bottom: 1px dotted #bbb; }
+  .row b { min-width: 120px; }
+  .link { text-decoration: underline; cursor: pointer; }
+  .plain { color: #555; }
+  .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .tag { display: inline-block; border: 1px solid #777; padding: 0 6px; border-radius: 3px; font-size: 12px; }
+  .tag.solid { background: #333; color: #fff; border-color: #333; }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; }
+  .stat { border: 1px solid #999; padding: 6px 12px; min-width: 96px; }
+  .stat b { display: block; font-size: 18px; }
+  .stat span { color: #666; font-size: 12px; }
+  .sess { border: 1px solid #999; margin-bottom: 8px; }
+  .sess .hd { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 8px 10px; background: #f0f0f0; }
+  .sess .bd { padding: 6px 10px 10px; border-top: 1px dashed #aaa; }
+  .turn { border-left: 3px solid #999; padding-left: 8px; margin: 6px 0; }
+  .ev { display: flex; gap: 10px; font-size: 12px; padding: 2px 0; }
+  .ev .t { width: 44px; color: #666; }
+  .more { color: #666; font-size: 12px; padding-top: 6px; }
+  .cat { margin-bottom: 8px; }
+  .cat > div { padding-left: 14px; }
+  .empty { border: 2px dashed #999; padding: 32px; text-align: center; color: #555; }
+  .muted { color: #888; }
+  .n { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: #222; color: #fff; font-size: 11px; margin-left: 4px; vertical-align: middle; }
+  aside { background: #fff; border: 1px solid #ccc; padding: 12px; }
+  aside h2 { font-size: 13px; margin: 0 0 8px; }
+  aside li { margin-bottom: 6px; }
+  details > summary { cursor: pointer; }
+  /* 页面 / 状态 / 方案切换
+     body 只放「当前值」(data-cur 状态、data-opt 方案);隐藏规则一律写成 `.main [...]`,
+     只作用于内容区。写成裸的 `[data-xxx] { display:none }` 会连 body 一起命中 → 整页空白且不报错。 */
+  .main section[data-page] { display: none; }
+  .main section[data-page].on { display: block; }
+  .main [data-state], .main [data-opt] { display: none; }
+  body[data-cur="normal"] .main [data-state~="normal"],
+  body[data-cur="empty"] .main [data-state~="empty"],
+  body[data-cur="error"] .main [data-state~="error"],
+  body[data-opt="a"] .main [data-opt~="a"],
+  body[data-opt="b"] .main [data-opt~="b"] { display: block; }
+</style>
+</head>
+<body data-cur="normal">
+<header>
+  <h1>线框 v3 · 开发任务浏览</h1>
+  <nav class="pages" aria-label="页面">
+    <a href="#list">任务列表</a><a href="#detail">任务详情</a>
+  </nav>
+  <div class="states" role="group" aria-label="状态">
+    <button data-to="normal" aria-pressed="true">正常</button>
+    <button data-to="empty" aria-pressed="false">空态</button>
+    <button data-to="error" aria-pressed="false">异常</button>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="frame">
+    <div class="side">
+      <div>知识库</div><div>开发时间线</div><div>模型知识库</div><div>系统地图</div>
+      <div class="cur">开发任务 <span class="n">1</span></div>
+    </div>
+
+    <div class="main">
+      <!-- ========== 任务列表 ========== -->
+      <section data-page="list">
+        <div class="bar"><b>开发任务</b><span class="muted">按最近活动倒序 <span class="n">2</span></span></div>
+
+        <div data-state="normal" class="tw">
+          <table>
+            <tr><th>任务</th><th>来源</th><th>状态</th><th class="num">会话</th><th class="num">commit</th><th class="num">活跃时长</th><th>最近活动</th></tr>
+            <tr>
+              <td><span class="link" data-go="detail">cgraphx-web开发任务浏览</span> <span class="tag solid">进行中</span><span class="n">3</span></td>
+              <td>手动</td><td class="muted">—</td><td class="num">1</td><td class="num">0</td><td class="num">55m</td><td>10-14 22:28</td>
+            </tr>
+            <tr>
+              <td><span class="link" data-go="detail">任务会话映射与timeline采集增强</span> <span class="tag solid">进行中</span></td>
+              <td>手动</td><td class="muted">—</td><td class="num">1</td><td class="num">2</td><td class="num">1h 57m</td><td>10-14 21:56</td>
+            </tr>
+            <tr class="muted">
+              <td><span class="link" data-go="detail">&lt;外部编号&gt; &lt;接口任务名称&gt;</span></td>
+              <td>接口</td><td>&lt;外部状态&gt;</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td>—</td>
+            </tr>
+          </table>
+          <p class="muted" style="font-size:12px">接口任务显示的是上次 <code>cgraphx task list</code> 拉取的缓存 <span class="n">4</span></p>
+        </div>
+
+        <div class="empty" data-state="empty">
+          暂无开发任务<br><br>
+          任务的两种来源:<br>
+          · 会话里执行 <code>cgraphx task use &lt;名称&gt;</code><br>
+          · 在需求 spec 头部写 <code>&gt; 任务: &lt;名称&gt;</code>,会话改动该需求目录时自动绑定
+        </div>
+        <div class="empty" data-state="error">
+          本项目尚未启用开发任务<br>
+          运行 <code>cgraphx install</code> 后可用(其它页面不受影响)
+        </div>
+      </section>
+
+      <!-- ========== 任务详情 ========== -->
+      <section data-page="detail">
+        <div class="bar"><b>任务会话映射与timeline采集增强</b><span class="link" data-go="list">← 返回任务列表</span></div>
+
+        <!-- 任务信息:正常 / 空态都显示 -->
+        <div data-state="normal empty">
+          <div class="row"><b>来源</b><span>手动</span><b>外部编号</b><span class="muted">—</span><b>状态</b><span class="muted">—</span><b>链接</b><span class="muted">—</span></div>
+          <div class="row"><b>关联需求目录</b><span class="plain mono">docs/features/2026-10-14-任务会话映射与timeline采集增强/</span><span class="n">5</span></div>
+        </div>
+
+        <div data-state="normal">
+          <!-- 合计 -->
+          <div class="box" style="margin-top:12px">
+            <h3>合计 <span class="n">6</span></h3>
+            <div class="stats">
+              <div class="stat"><b>1</b><span>会话(2 段绑定)</span></div>
+              <div class="stat"><b>1h 57m</b><span>活跃时长</span></div>
+              <div class="stat"><b>1h 57m</b><span>工作时长</span></div>
+              <div class="stat"><b>2</b><span>commit</span></div>
+              <div class="stat"><b>535</b><span>事件</span></div>
+            </div>
+          </div>
+
+          <!-- 产出 -->
+          <div class="box">
+            <h3>产出 · 15 个文件 <span class="n">7</span></h3>
+            <div class="cat"><b>需求文档 3</b>
+              <div class="plain mono">docs/features/2026-10-14-任务会话映射与timeline采集增强/任务会话映射与timeline采集增强-spec.md</div>
+              <div class="plain mono">…/plan/任务会话映射与timeline采集增强-index.md</div>
+              <div class="plain mono">…/plan/任务会话映射与timeline采集增强-02-backend.md</div>
+            </div>
+            <div class="cat"><b>知识库 3</b>
+              <div><span class="link">开发任务</span> · <span class="link">开发任务绑定</span> · <span class="link">会话 id 来源约束</span> → 知识库详情</div>
+            </div>
+            <div class="cat"><b>业务图 2</b>
+              <div><span class="link">开发任务绑定</span> · <span class="link">开发时间线记录</span> → 系统地图流程视图</div>
+            </div>
+            <div class="cat"><b>代码 7</b>
+              <details><summary>展开文件清单</summary>
+                <div class="plain mono">src/core/task/cli.ts<br>src/core/task/errors.ts<br>src/core/task/hooks.ts<br>src/core/task/index.ts<br>src/core/task/installer.ts<br>src/core/timeline/turn-state.ts<br>.claude/launch.json</div>
+              </details>
+            </div>
+            <div class="muted" style="font-size:12px">本任务无「数据库结构」「接口测试」产出(空类别不显示)</div>
+          </div>
+
+          <!-- 参考 -->
+          <div class="box">
+            <h3>参考 · 按命令记录推断 <span class="n">10</span></h3>
+            <div class="cat"><b>知识库 1</b>
+              <div><span class="link">features 需求阶段派生</span> → 知识库详情</div>
+              <div class="muted">查询过知识库概念:&lt;概念&gt; · &lt;概念&gt;</div>
+            </div>
+            <div class="cat"><b>代码地图 1</b>
+              <div><span class="link">系统交互</span> → 系统地图视图</div>
+            </div>
+            <div class="muted" style="font-size:12px">另有 8 个文件既被参考也是本任务产出(开发任务绑定、会话 id 来源约束等),只在产出栏显示</div>
+          </div>
+
+          <!-- 会话块:一条绑定一块 -->
+          <div>
+            <h3 style="font-size:13px">会话 <span class="n">8</span></h3>
+            <div class="sess">
+              <div class="hd"><span class="mono">b1ac8f3c</span><span>10-14 19:13 → 21:00</span><span class="tag">显式绑定</span><span>活跃 1h 42m · 工作 1h 42m · 0 commit</span></div>
+              <div class="bd"><details><summary>事件(504)· 15 轮</summary>
+                <div class="turn"><div class="muted">轮次 · 19:13 &lt;prompt 预览&gt;</div>
+                  <div class="ev"><span class="t">19:13</span><span class="tag">工具</span><span>Bash · git log …</span></div>
+                  <div class="ev"><span class="t">19:14</span><span class="tag">工具</span><span>Read · src/core/task/index.ts</span></div>
+                </div>
+                <div class="more">…(同样式,略)</div>
+              </details></div>
+            </div>
+            <div class="sess">
+              <div class="hd"><span class="mono">b1ac8f3c</span><span>10-14 21:40 → 生效中</span><span class="tag">需求目录自动绑定</span><span>活跃 15m · 工作 15m · 2 commit</span></div>
+              <div class="bd"><details open><summary>事件(31)· 4 轮</summary>
+                <div class="turn"><div class="muted">轮次 · 21:44 &lt;prompt 预览&gt;</div>
+                  <div class="ev"><span class="t">21:44</span><span class="tag">工具</span><span>Edit · src/core/task/hooks.ts</span></div>
+                  <div class="ev"><span class="t">21:45</span><span class="tag solid">commit</span><span class="mono">f170d46</span><span>fix(task): 会话开始默认先关联任务 · +10 −8</span></div>
+                </div>
+                <div class="turn"><div class="muted">轮次 · 21:55 &lt;prompt 预览&gt;</div>
+                  <div class="ev"><span class="t">21:56</span><span class="tag solid">commit</span><span class="mono">7782401</span><span>fix(task): 会话开始不再提示绑定 · +12 −14</span></div>
+                </div>
+              </details></div>
+            </div>
+          </div>
+
+          <p class="more">单个会话块事件超过 500 条时,末尾显示:还有 N 条未显示,用 <code>cgraphx task show &lt;任务&gt; --events --limit N</code> 查看 <span class="n">9</span></p>
+
+          <!-- 事件类型统计 -->
+          <div class="box">
+            <h3>事件类型统计</h3>
+            <div class="stats">
+              <div class="stat"><b>19</b><span>用户提问</span></div>
+              <div class="stat"><b>231</b><span>工具调用前</span></div>
+              <div class="stat"><b>266</b><span>工具调用后</span></div>
+              <div class="stat"><b>17</b><span>轮次结束</span></div>
+              <div class="stat"><b>2</b><span>commit</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 空态:任务从未绑定会话 -->
+        <div data-state="empty">
+          <div class="box" style="margin-top:12px"><h3>产出</h3><div class="empty" style="padding:16px">尚未绑定任何会话</div></div>
+          <div class="box"><h3>参考</h3><div class="empty" style="padding:16px">尚未绑定任何会话</div></div>
+          <div class="box"><h3>会话</h3><div class="empty" style="padding:16px">尚未绑定任何会话</div></div>
+        </div>
+
+        <!-- 异常:任务不存在 -->
+        <div class="empty" data-state="error">
+          404 · 找不到该任务<br>(沿用基座的 404 页)<br><span class="link" data-go="list">返回任务列表</span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside>
+    <h2>交互说明</h2>
+    <ol data-for="list">
+      <li>① 侧栏第 5 个入口「开发任务」,沿用既有应用壳</li>
+      <li>② 按最近活动倒序;从未绑定过会话的任务排最后,数字列显示「—」</li>
+      <li>③ 点任务名 → 任务详情。「进行中」= 存在未结束的绑定(任意会话)</li>
+      <li>④ web 不请求外部接口;页面无刷新、绑定、新建等任何写操作</li>
+      <li>状态切换:空态 = 一个任务都没有;异常 = 项目没装 task</li>
+    </ol>
+    <ol data-for="detail" start="5">
+      <li>⑤ 关联需求目录只显示路径,不可点</li>
+      <li>⑥ 会话数按不同会话去重(本例 1 个会话、2 段绑定);时长为各段之和</li>
+      <li>⑦ 产出按类别分组,只列现存文件;知识库、系统地图(code-map)、模型知识库(schema-knowledge)可点跳转,其余只显示路径;代码默认收起</li>
+      <li>⑧ 一条绑定一块(同一会话绑定两段 → 两块,各带绑定来源);事件默认折叠;展开后按轮次分组,行样式同时间线页;不跳时间线</li>
+      <li>⑨ 每个会话块最多 500 条事件</li>
+      <li>⑩ 参考:范围限知识库 / 代码地图(含 design-map)/ 数据库结构 / 需求文档,不列代码;命令里出现路径 ≠ 一定读过,故标「推断」;已在产出栏的文件不重复;链接规则同产出</li>
+      <li>状态切换:空态 = 任务从未绑定会话;异常 = 任务 id 不存在</li>
+    </ol>
+  </aside>
+</div>
+
+<script>
+  // 页面:URL hash 即当前页;状态:正常 / 空态 / 异常
+  const show = (page) => {
+    page = page || 'list';
+    document.querySelectorAll('section[data-page]').forEach(s => s.classList.toggle('on', s.dataset.page === page));
+    document.querySelectorAll('.pages a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + page));
+    document.querySelectorAll('aside ol').forEach(o => { o.hidden = o.dataset.for !== page; });
+  };
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  // 直接切页再写 hash:data: / 静态快照预览里 hashchange 不触发,不能只靠它
+  const goTo = (page) => {
+    show(page);
+    try { history.replaceState(null, '', '#' + page); } catch (_) { /* 预览环境不支持时忽略 */ }
+  };
+  document.addEventListener('click', (e) => {
+    const nav = e.target.closest('.pages a');
+    if (nav) { e.preventDefault(); goTo(nav.getAttribute('href').slice(1)); return; }
+    const go = e.target.closest('[data-go]');
+    if (go) goTo(go.dataset.go);
+    const st = e.target.closest('[data-to]');
+    if (st) {
+      document.body.dataset.cur = st.dataset.to;
+      document.querySelectorAll('[data-to]').forEach(b => b.setAttribute('aria-pressed', String(b === st)));
+    }
+    const op = e.target.closest('[data-opt-to]');
+    if (op) {
+      document.body.dataset.opt = op.dataset.optTo;
+      document.querySelectorAll('[data-opt-to]').forEach(b => b.setAttribute('aria-pressed', String(b === op)));
+    }
+  });
+  show(location.hash.slice(1));
+</script>
+</body>
+</html>

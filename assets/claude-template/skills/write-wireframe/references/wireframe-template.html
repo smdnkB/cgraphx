@@ -154,9 +154,16 @@
     document.querySelectorAll('aside ol').forEach(o => { o.hidden = o.dataset.for !== page; });
   };
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  // 直接切页再写 hash:data: / 静态快照预览里 hashchange 不触发,不能只靠它
+  const goTo = (page) => {
+    show(page);
+    try { history.replaceState(null, '', '#' + page); } catch (_) { /* 预览环境不支持时忽略 */ }
+  };
   document.addEventListener('click', (e) => {
+    const nav = e.target.closest('.pages a');
+    if (nav) { e.preventDefault(); goTo(nav.getAttribute('href').slice(1)); return; }
     const go = e.target.closest('[data-go]');
-    if (go) location.hash = go.dataset.go;
+    if (go) goTo(go.dataset.go);
     const st = e.target.closest('[data-to]');
     if (st) {
       document.body.dataset.cur = st.dataset.to;
