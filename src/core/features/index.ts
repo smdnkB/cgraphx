@@ -10,7 +10,7 @@ import { scanFeatures } from './scanner';
 import type { FeatureEntry, FeatureFilter } from './types';
 
 export type { FeatureEntry, FeatureFilter } from './types';
-export { scanFeatures, FEATURES_DIR } from './scanner';
+export { scanFeatures, readFeatureTask, scanFeatureTasks, FEATURES_DIR } from './scanner';
 
 /** 按 owner / q / stage 过滤(多条件取交集;空条件不过滤)。 */
 export function filterFeatures(

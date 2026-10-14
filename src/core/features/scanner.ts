@@ -13,6 +13,9 @@
  *   > 负责人: 张三
  *   > 日期: YYYY-MM-DD
  *
+ * 主 spec 头部的任务声明(`> 任务: <值>`)由 readFeatureTask / scanFeatureTasks 单独读取,
+ * 不进 FeatureEntry。
+ *
  * 需求阶段不读头部,由产物存在性派生(deriveStage):有测试报告 → 已验证,
  * 有 plan → 已规划,有 spec → 已规格,都没有 → null(未规格)。
  */
@@ -91,14 +94,12 @@ function compareSpecCandidates(a: string, b: string): number {
 }
 
 /**
- * 在一个 feature 目录里找元数据文件(读 负责人/日期 用):先 *-spec.md(或 spec.md),
- * 再 plan/*-index.md(或 plan/index.md)。都没有 → null(仅目录名可解析)。
- *
- * spec 候选按主 spec 优先遍历,取第一个头部读出负责人的——主 spec 头部残缺时
- * 仍可能从其他候选读出,且派生 spec 不再遮蔽主 spec(api-spec 的 'a' 字典序
- * 曾排在主 spec 的 's' 前,导致负责人恒丢失)。
+ * 认定需求目录的主 spec(读 负责人 / 任务 共用):*-spec.md(或 spec.md)候选按主 spec
+ * 优先遍历,取第一个头部读出负责人的——主 spec 头部残缺时仍可能从其他候选读出,
+ * 且派生 spec 不再遮蔽主 spec(api-spec 的 'a' 字典序曾排在主 spec 的 's' 前,
+ * 导致负责人恒丢失)。都读不出负责人取排序后的第一个;没有 spec → null。
  */
-function findMetaFile(featureDir: string): string | null {
+function findMainSpec(featureDir: string): string | null {
   let entries: string[];
   try {
     entries = fs.readdirSync(featureDir);
@@ -108,12 +109,21 @@ function findMetaFile(featureDir: string): string | null {
   const specs = entries
     .filter((n) => n.endsWith('-spec.md') || n === 'spec.md')
     .sort(compareSpecCandidates);
-  let mainSpec: string | null = null;
+  let first: string | null = null;
   for (const name of specs) {
     const file = path.join(featureDir, name);
-    if (mainSpec === null) mainSpec = file;
+    if (first === null) first = file;
     if (readHeaderMeta(file).owner !== null) return file;
   }
+  return first;
+}
+
+/**
+ * 在一个 feature 目录里找元数据文件(读 负责人/日期 用):先主 spec(findMainSpec),
+ * 再 plan/*-index.md(或 plan/index.md)。都没有 → null(仅目录名可解析)。
+ */
+function findMetaFile(featureDir: string): string | null {
+  const mainSpec = findMainSpec(featureDir);
   if (mainSpec !== null) return mainSpec;
   try {
     const planEntries = fs.readdirSync(path.join(featureDir, 'plan'));
@@ -204,5 +214,72 @@ export function scanFeatures(projectRoot: string): FeatureEntry[] {
       (b.date ?? '').localeCompare(a.date ?? '') ||
       a.title.localeCompare(b.title),
   );
+  return result;
+}
+
+/** 主 spec 头部的任务声明行(`> 任务: <值>`,全角冒号也认)。 */
+const TASK_HEADER_PATTERN = /^>\s*任务\s*[:：]\s*(.*?)\s*$/;
+
+/** feature-id 只能是 docs/features/ 下的单段目录名。 */
+function isPlainFeatureId(featureId: string): boolean {
+  return (
+    featureId !== '' &&
+    featureId !== '.' &&
+    featureId !== '..' &&
+    !featureId.includes('/') &&
+    !featureId.includes('\\')
+  );
+}
+
+/**
+ * 读需求目录主 spec 头部声明的任务值(spec §6.1)。
+ *
+ * 主 spec 的认定与读负责人相同(findMainSpec),不回退到 plan/index——任务只在 spec 里声明。
+ * 头部 30 行内只认第一条 `> 任务:` 行;值为空等同于未声明。目录 / spec 不存在或读不了 → null。
+ */
+export function readFeatureTask(projectRoot: string, featureId: string): string | null {
+  if (!isPlainFeatureId(featureId)) return null;
+  const mainSpec = findMainSpec(path.join(projectRoot, FEATURES_DIR, featureId));
+  if (mainSpec === null) return null;
+  let text: string;
+  try {
+    text = fs.readFileSync(mainSpec, 'utf-8');
+  } catch {
+    return null;
+  }
+  for (const line of text.split('\n').slice(0, HEADER_SCAN_LINES)) {
+    const m = TASK_HEADER_PATTERN.exec(line);
+    if (!m) continue;
+    const value = (m[1] ?? '').trim();
+    return value === '' ? null : value;
+  }
+  return null;
+}
+
+/**
+ * 扫描 docs/features/ 下所有主 spec 声明了任务的需求目录(只列有声明的)。
+ * path 为仓库相对 POSIX 路径(与 FeatureEntry.path 同格式)。目录不存在 → 空数组。
+ */
+export function scanFeatureTasks(
+  projectRoot: string,
+): Array<{ featureId: string; path: string; task: string }> {
+  let dirNames: string[];
+  try {
+    dirNames = fs
+      .readdirSync(path.join(projectRoot, FEATURES_DIR), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    return [];
+  }
+  const posixFeaturesDir = FEATURES_DIR.split(path.sep).join('/');
+  const result: Array<{ featureId: string; path: string; task: string }> = [];
+  for (const name of dirNames) {
+    const task = readFeatureTask(projectRoot, name);
+    if (task !== null) {
+      result.push({ featureId: name, path: `${posixFeaturesDir}/${name}`, task });
+    }
+  }
   return result;
 }
