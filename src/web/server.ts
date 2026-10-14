@@ -10,6 +10,9 @@
  *   GET /doc/<ident> 文档详情页(B-4:markdown 全文渲染 + 双向引用;ident 为
  *                    文档 ID 或项目相对路径,源文件路径仅从索引 DB 解析,spec §5.2)
  *   GET /timeline    开发时间线页(经 pages-timeline 渲染;门面 async,分支用 .then/.catch)
+ *   GET /map         系统地图首页(经 pages-codemap 渲染,2026-10-14-cgraphx-web系统地图)
+ *   GET /map/system/<name>、/map/flow/<name>
+ *                    系统交互 / 流程视图页(名字非法或视图不存在 → 404)
  *   GET /assets/*    静态资产(路径穿越防护 + 扩展名白名单)
  *   其他             404 页
  *   处理器抛错       500 页(可读原因,禁输出堆栈)
@@ -38,6 +41,8 @@ import {
   renderSchemaInsightsPage,
 } from './pages-schema';
 import { listTables, listProjects } from './schema-reader';
+import { renderCodemapHomePage, renderCodemapViewPage } from './pages-codemap';
+import { isSafeCodemapName, type CodemapKind } from './codemap-reader';
 import { escapeHtml } from './render-utils';
 
 /** 已启动的 web 服务句柄。 */
@@ -313,6 +318,53 @@ function handleSchema(
 }
 
 /**
+ * 系统地图路由(spec §3.2 / §3.3 / §5 / §7,2026-10-14-cgraphx-web系统地图)。
+ *
+ * 路由形态(契约 1):
+ *   GET /map、/map/                 地图首页
+ *   GET /map/system/<name>          系统交互视图(docs/code-map/<name>.md)
+ *   GET /map/flow/<name>            流程视图(docs/code-map/flows/<name>.md)
+ * 名字解码失败或格式非法(含 ../)→ 路由层 404,不进页面层;视图不存在 / 坏文件 →
+ * 页面层返回 status:404,此处统一出基座 404 页(契约 8)。其他形态 → 404。
+ */
+function handleCodemap(
+  res: http.ServerResponse,
+  ctx: HandlerContext,
+  pathname: string,
+): void {
+  const ctxPage = { version: ctx.version, localHost: ctx.localHost };
+  if (pathname === '/map' || pathname === '/map/') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(renderCodemapHomePage(ctx.projectRoot, ctxPage));
+    return;
+  }
+  const m = /^\/map\/(system|flow)\/([^/]+)$/.exec(pathname);
+  if (m === null) {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+  const kind = m[1] as CodemapKind;
+  let name: string;
+  try {
+    name = decodeURIComponent(m[2] ?? '');
+  } catch {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+  if (!isSafeCodemapName(name)) {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+  const result = renderCodemapViewPage(ctx.db, ctx.projectRoot, kind, name, ctxPage);
+  if (result.status === 404) {
+    sendNotFound(res, ctx, pathname);
+    return;
+  }
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(result.html);
+}
+
+/**
  * 单层名合法性(用于路由层工程名/表名校验,与 schema-reader.isSafeName 同口径)。
  *
  * 拒绝:空 / `.` / `..` / 含路径分隔符 / 含 `..` 子串 / 含 NUL。格式非法 →
@@ -367,6 +419,10 @@ function createRequestHandler(ctx: HandlerContext): http.RequestListener {
         }
         if (pathname === '/schema' || pathname.startsWith('/schema/')) {
           handleSchema(res, ctx, pathname);
+          return;
+        }
+        if (pathname === '/map' || pathname.startsWith('/map/')) {
+          handleCodemap(res, ctx, pathname);
           return;
         }
         if (pathname === '/doc' || pathname.startsWith('/doc/')) {

@@ -2374,3 +2374,104 @@ a.pager__btn:hover {
 }
 .insight-item__table:hover { text-decoration: underline; }
 .insight-item__text { flex: 1; word-break: break-all; }
+
+/* ---------- 系统地图(2026-10-14-cgraphx-web系统地图)---------- */
+
+.codemap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 28px 48px;
+}
+.codemap .schema-back { display: inline-block; margin-bottom: 12px; }
+.codemap__section { margin-bottom: 28px; }
+.codemap__list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.codemap__item {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.codemap__item-link {
+  display: block;
+  padding: 12px 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.codemap__item-link:hover { background: var(--surface-2); border-radius: 10px; }
+.codemap__item-title {
+  font-weight: 700;
+  color: var(--pine);
+}
+.codemap__item-summary {
+  margin: 6px 0 4px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.codemap__item-meta {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+}
+.codemap__none { color: var(--ink-3); font-size: 13px; margin: 10px 0 0; }
+.codemap__broken { padding: 12px 16px; opacity: 0.6; border-style: dashed; }
+.codemap__broken .codemap__item-title { color: var(--ink-3); font-weight: 500; }
+.codemap__broken .codemap__item-meta { margin-left: 10px; }
+.codemap__stale-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--rust);
+  background: var(--rust-tint);
+  vertical-align: 1px;
+}
+.codemap__meta {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.codemap__concepts {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+.codemap__concepts-lab { font-size: 12px; color: var(--ink-3); margin-right: 2px; }
+.codemap__concept {
+  padding: 1px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--pine-2);
+  color: var(--pine-2);
+  background: var(--pine-tint);
+  text-decoration: none;
+}
+a.codemap__concept:hover { background: var(--pine-2); color: #fff; }
+.codemap__concept--missing {
+  border-style: dashed;
+  border-color: var(--ink-3);
+  color: var(--ink-3);
+  background: transparent;
+  cursor: default;
+}
+.codemap__stale-box {
+  margin: 0 0 20px;
+  padding: 12px 16px;
+  border-left: 4px solid var(--rust);
+  background: var(--rust-tint);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.codemap__stale-box ul { margin: 6px 0; padding-left: 20px; }
+.codemap__stale-box p { margin: 4px 0 0; color: var(--ink-2); }
