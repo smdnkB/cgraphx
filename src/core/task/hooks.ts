@@ -127,8 +127,9 @@ function sessionStartContext(sessionId: string, current: CurrentBinding | null):
     return `当前会话已绑定开发任务:${ref} ${task.name}。当前会话 id:${sessionId}。`;
   }
   return (
-    '当前会话未绑定开发任务。用户开始具体开发任务时,先用 cgraphx task list 列出候选让用户选择,' +
-    '再执行 cgraphx task use <编号或名称>;纯咨询类对话无需绑定。' +
+    '当前会话未绑定开发任务。在本会话第一次回复用户之前,先执行 cgraphx task list 列出候选,' +
+    '请用户选择要关联的任务(也可以输入新任务名),再执行 cgraphx task use <编号或名称>;' +
+    '只有用户明确选择不关联时才跳过,并且本会话不再询问。' +
     `当前会话 id:${sessionId}(执行 cgraphx task 命令拿不到会话时用 --session 传入)。`
   );
 }
