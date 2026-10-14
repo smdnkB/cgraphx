@@ -1,0 +1,291 @@
+<!doctype html>
+<!--
+  线框 v1 · cgraphx web 系统地图(低保真)
+  feature-id: 2026-10-14-cgraphx-web系统地图
+  v1:首版。未拍板的两项用顶部「方案对照」开关切换查看:
+  - 图怎么显示:原文 / 画成图 / 离线退回原文
+  - 过期标记:显示 / 不显示
+  示例数据:取自 docs/code-map/系统交互.md 与 docs/code-map/flows/开发时间线记录.md 的真实
+  frontmatter、一句话、mermaid 原文与节点索引(source_commit 3c3d567 = 当前 HEAD,两份视图实际均未过期;
+  「异常」态的过期文件列表为演示占位)。
+  知识库条目页取真实条目 docs/knowledge/cgraphx-web.md;其「相关代码地图」一栏为占位——
+  现有视图的 concepts 无一与知识库条目同名(「开发时间线」无条目,系统交互 concepts 为空)。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>线框 v1 · 系统地图</title>
+<style>
+  /* 低保真:只用灰度,不用项目设计令牌;注意力放在布局与交互上 */
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: #222; background: #f4f4f4; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 16px; background: #fff; border-bottom: 1px solid #ccc; }
+  header h1 { font-size: 15px; margin: 0; }
+  .grp { display: flex; gap: 4px; align-items: center; }
+  .grp small { color: #666; margin-right: 2px; }
+  .states button, .opt button, .pages a { font: inherit; padding: 3px 10px; border: 1px solid #999; background: #fff; color: #222; cursor: pointer; text-decoration: none; border-radius: 3px; }
+  .states button[aria-pressed="true"], .opt button[aria-pressed="true"], .pages a.on { background: #333; color: #fff; border-color: #333; }
+  .optbar { display: flex; flex-wrap: wrap; gap: 16px; padding: 8px 16px; background: #e6e6e6; border-bottom: 1px dashed #999; }
+  .layout { display: grid; grid-template-columns: 1fr 280px; gap: 16px; padding: 16px; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  .frame { background: #fff; border: 2px solid #555; min-height: 460px; display: grid; grid-template-columns: 150px 1fr; }
+  .side { border-right: 1px dashed #999; padding: 12px; }
+  .side div { padding: 4px 6px; color: #666; }
+  .side .cur { background: #ddd; color: #222; font-weight: 600; }
+  .side .new { border: 1px dashed #333; }
+  .main { padding: 16px; min-width: 0; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 12px; }
+  .meta { color: #666; font-size: 12px; }
+  .box { border: 1px solid #999; padding: 10px; margin-bottom: 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; padding: 6px 4px; border-bottom: 1px dotted #bbb; }
+  .row b { min-width: 150px; }
+  .link { text-decoration: underline; cursor: pointer; }
+  .tag { display: inline-block; border: 1px solid #777; padding: 0 6px; margin-right: 4px; font-size: 12px; }
+  .tag.miss { border-style: dashed; color: #888; }
+  .mono { font-family: ui-monospace, Menlo, monospace; white-space: pre; font-size: 12px; background: #eee; padding: 8px; overflow-x: auto; margin: 0; }
+  .zone { border-left: 4px solid #777; background: #f0f0f0; }
+  .warn { border: 2px solid #333; background: #e8e8e8; padding: 8px 10px; margin-bottom: 10px; }
+  .empty { border: 2px dashed #999; padding: 28px; text-align: center; color: #555; }
+  .note { font-size: 12px; color: #666; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid #bbb; padding: 4px 6px; text-align: left; vertical-align: top; }
+  th { background: #eee; }
+  h3 { font-size: 14px; margin: 14px 0 6px; }
+  /* 「画成图」的低保真示意:灰框 + 箭头文字,不代表真实渲染效果 */
+  .dg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px; border: 1px solid #999; background: #fafafa; font-size: 12px; }
+  .dg span.nd { border: 1px solid #333; padding: 2px 8px; background: #fff; }
+  .dg span.db { border: 1px solid #333; border-radius: 10px; padding: 2px 8px; background: #fff; }
+  .dg i { font-style: normal; color: #555; }
+  .seq { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; font-size: 12px; border: 1px solid #999; background: #fafafa; padding: 10px; }
+  .seq .hd { border: 1px solid #333; background: #fff; text-align: center; padding: 2px; }
+  .seq .ln { grid-column: 1 / -1; color: #555; padding-left: 8px; border-left: 2px solid #999; }
+  .n { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: #222; color: #fff; font-size: 11px; margin-left: 4px; vertical-align: middle; font-style: normal; font-weight: normal; }
+  aside { background: #fff; border: 1px solid #ccc; padding: 12px; }
+  aside h2 { font-size: 13px; margin: 0 0 8px; }
+  aside li { margin-bottom: 6px; }
+  aside .open { margin-top: 12px; padding-top: 8px; border-top: 1px dashed #999; font-size: 12px; color: #444; }
+  /* 页面与状态切换 */
+  section[data-page] { display: none; }
+  section[data-page].on { display: block; }
+  [data-state] { display: none; }
+  body[data-cur="normal"] [data-state~="normal"],
+  body[data-cur="empty"] [data-state~="empty"],
+  body[data-cur="error"] [data-state~="error"] { display: block; }
+  /* 方案对照:图显示方式 */
+  .main [data-dg] { display: none; }
+  body[data-dg="src"] [data-dg~="src"],
+  body[data-dg="draw"] [data-dg~="draw"],
+  body[data-dg="offline"] [data-dg~="offline"] { display: block; }
+  /* 方案对照:过期标记 */
+  body[data-stale="off"] .stale-only { display: none !important; }
+</style>
+</head>
+<body data-cur="normal" data-dg="draw" data-stale="on">
+<header>
+  <h1>线框 v1 · 系统地图</h1>
+  <nav class="pages" aria-label="页面">
+    <a href="#home">地图首页</a><a href="#system">系统交互</a><a href="#flow">流程视图</a><a href="#doc">知识库条目页</a>
+  </nav>
+  <div class="states grp" role="group" aria-label="状态">
+    <button data-to="normal" aria-pressed="true">正常</button>
+    <button data-to="empty" aria-pressed="false">空态</button>
+    <button data-to="error" aria-pressed="false">异常</button>
+  </div>
+</header>
+<div class="optbar">
+  <div class="opt grp" role="group" aria-label="图怎么显示" data-opt="dg">
+    <small>方案对照 · 图怎么显示:</small>
+    <button data-v="src" aria-pressed="false">A 只显示原文</button>
+    <button data-v="draw" aria-pressed="true">B/C 画成图</button>
+    <button data-v="offline" aria-pressed="false">B 断网时</button>
+  </div>
+  <div class="opt grp" role="group" aria-label="过期标记" data-opt="stale">
+    <small>过期标记:</small>
+    <button data-v="on" aria-pressed="true">显示</button>
+    <button data-v="off" aria-pressed="false">不显示</button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="frame">
+    <div class="side">
+      <div>知识库</div><div>开发时间线</div><div>模型知识库</div>
+      <div class="cur new" id="nav-map">系统地图 <span class="n">1</span></div>
+    </div>
+
+    <div class="main">
+      <!-- ② 地图首页 -->
+      <section data-page="home">
+        <div class="bar"><b>系统地图</b><span class="meta">docs/code-map/ · 1 份系统交互 · 1 个流程</span></div>
+        <div data-state="normal error">
+          <div class="box">
+            <b class="link" data-go="system">系统交互</b> <span class="n">2</span>
+            <span class="tag stale-only" data-state="error">已过期</span>
+            <div>cgraphx 是本地 CLI:被 Claude Code 的 hook 和 agent 调用,读写项目内的 SQLite 与 markdown 文件;对外只有三类连接——只读查业务库、经 HTTP 只读查询接口查库、npm 自更新。</div>
+            <div class="meta">生成于 2026-10-14 · commit 3c3d567</div>
+          </div>
+          <h3>业务流程 <span class="n">3</span></h3>
+          <div class="row"><b class="link" data-go="flow">开发时间线记录</b><span>Claude Code 每个事件触发一个短命 hook 进程,把事件写进 timeline_events 表……</span><span class="meta">2026-10-14</span><span class="tag stale-only" data-state="error">已过期</span></div>
+          <div class="row" data-state="error" style="color:#888"><b>&lt;某视图文件名&gt;.md</b><span>头部格式无法解析 <span class="n">4</span></span></div>
+        </div>
+        <div class="empty" data-state="empty">还没有代码地图<br>在 Claude Code 中运行 <code>/code-map-write</code> 生成</div>
+      </section>
+
+      <!-- ③ 系统交互视图 -->
+      <section data-page="system">
+        <div class="bar"><b>系统交互 · 代码地图</b><span class="link" data-go="home">← 地图首页</span></div>
+        <div class="meta">生成于 2026-10-14 · commit 3c3d567 · 取结构方式:ai</div>
+        <div class="box zone">cgraphx 是本地 CLI:被 Claude Code 的 hook 和 agent 调用,读写项目内的 SQLite 与 markdown 文件;对外只有三类连接——只读查业务库、经 HTTP 只读查询接口查库、npm 自更新。</div>
+        <h3>交互图 <span class="n">5</span></h3>
+        <div class="note">看什么:实线是本仓库代码发起的调用,虚线是外部系统调用 cgraphx;除业务库和 npm 外,全部在本机。</div>
+        <div data-state="normal empty">
+          <div class="dg" data-dg="draw"><span class="nd">Claude Code</span><i>⇢</i><span class="nd">cgraphx CLI</span><i>→</i><span class="db">cgraphx.db</span><i>·</i><span class="db">docs/*</span><i>·</i><span class="db">业务库</span><i>·</i><span class="nd">HTTP 查询服务</span><i>·</i><span class="nd">npm</span>&nbsp;&nbsp;<span class="nd">浏览器</span><i>⇢</i><span class="nd">cgraphx web</span><i>→</i><span class="db">cgraphx.db</span></div>
+          <div data-dg="src offline">
+            <div class="note" data-dg="offline">⚠ 未联网,图无法绘制,显示原文</div>
+<pre class="mono">flowchart LR
+  cc[Claude Code] -. hook 子命令 / agent 调 CLI .-> cli[cgraphx CLI]
+  browser[浏览器] -. localhost .-> web[cgraphx web]
+  cli --> sqlite[(项目内 .cgraphx/cgraphx.db)]
+  web --> sqlite
+  cli -- 只读 SQL --> biz[(业务库&lt;br/&gt;MySQL / PostgreSQL)]
+  cli -- 只读查询接口 --> httpq[业务方 HTTP 查询服务]
+  cli -- upgrade --> npm[npm registry]
+  ...</pre>
+          </div>
+        </div>
+        <div data-state="error">
+          <div class="warn">图的写法有误,无法绘制,下面显示原文 <span class="n">6</span></div>
+          <pre class="mono">flowchart LR
+  cc[Claude Code] -. hook 子命令 .-&gt; cli[cgraphx CLI
+  ...</pre>
+        </div>
+        <h3>节点索引</h3>
+        <table>
+          <tr><th>连接</th><th>代码指针</th><th>来源</th></tr>
+          <tr><td>Claude Code → hook 子命令</td><td><code>src/core/timeline/cli.ts</code>(5 个隐藏子命令)</td><td>AI 读代码</td></tr>
+          <tr><td>CLI / web → SQLite</td><td><code>src/core/db/sqlite-adapter.ts</code></td><td>AI 读代码</td></tr>
+          <tr><td>CLI → 业务库</td><td><code>src/core/dbquery/drivers/mysql.ts</code>、<code>postgres.ts</code></td><td>AI 读代码</td></tr>
+          <tr><td colspan="3" class="meta">…共 6 行</td></tr>
+        </table>
+        <h3>已知盲区</h3>
+        <div>业务库与 HTTP 查询服务的具体地址来自目标项目的 <code>.cgraphx/db-profiles.json</code>,属运行时配置,图中不列实例。</div>
+      </section>
+
+      <!-- ④ 流程视图 -->
+      <section data-page="flow">
+        <div class="bar"><b>开发时间线记录 · 代码地图</b><span class="link" data-go="home">← 地图首页</span></div>
+        <div class="meta">生成于 2026-10-14 · commit 3c3d567 · 入口 <code>src/core/timeline/hooks.ts#userPromptHook</code></div>
+        <div style="margin:6px 0">概念:<span class="tag miss" title="知识库中没有这个概念">开发时间线</span> <span class="n">7</span></div>
+        <div class="warn stale-only" data-state="error">已过期:生成之后以下文件有改动,图可能和代码不符 <span class="n">8</span><br>
+          <code>&lt;related_code 中改动的文件&gt;</code><br><span class="note">在 Claude Code 中运行 <code>/code-map-write</code> 重新生成</span></div>
+        <div class="box zone">Claude Code 每个事件触发一个短命 hook 进程,把事件写进 <code>timeline_events</code> 表;同一轮对话的多个 hook 进程靠一个状态文件共享 <code>turn_id</code>。日报/周报和 web 时间线页只读这张表。</div>
+
+        <h3>代码链路:一轮对话中的 user_prompt 事件 <span class="n">5</span></h3>
+        <div class="note">看什么:turn_id 在哪里生成、经状态文件传给同轮的其他 hook;任何失败都不阻塞 Claude Code。</div>
+        <div class="seq" data-dg="draw">
+          <div class="hd">Claude Code</div><div class="hd">cli.ts</div><div class="hd">hooks.ts / hook-runner.ts</div><div class="hd">store.ts → cgraphx.db</div>
+          <div class="ln">Claude Code → cli.ts:timeline-user-prompt-hook(stdin 传 payload)</div>
+          <div class="ln">cli.ts → hooks.ts:userPromptHook() → runHook(buildEvent)</div>
+          <div class="ln">hooks.ts → timeline-current-turn.json:writeCurrentTurn</div>
+          <div class="ln">recorder.ts → store.ts:insert → INSERT timeline_events</div>
+          <div class="ln">退出(写库失败只写 stderr,不阻塞)</div>
+        </div>
+        <div data-dg="src offline">
+          <div class="note" data-dg="offline">⚠ 未联网,图无法绘制,显示原文</div>
+<pre class="mono">sequenceDiagram
+  participant CC as Claude Code
+  participant CLI as cli.ts&lt;br/&gt;隐藏 hook 子命令
+  participant H as hooks.ts
+  ...
+  CC->>CLI: timeline-user-prompt-hook(stdin 传 payload)
+  CLI->>H: userPromptHook()
+  ...(共 25 行)</pre>
+        </div>
+
+        <h3>数据流转</h3>
+        <div class="note">看什么:只有 hook 写表,读方都只读;状态文件只在同一轮的 hook 之间传值。</div>
+        <div class="dg" data-dg="draw"><span class="nd">user_prompt hook</span><i>写 turn_id →</i><span class="db">timeline-current-turn.json</span><i>→ 读</i><span class="nd">pre/post/stop hook</span><i>·</i><span class="nd">各 hook</span><i>INSERT →</i><span class="db">timeline_events</span><i>→ 查询</i><span class="nd">timeline 命令</span><span class="nd">web 时间线页</span></div>
+        <pre class="mono" data-dg="src offline">flowchart LR
+  up[user_prompt hook] -- 写 turn_id --> tf[(timeline-current-turn.json)]
+  tf -- 读 turn_id --> rest[pre / post / stop hook]
+  up -- INSERT --> ev[(timeline_events)]
+  ...</pre>
+
+        <h3>节点索引</h3>
+        <table>
+          <tr><th>节点</th><th>代码指针</th><th>来源</th></tr>
+          <tr><td>隐藏 hook 子命令</td><td><code>src/core/timeline/cli.ts</code>:<code>timeline-user-prompt-hook</code> 等 5 个</td><td>AI 读代码</td></tr>
+          <tr><td>runHook</td><td><code>src/core/timeline/hook-runner.ts</code>:<code>runHook</code></td><td>AI 读代码</td></tr>
+          <tr><td>web 时间线页</td><td><code>src/web/pages-timeline.ts</code></td><td>AI 读代码</td></tr>
+          <tr><td colspan="3" class="meta">…共 7 行</td></tr>
+        </table>
+        <h3>已知盲区</h3>
+        <div>pre_tool_use 只记录写类工具(白名单过滤),图中未展开过滤分支。<br>git_commit hook 由 <code>cgraphx timeline install</code> 接入 git 侧,接入路径未画。</div>
+      </section>
+
+      <!-- ⑤ 知识库条目页(既有页面,只加一栏) -->
+      <section data-page="doc">
+        <div class="bar"><b>cgraphx web</b><span class="meta">business-entity · 知识库条目页(既有)</span></div>
+        <div class="box" style="color:#888">元数据网格 · 摘要块 · 引用分区(既有,不变)</div>
+        <div class="box zone" data-state="normal">相关代码地图 <span class="n">9</span>
+          <div class="row"><b class="link" data-go="flow">&lt;流程视图名&gt;</b><span class="meta">concepts 含「cgraphx web」的视图(当前不存在,占位)</span><span class="tag stale-only">已过期</span></div>
+        </div>
+        <div class="note" data-state="empty error">(没有相关视图时,不显示「相关代码地图」一栏——这是当前的真实情况)</div>
+        <div class="box" style="color:#888">源文件 markdown 全文(既有,不变)</div>
+      </section>
+    </div>
+  </div>
+
+  <aside>
+    <h2>交互说明</h2>
+    <ol data-for="home">
+      <li>① 侧栏第四个入口,与已有三项并列(虚线框为本次新增)</li>
+      <li>② 系统交互单独置顶:一个项目只有一份</li>
+      <li>③ 流程列表:流程名 + 一句话 + 生成日期;点流程名进流程视图</li>
+      <li>④ 切到「异常」:头部格式坏的视图怎么呈现——列出但不可点,还是直接不显示?</li>
+    </ol>
+    <ol data-for="system" start="5">
+      <li>⑤ 用顶部「方案对照」切换图的显示方式;灰框示意仅表示「画成了图」,不代表真实样式</li>
+      <li>⑥ 切到「异常」:mermaid 写法错时退回原文 + 提示</li>
+    </ol>
+    <ol data-for="flow" start="7">
+      <li>⑦ 概念标签点了跳知识库条目;「开发时间线」在知识库里没有条目,这里画成虚线、不可点(真实现状)</li>
+      <li>⑧ 切到「异常」看过期提示;用「过期标记:不显示」对照不提示的样子</li>
+    </ol>
+    <ol data-for="doc" start="9">
+      <li>⑨ 反向跳转:知识库条目页加「相关代码地图」一栏,列出 concepts 含本条目概念的视图;没有就整栏不出现</li>
+    </ol>
+    <div class="open">⑤ 的「B 断网时」= 方案 B(联网时画图)断网的样子;方案 C(打包进程序)断网也是「画成图」。</div>
+  </aside>
+</div>
+
+<script>
+  // 页面:URL hash 即当前页;状态:正常 / 空态 / 异常;方案对照:写到 body 的 data 属性
+  const show = (page) => {
+    page = page || 'home';
+    document.querySelectorAll('section[data-page]').forEach(s => s.classList.toggle('on', s.dataset.page === page));
+    document.querySelectorAll('.pages a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + page));
+    document.querySelectorAll('aside ol').forEach(o => { o.hidden = o.dataset.for !== page; });
+    document.getElementById('nav-map').classList.toggle('cur', page !== 'doc');
+  };
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  document.addEventListener('click', (e) => {
+    const go = e.target.closest('[data-go]');
+    if (go) location.hash = go.dataset.go;
+    const st = e.target.closest('[data-to]');
+    if (st) {
+      document.body.dataset.cur = st.dataset.to;
+      document.querySelectorAll('[data-to]').forEach(b => b.setAttribute('aria-pressed', String(b === st)));
+    }
+    const ob = e.target.closest('.opt button');
+    if (ob) {
+      const grp = ob.parentElement;
+      document.body.dataset[grp.dataset.opt] = ob.dataset.v;
+      grp.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === ob)));
+    }
+  });
+  show(location.hash.slice(1));
+</script>
+</body>
+</html>
