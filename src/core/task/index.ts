@@ -35,6 +35,7 @@ export type {
 export {
   TaskError,
   TaskConfigError,
+  TaskNotEnabledError,
   TaskArgError,
   TaskStoreError,
   TaskSourceUnavailableError,

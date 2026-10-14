@@ -8,7 +8,8 @@
 import path from 'node:path';
 
 import { readFeatureTask, scanFeatureTasks } from '../features';
-import { isKillSwitchOn, queryEvents, type TimelineEvent } from '../timeline';
+import { isKillSwitchOn, type TimelineEvent } from '../timeline';
+import { queryBindingEvents } from './attribution';
 import { bindSessionCore } from './binding';
 import { TaskArgError } from './errors';
 import { findTask, resolveDeclaredTask } from './resolve';
@@ -19,9 +20,6 @@ import type { AutoBindOutcome, TaskDetail, TaskItem } from './types';
 
 /** 改动文件(相对项目根的 POSIX 路径)所在的需求目录。 */
 const FEATURE_DIR_PATTERN = /^docs\/features\/([^/]+)\//;
-
-/** 单条绑定区间内拉取事件的上限(timeline 查询硬上限)。 */
-const EVENTS_PER_BINDING_LIMIT = 10_000;
 
 /** `task show --events` 默认明细条数。 */
 const DEFAULT_DETAIL_EVENT_LIMIT = 100;
@@ -116,20 +114,11 @@ export async function getTaskDetail(
     conn.close();
   }
 
-  // 每条绑定区间单独查询;timeline 的 until 是闭区间,这里再剔除 ts >= unbound_at(左闭右开)
+  // 每条绑定区间单独查询(左闭右开在 queryBindingEvents 内处理),按 id 去重合并
   const byId = new Map<number, TimelineEvent>();
   for (const b of detail.sessions) {
-    const events = await queryEvents(projectRoot, {
-      session: b.sessionId,
-      since: b.boundAt,
-      until: b.unboundAt ?? undefined,
-      limit: EVENTS_PER_BINDING_LIMIT,
-    });
-    for (const e of events) {
-      if (e.ts < b.boundAt) continue;
-      if (b.unboundAt !== null && e.ts >= b.unboundAt) continue;
-      byId.set(e.id, e);
-    }
+    const { events } = await queryBindingEvents(projectRoot, b);
+    for (const e of events) byId.set(e.id, e);
   }
   const attributed = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts) || a.id - b.id);
 

@@ -253,6 +253,16 @@ export class TaskStore {
     return r.changes > 0;
   }
 
+  /** 全部绑定,按 task_id、bound_at、id 升序。 */
+  listAllBindings(): TaskBinding[] {
+    const rows = this.guard('列出全部绑定', () =>
+      this.db
+        .prepare(`SELECT ${BINDING_COLUMNS} FROM task_sessions ORDER BY task_id, bound_at, id`)
+        .all(),
+    ) as TaskSessionRow[];
+    return rows.map(rowToBinding);
+  }
+
   /** 任务的全部绑定,按 bound_at、id 升序。 */
   listBindingsForTask(taskId: number): TaskBinding[] {
     const rows = this.guard('列出任务绑定', () =>

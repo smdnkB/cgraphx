@@ -21,6 +21,14 @@ export class TaskConfigError extends TaskError {
   }
 }
 
+/** 项目库存在但没有 task 表(task 子系统出现之前安装、之后未重装)。 */
+export class TaskNotEnabledError extends TaskConfigError {
+  constructor(message = '本项目尚未启用开发任务,运行 `cgraphx install` 后可用', options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'TaskNotEnabledError';
+  }
+}
+
 /** 参数错误、会话拿不到、任务解析失败。 */
 export class TaskArgError extends TaskError {
   constructor(message: string, options?: { cause?: unknown }) {

@@ -11,7 +11,7 @@ import path from 'node:path';
 
 import { DatabaseConnection, getDatabasePath, type SqliteDatabase } from '../db';
 import { TASK_SCHEMA_VERSION } from './constants';
-import { TaskConfigError, TaskError, TaskStoreError } from './errors';
+import { TaskConfigError, TaskError, TaskNotEnabledError, TaskStoreError } from './errors';
 
 /** schema.sql 与编译后的模块同目录(dist 镜像 src)。 */
 function resolveSchemaPath(): string {
@@ -75,6 +75,43 @@ export function openTaskDb(projectRoot: string): DatabaseConnection {
   } catch (err) {
     connection.close();
     throw err;
+  }
+  return connection;
+}
+
+/**
+ * 只读打开项目共享库:不应用 schema、不建表(供 web 等只读调用方使用)。调用方负责 `close()`。
+ *
+ * 存在性检查必须先于 `DatabaseConnection.open`——open 会在 DB 不存在时创建文件。
+ *
+ * @throws TaskConfigError 项目未初始化(`.cgraphx/cgraphx.db` 不存在)。
+ * @throws TaskNotEnabledError 库中没有 `task_schema_versions` 表。
+ * @throws TaskStoreError 查询 sqlite_master 失败。
+ */
+export function openTaskDbReadOnly(projectRoot: string): DatabaseConnection {
+  const resolved = path.resolve(projectRoot);
+  const dbPath = getDatabasePath(resolved);
+
+  if (!fs.existsSync(dbPath)) {
+    throw new TaskConfigError(`cgraphx 未在 ${resolved} 初始化,请先运行 \`cgraphx install\``);
+  }
+
+  const connection = DatabaseConnection.open(dbPath);
+  let present: boolean;
+  try {
+    const row = connection
+      .getDb()
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='task_schema_versions'`)
+      .get();
+    present = row !== undefined;
+  } catch (err) {
+    connection.close();
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new TaskStoreError(`读取 task 表信息失败:${msg}。检查 .cgraphx/cgraphx.db 是否损坏`, { cause: err });
+  }
+  if (!present) {
+    connection.close();
+    throw new TaskNotEnabledError();
   }
   return connection;
 }
