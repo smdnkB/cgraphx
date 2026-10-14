@@ -9,7 +9,7 @@
 
 ## DDL 层
 
-- 表命名空间:每子系统拥有前缀表(`markdown_*` / `timeline_*`),共用一个 `.cgraphx/cgraphx.db`
+- 表命名空间:每子系统拥有前缀表(`markdown_*` / `timeline_*` / `task_*`),共用一个 `.cgraphx/cgraphx.db`
 - `schema.sql` 必须全幂等(一律 `CREATE ... IF NOT EXISTS`),由 schema-bootstrap 重复应用
 - 每子系统自有版本表(`<prefix>_schema_versions`,每版本一条 `INSERT OR IGNORE`);表结构变更 = schema.sql 追加 + 加版本号,不改旧版本记录
 
