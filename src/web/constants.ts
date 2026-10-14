@@ -7,6 +7,7 @@
  */
 
 import type { DocumentType, DocumentStatus } from '../core/markdown';
+import type { ArtifactCategory, BindSource, TaskSource } from '../core/task';
 import type { EventType } from '../core/timeline';
 
 /** 列表页大小(plan index 第 4 节推荐:服务端分页 30/页)。 */
@@ -131,3 +132,24 @@ export const CODE_MAP_FLOWS_SUBDIR = 'flows';
 
 /** 过期判定 git 调用超时(毫秒);超时视为无法判断。 */
 export const CODE_MAP_GIT_TIMEOUT_MS = 3000;
+
+// ----- 开发任务页(2026-10-14-cgraphx-web开发任务浏览)-----------------------
+
+/** 会话块事件显示上限(spec §7.3)。 */
+export const TASK_SEGMENT_EVENT_LIMIT = 500;
+
+/** 任务来源显示名。 */
+export const TASK_SOURCE_LABELS: Record<TaskSource, string> = { api: '接口', manual: '手动' };
+
+/** 绑定来源显示名。 */
+export const BIND_SOURCE_LABELS: Record<BindSource, string> = { cli: '显式绑定', feature_dir: '需求目录自动绑定' };
+
+/** 产出 / 参考类别显示名(spec §5.2)。 */
+export const ARTIFACT_CATEGORY_LABELS: Record<ArtifactCategory, string> = {
+  'feature-doc': '需求文档',
+  knowledge: '知识库',
+  schema: '数据库结构',
+  diagram: '业务图',
+  'api-test': '接口测试',
+  code: '代码',
+};

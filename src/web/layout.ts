@@ -14,7 +14,7 @@
 import { escapeHtml } from './render-utils';
 
 /** 当前导航激活项。'none' 表示错误页等非导航页面。 */
-export type ShellActive = 'knowledge' | 'timeline' | 'schema' | 'codemap' | 'none';
+export type ShellActive = 'knowledge' | 'timeline' | 'schema' | 'codemap' | 'tasks' | 'none';
 
 /** 侧栏导航条目。href 为 null → 「后续」灰置占位(不可点击)。 */
 function navItem(label: string, glyph: string, href: string | null, key: ShellActive, active: ShellActive): string {
@@ -77,6 +77,7 @@ export function renderShellPage(opts: {
       ${navItem('模型知识库', '⛁', '/schema', 'schema', active)}
       ${schemaChildren}
       ${navItem('系统地图', '⌖', '/map', 'codemap', active)}
+      ${navItem('开发任务', '▤', '/tasks', 'tasks', active)}
     </nav>
     <div class="nav__foot">cgraphx v${escapeHtml(version)}<br>local · read-only viewer</div>
   </aside>
