@@ -139,3 +139,25 @@ export function renderCodemapViewContent(detail: CodemapViewDetail, linkableConc
       <div class="prose">${renderMarkdownBody(dropFirstH1(detail.body))}</div>
     </div>`;
 }
+
+/**
+ * 知识库详情页「相关代码地图」一栏(spec §3.6 反向)。entries 为空 → '',整栏不出现。
+ * 复用既有 detail__seclab / refs__* 样式与 T-2 的 codemap__stale-tag,不新增 CSS。
+ */
+export function renderRelatedCodemapSection(entries: CodemapViewEntry[]): string {
+  if (entries.length === 0) return '';
+  const items = entries
+    .map((e) => `
+        <li class="refs__item">
+          <a class="refs__link" href="${escapeHtml(codemapViewHref(e))}">
+            <span class="refs__title">${escapeHtml(e.title ?? e.name)}</span>${staleTag(e)}
+          </a>
+        </li>`)
+    .join('');
+  return `
+        <section class="detail__codemap">
+          <div class="detail__seclab">相关代码地图 <i>CODE MAP</i></div>
+          <ul class="refs__list">${items}
+          </ul>
+        </section>`;
+}

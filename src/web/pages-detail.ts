@@ -28,6 +28,8 @@ import { TYPE_LABELS, STATUS_LABELS, TYPE_TONES } from './constants';
 import { renderShellPage } from './layout';
 import { escapeHtml, docTime, epochTime, type TimeModel } from './render-utils';
 import { renderMarkdownBody } from './markdown';
+import { findCodemapViewsByConcepts } from './codemap-reader';
+import { renderRelatedCodemapSection } from './codemap-templates';
 
 // ----- 局部渲染 ------------------------------------------------------------
 
@@ -256,6 +258,7 @@ export function renderDetailPage(
         ${renderIdentity(doc)}
         ${renderMetaGrid(doc)}
         ${renderSummary(doc)}
+        ${renderRelatedCodemapSection(findCodemapViewsByConcepts(projectRoot, doc.concepts))}
         <section class="detail__fulltext">
           <div class="detail__seclab">正文 <i>FULL TEXT</i></div>
           ${renderSourceBody(projectRoot, doc)}
