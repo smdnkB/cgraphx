@@ -5,6 +5,7 @@
   v1 → v2 变化:
   - 单工程时跳过工程列表,直达表清单(clarify 决策:单项列表空转无意义)
   - 经验沉淀从详情页内的折叠块,改为表清单页右上角的独立入口(看了 v1 才发现:经验要跨表看)
+  待拍板(方案对照开关):表清单排序——A 按 INDEX 原序 / B 有经验的表排前
   示例数据:取自 docs/schema-knowledge/zqassis-service/ 的真实表名、注释与 DISCOVERED 条目。
   (本文件是 write-wireframe 的示范样张,上面的数据为示意;实际生成时必须从目标项目真实数据取,并照此注明来源。)
 -->
@@ -19,8 +20,9 @@
   body { margin: 0; font: 14px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: #222; background: #f4f4f4; }
   header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 16px; background: #fff; border-bottom: 1px solid #ccc; }
   header h1 { font-size: 15px; margin: 0; }
-  .states button, .pages a { font: inherit; padding: 3px 10px; border: 1px solid #999; background: #fff; color: #222; cursor: pointer; text-decoration: none; border-radius: 3px; }
-  .states button[aria-pressed="true"], .pages a.on { background: #333; color: #fff; border-color: #333; }
+  .states button, .opts button, .pages a { font: inherit; padding: 3px 10px; border: 1px solid #999; background: #fff; color: #222; cursor: pointer; text-decoration: none; border-radius: 3px; }
+  .opts { padding: 2px 8px; background: #e6e6e6; border-radius: 3px; }
+  .states button[aria-pressed="true"], .opts button[aria-pressed="true"], .pages a.on { background: #333; color: #fff; border-color: #333; }
   .layout { display: grid; grid-template-columns: 1fr 260px; gap: 16px; padding: 16px; }
   @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
   .frame { background: #fff; border: 2px solid #555; min-height: 420px; display: grid; grid-template-columns: 140px 1fr; }
@@ -40,16 +42,20 @@
   aside { background: #fff; border: 1px solid #ccc; padding: 12px; }
   aside h2 { font-size: 13px; margin: 0 0 8px; }
   aside li { margin-bottom: 6px; }
-  /* 页面与状态切换 */
-  section[data-page] { display: none; }
-  section[data-page].on { display: block; }
-  [data-state] { display: none; }
-  body[data-cur="normal"] [data-state~="normal"],
-  body[data-cur="empty"] [data-state~="empty"],
-  body[data-cur="error"] [data-state~="error"] { display: block; }
+  /* 页面 / 状态 / 方案切换
+     body 只放「当前值」(data-cur 状态、data-opt 方案);隐藏规则一律写成 `.main [...]`,
+     只作用于内容区。写成裸的 `[data-xxx] { display:none }` 会连 body 一起命中 → 整页空白且不报错。 */
+  .main section[data-page] { display: none; }
+  .main section[data-page].on { display: block; }
+  .main [data-state], .main [data-opt] { display: none; }
+  body[data-cur="normal"] .main [data-state~="normal"],
+  body[data-cur="empty"] .main [data-state~="empty"],
+  body[data-cur="error"] .main [data-state~="error"],
+  body[data-opt="a"] .main [data-opt~="a"],
+  body[data-opt="b"] .main [data-opt~="b"] { display: block; }
 </style>
 </head>
-<body data-cur="normal">
+<body data-cur="normal" data-opt="a">
 <header>
   <h1>线框 v2 · 数据库入口</h1>
   <nav class="pages" aria-label="页面">
@@ -59,6 +65,12 @@
     <button data-to="normal" aria-pressed="true">正常</button>
     <button data-to="empty" aria-pressed="false">空态</button>
     <button data-to="error" aria-pressed="false">异常</button>
+  </div>
+  <!-- 方案对照:只为 clarify 还没拍板的选项而设,拍板后下一版删掉 -->
+  <div class="opts" role="group" aria-label="方案对照">
+    方案对照 · 表清单排序:
+    <button data-opt-to="a" aria-pressed="true">A 按 INDEX 原序</button>
+    <button data-opt-to="b" aria-pressed="false">B 有经验的表排前</button>
   </div>
 </header>
 
@@ -73,9 +85,16 @@
       <section data-page="tables" data-notes="tables">
         <div class="bar"><b>表清单 · zqassis-service</b><span class="link" data-go="insights">经验沉淀 →</span><span class="n">3</span></div>
         <div data-state="normal">
-          <div class="row"><b class="link" data-go="ddl">so_order</b><span>订单主表</span><span class="n">2</span></div>
-          <div class="row"><b class="link" data-go="ddl">so_order_item</b><span>订单明细</span></div>
-          <div class="row"><b class="link" data-go="ddl">pkg_instance</b><span>礼包实例</span></div>
+          <div data-opt="a">
+            <div class="row"><b class="link" data-go="ddl">pkg_instance</b><span>礼包实例</span></div>
+            <div class="row"><b class="link" data-go="ddl">so_order</b><span>订单主表 · 经验 2 条</span><span class="n">2</span></div>
+            <div class="row"><b class="link" data-go="ddl">so_order_item</b><span>订单明细</span></div>
+          </div>
+          <div data-opt="b">
+            <div class="row"><b class="link" data-go="ddl">so_order</b><span>订单主表 · 经验 2 条</span><span class="n">2</span></div>
+            <div class="row"><b class="link" data-go="ddl">pkg_instance</b><span>礼包实例</span></div>
+            <div class="row"><b class="link" data-go="ddl">so_order_item</b><span>订单明细</span></div>
+          </div>
           <div class="row" style="color:#888">…共 128 张(INDEX 中标 missing 的不显示)</div>
         </div>
         <div class="empty" data-state="empty">未导出 schema-knowledge<br>先运行 <code>/export-table-ddl</code> 建基线</div>
@@ -111,6 +130,7 @@
 
   <aside>
     <h2>交互说明</h2>
+    <p style="color:#555">方案对照:顶部切 A / B,看表清单排序差异——有经验的表在 B 里排到最前。</p>
     <ol data-for="tables">
       <li>① 侧栏第三入口由灰置变为可点;只有一个工程时直达本页</li>
       <li>② 点表名 → 单表 DDL</li>
@@ -141,6 +161,11 @@
     if (st) {
       document.body.dataset.cur = st.dataset.to;
       document.querySelectorAll('[data-to]').forEach(b => b.setAttribute('aria-pressed', String(b === st)));
+    }
+    const op = e.target.closest('[data-opt-to]');
+    if (op) {
+      document.body.dataset.opt = op.dataset.optTo;
+      document.querySelectorAll('[data-opt-to]').forEach(b => b.setAttribute('aria-pressed', String(b === op)));
     }
   });
   show(location.hash.slice(1));
