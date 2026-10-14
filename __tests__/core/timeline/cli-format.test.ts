@@ -201,12 +201,12 @@ describe('describeEvent — per-event-type summary', () => {
 
   it('stop: with duration_ms shows milliseconds', () => {
     const e = makeEvent({ event_type: 'stop', duration_ms: 45000 });
-    expect(describeEvent(e)).toBe('session ended (45000ms)');
+    expect(describeEvent(e)).toBe('turn ended (45000ms)');
   });
 
   it('stop: without duration_ms shows plain message', () => {
     const e = makeEvent({ event_type: 'stop', duration_ms: null });
-    expect(describeEvent(e)).toBe('session ended');
+    expect(describeEvent(e)).toBe('turn ended');
   });
 });
 
@@ -246,7 +246,7 @@ describe('renderEventsTable — column layout', () => {
     const out = renderEventsTable([e]);
     const lines = out.split('\n');
     expect(lines[1]).toContain('stop');
-    expect(lines[1]).toContain('session ended (1000ms)');
+    expect(lines[1]).toContain('turn ended (1000ms)');
     // header line has "tool_name" so the column is there; row 1's tool_name cell is empty
     expect(lines[0]).toContain('tool_name');
   });
@@ -341,8 +341,8 @@ describe('renderEventsTable — B-7 turn column', () => {
     expect(lines[0]).toContain('turn');
     // row contains the dash placeholder
     expect(lines[1]).toContain('-');
-    // session ended summary still rendered
-    expect(lines[1]).toContain('session ended (1000ms)');
+    // turn ended summary still rendered
+    expect(lines[1]).toContain('turn ended (1000ms)');
   });
 
   it('column order is id | ts | event_type | tool_name | turn | summary', () => {

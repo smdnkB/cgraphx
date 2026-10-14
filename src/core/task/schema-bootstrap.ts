@@ -11,7 +11,7 @@ import path from 'node:path';
 
 import { DatabaseConnection, getDatabasePath, type SqliteDatabase } from '../db';
 import { TASK_SCHEMA_VERSION } from './constants';
-import { TaskConfigError } from './errors';
+import { TaskConfigError, TaskError, TaskStoreError } from './errors';
 
 /** schema.sql 与编译后的模块同目录(dist 镜像 src)。 */
 function resolveSchemaPath(): string {
@@ -30,12 +30,24 @@ function getCurrentTaskSchemaVersion(db: SqliteDatabase): number {
  * 在已打开的连接上应用 task schema(幂等,可每次打开都调用)。
  *
  * @throws TaskConfigError 库里记录的版本比本构建支持的新(需要升级 cgraphx)。
+ * @throws TaskStoreError 读取 schema.sql 或应用 schema 时的 DB 异常。
  */
 export function ensureTaskSchema(db: SqliteDatabase): void {
-  const sql = fs.readFileSync(resolveSchemaPath(), 'utf-8');
-  db.exec(sql);
+  let current: number;
+  try {
+    const sql = fs.readFileSync(resolveSchemaPath(), 'utf-8');
+    db.exec(sql);
+    current = getCurrentTaskSchemaVersion(db);
+  } catch (err) {
+    if (err instanceof TaskError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new TaskStoreError(
+      `task schema 应用失败:${msg}。检查 .cgraphx/cgraphx.db 是否可写、未损坏,` +
+        '或运行 `cgraphx install` 重新初始化',
+      { cause: err },
+    );
+  }
 
-  const current = getCurrentTaskSchemaVersion(db);
   if (current > TASK_SCHEMA_VERSION) {
     throw new TaskConfigError(
       `task schema 版本 ${current} 比当前 cgraphx 支持的版本 ${TASK_SCHEMA_VERSION} 新,` +

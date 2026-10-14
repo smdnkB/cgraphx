@@ -17,20 +17,18 @@
 import type { Command } from 'commander';
 
 import { resolveProjectRoot } from '../directory';
-import type { TimelineEvent } from '../timeline';
+import { describeEvent, type TimelineEvent } from '../timeline';
 import {
   bindSession,
   clearBinding,
-  findTask,
+  findTaskByValue,
   getCurrentBinding,
   getTaskDetail,
   listTasks,
-  openTaskDb,
   resolveSessionId,
   resolveTaskForUse,
   taskPostToolUseHook,
   taskSessionStartHook,
-  TaskStore,
 } from './index';
 import { TaskArgError, TaskConfigError, TaskStoreError } from './errors';
 import type {
@@ -235,33 +233,9 @@ function renderEvents(events: TimelineEvent[]): string {
     e.event_type,
     e.tool_name ?? '',
     e.turn_id ? e.turn_id.slice(0, 8) : '-',
-    summarizeEvent(e),
+    describeEvent(e),
   ]);
   return renderTable(['id', 'ts(local)', 'event_type', 'tool_name', 'turn', 'summary'], cells, '  ');
-}
-
-function summarizeEvent(e: TimelineEvent): string {
-  switch (e.event_type) {
-    case 'user_prompt':
-      return truncate(e.prompt_text ?? '', 120);
-    case 'git_commit':
-      return [e.commit_hash?.slice(0, 7), e.commit_message ? truncate(e.commit_message, 100) : null]
-        .filter((p): p is string => Boolean(p))
-        .join(' ');
-    case 'pre_tool_use':
-    case 'post_tool_use': {
-      const args = e.tool_args;
-      if (!args || typeof args !== 'object') return '';
-      const r = args as Record<string, unknown>;
-      for (const key of ['file_path', 'path', 'command', 'url', 'query', 'skill']) {
-        const v = r[key];
-        if (typeof v === 'string') return truncate(v, 120);
-      }
-      return '';
-    }
-    default:
-      return '';
-  }
 }
 
 function renderShow(detail: TaskDetail): string {
@@ -311,16 +285,11 @@ function parseLimit(raw: string | undefined): number | undefined {
 
 /** `show` 只按本地 id → 接口编号 → 手动任务名称解析(spec §5.5),不联网、不新建。 */
 function findTaskOrThrow(projectRoot: string, value: string): TaskItem {
-  const conn = openTaskDb(projectRoot);
-  try {
-    const task = findTask(new TaskStore(conn.getDb()), value);
-    if (!task) {
-      throw new TaskArgError(`找不到任务 ${value};用 cgraphx task list 查看可用任务的本地 id / 编号 / 名称`);
-    }
-    return task;
-  } finally {
-    conn.close();
+  const task = findTaskByValue(projectRoot, value);
+  if (!task) {
+    throw new TaskArgError(`找不到任务 ${value};用 cgraphx task list 查看可用任务的本地 id / 编号 / 名称`);
   }
+  return task;
 }
 
 /** 把 `task` 命令组挂到 commander 程序上。主 CLI 调用一次。 */

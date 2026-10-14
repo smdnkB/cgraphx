@@ -44,14 +44,17 @@ export const DISABLED_RESPONSE_TEXT = '';
  * 唯一事实来源:installer(写 settings.json)和 cli.ts(注册实际命令)都从这里读,
  * 不会因手误不同步。
  */
-export const HOOK_EVENTS_TO_COMMANDS: ReadonlyArray<{ event: string; subcommand: string }> = [
+export const HOOK_EVENTS_TO_COMMANDS = [
   { event: 'UserPromptSubmit', subcommand: 'timeline-user-prompt-hook' },
   { event: 'PreToolUse', subcommand: 'timeline-pre-tool-use-hook' },
   { event: 'PostToolUse', subcommand: 'timeline-post-tool-use-hook' },
   { event: 'Stop', subcommand: 'timeline-stop-hook' },
   { event: 'SessionStart', subcommand: 'timeline-session-start-hook' },
   { event: 'SessionEnd', subcommand: 'timeline-session-end-hook' },
-];
+] as const;
+
+/** timeline 接入的 Claude Code hook 事件名联合(由 HOOK_EVENTS_TO_COMMANDS 推出)。 */
+export type HookEventName = (typeof HOOK_EVENTS_TO_COMMANDS)[number]['event'];
 
 export const GIT_COMMIT_SUBCOMMAND = 'timeline-git-commit-hook';
 

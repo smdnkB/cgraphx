@@ -26,6 +26,20 @@ export function findTask(store: TaskStore, value: string): TaskItem | null {
 }
 
 /**
+ * 自行开关连接的 findTask:按本地 id → 接口编号 → 手动任务名称查找,不联网、不新建。
+ *
+ * @throws TaskConfigError 项目未初始化。
+ */
+export function findTaskByValue(projectRoot: string, value: string): TaskItem | null {
+  const conn = openTaskDb(projectRoot);
+  try {
+    return findTask(new TaskStore(conn.getDb()), value);
+  } finally {
+    conn.close();
+  }
+}
+
+/**
  * 解析 `task use` 的参数为任务,严格按 spec §5.2 的顺序,先命中先用。
  *
  * @throws TaskArgError 参数为空,或已配置接口、不带 manual 且接口中找不到。

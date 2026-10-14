@@ -29,7 +29,8 @@ import { installTimelineHooks, uninstallTimelineHooks } from './installer';
 import { resolveProjectRoot } from '../directory';
 import { TimelineSchemaError, StoreQueryError } from './errors';
 import { assertEventType } from './payload';
-import { HOOK_EVENTS_TO_COMMANDS, GIT_COMMIT_SUBCOMMAND } from './constants';
+import { HOOK_EVENTS_TO_COMMANDS, GIT_COMMIT_SUBCOMMAND, type HookEventName } from './constants';
+import { describeEvent, truncate } from './describe';
 import type { EventType, TimelineEvent, TimelineStats } from './types';
 import {
   userPromptHook,
@@ -41,8 +42,14 @@ import {
   gitCommitHook,
 } from './hooks';
 
-/** Claude Code hook 事件名 → 处理函数;子命令名只从 HOOK_EVENTS_TO_COMMANDS 取。 */
-const HOOK_HANDLERS: Record<string, () => Promise<void>> = {
+// 摘要逻辑已移至 describe.ts(门面同源导出);此处保留再导出,兼容既有直接引用。
+export { describeEvent } from './describe';
+
+/**
+ * Claude Code hook 事件名 → 处理函数;子命令名只从 HOOK_EVENTS_TO_COMMANDS 取。
+ * 键类型由 HOOK_EVENTS_TO_COMMANDS 推出,新增事件漏配处理函数时编译期报错。
+ */
+const HOOK_HANDLERS: Record<HookEventName, () => Promise<void>> = {
   UserPromptSubmit: userPromptHook,
   PreToolUse: preToolUseHook,
   PostToolUse: postToolUseHook,
@@ -92,49 +99,6 @@ export function renderEventsTable(events: TimelineEvent[]): string {
   const all = [header, ...rows];
   const widths = header.map((_, i) => Math.max(...all.map(r => String(r[i] ?? '').length)));
   return all.map(r => r.map((c, i) => String(c).padEnd(widths[i]!)).join('  ')).join('\n');
-}
-
-export function describeEvent(e: TimelineEvent): string {
-  switch (e.event_type) {
-    case 'user_prompt':
-      return truncate(e.prompt_text ?? '', 120);
-    case 'pre_tool_use':
-    case 'post_tool_use':
-      return describeToolArgs(e.tool_name, e.tool_args);
-    case 'git_commit': {
-      const parts: string[] = [];
-      if (e.commit_hash) parts.push(e.commit_hash.slice(0, 7));
-      if (e.commit_message) parts.push(truncate(e.commit_message, 100));
-      if (e.commit_files.length > 0) parts.push(`(${e.commit_files.length} files)`);
-      return parts.join(' ');
-    }
-    case 'stop':
-      return e.duration_ms !== null ? `session ended (${e.duration_ms}ms)` : 'session ended';
-    case 'session_start': {
-      const source = typeof e.metadata.source === 'string' ? e.metadata.source : null;
-      return source ? `session started (${source})` : 'session started';
-    }
-    case 'session_end': {
-      const reason = typeof e.metadata.reason === 'string' ? e.metadata.reason : null;
-      return reason ? `session ended (${reason})` : 'session ended';
-    }
-  }
-}
-
-function describeToolArgs(toolName: string | null, args: unknown): string {
-  if (!toolName || !args || typeof args !== 'object') return '';
-  const r = args as Record<string, unknown>;
-  if (typeof r.file_path === 'string') return r.file_path;
-  if (typeof r.path === 'string') return r.path;
-  if (typeof r.command === 'string') return truncate(r.command, 120);
-  if (typeof r.url === 'string') return r.url;
-  if (typeof r.query === 'string') return truncate(r.query, 120);
-  return '';
-}
-
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1) + '…';
 }
 
 function renderStats(s: TimelineStats): string {
@@ -391,7 +355,6 @@ export function registerTimelineCommands(program: Command): void {
 
   for (const { event, subcommand } of HOOK_EVENTS_TO_COMMANDS) {
     const handler = HOOK_HANDLERS[event];
-    if (!handler) continue;
     program
       .command(subcommand, { hidden: true })
       .action(async () => { await handler(); });

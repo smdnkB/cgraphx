@@ -6,9 +6,8 @@
  */
 
 export { ensureTaskSchema, openTaskDb } from './schema-bootstrap';
-export { TaskStore } from './store';
 export { loadTaskSourceConfig, fetchRemoteTasks } from './source';
-export { findTask, resolveTaskForUse, resolveDeclaredTask, listTasks } from './resolve';
+export { findTaskByValue, resolveTaskForUse, resolveDeclaredTask, listTasks } from './resolve';
 export { bindSession, getCurrentBinding, clearBinding, resolveSessionId } from './binding';
 export { autoBindFromFeatureDir, getTaskDetail } from './feature-link';
 export { taskSessionStartHook, taskPostToolUseHook } from './hooks';
@@ -19,7 +18,6 @@ export {
   TASK_SOURCE_TIMEOUT_MS,
   TASK_SOURCES,
   BIND_SOURCES,
-  FEATURE_TASK_HEADER_KEY,
 } from './constants';
 export type {
   TaskSource,

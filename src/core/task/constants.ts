@@ -18,6 +18,3 @@ export const TASK_SOURCES = ['api', 'manual'] as const;
 
 /** 绑定来源:显式绑定 / 需求目录自动绑定。 */
 export const BIND_SOURCES = ['cli', 'feature_dir'] as const;
-
-/** 需求目录主 spec 头部声明任务的键名(`> 任务: <值>`)。 */
-export const FEATURE_TASK_HEADER_KEY = '任务';
