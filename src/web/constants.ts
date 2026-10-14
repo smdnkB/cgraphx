@@ -113,3 +113,17 @@ export const INSIGHT_TAGS = ['定位', '关系', '陷阱', '样本', '索引', '
 /** 经验标签类型。 */
 export type InsightTag = (typeof INSIGHT_TAGS)[number];
 
+
+/**
+ * 代码地图根目录(相对 projectRoot)。
+ *
+ * code-map-write skill 的产物目录:根目录放系统交互视图(`系统交互.md` /
+ * `系统交互-<域>.md`),`flows/` 放流程视图。web 仅只读消费(2026-10-14-cgraphx-web系统地图)。
+ */
+export const CODE_MAP_DIR = 'docs/code-map';
+
+/** 流程视图子目录名(位于 CODE_MAP_DIR 下)。 */
+export const CODE_MAP_FLOWS_SUBDIR = 'flows';
+
+/** 过期判定 git 调用超时(毫秒);超时视为无法判断。 */
+export const CODE_MAP_GIT_TIMEOUT_MS = 3000;
