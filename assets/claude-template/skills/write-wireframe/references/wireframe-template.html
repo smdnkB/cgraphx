@@ -1,0 +1,149 @@
+<!doctype html>
+<!--
+  线框 v2 · cgraphx web 数据库入口(低保真)
+  feature-id: 2026-09-16-cgraphx-web数据库预览
+  v1 → v2 变化:
+  - 单工程时跳过工程列表,直达表清单(clarify 决策:单项列表空转无意义)
+  - 经验沉淀从详情页内的折叠块,改为表清单页右上角的独立入口(看了 v1 才发现:经验要跨表看)
+  示例数据:取自 docs/schema-knowledge/zqassis-service/ 的真实表名、注释与 DISCOVERED 条目。
+  (本文件是 write-wireframe 的示范样张,上面的数据为示意;实际生成时必须从目标项目真实数据取,并照此注明来源。)
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>线框 v2 · 数据库入口</title>
+<style>
+  /* 低保真:只用灰度,不用项目设计令牌;注意力放在布局与交互上 */
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: #222; background: #f4f4f4; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 16px; background: #fff; border-bottom: 1px solid #ccc; }
+  header h1 { font-size: 15px; margin: 0; }
+  .states button, .pages a { font: inherit; padding: 3px 10px; border: 1px solid #999; background: #fff; color: #222; cursor: pointer; text-decoration: none; border-radius: 3px; }
+  .states button[aria-pressed="true"], .pages a.on { background: #333; color: #fff; border-color: #333; }
+  .layout { display: grid; grid-template-columns: 1fr 260px; gap: 16px; padding: 16px; }
+  @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+  .frame { background: #fff; border: 2px solid #555; min-height: 420px; display: grid; grid-template-columns: 140px 1fr; }
+  .side { border-right: 1px dashed #999; padding: 12px; }
+  .side div { padding: 4px 6px; color: #666; }
+  .side .cur { background: #ddd; color: #222; font-weight: 600; }
+  .main { padding: 16px; position: relative; }
+  .bar { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 12px; }
+  .box { border: 1px solid #999; padding: 10px; margin-bottom: 10px; }
+  .row { display: flex; gap: 16px; padding: 6px 4px; border-bottom: 1px dotted #bbb; }
+  .row b { min-width: 160px; }
+  .link { text-decoration: underline; cursor: pointer; }
+  .mono { font-family: ui-monospace, Menlo, monospace; white-space: pre; font-size: 12px; background: #eee; padding: 8px; overflow-x: auto; }
+  .zone { border-left: 4px solid #777; background: #f0f0f0; }
+  .empty { border: 2px dashed #999; padding: 32px; text-align: center; color: #555; }
+  .n { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: #222; color: #fff; font-size: 11px; margin-left: 4px; vertical-align: middle; }
+  aside { background: #fff; border: 1px solid #ccc; padding: 12px; }
+  aside h2 { font-size: 13px; margin: 0 0 8px; }
+  aside li { margin-bottom: 6px; }
+  /* 页面与状态切换 */
+  section[data-page] { display: none; }
+  section[data-page].on { display: block; }
+  [data-state] { display: none; }
+  body[data-cur="normal"] [data-state~="normal"],
+  body[data-cur="empty"] [data-state~="empty"],
+  body[data-cur="error"] [data-state~="error"] { display: block; }
+</style>
+</head>
+<body data-cur="normal">
+<header>
+  <h1>线框 v2 · 数据库入口</h1>
+  <nav class="pages" aria-label="页面">
+    <a href="#tables">表清单</a><a href="#ddl">单表 DDL</a><a href="#insights">经验沉淀</a>
+  </nav>
+  <div class="states" role="group" aria-label="状态">
+    <button data-to="normal" aria-pressed="true">正常</button>
+    <button data-to="empty" aria-pressed="false">空态</button>
+    <button data-to="error" aria-pressed="false">异常</button>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="frame">
+    <div class="side">
+      <div>知识库</div><div>时间线</div><div class="cur">数据库 <span class="n">1</span></div>
+    </div>
+
+    <div class="main">
+      <!-- 表清单 -->
+      <section data-page="tables" data-notes="tables">
+        <div class="bar"><b>表清单 · zqassis-service</b><span class="link" data-go="insights">经验沉淀 →</span><span class="n">3</span></div>
+        <div data-state="normal">
+          <div class="row"><b class="link" data-go="ddl">so_order</b><span>订单主表</span><span class="n">2</span></div>
+          <div class="row"><b class="link" data-go="ddl">so_order_item</b><span>订单明细</span></div>
+          <div class="row"><b class="link" data-go="ddl">pkg_instance</b><span>礼包实例</span></div>
+          <div class="row" style="color:#888">…共 128 张(INDEX 中标 missing 的不显示)</div>
+        </div>
+        <div class="empty" data-state="empty">未导出 schema-knowledge<br>先运行 <code>/export-table-ddl</code> 建基线</div>
+        <div class="empty" data-state="error">INDEX.md 不可读<br>已降级:仅按 ddl/ 目录列出表名,无注释</div>
+      </section>
+
+      <!-- 单表 DDL -->
+      <section data-page="ddl" data-notes="ddl">
+        <div class="bar"><b>so_order</b><span class="link" data-go="tables">← 返回表清单</span></div>
+        <div data-state="normal empty">
+          <div class="mono">CREATE TABLE so_order (
+  order_id    bigint       NOT NULL,
+  assignee_id varchar(32)  NULL,
+  ...
+);</div>
+          <div class="box zone" data-state="normal">探索经验 <span class="n">4</span><br>[关系] assignee_id 实际对应 users.staff_code,不是 users.id</div>
+        </div>
+        <div class="empty" data-state="error">DDL 文件缺失<br><span class="link" data-go="tables">返回表清单</span></div>
+      </section>
+
+      <!-- 经验沉淀 -->
+      <section data-page="insights" data-notes="insights">
+        <div class="bar"><b>经验沉淀 · zqassis-service</b><span class="link" data-go="tables">← 返回表清单</span></div>
+        <div data-state="normal">
+          <div class="box"><b>陷阱</b> <span class="n">5</span><div class="row"><span class="link" data-go="ddl">so_order</span><span>status=9 是软删,统计要排除</span></div></div>
+          <div class="box"><b>关系</b><div class="row"><span class="link" data-go="ddl">so_order</span><span>assignee_id → users.staff_code</span></div></div>
+          <div class="box" style="color:#888">定位 · 样本 · 索引 · 性能 · 其他(同样式,略)</div>
+        </div>
+        <div class="empty" data-state="empty error">暂无探索沉淀的经验</div>
+      </section>
+    </div>
+  </div>
+
+  <aside>
+    <h2>交互说明</h2>
+    <ol data-for="tables">
+      <li>① 侧栏第三入口由灰置变为可点;只有一个工程时直达本页</li>
+      <li>② 点表名 → 单表 DDL</li>
+      <li>③ 本工程所有表的经验汇总入口</li>
+    </ol>
+    <ol data-for="ddl" start="4">
+      <li>④ 有 DISCOVERED 块才出现(切到「空态」看无经验的样子),与 DDL 原文分区;原文不高亮、不重排</li>
+    </ol>
+    <ol data-for="insights" start="5">
+      <li>⑤ 按 6 类标签 + 其他分组;每条带归属表名,点击跳该表 DDL</li>
+    </ol>
+  </aside>
+</div>
+
+<script>
+  // 页面:URL hash 即当前页;状态:正常 / 空态 / 异常
+  const show = (page) => {
+    page = page || 'tables';
+    document.querySelectorAll('section[data-page]').forEach(s => s.classList.toggle('on', s.dataset.page === page));
+    document.querySelectorAll('.pages a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + page));
+    document.querySelectorAll('aside ol').forEach(o => { o.hidden = o.dataset.for !== page; });
+  };
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  document.addEventListener('click', (e) => {
+    const go = e.target.closest('[data-go]');
+    if (go) location.hash = go.dataset.go;
+    const st = e.target.closest('[data-to]');
+    if (st) {
+      document.body.dataset.cur = st.dataset.to;
+      document.querySelectorAll('[data-to]').forEach(b => b.setAttribute('aria-pressed', String(b === st)));
+    }
+  });
+  show(location.hash.slice(1));
+</script>
+</body>
+</html>
