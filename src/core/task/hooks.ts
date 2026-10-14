@@ -32,7 +32,7 @@ interface TaskHookPayload {
   raw: Record<string, unknown>;
 }
 
-/** SessionStart:向 agent 注入当前会话的任务绑定状态;查询失败不输出任何内容。 */
+/** SessionStart:向 agent 注入当前绑定的任务(未绑定时只注入会话 id,不提示绑定);查询失败不输出任何内容。 */
 export async function taskSessionStartHook(): Promise<void> {
   await runTaskHook(async (payload) => {
     const projectRoot = resolveProjectRoot(payload.cwd ?? process.cwd());
@@ -127,9 +127,6 @@ function sessionStartContext(sessionId: string, current: CurrentBinding | null):
     return `当前会话已绑定开发任务:${ref} ${task.name}。当前会话 id:${sessionId}。`;
   }
   return (
-    '当前会话未绑定开发任务。在本会话第一次回复用户之前,先执行 cgraphx task list 列出候选,' +
-    '请用户选择要关联的任务(也可以输入新任务名),再执行 cgraphx task use <编号或名称>;' +
-    '只有用户明确选择不关联时才跳过,并且本会话不再询问。' +
     `当前会话 id:${sessionId}(执行 cgraphx task 命令拿不到会话时用 --session 传入)。`
   );
 }

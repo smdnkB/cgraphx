@@ -53,7 +53,7 @@ cgraphx 拿 Claude Code 的会话 id(session_id)有两条路:hook 进程从 stdi
 ## Impact For Future Changes
 
 - 新功能要在非 hook 进程里拿会话 id 时,复用 `CLAUDE_SESSION_ID_ENV` 和 `resolveSessionId`,不要另写变量名。
-- 降级方案已经做进去了:会话开始的 task hook 把当前会话 id 写进给 agent 的上下文,agent 读不到环境变量时可以用 `--session` 传入。改动会话开始提醒的文案时,不要删掉会话 id。
+- 降级方案已经做进去了:会话开始的 task hook 总会把当前会话 id 写进给 agent 的上下文(不论是否绑定),agent 读不到环境变量时可以用 `--session` 传入。改动这段注入文案时,不要删掉会话 id。
 - 如果宿主改名或取消这个变量:绑定命令会退出码 3 并提示 `--session`,commit 会全部变成未归属。功能退化,但不会出错数据。
 
 ## Reuse Guidance
