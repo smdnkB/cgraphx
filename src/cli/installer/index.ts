@@ -164,7 +164,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   const projectRoot = process.cwd();
   const initOutcome = await ensureProjectInitialized(projectRoot);
   if (initOutcome === 'initialized') {
-    clack.log.success(`已初始化 ${getCodeGraphDir(projectRoot)}(markdown + timeline schema)`);
+    clack.log.success(`已初始化 ${getCodeGraphDir(projectRoot)}(markdown + timeline + task schema)`);
   } else if (initOutcome === 'skipped-unsafe') {
     clack.log.warn('跳过 .cgraphx/ 初始化:当前目录看起来不是项目根($HOME / 文件系统根)。在真实项目内重跑 cgraphx install 以启用知识库 / 时间线。');
   }
@@ -262,6 +262,18 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
       clack.log.success(`Developer Timeline 已装:${events}${git}`);
     } catch (err) {
       clack.log.warn(`timeline install 失败:${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // 开发任务绑定 hook(会话开始提醒 + 需求目录自动绑定)。已初始化的项目先打开库
+    // 应用 task schema,保证老项目重装后也有 task 表。失败只 warn,不中断安装。
+    try {
+      const { installTaskHooks, openTaskDb } = await import('../../core/task');
+      if (isInitialized(projectRoot)) openTaskDb(projectRoot).close();
+      const report = installTaskHooks(projectRoot);
+      const events = report.written.length > 0 ? report.written.join('/') : '已存在(幂等)';
+      clack.log.success(`开发任务绑定已装:${events}`);
+    } catch (err) {
+      clack.log.warn(`task hook install 失败:${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -422,6 +434,17 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
       `timeline uninstall 失败:${err instanceof Error ? err.message : String(err)}`,
     );
   }
+  try {
+    const { uninstallTaskHooks } = await import('../../core/task');
+    const taskReport = uninstallTaskHooks(process.cwd());
+    if (taskReport.removed.length > 0) {
+      clack.log.success(`开发任务绑定:已移除 hooks(${taskReport.removed.join(', ')})`);
+    }
+  } catch (err) {
+    clack.log.warn(
+      `task hook uninstall 失败:${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 
   // Remove the `.cgraphx/` data dir (the folded `uninit`).
   const dataDir = getCodeGraphDir(process.cwd());
@@ -463,7 +486,7 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
 }
 
 /**
- * Ensure the project's `.cgraphx/` data dir exists and the markdown + timeline
+ * Ensure the project's `.cgraphx/` data dir exists and the markdown + timeline + task
  * schemas are applied — the work the removed `cgraphx init` command did, folded
  * into install. Idempotent: an already-initialized project is a no-op.
  *
@@ -481,11 +504,13 @@ export async function ensureProjectInitialized(
   const { DatabaseConnection, getDatabasePath } = await import('../../core/db');
   const { ensureMarkdownSchema } = await import('../../core/markdown/schema-bootstrap');
   const { ensureTimelineSchema } = await import('../../core/timeline/schema-bootstrap');
+  const { ensureTaskSchema } = await import('../../core/task');
   const conn = DatabaseConnection.open(getDatabasePath(projectRoot));
   try {
     const db = conn.getDb();
     ensureMarkdownSchema(db);
     ensureTimelineSchema(db);
+    ensureTaskSchema(db);
   } finally {
     conn.close();
   }

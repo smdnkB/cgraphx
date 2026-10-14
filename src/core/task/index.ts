@@ -11,6 +11,8 @@ export { loadTaskSourceConfig, fetchRemoteTasks } from './source';
 export { findTask, resolveTaskForUse, resolveDeclaredTask, listTasks } from './resolve';
 export { bindSession, getCurrentBinding, clearBinding, resolveSessionId } from './binding';
 export { autoBindFromFeatureDir, getTaskDetail } from './feature-link';
+export { taskSessionStartHook, taskPostToolUseHook } from './hooks';
+export { installTaskHooks, uninstallTaskHooks } from './installer';
 export {
   TASK_SCHEMA_VERSION,
   TASK_SOURCE_CONFIG_FILENAME,

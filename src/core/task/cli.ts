@@ -28,6 +28,8 @@ import {
   openTaskDb,
   resolveSessionId,
   resolveTaskForUse,
+  taskPostToolUseHook,
+  taskSessionStartHook,
   TaskStore,
 } from './index';
 import { TaskArgError, TaskConfigError, TaskStoreError } from './errors';
@@ -423,6 +425,11 @@ export function registerTaskCommands(program: Command): void {
       }
     });
 
-  // 隐藏 hook 入口(task-session-start-hook / task-post-tool-use-hook)在此追加,
-  // 形如 program.command(<子命令>, { hidden: true }).action(async () => { await handler(); })。
+  // 隐藏 hook 入口:由目标项目 .claude/settings.json 的 SessionStart / PostToolUse 调起,退出码恒为 0
+  program
+    .command('task-session-start-hook', { hidden: true })
+    .action(async () => { await taskSessionStartHook(); });
+  program
+    .command('task-post-tool-use-hook', { hidden: true })
+    .action(async () => { await taskPostToolUseHook(); });
 }
