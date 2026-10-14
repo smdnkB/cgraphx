@@ -534,7 +534,7 @@ function buildLast7Bars(stats: TimelineStats, todayStr: string): BarModel[] {
 
 /** 今日各类型计数(从今日事件直方图;用于 chip 计数,range=today 时)。 */
 function todayByType(todayEvents: TimelineEvent[]): Record<EventType, number> {
-  const out = { user_prompt: 0, pre_tool_use: 0, post_tool_use: 0, stop: 0, git_commit: 0 } as Record<EventType, number>;
+  const out = { user_prompt: 0, pre_tool_use: 0, post_tool_use: 0, stop: 0, git_commit: 0, session_start: 0, session_end: 0 } as Record<EventType, number>;
   for (const e of todayEvents) out[e.event_type] += 1;
   return out;
 }

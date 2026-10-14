@@ -40,15 +40,15 @@ describe('installTimelineHooks', () => {
   beforeEach(() => { project = makeTmpProject(); });
   afterEach(() => { fs.rmSync(project, { recursive: true, force: true }); });
 
-  it('writes 4 hook events into .claude/settings.json', () => {
+  it('writes 6 hook events into .claude/settings.json', () => {
     const report = installTimelineHooks(project);
     expect(report.writtenHookEvents).toEqual(
-      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']),
+      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']),
     );
     const settings = readSettings(project);
     const hooks = settings.hooks as Record<string, unknown>;
     expect(Object.keys(hooks)).toEqual(
-      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']),
+      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']),
     );
   });
 
@@ -64,12 +64,12 @@ describe('installTimelineHooks', () => {
     const second = installTimelineHooks(project);
     expect(second.writtenHookEvents).toEqual([]);
     expect(second.skipped).toEqual(
-      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']),
+      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']),
     );
 
     const settings = readSettings(project);
     const hooks = settings.hooks as Record<string, Array<{ hooks: Array<{ command: string }> }>>;
-    for (const event of ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']) {
+    for (const event of ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']) {
       const commands = hooks[event]!.flatMap(g => g.hooks.map(h => h.command));
       const timelineCmds = commands.filter(c => c.includes('timeline-'));
       expect(timelineCmds).toHaveLength(1);
@@ -122,7 +122,7 @@ describe('uninstallTimelineHooks', () => {
     const report = uninstallTimelineHooks(project);
 
     expect(report.removedHookEvents).toEqual(
-      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']),
+      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']),
     );
     expect(report.gitHookRemoved).toBe(true);
 

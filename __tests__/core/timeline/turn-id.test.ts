@@ -91,9 +91,9 @@ function readAllRows(dbPath: string) {
   }
 }
 
-/** Read the per-turn state file under <dir>/.cgraphx/. */
-function readTurnFile(dir: string): { turn_id?: string; session_id?: string | null; ts?: string } | null {
-  const filePath = path.join(dir, '.cgraphx', 'timeline-current-turn.json');
+/** 读取 <dir>/.cgraphx/turns/<会话>.json(按会话隔离的 turn 状态文件)。 */
+function readTurnFile(dir: string, sessionId: string): { turn_id?: string; session_id?: string | null; ts?: string } | null {
+  const filePath = path.join(dir, '.cgraphx', 'turns', `${sessionId}.json`);
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch {
@@ -140,7 +140,7 @@ describe('B-1: turn_id generation + cross-hook correlation', () => {
     });
 
     // Verify the per-turn state file was created with a v4 UUID.
-    const turnFile = readTurnFile(dir);
+    const turnFile = readTurnFile(dir, sessionId);
     expect(turnFile).not.toBeNull();
     const turn1 = turnFile!.turn_id!;
     expect(turn1).toMatch(UUID_V4);
@@ -192,7 +192,7 @@ describe('B-1: turn_id generation + cross-hook correlation', () => {
       cwd: dir,
       prompt: 'first prompt',
     });
-    const turn1 = readTurnFile(dir)!.turn_id!;
+    const turn1 = readTurnFile(dir, sessionId)!.turn_id!;
     expect(turn1).toMatch(UUID_V4);
 
     // Tiny delay so the ts in the per-turn file differs (not asserted, just
@@ -204,7 +204,7 @@ describe('B-1: turn_id generation + cross-hook correlation', () => {
       cwd: dir,
       prompt: 'second prompt',
     });
-    const turn2 = readTurnFile(dir)!.turn_id!;
+    const turn2 = readTurnFile(dir, sessionId)!.turn_id!;
     expect(turn2).toMatch(UUID_V4);
     expect(turn2).not.toBe(turn1); // minted fresh, not reused
 
@@ -239,7 +239,7 @@ describe('B-1: turn_id generation + cross-hook correlation', () => {
       cwd: dir,
       prompt: 'from session A',
     });
-    const turnA = readTurnFile(dir)!.turn_id!;
+    const turnA = readTurnFile(dir, 'sess-A')!.turn_id!;
     expect(turnA).toMatch(UUID_V4);
 
     // Session B fires a post_tool_use WITHOUT first writing a user_prompt of
@@ -276,7 +276,7 @@ describe('B-1: turn_id generation + cross-hook correlation', () => {
     });
 
     // The per-turn file stores the HOST value (no fresh UUID minted).
-    expect(readTurnFile(dir)!.turn_id).toBe(hostTurnId);
+    expect(readTurnFile(dir, sessionId)!.turn_id).toBe(hostTurnId);
 
     // Downstream hooks read back the same host-supplied value.
     await runHookWithPayload(postToolUseHook, {
@@ -315,9 +315,9 @@ describe('B-1: turn_id generation + cross-hook correlation', () => {
 
   it('case 5b: corrupt turn JSON → readCurrentTurnId returns null, no throw', async () => {
     const sessionId = 'sess-case5b';
-    fs.mkdirSync(path.join(dir, '.cgraphx'), { recursive: true });
+    fs.mkdirSync(path.join(dir, '.cgraphx', 'turns'), { recursive: true });
     fs.writeFileSync(
-      path.join(dir, '.cgraphx', 'timeline-current-turn.json'),
+      path.join(dir, '.cgraphx', 'turns', `${sessionId}.json`),
       'this is { not valid json',
       { flag: 'w' },
     );
@@ -349,9 +349,9 @@ describe('B-1: turn_id generation + cross-hook correlation', () => {
     // the turn-state path as a DIRECTORY — writeFileSync with flag:'w' on a
     // directory throws EISDIR, exercising the same try/catch path a real disk
     // fault would. After the test, afterEach's rmSync cleans everything.
-    const codegraphDir = path.join(dir, '.cgraphx');
-    fs.mkdirSync(codegraphDir, { recursive: true });
-    fs.mkdirSync(path.join(codegraphDir, 'timeline-current-turn.json'));
+    const turnsDir = path.join(dir, '.cgraphx', 'turns');
+    fs.mkdirSync(turnsDir, { recursive: true });
+    fs.mkdirSync(path.join(turnsDir, `${sessionId}.json`));
 
     const result = await runHookWithPayload(userPromptHook, {
       session_id: sessionId,

@@ -9,12 +9,9 @@
  *   - cgraphx timeline install
  *   - cgraphx timeline uninstall
  *
- * Hidden hook entry points (spec §3.3):
- *   - cgraphx timeline-user-prompt-hook
- *   - cgraphx timeline-pre-tool-use-hook
- *   - cgraphx timeline-post-tool-use-hook
- *   - cgraphx timeline-stop-hook
- *   - cgraphx timeline-git-commit-hook
+ * 隐藏 hook 入口(spec §3.3):Claude Code hook 子命令按 HOOK_EVENTS_TO_COMMANDS
+ * 逐项注册(user-prompt / pre-tool-use / post-tool-use / stop / session-start /
+ * session-end),另加 git post-commit 用的 timeline-git-commit-hook。
  *
  * Exit codes (spec §5.5):
  *   0  success (incl. "no matching events")
@@ -32,14 +29,30 @@ import { installTimelineHooks, uninstallTimelineHooks } from './installer';
 import { resolveProjectRoot } from '../directory';
 import { TimelineSchemaError, StoreQueryError } from './errors';
 import { assertEventType } from './payload';
+import { HOOK_EVENTS_TO_COMMANDS, GIT_COMMIT_SUBCOMMAND } from './constants';
 import type { EventType, TimelineEvent, TimelineStats } from './types';
 import {
   userPromptHook,
   preToolUseHook,
   postToolUseHook,
   stopHook,
+  sessionStartHook,
+  sessionEndHook,
   gitCommitHook,
 } from './hooks';
+
+/** Claude Code hook 事件名 → 处理函数;子命令名只从 HOOK_EVENTS_TO_COMMANDS 取。 */
+const HOOK_HANDLERS: Record<string, () => Promise<void>> = {
+  UserPromptSubmit: userPromptHook,
+  PreToolUse: preToolUseHook,
+  PostToolUse: postToolUseHook,
+  Stop: stopHook,
+  SessionStart: sessionStartHook,
+  SessionEnd: sessionEndHook,
+};
+
+/** `--type` 可接受的事件类型(帮助文本与报错共用)。 */
+const EVENT_TYPES_HELP = 'user_prompt | pre_tool_use | post_tool_use | stop | git_commit | session_start | session_end';
 
 class ArgError extends Error {}
 
@@ -97,6 +110,14 @@ export function describeEvent(e: TimelineEvent): string {
     }
     case 'stop':
       return e.duration_ms !== null ? `session ended (${e.duration_ms}ms)` : 'session ended';
+    case 'session_start': {
+      const source = typeof e.metadata.source === 'string' ? e.metadata.source : null;
+      return source ? `session started (${source})` : 'session started';
+    }
+    case 'session_end': {
+      const reason = typeof e.metadata.reason === 'string' ? e.metadata.reason : null;
+      return reason ? `session ended (${reason})` : 'session ended';
+    }
   }
 }
 
@@ -202,7 +223,7 @@ export function registerTimelineCommands(program: Command): void {
     .description('Query timeline events by time window, type, tool, file, or session')
     .option('--since <date>', 'Start time (ISO 8601 or relative like 7d/12h/30m/now)')
     .option('--until <date>', 'End time (ISO 8601 or relative)')
-    .option('--type <type>', 'Event type: user_prompt | pre_tool_use | post_tool_use | stop | git_commit')
+    .option('--type <type>', `Event type: ${EVENT_TYPES_HELP}`)
     .option('--tool <name>', 'Exact tool_name (Edit/Bash/Read/...)')
     .option('--file <path>', 'Substring match on tool_args.file_path or commit_files')
     .option('--session <id>', 'Exact session_id')
@@ -365,34 +386,26 @@ export function registerTimelineCommands(program: Command): void {
       }
     });
 
-  // ─── Hidden hook entry points (spec §3) ────────────────────────────────
-  // All async — fire-and-forget on hook trigger; exit 0 when the work is done.
+  // ─── 隐藏 hook 入口(spec §3) ─────────────────────────────────────────
+  // 全部 await 到写库完成再退出,退出码恒为 0。
+
+  for (const { event, subcommand } of HOOK_EVENTS_TO_COMMANDS) {
+    const handler = HOOK_HANDLERS[event];
+    if (!handler) continue;
+    program
+      .command(subcommand, { hidden: true })
+      .action(async () => { await handler(); });
+  }
 
   program
-    .command('timeline-user-prompt-hook', { hidden: true })
-    .action(async () => { await userPromptHook(); });
-
-  program
-    .command('timeline-pre-tool-use-hook', { hidden: true })
-    .action(async () => { await preToolUseHook(); });
-
-  program
-    .command('timeline-post-tool-use-hook', { hidden: true })
-    .action(async () => { await postToolUseHook(); });
-
-  program
-    .command('timeline-stop-hook', { hidden: true })
-    .action(async () => { await stopHook(); });
-
-  program
-    .command('timeline-git-commit-hook', { hidden: true })
+    .command(GIT_COMMIT_SUBCOMMAND, { hidden: true })
     .action(async () => { await gitCommitHook(); });
 }
 
 function parseType(s: string | undefined): EventType | undefined {
   if (!s) return undefined;
   const t = assertEventType(s);
-  if (!t) throw new ArgError(`Invalid --type: ${s}. Must be one of user_prompt, pre_tool_use, post_tool_use, stop, git_commit`);
+  if (!t) throw new ArgError(`Invalid --type: ${s}. Must be one of ${EVENT_TYPES_HELP.split(' | ').join(', ')}`);
   return t;
 }
 

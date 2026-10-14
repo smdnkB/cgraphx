@@ -1,103 +1,23 @@
 /**
- * Five hook handlers (spec §3).
+ * 七个 hook 处理函数:6 个 Claude Code hook(user_prompt / pre_tool_use /
+ * post_tool_use / stop / session_start / session_end)+ git post-commit 的 gitCommitHook。
  *
- * Each is a thin function that maps a Claude Code payload to a TimelineEventInput
- * and calls runHook. They're called by the hidden CLI subcommands in cli.ts
- * (e.g. `cgraphx timeline-pre-tool-use-hook`).
+ * 每个函数把 Claude Code 的 payload 映射成 TimelineEventInput 并交给 runHook,
+ * 由 cli.ts 中的隐藏子命令调起(如 `cgraphx timeline-pre-tool-use-hook`)。
  *
- * These are async + await recordEvent — never fire-and-forget. Per spec §4.4,
- * hook processes are short-lived: open DB, INSERT, exit. ~5ms typical.
+ * 全部 async 并 await recordEvent —— 绝不 fire-and-forget。hook 进程短生命周期:
+ * 打开 DB → INSERT → 退出,通常约 5ms。
  */
 
-import { runHook } from './hook-runner';
+import { runHook, isKillSwitchOn } from './hook-runner';
 import { extractHookPayload } from './payload';
 import { resolveProjectRoot } from '../directory';
 import { summarizeToolResponse } from './post-tool-summary';
-import { WRITE_TOOLS_WHITELIST } from './constants';
+import { CLAUDE_SESSION_ID_ENV, WRITE_TOOLS_WHITELIST } from './constants';
+import { readCurrentTurnId, writeCurrentTurn, removeTurnState } from './turn-state';
 import type { TimelineEventInput } from './types';
 import { randomUUID } from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
-/**
- * Per-turn state file used to hand the current turn_id from the user_prompt
- * hook (which generates it) to the pre/post/stop hooks in the SAME turn.
- *
- * Each Claude Code hook is a separate short-lived process — there's no shared
- * memory — so we use a single JSON file under `.cgraphx/`. Write is a single
- * `fs.writeFileSync(..., {flag:'w'})` (atomic-ish: a small complete overwrite,
- * no locks needed). Reads tolerate a missing / corrupt file (return null,
- * which makes the duration_ms enricher a no-op — graceful degradation, never
- * blocks the hook).
- */
-const TURN_STATE_FILENAME = 'timeline-current-turn.json';
-
-function turnStateFilePath(projectRoot: string): string {
-  return path.join(projectRoot, '.cgraphx', TURN_STATE_FILENAME);
-}
-
-/**
- * Read the current turn_id for a given session from the per-turn state file.
- *
- * Returns null if the file is absent, the JSON is corrupt, or the stored
- * session_id does not match `session_id` (cross-session isolation — two
- * parallel Claude Code sessions on the same project must not share a turn id).
- *
- * `projectRoot` defaults to process.cwd() (Claude Code launches hooks with
- * cwd = project root); callers may pass an explicit root (e.g. payload.cwd)
- * to be precise.
- */
-async function readCurrentTurnId(
-  session_id: string | null,
-  projectRoot: string = process.cwd(),
-): Promise<string | null> {
-  try {
-    const content = await fs.promises.readFile(turnStateFilePath(projectRoot), 'utf8');
-    const data = JSON.parse(content) as {
-      turn_id?: string;
-      session_id?: string | null;
-      ts?: string;
-    };
-    // Cross-session isolation: if the caller pins a session and the file's
-    // session differs, the stored turn belongs to a different conversation —
-    // do not propagate it. A null session_id caller accepts any stored turn.
-    if (session_id !== null && data.session_id !== session_id) return null;
-    return data.turn_id ?? null;
-  } catch {
-    // File missing / unreadable / JSON.parse threw — silent null. The
-    // duration_ms enricher no-ops on null turn_id, so this degrades cleanly.
-    return null;
-  }
-}
-
-/**
- * Persist the current turn_id to the per-turn state file (B-1).
- *
- * Writes the whole file each call ({flag:'w'} truncates). Failures are
- * swallowed and reported to stderr — a missing turn file only disables
- * duration_ms computation, it must never block the hook (spec §4.5).
- */
-function writeCurrentTurn(
-  projectRoot: string,
-  turn: { turn_id: string; session_id: string | null; ts?: string },
-): void {
-  const payload = {
-    turn_id: turn.turn_id,
-    session_id: turn.session_id,
-    ts: turn.ts ?? new Date().toISOString(),
-  };
-  try {
-    const filePath = turnStateFilePath(projectRoot);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(payload), { flag: 'w' });
-  } catch (err) {
-    // Never throw — recording the user_prompt still matters more than the
-    // turn file. Subsequent pre/post hooks will read null (no duration_ms),
-    // which is a tolerable degradation.
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[timeline] turn-state write failed: ${msg}\n`);
-  }
-}
+import { execSync } from 'node:child_process';
 
 export async function userPromptHook(): Promise<void> {
   await runHook((payload) => {
@@ -249,10 +169,50 @@ export async function stopHook(): Promise<void> {
 }
 
 /**
- * Git post-commit hook — reads no stdin; pulls commit info from `git` CLI.
+ * 会话开始(SessionStart):记录 session_start 事件,turn_id 恒为 null。
+ * 宿主给出字符串 `source`(startup / resume / clear / compact 等)时写入 metadata.source。
+ */
+export async function sessionStartHook(): Promise<void> {
+  await runHook((payload) => ({
+    event_type: 'session_start',
+    session_id: payload.session_id ?? null,
+    turn_id: null,
+    cwd: payload.cwd,
+    metadata: payload.source !== undefined ? { source: payload.source } : undefined,
+  } satisfies TimelineEventInput));
+}
+
+/**
+ * 会话结束(SessionEnd):记录 session_end 事件(metadata.reason 规则同 source),
+ * 事件写入后删除本会话的 turn 状态文件。开关关闭或无 payload 时 runHook 不调
+ * buildEvent,此时也不碰 turn 文件。
+ */
+export async function sessionEndHook(): Promise<void> {
+  // runHook 不提供写库后回调;buildEvent 被调用时记下待清理的会话,runHook 返回后再删。
+  let ended = null as { projectRoot: string; session_id: string | null } | null;
+  await runHook((payload) => {
+    const session_id = payload.session_id ?? null;
+    ended = { projectRoot: resolveProjectRoot(payload.cwd ?? process.cwd()), session_id };
+    return {
+      event_type: 'session_end',
+      session_id,
+      turn_id: null,
+      cwd: payload.cwd,
+      metadata: payload.reason !== undefined ? { reason: payload.reason } : undefined,
+    } satisfies TimelineEventInput;
+  });
+  if (ended) {
+    const { projectRoot, session_id } = ended;
+    removeTurnState(projectRoot, session_id);
+  }
+}
+
+/**
+ * git post-commit hook —— 不读 stdin,从 `git` CLI 取提交信息。
  *
- * Spec §3.3. Invoked from a `.git/hooks/post-commit` script that backgrounds
- * us (`&`), so we're allowed to take longer than the Claude Code hooks.
+ * 由 `.git/hooks/post-commit` 片段后台调起(`&`),耗时可以比 Claude Code hook 宽松。
+ * 会话 id 取自环境变量 CLAUDE_CODE_SESSION_ID:agent 在会话内通过 Bash 提交时
+ * 子进程继承该变量;终端手动提交时没有,记为 null(未归属)。
  */
 export async function gitCommitHook(): Promise<void> {
   if (isKillSwitchOn()) return;
@@ -260,18 +220,23 @@ export async function gitCommitHook(): Promise<void> {
   const info = readGitCommitInfo();
   if (!info) return;
 
+  const envSession = process.env[CLAUDE_SESSION_ID_ENV];
+  const session_id = typeof envSession === 'string' && envSession.length > 0 ? envSession : null;
+
   try {
     const { recordEvent } = await import('./recorder');
     // info.cwd 是 git 仓库根;项目可能初始化在其子目录,向上回溯找真根
     // (spec 2026-08-13)。事件自身的 cwd 字段仍记录真实 git 根。
     await recordEvent(resolveProjectRoot(info.cwd), {
       event_type: 'git_commit',
+      session_id,
       commit_hash: info.hash,
       commit_message: info.message,
       commit_files: info.files,
       commit_insertions: info.insertions,
       commit_deletions: info.deletions,
       cwd: info.cwd,
+      metadata: info.branch !== null ? { branch: info.branch } : undefined,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -279,14 +244,7 @@ export async function gitCommitHook(): Promise<void> {
   }
 }
 
-// Imported here (not at module top) to avoid a circular import: hook-runner
-// imports recorder which imports store which imports nothing — fine, but
-// keeping the import inline matches the lazy pattern used for git.
-import { isKillSwitchOn } from './hook-runner';
-import { execSync } from 'node:child_process';
-
-// Exported for direct unit testing (otherwise it's only reachable through the
-// `gitCommitHook` side-effect path, which is awkward to drive from a test).
+// 导出以便单测直接驱动(否则只能经 gitCommitHook 的副作用路径触达)。
 export interface GitCommitInfo {
   hash: string;
   message: string;
@@ -294,19 +252,16 @@ export interface GitCommitInfo {
   cwd: string;
   insertions: number;
   deletions: number;
+  /** 当前分支名;detached HEAD(输出为 `HEAD`)或命令失败时为 null。 */
+  branch: string | null;
 }
 
 /**
- * Read HEAD commit info + aggregated insertions/deletions.
+ * 读取 HEAD 提交信息 + 汇总增删行数 + 当前分支名。
  *
- * numstat parsing: `git show --numstat --format= HEAD` emits one line per
- * changed file as `<ins>\t<del>\t<path>`. Binary files show literal `-` in
- * the ins/del columns — we skip those (no numeric contribution). The result
- * is aggregated across ALL files in the commit.
- *
- * If numstat fails (rare: shallow clone, broken repo, git too old), we still
- * return the rest of the info with insertions/deletions = 0 — numstat is an
- * enhancement, not a gate.
+ * numstat:`git show --numstat --format= HEAD` 每个文件一行 `<ins>\t<del>\t<path>`,
+ * 二进制文件两列为字面量 `-`,跳过不计。numstat 或分支读取失败(浅克隆、仓库损坏、
+ * git 过旧)不影响其它字段:行数记 0/0,分支记 null —— 它们是增强项,不是闸门。
  */
 export function readGitCommitInfo(): GitCommitInfo | null {
   try {
@@ -316,8 +271,7 @@ export function readGitCommitInfo(): GitCommitInfo | null {
     const filesOut = execSync('git diff-tree --no-commit-id --name-only -r HEAD', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
     const files = filesOut.split('\n').map(s => s.trim()).filter(Boolean);
 
-    // Aggregate insertions/deletions from numstat. Run with cwd=parsed repo
-    // root so the command works even when the hook is launched from elsewhere.
+    // 以仓库根为 cwd 跑 numstat,hook 从别处启动也能正确执行。
     let insertions = 0;
     let deletions = 0;
     try {
@@ -332,7 +286,7 @@ export function readGitCommitInfo(): GitCommitInfo | null {
         const parts = trimmed.split('\t');
         if (parts.length < 3) continue;
         const [ins, del] = parts;
-        // Binary file: git emits literal "-" — skip, contributes no count.
+        // 二进制文件:git 输出字面量 "-",跳过不计。
         if (ins === '-' || del === '-') continue;
         const insNum = parseInt(ins!, 10);
         const delNum = parseInt(del!, 10);
@@ -340,10 +294,22 @@ export function readGitCommitInfo(): GitCommitInfo | null {
         if (!Number.isNaN(delNum)) deletions += delNum;
       }
     } catch {
-      // numstat unavailable — keep 0/0, don't block the rest of the record.
+      // numstat 不可用 —— 保持 0/0,不阻塞其余字段。
     }
 
-    return { hash, message, files, cwd, insertions, deletions };
+    let branch: string | null = null;
+    try {
+      const out = execSync('git rev-parse --abbrev-ref HEAD', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+        cwd,
+      }).trim();
+      branch = out && out !== 'HEAD' ? out : null;
+    } catch {
+      // 分支读取失败 —— 记 null。
+    }
+
+    return { hash, message, files, cwd, insertions, deletions, branch };
   } catch {
     return null;
   }

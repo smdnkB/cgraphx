@@ -75,6 +75,8 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   post_tool_use: '工具完成',
   stop: 'Stop',
   git_commit: 'Git 提交',
+  session_start: '会话开始',
+  session_end: '会话结束',
 };
 
 /**
@@ -89,6 +91,8 @@ export const EVENT_TYPE_CHIP_TONE: Record<EventType, EventTone> = {
   post_tool_use: 'post',
   stop: 'stop',
   git_commit: 'git',
+  session_start: 'stop',
+  session_end: 'stop',
 };
 
 // ----- schema-knowledge 模型知识库预览(2026-09-16-cgraphx-web数据库预览)-----

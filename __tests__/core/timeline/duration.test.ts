@@ -398,9 +398,9 @@ describe('B-2: pre_tool_use whitelist + duration_ms enricher', () => {
     // turn-state, postToolUseHook reads null and short-circuits the enricher
     // before reaching getMostRecentPre. Write the turn file manually so the
     // enricher path is exercised.
-    fs.mkdirSync(path.join(dir, '.cgraphx'), { recursive: true });
+    fs.mkdirSync(path.join(dir, '.cgraphx', 'turns'), { recursive: true });
     fs.writeFileSync(
-      path.join(dir, '.cgraphx', 'timeline-current-turn.json'),
+      path.join(dir, '.cgraphx', 'turns', `${sessionId}.json`),
       JSON.stringify({ turn_id: turnId, session_id: sessionId, ts: new Date().toISOString() }),
     );
 
