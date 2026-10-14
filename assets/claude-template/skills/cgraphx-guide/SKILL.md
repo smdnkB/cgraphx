@@ -34,7 +34,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
 | **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/knowledge-init`(接手陌生项目时建业务知识库) |
 | **日常做需求 · 必经 2 步** | `/clarify-requirements` 澄清 → `/implementation`(小规模)或 `/subagent-implement`(大规模)实现 |
-| **日常做需求 · 复杂按需** | `/write-prd`、`/write-spec`、`/write-plan`、`/knowledge-write`(沉淀到 `docs/knowledge/`)、`/write-delivery-guide`(交付讲解,实现收尾提示触发) |
+| **日常做需求 · 复杂按需** | `/write-wireframe`(涉及界面时画线框)、`/write-prd`、`/write-spec`、`/write-plan`、`/knowledge-write`(沉淀到 `docs/knowledge/`)、`/write-delivery-guide`(交付讲解,实现收尾提示触发) |
 | **工作回顾 · 按需** | `/developer-timeline`(日/周/月报)、`/write-design-doc`(发布后合成设计文档) |
 | **卸载 · 可选** | `cgraphx uninstall`(清项目 `.claude/` 内包自带的 skills/配置 + 删 `.cgraphx/`)、`npm uninstall -g cgraphx` |
 
@@ -45,6 +45,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | skill | 何时建议用户调 |
 |---|---|
 | `/clarify-requirements` | 接到模糊需求,先澄清意图、业务边界、技术边界 |
+| `/write-wireframe` | 需求涉及界面时画低保真 HTML 线框(可点击、可切空态/异常),看着界面确认布局交互或发现业务问题;clarify 前后、spec 后都可用,迭代出 v1/v2 |
 | `/write-prd` | 要给业务方 / 领导确认业务文档 |
 | `/write-spec` | 写技术规格(归档业务行为 / 规则 / 接口 / 数据,作为 plan 的稳定输入) |
 | `/write-plan` | 拆执行计划(给 agent 执行) |
@@ -54,6 +55,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/run-api-test` | 跑接口测试 + 核实写接口 DB 副作用 + 出报告(写接口必查 DB;失败只报告不修代码) |
 | `/knowledge-init` | 接手陌生项目,派子 agent 自动探索、建业务知识库 |
 | `/knowledge-write` | 把业务决策 / 概念沉淀成 md 到 `docs/knowledge/` |
+| `/code-map-write` | 生成/刷新代码地图(`docs/code-map/`):系统交互图 + 业务流程的代码链路与数据流转;实现收尾自动提示,也可批量初建 |
 | `/write-design-doc` | 发布后按需,从知识库合成面向人类阅读的设计文档(HTML 或 Markdown) |
 | `/write-delivery-guide` | 交付后生成/重生成「交付讲解」——业务故事线讲解,让人看懂 AI 写的代码(实现收尾自动提示) |
 | `/developer-timeline` | 生成日报 / 周报 / 月报 / 阶段总结 / 交付汇报 |
@@ -63,6 +65,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | skill / 工具 | agent 何时自动调 |
 |---|---|
 | `knowledge-api` | 任务开始时查 `docs/knowledge/` 业务决策 / 概念 / 历史教训 |
+| `code-map-recall` | 写 plan 画设计预览前,取 `docs/code-map/` 中涉及流程/系统的已有视图作底图,并判断是否过期 |
 | `db-query` | 验证数据假设 / 查表结构 / 找测试数据(查 MySQL / PostgreSQL,沉淀 schema 到 `docs/schema-knowledge/`) |
 
 ## 安装与接入(两步)
