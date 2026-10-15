@@ -5,6 +5,8 @@
  * (user prompts, tool calls, commits), not code-graph nodes. See spec §0.1.
  */
 
+import type { AgentId } from '../agents';
+
 export type EventType =
   | 'user_prompt'
   | 'pre_tool_use'
@@ -31,6 +33,8 @@ export interface TimelineEventInput {
   turn_id?: string | null;
   commit_insertions?: number | null;
   commit_deletions?: number | null;
+  /** 来源 agent;仅写入,读取侧 TimelineEvent 不暴露。git_commit 未归属会话时为 null。 */
+  agent?: AgentId | null;
 }
 
 export interface TimelineEvent {

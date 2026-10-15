@@ -38,19 +38,18 @@ export function getCurrentTimelineSchemaVersion(db: SqliteDatabase): number {
 }
 
 /**
- * Apply the timeline schema to an open DB handle.
+ * 在已打开的连接上应用 timeline schema,每次 hook 触发都会调用(幂等)。
  *
- * Idempotent: safe to call on every hook trigger. The SQL is composed entirely
- * of `CREATE ... IF NOT EXISTS` + a single version-row `INSERT OR IGNORE`.
+ * 先执行全幂等的 schema.sql,再为旧库补 agent 列(见 ensureAgentColumn)。
  *
- * @throws TimelineSchemaError if a recorded version is *newer* than what this
- *   build supports (would happen when a newer cgraphx wrote the schema and
- *   an older one tried to read it).
+ * @throws TimelineSchemaError 库中记录的版本高于本构建支持的版本
+ *   (新版 cgraphx 写过的库被旧版打开)。
  */
 export function ensureTimelineSchema(db: SqliteDatabase): void {
   const schemaPath = resolveSchemaPath();
   const sql = fs.readFileSync(schemaPath, 'utf-8');
   db.exec(sql);
+  ensureAgentColumn(db);
 
   const current = getCurrentTimelineSchemaVersion(db);
   if (current > TIMELINE_SCHEMA_VERSION) {
@@ -59,6 +58,40 @@ export function ensureTimelineSchema(db: SqliteDatabase): void {
         `(${TIMELINE_SCHEMA_VERSION}). Upgrade cgraphx.`,
       { current, supported: TIMELINE_SCHEMA_VERSION },
     );
+  }
+}
+
+/** timeline_events 是否已有 agent 列(一次 PRAGMA 查询,不扫表)。 */
+function hasAgentColumn(db: SqliteDatabase): boolean {
+  const cols = db.prepare('PRAGMA table_info(timeline_events)').all() as Array<{ name: string }>;
+  return cols.some((c) => c.name === 'agent');
+}
+
+/**
+ * 旧库(版本 1)补 agent 列并把存量行回填为 'claude-code'。
+ *
+ * 快路径:已有列直接返回。慢路径在 BEGIN IMMEDIATE 写事务内二次确认后补列 + 回填,
+ * 多个 hook 进程并发打开旧库时只有一个真正执行;另一进程抢先补列导致的
+ * `duplicate column name` 视为成功。其它错误照常抛出,由 hook 层吞掉。
+ */
+function ensureAgentColumn(db: SqliteDatabase): void {
+  if (hasAgentColumn(db)) return;
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      if (!hasAgentColumn(db)) {
+        db.exec('ALTER TABLE timeline_events ADD COLUMN agent TEXT');
+        db.exec("UPDATE timeline_events SET agent = 'claude-code'");
+      }
+      db.exec('COMMIT');
+    } catch (err) {
+      try { db.exec('ROLLBACK'); } catch { /* 事务可能已结束 */ }
+      throw err;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('duplicate column name')) return;
+    throw err;
   }
 }
 

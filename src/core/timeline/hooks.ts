@@ -13,13 +13,14 @@ import { runHook, isKillSwitchOn } from './hook-runner';
 import { extractHookPayload } from './payload';
 import { resolveProjectRoot } from '../directory';
 import { summarizeToolResponse } from './post-tool-summary';
-import { CLAUDE_SESSION_ID_ENV, COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
+import { COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
 import { readCurrentTurnId, writeCurrentTurn, removeTurnState } from './turn-state';
 import type { TimelineEventInput } from './types';
+import { resolveSessionIdFromEnv, type AgentId } from '../agents';
 import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
-export async function userPromptHook(): Promise<void> {
+export async function userPromptHook(agent: AgentId = 'claude-code'): Promise<void> {
   await runHook((payload) => {
     if (payload.prompt === undefined) return null;
     // B-1: generate a per-turn id. Honor a host-supplied turn_id if present
@@ -39,11 +40,12 @@ export async function userPromptHook(): Promise<void> {
       prompt_text: payload.prompt,
       turn_id,
       cwd: payload.cwd,
+      agent,
     } satisfies TimelineEventInput;
   });
 }
 
-export async function preToolUseHook(): Promise<void> {
+export async function preToolUseHook(agent: AgentId = 'claude-code'): Promise<void> {
   await runHook(async (payload) => {
     if (!payload.tool_name) return null;
     // B-2 pre-event reduction: only write-tools (Edit/Write/MultiEdit/
@@ -63,11 +65,12 @@ export async function preToolUseHook(): Promise<void> {
       tool_args: payload.tool_input,
       turn_id,
       cwd: payload.cwd,
+      agent,
     } satisfies TimelineEventInput;
   });
 }
 
-export async function postToolUseHook(): Promise<void> {
+export async function postToolUseHook(agent: AgentId = 'claude-code'): Promise<void> {
   await runHook(async (payload) => {
     if (!payload.tool_name) return null;
     const summary = summarizeToolResponse(payload.tool_name, payload.tool_response, payload.tool_input);
@@ -84,6 +87,7 @@ export async function postToolUseHook(): Promise<void> {
       tool_result_summary: summary,
       turn_id,
       cwd: payload.cwd,
+      agent,
     } satisfies TimelineEventInput;
   }, {
     // Enricher runs inside recordEvent before insert. Computes duration_ms
@@ -120,7 +124,7 @@ export async function postToolUseHook(): Promise<void> {
   });
 }
 
-export async function stopHook(): Promise<void> {
+export async function stopHook(agent: AgentId = 'claude-code'): Promise<void> {
   await runHook(async (payload) => {
     const turn_id = await readCurrentTurnId(
       payload.session_id ?? null,
@@ -132,6 +136,7 @@ export async function stopHook(): Promise<void> {
       session_id: payload.session_id ?? null,
       turn_id,
       cwd: payload.cwd,
+      agent,
       // If Claude Code surfaces token usage in the payload later, capture it here.
       metadata: payload.stop_hook_active !== undefined
         ? { stop_hook_active: payload.stop_hook_active }
@@ -172,12 +177,13 @@ export async function stopHook(): Promise<void> {
  * 会话开始(SessionStart):记录 session_start 事件,turn_id 恒为 null。
  * 宿主给出字符串 `source`(startup / resume / clear / compact 等)时写入 metadata.source。
  */
-export async function sessionStartHook(): Promise<void> {
+export async function sessionStartHook(agent: AgentId = 'claude-code'): Promise<void> {
   await runHook((payload) => ({
     event_type: 'session_start',
     session_id: payload.session_id ?? null,
     turn_id: null,
     cwd: payload.cwd,
+    agent,
     metadata: payload.source !== undefined ? { source: payload.source } : undefined,
   } satisfies TimelineEventInput));
 }
@@ -187,7 +193,7 @@ export async function sessionStartHook(): Promise<void> {
  * 事件写入后删除本会话的 turn 状态文件。开关关闭或无 payload 时 runHook 不调
  * buildEvent,此时也不碰 turn 文件。
  */
-export async function sessionEndHook(): Promise<void> {
+export async function sessionEndHook(agent: AgentId = 'claude-code'): Promise<void> {
   // runHook 不提供写库后回调;buildEvent 被调用时记下待清理的会话,runHook 返回后再删。
   let ended = null as { projectRoot: string; session_id: string | null } | null;
   await runHook((payload) => {
@@ -198,6 +204,7 @@ export async function sessionEndHook(): Promise<void> {
       session_id,
       turn_id: null,
       cwd: payload.cwd,
+      agent,
       metadata: payload.reason !== undefined ? { reason: payload.reason } : undefined,
     } satisfies TimelineEventInput;
   });
@@ -211,8 +218,8 @@ export async function sessionEndHook(): Promise<void> {
  * git post-commit hook —— 不读 stdin,从 `git` CLI 取提交信息。
  *
  * 由 `.git/hooks/post-commit` 片段后台调起(`&`),耗时可以比 Claude Code hook 宽松。
- * 会话 id 取自环境变量 CLAUDE_CODE_SESSION_ID:agent 在会话内通过 Bash 提交时
- * 子进程继承该变量;终端手动提交时没有,记为 null(未归属)。
+ * 会话 id 与来源 agent 经 agents 门面从会话环境变量解析:agent 在会话内通过 Bash
+ * 提交时子进程继承该变量;终端手动提交时没有,两者均记为 null(未归属)。
  */
 export async function gitCommitHook(): Promise<void> {
   if (isKillSwitchOn()) return;
@@ -224,8 +231,10 @@ export async function gitCommitHook(): Promise<void> {
   });
   if (!info) return;
 
-  const envSession = process.env[CLAUDE_SESSION_ID_ENV];
-  const session_id = typeof envSession === 'string' && envSession.length > 0 ? envSession : null;
+  // 归属会话与来源 agent 取自会话环境变量;终端手动提交时两者均为 null。
+  const fromEnv = resolveSessionIdFromEnv();
+  const session_id = fromEnv?.sessionId ?? null;
+  const agent = fromEnv?.agent ?? null;
 
   try {
     const { recordEvent } = await import('./recorder');
@@ -234,6 +243,7 @@ export async function gitCommitHook(): Promise<void> {
     await recordEvent(resolveProjectRoot(info.cwd), {
       event_type: 'git_commit',
       session_id,
+      agent,
       commit_hash: info.hash,
       commit_message: info.message,
       commit_files: info.files,

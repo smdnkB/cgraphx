@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS timeline_schema_versions (
 INSERT OR IGNORE INTO timeline_schema_versions (version, applied_at, description)
 VALUES (1, strftime('%s', 'now') * 1000, 'Initial timeline schema');
 
+INSERT OR IGNORE INTO timeline_schema_versions (version, applied_at, description)
+VALUES (2, strftime('%s', 'now') * 1000, 'Add agent column');
+
 CREATE TABLE IF NOT EXISTS timeline_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ts TEXT NOT NULL,
@@ -27,7 +30,8 @@ CREATE TABLE IF NOT EXISTS timeline_events (
   metadata TEXT,
   turn_id TEXT,
   commit_insertions INTEGER,
-  commit_deletions INTEGER
+  commit_deletions INTEGER,
+  agent TEXT
 );
 
 CREATE INDEX IF NOT EXISTS timeline_events_ts_idx ON timeline_events(ts);

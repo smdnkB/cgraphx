@@ -14,6 +14,7 @@ import * as path from 'node:path';
 
 import { execSync } from 'node:child_process';
 
+import { agentSettingsPath, getAgentProfile, hookCommand, type AgentId, type AgentProfile } from '../agents';
 import { DatabaseConnection } from '../db';
 import { COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, GIT_COMMIT_SUBCOMMAND, HOOK_EVENTS_TO_COMMANDS } from './constants';
 import { cleanDebrisCgraphxDirs } from './debris';
@@ -135,17 +136,26 @@ function writeGitHook(gitHookPath: string, content: string, executable: boolean)
   }
 }
 
+/** 按 id 取 agent 描述;未登记时抛错(调用方只应传已登记的 AgentId)。 */
+function requireProfile(agent: AgentId): AgentProfile {
+  const profile = getAgentProfile(agent);
+  if (!profile) throw new Error(`agent ${agent} 未登记`);
+  return profile;
+}
+
 export function installTimelineHooks(
   projectRoot: string,
-  opts: { purgeFirst?: boolean } = {},
+  opts: { purgeFirst?: boolean; agent?: AgentId } = {},
 ): InstallReport {
+  const agent = opts.agent ?? 'claude-code';
+  const profile = requireProfile(agent);
   const resolvedRoot = path.resolve(projectRoot);
-  const settingsPath = path.join(resolvedRoot, '.claude', 'settings.json');
+  const settingsPath = agentSettingsPath(resolvedRoot, profile);
   const gitRoot = findGitRoot(resolvedRoot);
   const gitHookPath = gitRoot ? path.join(gitRoot, '.git', 'hooks', 'post-commit') : null;
 
   if (opts.purgeFirst) {
-    uninstallTimelineHooks(resolvedRoot, { purgeData: false });
+    uninstallTimelineHooks(resolvedRoot, { purgeData: false, agent });
   }
 
   const settings = readSettings(settingsPath);
@@ -157,7 +167,7 @@ export function installTimelineHooks(
   const skipped: string[] = [];
 
   for (const { event, subcommand } of HOOK_EVENTS_TO_COMMANDS) {
-    const command = `cgraphx ${subcommand}`;
+    const command = hookCommand(`cgraphx ${subcommand}`, profile);
     const existing = hooks[event] ?? [];
 
     // Idempotent: skip if any group already has this exact command.
@@ -226,10 +236,11 @@ export function installTimelineHooks(
 
 export function uninstallTimelineHooks(
   projectRoot: string,
-  opts: { purgeData?: boolean } = {},
+  opts: { purgeData?: boolean; agent?: AgentId; keepGitHook?: boolean } = {},
 ): UninstallReport {
+  const profile = requireProfile(opts.agent ?? 'claude-code');
   const resolvedRoot = path.resolve(projectRoot);
-  const settingsPath = path.join(resolvedRoot, '.claude', 'settings.json');
+  const settingsPath = agentSettingsPath(resolvedRoot, profile);
   const gitRoot = findGitRoot(resolvedRoot);
   const gitHookPath = gitRoot ? path.join(gitRoot, '.git', 'hooks', 'post-commit') : null;
 
@@ -265,9 +276,9 @@ export function uninstallTimelineHooks(
     writeSettings(settingsPath, settings);
   }
 
-  // Git hook
+  // git 钩子:keepGitHook(只卸指定 agent)时保留
   let gitHookRemoved = false;
-  if (gitHookPath && fs.existsSync(gitHookPath)) {
+  if (!opts.keepGitHook && gitHookPath && fs.existsSync(gitHookPath)) {
     const content = readGitHook(gitHookPath);
     if (content.includes(GIT_HOOK_MARKER)) {
       const filtered = stripTimelineGitHook(content);

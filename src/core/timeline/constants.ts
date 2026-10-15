@@ -7,14 +7,8 @@
 /** Kill-switch env var: any non-empty value (except '0'/'false') disables timeline. */
 export const NO_TIMELINE_ENV = 'CGRAPHX_NO_TIMELINE';
 
-/**
- * Claude Code 注入给会话内子进程(含 Bash 及其派生的 git hook)的会话 id 环境变量名。
- * 唯一来源,经 timeline 门面导出供 task 子系统使用。
- */
-export const CLAUDE_SESSION_ID_ENV = 'CLAUDE_CODE_SESSION_ID';
-
 /** Schema version (independent timeline_schema_versions table). */
-export const TIMELINE_SCHEMA_VERSION = 1;
+export const TIMELINE_SCHEMA_VERSION = 2;
 
 /** Field size caps (spec §2.3). */
 export const ARGS_MAX_BYTES = 64 * 1024;

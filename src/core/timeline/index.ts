@@ -10,7 +10,6 @@ export { queryEvents, getEventById, getEventStats, getMostRecentPre, getSessionS
 export { installTimelineHooks, uninstallTimelineHooks } from './installer';
 export { isKillSwitchOn } from './hook-runner';
 export { describeEvent } from './describe';
-export { CLAUDE_SESSION_ID_ENV } from './constants';
 export type {
   EventType,
   TimelineEvent,

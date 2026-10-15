@@ -130,6 +130,8 @@ interface EventRow {
   turn_id: string | null;
   commit_insertions: number | null;
   commit_deletions: number | null;
+  /** 来源 agent 原始值;rowToEvent 不映射,读取侧输出不含该字段。 */
+  agent?: string | null;
 }
 
 function rowToEvent(row: EventRow): TimelineEvent {
@@ -204,8 +206,8 @@ export class TimelineStore {
              ts, session_id, event_type, tool_name, tool_args,
              tool_result_summary, prompt_text, duration_ms,
              commit_hash, commit_message, commit_files, cwd, metadata,
-             turn_id, commit_insertions, commit_deletions
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             turn_id, commit_insertions, commit_deletions, agent
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           ts,
@@ -224,6 +226,7 @@ export class TimelineStore {
           input.turn_id ?? null,
           input.commit_insertions ?? null,
           input.commit_deletions ?? null,
+          input.agent ?? null,
         );
       const id = (result as unknown as { lastInsertRowid: number }).lastInsertRowid;
       return typeof id === 'number' ? id : Number(id);

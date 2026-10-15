@@ -33,6 +33,14 @@ import { HOOK_EVENTS_TO_COMMANDS, GIT_COMMIT_SUBCOMMAND, type HookEventName } fr
 import { describeEvent, truncate } from './describe';
 import type { EventType, TimelineEvent, TimelineStats } from './types';
 import {
+  getAgentProfile,
+  isAgentInstalled,
+  listAgentProfiles,
+  resolveHookAgent,
+  type AgentId,
+  type AgentProfile,
+} from '../agents';
+import {
   userPromptHook,
   preToolUseHook,
   postToolUseHook,
@@ -49,7 +57,7 @@ export { describeEvent } from './describe';
  * Claude Code hook 事件名 → 处理函数;子命令名只从 HOOK_EVENTS_TO_COMMANDS 取。
  * 键类型由 HOOK_EVENTS_TO_COMMANDS 推出,新增事件漏配处理函数时编译期报错。
  */
-const HOOK_HANDLERS: Record<HookEventName, () => Promise<void>> = {
+const HOOK_HANDLERS: Record<HookEventName, (agent: AgentId) => Promise<void>> = {
   UserPromptSubmit: userPromptHook,
   PreToolUse: preToolUseHook,
   PostToolUse: postToolUseHook,
@@ -322,12 +330,16 @@ export function registerTimelineCommands(program: Command): void {
     .command('install')
     .description('Install timeline hooks into this project\'s .claude/settings.json and .git/hooks/')
     .option('--purge-first', 'Remove existing timeline hooks before installing (clean slate)')
-    .action(async (opts: { purgeFirst?: boolean }) => {
+    .option('-t, --target <ids>', 'Comma-separated agent ids (default: installed agents, else claude-code)')
+    .action(async (opts: { purgeFirst?: boolean; target?: string }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
-        const report = installTimelineHooks(projectRoot, { purgeFirst: opts.purgeFirst === true });
-        process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+        const profiles = selectAgents(projectRoot, opts.target);
+        const reports = profiles.map((p) =>
+          installTimelineHooks(projectRoot, { purgeFirst: opts.purgeFirst === true, agent: p.id }),
+        );
+        writeReports(reports);
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
@@ -338,12 +350,18 @@ export function registerTimelineCommands(program: Command): void {
     .command('uninstall')
     .description('Remove timeline hooks from this project')
     .option('--purge', 'Also DROP all timeline_* tables (data loss)')
-    .action(async (opts: { purge?: boolean }) => {
+    .option('-t, --target <ids>', 'Comma-separated agent ids (default: installed agents, else claude-code)')
+    .action(async (opts: { purge?: boolean; target?: string }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
-        const report = uninstallTimelineHooks(projectRoot, { purgeData: opts.purge === true });
-        process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+        const profiles = selectAgents(projectRoot, opts.target);
+        // 给了 -t 只卸指定 agent 的配置,不动 git post-commit 钩子(spec §5)
+        const keepGitHook = opts.target !== undefined;
+        const reports = profiles.map((p) =>
+          uninstallTimelineHooks(projectRoot, { purgeData: opts.purge === true, agent: p.id, keepGitHook }),
+        );
+        writeReports(reports);
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
@@ -357,12 +375,49 @@ export function registerTimelineCommands(program: Command): void {
     const handler = HOOK_HANDLERS[event];
     program
       .command(subcommand, { hidden: true })
-      .action(async () => { await handler(); });
+      .option('--agent <id>', 'Source agent id (unknown → claude-code)')
+      // --agent 缺省或无法识别时按 claude-code 处理,不报错(spec §12)
+      .action(async (opts: { agent?: string }) => { await handler(resolveHookAgent(opts.agent).id); });
   }
 
   program
     .command(GIT_COMMIT_SUBCOMMAND, { hidden: true })
     .action(async () => { await gitCommitHook(); });
+}
+
+/** 可用 agent id 列表(含 legacy 别名),用于 -t 报错提示。 */
+function availableAgentIdsHelp(): string {
+  return listAgentProfiles()
+    .map((p) => (p.legacyIds.length > 0 ? `${p.id} (${p.legacyIds.join(', ')})` : p.id))
+    .join(', ');
+}
+
+/**
+ * 选出 timeline install/uninstall 作用的 agent(spec §4.3):
+ * 给了 -t 用列出的 agent(未知 id 报参数错误);没给则取已装的 agent,一个都没装时只取 claude-code。
+ */
+function selectAgents(projectRoot: string, target: string | undefined): AgentProfile[] {
+  if (target !== undefined) {
+    const ids = target.split(',').map((s) => s.trim()).filter(Boolean);
+    if (ids.length === 0) throw new ArgError(`Invalid --target: empty. Available: ${availableAgentIdsHelp()}`);
+    const selected: AgentProfile[] = [];
+    for (const id of ids) {
+      const profile = getAgentProfile(id);
+      if (!profile) throw new ArgError(`Unknown agent: ${id}. Available: ${availableAgentIdsHelp()}`);
+      if (!selected.includes(profile)) selected.push(profile);
+    }
+    return selected;
+  }
+  const installed = listAgentProfiles().filter((p) => isAgentInstalled(projectRoot, p));
+  if (installed.length > 0) return installed;
+  const fallback = getAgentProfile('claude-code');
+  return fallback ? [fallback] : [];
+}
+
+/** 单个 agent 输出单个报告对象(与改造前一致);多个输出报告数组。 */
+function writeReports(reports: readonly unknown[]): void {
+  const out = reports.length === 1 ? reports[0] : reports;
+  process.stdout.write(JSON.stringify(out, null, 2) + '\n');
 }
 
 function parseType(s: string | undefined): EventType | undefined {
