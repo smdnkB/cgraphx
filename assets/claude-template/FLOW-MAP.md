@@ -72,7 +72,7 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 - **链**:`/write-ui-test`(从 spec 派生用例,一功能点一用例)→ `/run-ui-test`(Playwright MCP 驱动浏览器执行 + 截图 + 报告;**不验库,只看 UI 表现**)
 - **前置**:spec + 实现完成 + 目标项目已装 Playwright MCP;推荐在接口测试后跑(非硬前置);服务启动 / 测试数据 / headed 与否归人工
-- **产物**:`docs/features/<feature-id>/ui功能测试/`(用例规格 + 报告 + 按功能点命名的截图)
+- **产物**:`docs/features/<feature-id>/ui功能测试/`(用例规格 + xlsx 报告 + 结构化结果 + 按功能点命名的截图)
 
 ## 单元测试流程
 

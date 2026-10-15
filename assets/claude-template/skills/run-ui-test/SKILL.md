@@ -59,7 +59,8 @@ description: 在 write-ui-test 生成用例规格后,通过 Playwright MCP 驱�
 
 产物文件名(归用户指定的 feature 目录):
 
-- 测试报告:`docs/features/<feature-id>/ui功能测试/<文件前缀>-ui功能测试报告.md`
+- 结构化结果:`docs/features/<feature-id>/ui功能测试/<文件前缀>-ui功能测试结果.json`(agent 写)
+- 测试报告:`docs/features/<feature-id>/ui功能测试/<文件前缀>-ui功能测试报告.xlsx`(`cgraphx report ui-test` 生成)
 - 截图:`docs/features/<feature-id>/ui功能测试/<功能点名>.png`(同功能点多张追加 `-2`/`-3`)
 
 格式见 `references/report-format.md`。
@@ -132,9 +133,16 @@ description: 在 write-ui-test 生成用例规格后,通过 Playwright MCP 驱�
 ### R6. 产出测试报告
 
 - **前置**:R5 完成
-- **行为**:按 `references/report-format.md` 汇总产出 `<文件前缀>-ui功能测试报告.md`(汇总 + 逐用例结果 + 失败汇总 + 下一步建议 + 产物清单)
+- **行为**:
+  1. 按 `references/report-format.md` 写 `<文件前缀>-ui功能测试结果.json`(每条用例一项,含截图路径)
+  2. 生成 xlsx:
+     ```bash
+     cgraphx report ui-test docs/features/<feature-id>/ui功能测试/<文件前缀>-ui功能测试结果.json
+     ```
+  3. 退出码 2 → 按 stderr 逐条修正 JSON,回到 2;**只修 JSON,不重跑用例、不改结果判定**
+- **xlsx 不手写**:报告只由命令生成;旧的 md 报告由命令删除
 - **报告归属**:归用户指定的 feature 目录
-- **同需求重复触发**:覆盖该需求报告,不增量合并
+- **同需求重复触发**:覆盖该需求的 JSON 与 xlsx,不增量合并
 
 ## 状态枚举
 
@@ -160,11 +168,14 @@ description: 在 write-ui-test 生成用例规格后,通过 Playwright MCP 驱�
 | 单条用例失败 | 记状态 + 原因,继续其他用例 |
 | 浏览器 / MCP 崩溃 | 记「失败-环境」,出报告如实标注,不产误导性结论 |
 | 同需求重复触发 | 覆盖该需求报告,不增量合并 |
+| 生成命令校验失败(退出码 2) | 按报错修正 JSON 后重新执行命令,不重跑用例、不改结果判定 |
 
 ## 质量检查
 
 跑完后自检:
-- 报告归指定的 feature 目录 `ui功能测试/`,截图同目录按功能点命名
+- JSON、xlsx、截图归指定 feature 目录的 `ui功能测试/`,截图按功能点命名
+- 结构化结果 JSON 已写出,且 `cgraphx report ui-test` 以退出码 0 生成了 xlsx
+- 目录中没有旧的 md 报告
 - 每条用例都有状态(六枚举之一),失败用例有原因分类
 - 全程没查库、没修代码、没改用例、没自动重跑
 - 五道前置关都过了才执行,没盲跑(MCP/URL/服务/数据)
@@ -174,10 +185,10 @@ description: 在 write-ui-test 生成用例规格后,通过 Playwright MCP 驱�
 ## 收尾
 
 提示用户:
-1. 测试报告位置(`<文件前缀>-ui功能测试报告.md`)与截图目录
+1. 测试报告位置(`<文件前缀>-ui功能测试报告.xlsx`)、结构化结果 JSON 与截图目录
 2. 通过 / 失败 / 跳过汇总
 3. 失败用例清单 + 原因分类
-4. 下一步建议:
+4. 下一步建议(只在对话中给出,不写入报告):
    - 失败-预期不符 → 疑似功能 bug,走 `/implementation` 修,修完重跑 `/run-ui-test`
    - 失败-元素缺失 → 确认页面结构是否改版;用例过时 → 走 `/write-ui-test` 重新派生
    - 失败-环境 → 服务/浏览器问题,恢复后重跑
