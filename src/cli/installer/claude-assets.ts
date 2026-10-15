@@ -31,14 +31,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { applyAssetReplacements, getAgentProfile, type AgentProfile } from '../../core/agents';
-
-/** 默认 agent 描述(claude-code):未传 profile 时的行为即改造前行为。 */
-function claudeCodeProfile(): AgentProfile {
-  const profile = getAgentProfile('claude-code');
-  if (!profile) throw new Error('agent 描述 claude-code 未登记');
-  return profile;
-}
+import { applyAssetReplacements, defaultAgentProfile, type AgentProfile } from '../../core/agents';
 
 /** 按 agent 替换规则改写内容的文本扩展名;其余扩展名一律逐字节复制。 */
 const TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
@@ -132,7 +125,7 @@ function walkFiles(root: string): string[] {
  */
 export function deployClaudeAssets(
   targetClaudeDir: string,
-  profile: AgentProfile = claudeCodeProfile(),
+  profile: AgentProfile = defaultAgentProfile(),
 ): ClaudeAssetChange[] {
   const templateDir = resolveTemplateDir();
   if (!templateDir) {
@@ -186,7 +179,7 @@ export function deployClaudeAssets(
 export function cleanDeprecatedAssets(
   targetClaudeDir: string,
   overrideTemplateDir?: string,
-  profile: AgentProfile = claudeCodeProfile(),
+  profile: AgentProfile = defaultAgentProfile(),
 ): ClaudeAssetChange[] {
   const templateDir = overrideTemplateDir ?? resolveTemplateDir();
   if (!templateDir) return [];
@@ -274,7 +267,7 @@ export function readTemplateClaudeMd(overrideDir?: string): string | null {
 export function removeClaudeAssets(
   targetClaudeDir: string,
   overrideTemplateDir?: string,
-  profile: AgentProfile = claudeCodeProfile(),
+  profile: AgentProfile = defaultAgentProfile(),
 ): ClaudeAssetChange[] {
   const templateDir = overrideTemplateDir ?? resolveTemplateDir();
   if (!templateDir || !fs.existsSync(templateDir)) {

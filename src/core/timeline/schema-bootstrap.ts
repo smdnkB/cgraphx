@@ -21,6 +21,7 @@ import {
 } from '../db';
 import { TimelineSchemaError } from './errors';
 import { TIMELINE_SCHEMA_VERSION } from './constants';
+import { DEFAULT_AGENT_ID } from '../agents';
 
 /** Resolve schema.sql path — works in both dist/ and src/ layouts. */
 function resolveSchemaPath(): string {
@@ -68,7 +69,7 @@ function hasAgentColumn(db: SqliteDatabase): boolean {
 }
 
 /**
- * 旧库(版本 1)补 agent 列并把存量行回填为 'claude-code'。
+ * 旧库(版本 1)补 agent 列并把存量行回填为默认 agent(Claude Code)。
  *
  * 快路径:已有列直接返回。慢路径在 BEGIN IMMEDIATE 写事务内二次确认后补列 + 回填,
  * 多个 hook 进程并发打开旧库时只有一个真正执行;另一进程抢先补列导致的
@@ -81,7 +82,7 @@ function ensureAgentColumn(db: SqliteDatabase): void {
     try {
       if (!hasAgentColumn(db)) {
         db.exec('ALTER TABLE timeline_events ADD COLUMN agent TEXT');
-        db.exec("UPDATE timeline_events SET agent = 'claude-code'");
+        db.exec(`UPDATE timeline_events SET agent = '${DEFAULT_AGENT_ID}'`);
       }
       db.exec('COMMIT');
     } catch (err) {

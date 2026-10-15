@@ -33,10 +33,11 @@ import { HOOK_EVENTS_TO_COMMANDS, GIT_COMMIT_SUBCOMMAND, type HookEventName } fr
 import { describeEvent, truncate } from './describe';
 import type { EventType, TimelineEvent, TimelineStats } from './types';
 import {
-  getAgentProfile,
-  isAgentInstalled,
-  listAgentProfiles,
+  AGENT_OPTION_FLAG,
+  DEFAULT_AGENT_ID,
+  parseAgentList,
   resolveHookAgent,
+  selectInstalledAgents,
   type AgentId,
   type AgentProfile,
 } from '../agents';
@@ -330,7 +331,7 @@ export function registerTimelineCommands(program: Command): void {
     .command('install')
     .description('Install timeline hooks into this project\'s .claude/settings.json and .git/hooks/')
     .option('--purge-first', 'Remove existing timeline hooks before installing (clean slate)')
-    .option('-t, --target <ids>', 'Comma-separated agent ids (default: installed agents, else claude-code)')
+    .option('-t, --target <ids>', `Comma-separated agent ids, or all / none (default: installed agents, else ${DEFAULT_AGENT_ID})`)
     .action(async (opts: { purgeFirst?: boolean; target?: string }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
@@ -350,7 +351,7 @@ export function registerTimelineCommands(program: Command): void {
     .command('uninstall')
     .description('Remove timeline hooks from this project')
     .option('--purge', 'Also DROP all timeline_* tables (data loss)')
-    .option('-t, --target <ids>', 'Comma-separated agent ids (default: installed agents, else claude-code)')
+    .option('-t, --target <ids>', `Comma-separated agent ids, or all / none (default: installed agents, else ${DEFAULT_AGENT_ID})`)
     .action(async (opts: { purge?: boolean; target?: string }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
@@ -375,8 +376,8 @@ export function registerTimelineCommands(program: Command): void {
     const handler = HOOK_HANDLERS[event];
     program
       .command(subcommand, { hidden: true })
-      .option('--agent <id>', 'Source agent id (unknown → claude-code)')
-      // --agent 缺省或无法识别时按 claude-code 处理,不报错(spec §12)
+      .option(`${AGENT_OPTION_FLAG} <id>`, `Source agent id (unknown → ${DEFAULT_AGENT_ID})`)
+      // --agent 缺省或无法识别时按默认 agent 处理,不报错(spec §12)
       .action(async (opts: { agent?: string }) => { await handler(resolveHookAgent(opts.agent).id); });
   }
 
@@ -385,33 +386,20 @@ export function registerTimelineCommands(program: Command): void {
     .action(async () => { await gitCommitHook(); });
 }
 
-/** 可用 agent id 列表(含 legacy 别名),用于 -t 报错提示。 */
-function availableAgentIdsHelp(): string {
-  return listAgentProfiles()
-    .map((p) => (p.legacyIds.length > 0 ? `${p.id} (${p.legacyIds.join(', ')})` : p.id))
-    .join(', ');
-}
-
 /**
- * 选出 timeline install/uninstall 作用的 agent(spec §4.3):
- * 给了 -t 用列出的 agent(未知 id 报参数错误);没给则取已装的 agent,一个都没装时只取 claude-code。
+ * 选出 timeline install/uninstall 作用的 agent(spec §4.3,规则同 `install -y`,见 agents 门面):
+ * 给了 -t 按 `parseAgentList` 解析(`all` / `none` / id 列表;未知 id 报参数错误);
+ * 没给则取已装的 agent,一个都没装时只取默认 agent。
  */
 function selectAgents(projectRoot: string, target: string | undefined): AgentProfile[] {
-  if (target !== undefined) {
-    const ids = target.split(',').map((s) => s.trim()).filter(Boolean);
-    if (ids.length === 0) throw new ArgError(`Invalid --target: empty. Available: ${availableAgentIdsHelp()}`);
-    const selected: AgentProfile[] = [];
-    for (const id of ids) {
-      const profile = getAgentProfile(id);
-      if (!profile) throw new ArgError(`Unknown agent: ${id}. Available: ${availableAgentIdsHelp()}`);
-      if (!selected.includes(profile)) selected.push(profile);
-    }
-    return selected;
+  if (target === undefined) return selectInstalledAgents(projectRoot);
+  let parsed: AgentProfile[] | 'none';
+  try {
+    parsed = parseAgentList(target);
+  } catch (err) {
+    throw new ArgError(err instanceof Error ? err.message : String(err));
   }
-  const installed = listAgentProfiles().filter((p) => isAgentInstalled(projectRoot, p));
-  if (installed.length > 0) return installed;
-  const fallback = getAgentProfile('claude-code');
-  return fallback ? [fallback] : [];
+  return parsed === 'none' ? [] : parsed;
 }
 
 /** 单个 agent 输出单个报告对象(与改造前一致);多个输出报告数组。 */

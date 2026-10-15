@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { agentSettingsPath, getAgentProfile, hookCommand, resolveHookAgent } from '../agents';
+import { agentSettingsPath, DEFAULT_AGENT_ID, hookCommand, requireAgentProfile } from '../agents';
 import type { AgentId, AgentProfile } from '../agents';
 
 interface HookEntry {
@@ -53,9 +53,9 @@ function taskHookGroups(profile: AgentProfile): ReadonlyArray<{ event: string; g
   ];
 }
 
-/** 取 agent 描述:缺省为 claude-code;未登记的 id 按 claude-code 处理。 */
+/** 取 agent 描述:缺省为默认 agent;未登记的 id 抛错(不静默回退,避免写错 agent 的配置)。 */
 function profileOf(agent: AgentId | undefined): AgentProfile {
-  return (agent ? getAgentProfile(agent) : undefined) ?? resolveHookAgent(undefined);
+  return requireAgentProfile(agent ?? DEFAULT_AGENT_ID);
 }
 
 /** 写入 task hook;返回本次写入的事件与因已存在而跳过的事件。 */

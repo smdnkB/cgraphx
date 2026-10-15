@@ -14,7 +14,7 @@ import * as path from 'node:path';
 
 import { execSync } from 'node:child_process';
 
-import { agentSettingsPath, getAgentProfile, hookCommand, type AgentId, type AgentProfile } from '../agents';
+import { agentSettingsPath, DEFAULT_AGENT_ID, hookCommand, requireAgentProfile, type AgentId } from '../agents';
 import { DatabaseConnection } from '../db';
 import { COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, GIT_COMMIT_SUBCOMMAND, HOOK_EVENTS_TO_COMMANDS } from './constants';
 import { cleanDebrisCgraphxDirs } from './debris';
@@ -136,19 +136,12 @@ function writeGitHook(gitHookPath: string, content: string, executable: boolean)
   }
 }
 
-/** 按 id 取 agent 描述;未登记时抛错(调用方只应传已登记的 AgentId)。 */
-function requireProfile(agent: AgentId): AgentProfile {
-  const profile = getAgentProfile(agent);
-  if (!profile) throw new Error(`agent ${agent} 未登记`);
-  return profile;
-}
-
 export function installTimelineHooks(
   projectRoot: string,
   opts: { purgeFirst?: boolean; agent?: AgentId } = {},
 ): InstallReport {
-  const agent = opts.agent ?? 'claude-code';
-  const profile = requireProfile(agent);
+  const agent = opts.agent ?? DEFAULT_AGENT_ID;
+  const profile = requireAgentProfile(agent);
   const resolvedRoot = path.resolve(projectRoot);
   const settingsPath = agentSettingsPath(resolvedRoot, profile);
   const gitRoot = findGitRoot(resolvedRoot);
@@ -238,7 +231,7 @@ export function uninstallTimelineHooks(
   projectRoot: string,
   opts: { purgeData?: boolean; agent?: AgentId; keepGitHook?: boolean } = {},
 ): UninstallReport {
-  const profile = requireProfile(opts.agent ?? 'claude-code');
+  const profile = requireAgentProfile(opts.agent ?? DEFAULT_AGENT_ID);
   const resolvedRoot = path.resolve(projectRoot);
   const settingsPath = agentSettingsPath(resolvedRoot, profile);
   const gitRoot = findGitRoot(resolvedRoot);

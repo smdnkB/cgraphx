@@ -16,11 +16,11 @@ import { summarizeToolResponse } from './post-tool-summary';
 import { COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
 import { readCurrentTurnId, writeCurrentTurn, removeTurnState } from './turn-state';
 import type { TimelineEventInput } from './types';
-import { resolveSessionIdFromEnv, type AgentId } from '../agents';
+import { DEFAULT_AGENT_ID, resolveSessionIdFromEnv, type AgentId } from '../agents';
 import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
-export async function userPromptHook(agent: AgentId = 'claude-code'): Promise<void> {
+export async function userPromptHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   await runHook((payload) => {
     if (payload.prompt === undefined) return null;
     // B-1: generate a per-turn id. Honor a host-supplied turn_id if present
@@ -45,7 +45,7 @@ export async function userPromptHook(agent: AgentId = 'claude-code'): Promise<vo
   });
 }
 
-export async function preToolUseHook(agent: AgentId = 'claude-code'): Promise<void> {
+export async function preToolUseHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   await runHook(async (payload) => {
     if (!payload.tool_name) return null;
     // B-2 pre-event reduction: only write-tools (Edit/Write/MultiEdit/
@@ -70,7 +70,7 @@ export async function preToolUseHook(agent: AgentId = 'claude-code'): Promise<vo
   });
 }
 
-export async function postToolUseHook(agent: AgentId = 'claude-code'): Promise<void> {
+export async function postToolUseHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   await runHook(async (payload) => {
     if (!payload.tool_name) return null;
     const summary = summarizeToolResponse(payload.tool_name, payload.tool_response, payload.tool_input);
@@ -124,7 +124,7 @@ export async function postToolUseHook(agent: AgentId = 'claude-code'): Promise<v
   });
 }
 
-export async function stopHook(agent: AgentId = 'claude-code'): Promise<void> {
+export async function stopHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   await runHook(async (payload) => {
     const turn_id = await readCurrentTurnId(
       payload.session_id ?? null,
@@ -177,7 +177,7 @@ export async function stopHook(agent: AgentId = 'claude-code'): Promise<void> {
  * 会话开始(SessionStart):记录 session_start 事件,turn_id 恒为 null。
  * 宿主给出字符串 `source`(startup / resume / clear / compact 等)时写入 metadata.source。
  */
-export async function sessionStartHook(agent: AgentId = 'claude-code'): Promise<void> {
+export async function sessionStartHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   await runHook((payload) => ({
     event_type: 'session_start',
     session_id: payload.session_id ?? null,
@@ -193,7 +193,7 @@ export async function sessionStartHook(agent: AgentId = 'claude-code'): Promise<
  * 事件写入后删除本会话的 turn 状态文件。开关关闭或无 payload 时 runHook 不调
  * buildEvent,此时也不碰 turn 文件。
  */
-export async function sessionEndHook(agent: AgentId = 'claude-code'): Promise<void> {
+export async function sessionEndHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   // runHook 不提供写库后回调;buildEvent 被调用时记下待清理的会话,runHook 返回后再删。
   let ended = null as { projectRoot: string; session_id: string | null } | null;
   await runHook((payload) => {

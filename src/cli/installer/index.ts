@@ -18,6 +18,7 @@ import type { AgentTarget, Location } from './targets/types';
 import {
   anyAgentInstalled,
   installAgentHooks,
+  installedTargetsOrDefault,
   installAgentTargets,
   selectInstallTargets,
   tildify,
@@ -334,7 +335,8 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
   // Step 1: install location. 2.0 is project-local only — no global uninstall.
   const location: Location = 'local';
 
-  // Step 2:卸载对象。不给 -t → 全部 agent(彻底卸载);给 -t → 只处理指定 agent(部分卸载)。
+  // Step 2:卸载对象。不给 -t → 对全部 agent 静默清扫(彻底卸载),但只为「清扫前已装」的 agent
+  //   打印反馈(都没装时为 claude-code,保证 git 钩子移除与改造前输出一致);给 -t → 只处理指定 agent。
   const partial = opts.target !== undefined;
   const targets: AgentTarget[] = opts.target !== undefined
     ? resolveTargetFlag(opts.target, location)
@@ -343,12 +345,16 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     clack.outro('未选择任何 agent —— 无操作。');
     return;
   }
+  // 已装判定必须在清扫之前算
+  const involved: AgentTarget[] = partial ? targets : installedTargetsOrDefault(process.cwd());
 
   // Step 3: sweep + per-agent feedback.
   const reports = uninstallTargets(targets, location);
   const removed = reports.filter((r) => r.status === 'removed');
 
   for (const r of reports) {
+    // 未涉及的 agent 只在确有移除时打印,不打「未配置」
+    if (r.status !== 'removed' && !involved.some((t) => t.id === r.id)) continue;
     if (r.status === 'removed') {
       for (const p of r.removedPaths) {
         clack.log.success(`${r.displayName}:已移除 ${tildify(p)}`);
@@ -363,7 +369,7 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
   // Step 4:撤销 install 在 agent target 之外做的事——逐 agent 移除 timeline / 任务绑定 hook
   //   (部分卸载保留 git post-commit 钩子);彻底卸载再按规则删除 `.cgraphx/`
   //   (破坏性,非 --yes 时交互确认;--keep-data 保留)。
-  await uninstallAgentHooks(clack, process.cwd(), targets, partial);
+  await uninstallAgentHooks(clack, process.cwd(), targets, partial, involved);
 
   // 删除 `.cgraphx/`(折叠进来的 `uninit`);部分卸载(-t)跳过,并在已无已装 agent 时提示。
   const dataDir = getCodeGraphDir(process.cwd());

@@ -3,7 +3,7 @@
  * 新增 agent 只需在 `src/core/agents/profiles.ts` 登记描述,本文件无需改动。
  */
 
-import { getAgentProfile, listAgentProfiles } from '../../../core/agents';
+import { getAgentProfile, listAgentProfiles, parseAgentList } from '../../../core/agents';
 import type { AgentTarget, Location, TargetId } from './types';
 import { createAgentTarget } from './agent-target';
 
@@ -33,29 +33,21 @@ export function detectAll(loc: Location): Array<{
 }
 
 /**
- * 解析 `--target=` 参数:
+ * 解析 `--target=` 参数(规则见 agents 门面 `parseAgentList`):
  *   - `auto` / `all` —— 注册表全部 target;
  *   - `none` —— 空列表(调用方跳过 agent 配置写入);
- *   - 逗号分隔 id 列表 —— 支持 legacy 别名,重复项去重;未知 id 报错并列出可用 id。
+ *   - 逗号分隔 id 列表 —— 支持 legacy 别名,重复项去重;未知 id 报错并列出可用 id 与别名。
  */
 export function resolveTargetFlag(value: string, loc: Location): AgentTarget[] {
   void loc;
-  if (value === 'none') return [];
-  if (value === 'all' || value === 'auto') return [...ALL_TARGETS];
+  const profiles = parseAgentList(value);
+  if (profiles === 'none') return [];
+  return profiles.map((p) => targetOfProfile(p.id));
+}
 
-  const ids = value.split(',').map((s) => s.trim()).filter(Boolean);
-  const resolved: AgentTarget[] = [];
-  const unknown: string[] = [];
-  for (const id of ids) {
-    const t = getTarget(id);
-    if (!t) unknown.push(id);
-    else if (!resolved.includes(t)) resolved.push(t);
-  }
-  if (unknown.length > 0) {
-    const known = listTargetIds().join(', ');
-    throw new Error(
-      `Unknown --target id(s): ${unknown.join(', ')}. Known: ${known}, plus 'auto' / 'all' / 'none'.`,
-    );
-  }
-  return resolved;
+/** 按描述 id 取 target(注册表由全部描述生成,必然存在)。 */
+function targetOfProfile(id: TargetId): AgentTarget {
+  const t = ALL_TARGETS.find((x) => x.id === id);
+  if (!t) throw new Error(`agent ${id} 未生成 target`);
+  return t;
 }

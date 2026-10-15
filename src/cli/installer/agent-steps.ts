@@ -8,23 +8,37 @@ import * as path from 'node:path';
 import { ALL_TARGETS, getTarget, resolveTargetFlag } from './targets/registry';
 import type { AgentTarget, Location } from './targets/types';
 import { isInitialized } from '../../core/directory';
+import {
+  DEFAULT_AGENT_ID,
+  defaultAgentProfile,
+  isAgentInstalled,
+  selectInstalledAgents,
+  type AgentProfile,
+} from '../../core/agents';
 
 type Clack = typeof import('@clack/prompts');
 
-/** 默认 agent(claude-code)的 target。 */
-function defaultTarget(): AgentTarget {
-  const target = getTarget('claude-code') ?? ALL_TARGETS[0];
-  if (!target) throw new Error('未登记任何 agent 描述');
+/** 描述对应的 target(注册表由全部描述生成,必然存在)。 */
+function targetOf(profile: AgentProfile): AgentTarget {
+  const target = getTarget(profile.id);
+  if (!target) throw new Error(`agent ${profile.id} 未生成 target`);
   return target;
 }
 
 /**
- * timeline / task 日志行前缀:本次只涉及 claude-code 时为空(与改造前输出一致),
- * 否则为 `<displayName>: `。
+ * timeline / task 日志行前缀:本次涉及的 agent(被选中 / 实际已装)只有 claude-code 时为空
+ * (与改造前输出一致),否则为 `<displayName>: `。
  */
-function hookLogPrefix(targets: readonly AgentTarget[], target: AgentTarget): string {
-  const onlyDefault = targets.length === 1 && target.id === defaultTarget().id;
+function hookLogPrefix(involved: readonly AgentTarget[], target: AgentTarget): string {
+  const onlyDefault = involved.length === 1
+    && involved[0]?.id === DEFAULT_AGENT_ID
+    && target.id === DEFAULT_AGENT_ID;
   return onlyDefault ? '' : `${target.displayName}: `;
+}
+
+/** 当前项目中「已装」的 agent 的 target;一个都没装时为 `[claude-code]`。 */
+export function installedTargetsOrDefault(projectRoot: string): AgentTarget[] {
+  return selectInstalledAgents(projectRoot).map(targetOf);
 }
 
 function errorMessage(err: unknown): string {
@@ -45,16 +59,13 @@ export async function selectInstallTargets(
 ): Promise<AgentTarget[]> {
   if (opts.target !== undefined) return resolveTargetFlag(opts.target, location);
 
-  if (useDefaults) {
-    const installed = ALL_TARGETS.filter((t) => t.detect(location).installed);
-    return installed.length > 0 ? installed : [defaultTarget()];
-  }
+  if (useDefaults) return installedTargetsOrDefault(process.cwd());
 
   const detected = ALL_TARGETS.filter((t) => t.detect(location).detected).map((t) => t.id);
   const sel = await clack.multiselect({
     message: '选择要安装 cgraphx 的 agent(回车确认)',
     options: ALL_TARGETS.map((t) => ({ value: t.id, label: t.displayName })),
-    initialValues: detected.length > 0 ? detected : [defaultTarget().id],
+    initialValues: detected.length > 0 ? detected : [defaultAgentProfile().id],
     required: false,
   });
   if (clack.isCancel(sel)) {
@@ -146,19 +157,21 @@ export async function installAgentHooks(
 
 /**
  * 逐 agent 移除 timeline 与任务绑定 hook。`keepGitHook` 为真(`uninstall -t`)时不动
- * git post-commit 钩子;否则随首个 agent 一并移除。
+ * git post-commit 钩子;否则随首个 agent 一并移除。`involved` 是日志前缀计算所依据的
+ * 「本次涉及的 agent」(彻底卸载时为清扫前已装的 agent),缺省即 `targets`。
  */
 export async function uninstallAgentHooks(
   clack: Clack,
   projectRoot: string,
   targets: readonly AgentTarget[],
   keepGitHook: boolean,
+  involved: readonly AgentTarget[] = targets,
 ): Promise<void> {
   const { uninstallTimelineHooks } = await import('../../core/timeline');
   const { uninstallTaskHooks } = await import('../../core/task');
 
   for (const target of targets) {
-    const prefix = hookLogPrefix(targets, target);
+    const prefix = hookLogPrefix(involved, target);
     try {
       const tlReport = uninstallTimelineHooks(projectRoot, { agent: target.id, keepGitHook });
       if (tlReport.removedHookEvents.length > 0) {
@@ -185,7 +198,8 @@ export async function uninstallAgentHooks(
 
 /** 项目中是否还有任一 agent 处于「已装」状态。 */
 export function anyAgentInstalled(location: Location): boolean {
-  return ALL_TARGETS.some((t) => t.detect(location).installed);
+  void location;
+  return ALL_TARGETS.some((t) => isAgentInstalled(process.cwd(), t.profile));
 }
 
 /** 日志行中把 home 前缀替换为 `~/`,纯展示用。 */

@@ -16,7 +16,7 @@
 
 import type { Command } from 'commander';
 
-import { resolveHookAgent } from '../agents';
+import { AGENT_OPTION_FLAG, resolveHookAgent } from '../agents';
 import { resolveProjectRoot } from '../directory';
 import { describeEvent, type TimelineEvent } from '../timeline';
 import {
@@ -399,10 +399,10 @@ export function registerTaskCommands(program: Command): void {
   // --agent 缺省或无法识别时按 Claude Code 处理
   program
     .command('task-session-start-hook', { hidden: true })
-    .option('--agent <id>')
+    .option(`${AGENT_OPTION_FLAG} <id>`)
     .action(async (opts: { agent?: string }) => { await taskSessionStartHook(resolveHookAgent(opts.agent)); });
   program
     .command('task-post-tool-use-hook', { hidden: true })
-    .option('--agent <id>')
+    .option(`${AGENT_OPTION_FLAG} <id>`)
     .action(async (opts: { agent?: string }) => { await taskPostToolUseHook(resolveHookAgent(opts.agent)); });
 }
