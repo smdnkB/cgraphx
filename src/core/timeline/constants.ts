@@ -58,6 +58,14 @@ export type HookEventName = (typeof HOOK_EVENTS_TO_COMMANDS)[number]['event'];
 
 export const GIT_COMMIT_SUBCOMMAND = 'timeline-git-commit-hook';
 
+/**
+ * post-commit 钩子在提交当下同步取得的 hash / 分支,经环境变量交给后台记录进程。
+ * 后台进程启动有延迟,若改读当时的 HEAD,连续快速提交会只记到最后一个。
+ * 用环境变量而非位置参数:旧版 cgraphx 会忽略它们并退回读 HEAD,不会因多余参数报错。
+ */
+export const COMMIT_SHA_ENV = 'CGRAPHX_COMMIT_SHA';
+export const COMMIT_BRANCH_ENV = 'CGRAPHX_COMMIT_BRANCH';
+
 // ─── Tool classification (timeline-data-quality feature) ───────────────────
 // Defined here so the enricher hooks share one source of truth.
 

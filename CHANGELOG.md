@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Fixed — git commits lost when committing in quick succession
+
+- The post-commit hook ran the recorder in the background, which read `HEAD`
+  only after it started; back-to-back commits (`git commit && git commit`)
+  were recorded as the last commit several times and the earlier ones were
+  lost. The hook now captures the commit hash and branch synchronously and
+  passes them via `CGRAPHX_COMMIT_SHA` / `CGRAPHX_COMMIT_BRANCH`.
+- `cgraphx install` now upgrades an existing cgraphx post-commit snippet in
+  place (your own hook lines are kept). Re-run it in already-installed
+  projects to pick up the fix; older cgraphx binaries ignore the new
+  variables and keep the previous behavior.
+- Already-lost or duplicated commit events are not backfilled.
+
 ### Added — cgraphx web: development tasks page
 
 - New sidebar entry 「开发任务」 with a task list (`/tasks`) and a task detail

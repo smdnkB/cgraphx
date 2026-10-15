@@ -13,7 +13,7 @@ import { runHook, isKillSwitchOn } from './hook-runner';
 import { extractHookPayload } from './payload';
 import { resolveProjectRoot } from '../directory';
 import { summarizeToolResponse } from './post-tool-summary';
-import { CLAUDE_SESSION_ID_ENV, WRITE_TOOLS_WHITELIST } from './constants';
+import { CLAUDE_SESSION_ID_ENV, COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
 import { readCurrentTurnId, writeCurrentTurn, removeTurnState } from './turn-state';
 import type { TimelineEventInput } from './types';
 import { randomUUID } from 'node:crypto';
@@ -217,7 +217,11 @@ export async function sessionEndHook(): Promise<void> {
 export async function gitCommitHook(): Promise<void> {
   if (isKillSwitchOn()) return;
 
-  const info = readGitCommitInfo();
+  // 钩子在提交当下固定的 hash / 分支(旧版钩子脚本不传 → 退回读 HEAD 与当前分支)
+  const info = readGitCommitInfo({
+    hash: process.env[COMMIT_SHA_ENV],
+    branch: process.env[COMMIT_BRANCH_ENV],
+  });
   if (!info) return;
 
   const envSession = process.env[CLAUDE_SESSION_ID_ENV];
@@ -256,26 +260,34 @@ export interface GitCommitInfo {
   branch: string | null;
 }
 
+/** 只接受十六进制提交 hash:它会拼进 git 命令行,其它内容一律退回 HEAD。 */
+const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,64}$/i;
+
 /**
- * 读取 HEAD 提交信息 + 汇总增删行数 + 当前分支名。
+ * 读取一个提交的信息 + 汇总增删行数 + 分支名。
+ *
+ * `pinned.hash` 合法时读该提交,否则读 HEAD;`pinned.branch` 有定义时直接采用
+ * (空串 = detached HEAD → null),未定义时读当前分支。钩子在提交当下固定这两项,
+ * 避免后台进程启动后 HEAD 已前移(连续提交只记到最后一个)。
  *
  * numstat:`git show --numstat --format= HEAD` 每个文件一行 `<ins>\t<del>\t<path>`,
  * 二进制文件两列为字面量 `-`,跳过不计。numstat 或分支读取失败(浅克隆、仓库损坏、
  * git 过旧)不影响其它字段:行数记 0/0,分支记 null —— 它们是增强项,不是闸门。
  */
-export function readGitCommitInfo(): GitCommitInfo | null {
+export function readGitCommitInfo(pinned: { hash?: string; branch?: string } = {}): GitCommitInfo | null {
+  const ref = pinned.hash !== undefined && COMMIT_HASH_PATTERN.test(pinned.hash) ? pinned.hash : 'HEAD';
   try {
     const cwd = execSync('git rev-parse --show-toplevel', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-    const hash = execSync('git rev-parse HEAD', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-    const message = execSync('git log -1 --pretty=%B HEAD', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-    const filesOut = execSync('git diff-tree --no-commit-id --name-only -r HEAD', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+    const hash = execSync(`git rev-parse --verify ${ref}^{commit}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+    const message = execSync(`git log -1 --pretty=%B ${ref}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+    const filesOut = execSync(`git diff-tree --no-commit-id --name-only -r ${ref}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
     const files = filesOut.split('\n').map(s => s.trim()).filter(Boolean);
 
     // 以仓库根为 cwd 跑 numstat,hook 从别处启动也能正确执行。
     let insertions = 0;
     let deletions = 0;
     try {
-      const numstatOut = execSync('git show --numstat --format= HEAD', {
+      const numstatOut = execSync(`git show --numstat --format= ${ref}`, {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'ignore'],
         cwd,
@@ -298,15 +310,19 @@ export function readGitCommitInfo(): GitCommitInfo | null {
     }
 
     let branch: string | null = null;
-    try {
-      const out = execSync('git rev-parse --abbrev-ref HEAD', {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'ignore'],
-        cwd,
-      }).trim();
-      branch = out && out !== 'HEAD' ? out : null;
-    } catch {
-      // 分支读取失败 —— 记 null。
+    if (pinned.branch !== undefined) {
+      branch = pinned.branch !== '' ? pinned.branch : null;
+    } else {
+      try {
+        const out = execSync('git rev-parse --abbrev-ref HEAD', {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'ignore'],
+          cwd,
+        }).trim();
+        branch = out && out !== 'HEAD' ? out : null;
+      } catch {
+        // 分支读取失败 —— 记 null。
+      }
     }
 
     return { hash, message, files, cwd, insertions, deletions, branch };

@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 
 import { DatabaseConnection } from '../db';
-import { HOOK_EVENTS_TO_COMMANDS } from './constants';
+import { COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, GIT_COMMIT_SUBCOMMAND, HOOK_EVENTS_TO_COMMANDS } from './constants';
 import { cleanDebrisCgraphxDirs } from './debris';
 import { LEGACY_TURN_STATE_FILENAME } from './turn-state';
 
@@ -95,11 +95,27 @@ function findGitRoot(projectRoot: string): string | null {
 
 const GIT_HOOK_MARKER = '# cgraphx-timeline-hook';
 
+/**
+ * post-commit 片段:先在前台取得本次提交的 hash 与分支,再把记录进程放到后台。
+ * 每行都带 GIT_HOOK_MARKER,升级与卸载按行精确删除,不碰用户自己的钩子内容。
+ */
 function buildGitPostCommitSnippet(): string {
   return [
-    `# cgraphx-timeline-hook — record commit events to .cgraphx/cgraphx.db`,
-    `cgraphx timeline-git-commit-hook >/dev/null 2>&1 &`,
+    `${GIT_HOOK_MARKER} — record commit events to .cgraphx/cgraphx.db`,
+    `__cgx_sha=$(git rev-parse HEAD 2>/dev/null); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null) ${GIT_HOOK_MARKER}`,
+    `${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & ${GIT_HOOK_MARKER}`,
   ].join('\n');
+}
+
+/** 删去 cgraphx 写入的行(带标记的行,以及旧版不带标记的调用行),规整空行。 */
+function stripTimelineGitHook(content: string): string {
+  return content
+    .split('\n')
+    .filter(l => !l.includes(GIT_HOOK_MARKER) && !l.includes(GIT_COMMIT_SUBCOMMAND))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\n+/, '')
+    .replace(/\n+$/, '');
 }
 
 function readGitHook(gitHookPath: string): string {
@@ -175,13 +191,13 @@ export function installTimelineHooks(
   let gitHookWritten = false;
   if (gitHookPath) {
     const existing = readGitHook(gitHookPath);
-    if (existing.includes(GIT_HOOK_MARKER)) {
-      // already there
-    } else {
-      const snippet = buildGitPostCommitSnippet();
-      const newContent = existing.length > 0
-        ? `${existing.replace(/\n+$/, '')}\n\n${snippet}\n`
-        : `#!/bin/sh\n${snippet}\n`;
+    const snippet = buildGitPostCommitSnippet();
+    // 已有旧版片段 → 原地替换为当前版本(升级);内容未变则不写(幂等)。
+    const base = existing.includes(GIT_HOOK_MARKER) ? stripTimelineGitHook(existing) : existing.replace(/\n+$/, '');
+    const newContent = base.length > 0 && base !== '#!/bin/sh'
+      ? `${base}\n\n${snippet}\n`
+      : `#!/bin/sh\n${snippet}\n`;
+    if (newContent !== existing) {
       writeGitHook(gitHookPath, newContent, true);
       gitHookWritten = true;
     }
@@ -254,13 +270,7 @@ export function uninstallTimelineHooks(
   if (gitHookPath && fs.existsSync(gitHookPath)) {
     const content = readGitHook(gitHookPath);
     if (content.includes(GIT_HOOK_MARKER)) {
-      const lines = content.split('\n');
-      const filtered = lines
-        .filter(l => !l.includes(GIT_HOOK_MARKER) && !l.includes('timeline-git-commit-hook'))
-        .join('\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .replace(/^\n+/, '')
-        .replace(/\n+$/, '');
+      const filtered = stripTimelineGitHook(content);
       if (filtered.length === 0 || filtered === '#!/bin/sh') {
         fs.rmSync(gitHookPath, { force: true });
       } else {

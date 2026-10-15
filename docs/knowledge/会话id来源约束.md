@@ -25,8 +25,9 @@ related_code:
   - src/core/task/hooks.ts
 related_documents:
   - docs/knowledge/开发任务绑定.md
+  - docs/knowledge/git提交记录须在钩子当下固定hash.md
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 
 # 会话 id 来源约束
