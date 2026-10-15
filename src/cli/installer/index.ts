@@ -1,29 +1,28 @@
 /**
- * cgraphx Interactive Installer (2.0)
+ * cgraphx 交互式安装器(2.0)
  *
- * Single target: Claude Code. Wires the bundled `.claude/` template
- * (skills / agents / commands / hooks / plugins) and the cgraphx-specific
- * hooks + statusLine into the user's Claude Code configuration.
- * Optionally registers the markdown / dbquery / timeline subsystems.
- *
- * 2.0 cut points versus 1.x: NO server config is written (no server in
- * 2.0); NO usage stats are collected; the live graph watcher / git-sync-hook
- * fallback is gone (no graph in 2.0); and only Claude Code is shipped
- * (every other 1.x agent target wrote only the now-removed server config).
+ * 按 agent 描述为每个选中的 agent(Claude Code / CodeBuddy …)部署模板资产、
+ * cgraphx hook 与 statusLine、指引块;项目级 `.cgraphx/` 初始化与 docs / db 子系统
+ * 每个项目只做一次,timeline 与任务绑定 hook 对每个选中 agent 接入。
+ * 安装对象选择见 `agent-steps.ts`(spec §4.1),卸载规则见 `runUninstaller`(spec §5)。
  *
  * Uses @clack/prompts for the interactive UI; `runInstallerWithOptions`
  * is the non-interactive entry point used by the `--target` flag.
  */
 
-import { execSync } from 'child_process';
-import * as path from 'path';
-import * as fs from 'fs';
-import {
-  ALL_TARGETS,
-  detectAll,
-  resolveTargetFlag,
-} from './targets/registry';
+import { execSync } from 'node:child_process';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import { ALL_TARGETS, resolveTargetFlag } from './targets/registry';
 import type { AgentTarget, Location } from './targets/types';
+import {
+  anyAgentInstalled,
+  installAgentHooks,
+  installAgentTargets,
+  selectInstallTargets,
+  tildify,
+  uninstallAgentHooks,
+} from './agent-steps';
 import {
   getCodeGraphDir,
   isInitialized,
@@ -51,12 +50,8 @@ function getVersion(): string {
 
 export interface RunInstallerOptions {
   /**
-   * Accepted for back-compat. In 2.0 only Claude is shipped, so any
-   * non-empty value effectively resolves to `[claudeTarget]` — the
-   * flag is parsed (and unknown ids error) but no longer drives a
-   * multi-agent prompt.
-   *
-   * Comma-separated target list, or `auto` / `all` / `none`.
+   * 逗号分隔的 agent id(支持 legacy 别名如 `claude`),或 `auto` / `all` / `none`。
+   * 给出时只装指定 agent,优先于 `yes`,不弹任何提示。
    */
   target?: string;
   /**
@@ -81,13 +76,11 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
 
   const useDefaults = opts.yes === true;
 
-  // Step 1: targets. 2.0 ships only Claude, so there's no multi-select —
-  // just resolve the (legacy) --target flag if present and move on.
-  const targets = await resolveTargets(clack, opts, useDefaults);
-  if (targets.length === 0) {
-    clack.outro('未选择任何 agent —— 无操作。');
-    return;
-  }
+  // 安装位置:2.0 只支持项目本地,是常量而非提示。
+  const location: Location = 'local';
+
+  // Step 1:安装对象(spec §4.1)。一个都不选 → 跳过 agent 配置写入,仍初始化 .cgraphx/。
+  const targets = await selectInstallTargets(clack, opts, useDefaults, location);
 
   // Step 2: install the cgraphx npm package on PATH (only when NOT already
   // there). Running this for an already-installed user is noise + fragile
@@ -130,32 +123,8 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 3: install location. 2.0 is project-local only — there is no global
-  // (~/.claude) install, so this is a constant, not a prompt.
-  const location: Location = 'local';
-
-  // Step 4: per-target install loop.
-  for (const target of targets) {
-    if (!target.supportsLocation(location)) {
-      clack.log.warn(
-        `${target.displayName}:已跳过 —— 不支持 --location=${location}。`,
-      );
-      continue;
-    }
-    const result = target.install(location, {});
-    for (const file of result.files) {
-      const verb = file.action === 'unchanged'
-        ? 'Unchanged'
-        : file.action === 'created' ? 'Created'
-          : file.action === 'removed' ? 'Removed'
-            : file.action === 'overwritten' ? 'Overwritten'
-              : 'Updated';
-      clack.log.success(`${target.displayName}: ${verb} ${tildify(file.path)}`);
-    }
-    for (const note of result.notes ?? []) {
-      clack.log.info(`${target.displayName}: ${note}`);
-    }
-  }
+  // Step 4:逐 agent 写配置;单个 agent 失败只 warn,继续其他 agent 与后续步骤。
+  installAgentTargets(clack, targets, location);
 
   // Step 4¼: ensure the project's `.cgraphx/` data dir exists — the work the
   // removed `cgraphx init` did, folded into install. Idempotent; an unsafe root
@@ -200,7 +169,13 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
       options: [
         { value: 'docs' as const,     label: '文档知识库',     hint: docsHasMd ? '扫描 docs/knowledge/' : 'docs/knowledge/ 不存在 — 跳过' },
         { value: 'db' as const,       label: '数据库查询',     hint: cgraphxExists ? '生成 .cgraphx/db-profiles.json 模板' : '.cgraphx/ 不存在 — 跳过' },
-        { value: 'timeline' as const, label: 'Developer Timeline', hint: '装 Claude Code hooks(项目级)' },
+        {
+          value: 'timeline' as const,
+          label: 'Developer Timeline',
+          hint: targets.length > 0
+            ? `装 ${targets.map((t) => t.displayName).join(' / ')} hooks(项目级)`
+            : '未选择 agent — 跳过',
+        },
       ],
       initialValues: ['docs', 'db', 'timeline'] as Subsystem[],
       required: false,
@@ -250,31 +225,8 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   }
 
   if (chosen.includes('timeline')) {
-    try {
-      const { installTimelineHooks } = await import('../../core/timeline/installer');
-      const report = installTimelineHooks(projectRoot);
-      const events = report.writtenHookEvents.length > 0
-        ? report.writtenHookEvents.join('/')
-        : '已存在(幂等)';
-      const git = report.gitHookWritten
-        ? ' + git post-commit'
-        : report.gitHookPath ? '(git hook 已存在)' : '(非 git 仓库,跳过 git hook)';
-      clack.log.success(`Developer Timeline 已装:${events}${git}`);
-    } catch (err) {
-      clack.log.warn(`timeline install 失败:${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    // 开发任务绑定 hook(会话开始提醒 + 需求目录自动绑定)。已初始化的项目先打开库
-    // 应用 task schema,保证老项目重装后也有 task 表。失败只 warn,不中断安装。
-    try {
-      const { installTaskHooks, openTaskDb } = await import('../../core/task');
-      if (isInitialized(projectRoot)) openTaskDb(projectRoot).close();
-      const report = installTaskHooks(projectRoot);
-      const events = report.written.length > 0 ? report.written.join('/') : '已存在(幂等)';
-      clack.log.success(`开发任务绑定已装:${events}`);
-    } catch (err) {
-      clack.log.warn(`task hook install 失败:${err instanceof Error ? err.message : String(err)}`);
-    }
+    // 对本次选中的每个 agent 接入 timeline + 任务绑定 hook;git post-commit 每项目一个
+    await installAgentHooks(clack, projectRoot, targets);
   }
 
   // Step 5: next steps. install now initializes the data dir itself (the
@@ -293,10 +245,9 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
 
 export interface RunUninstallerOptions {
   /**
-   * Comma-separated target list, or `auto` / `all` / `none`. Defaults
-   * to `all` — uninstall sweeps every known agent and reports which
-   * ones it actually touched, so the user doesn't have to remember
-   * where they configured it.
+   * 逗号分隔的 agent id,或 `auto` / `all` / `none`。不给 → 卸载全部 agent 并移除
+   * git post-commit 钩子与 `.cgraphx/`;给出 → 只移除指定 agent 的配置,
+   * 不动 git 钩子、不删 `.cgraphx/`(忽略 `--keep-data`)。
    */
   target?: string;
   /** Non-interactive: target=all, no prompts (also skips the data-delete confirm). */
@@ -383,13 +334,11 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
   // Step 1: install location. 2.0 is project-local only — no global uninstall.
   const location: Location = 'local';
 
-  // Step 2: which agents. Default is every agent.
-  let targets: AgentTarget[];
-  if (opts.target !== undefined) {
-    targets = resolveTargetFlag(opts.target, location);
-  } else {
-    targets = [...ALL_TARGETS];
-  }
+  // Step 2:卸载对象。不给 -t → 全部 agent(彻底卸载);给 -t → 只处理指定 agent(部分卸载)。
+  const partial = opts.target !== undefined;
+  const targets: AgentTarget[] = opts.target !== undefined
+    ? resolveTargetFlag(opts.target, location)
+    : [...ALL_TARGETS];
   if (targets.length === 0) {
     clack.outro('未选择任何 agent —— 无操作。');
     return;
@@ -411,44 +360,18 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     }
   }
 
-  // Step 4: mirror what `install` did beyond the agent targets.
-  //   - install wires Developer Timeline hooks (Step 4½) → remove them here.
-  //   - install creates `.cgraphx/` (folded `init`) → remove it here (folded
-  //     `uninit`) unless --keep-data. Destructive (timeline / docs index data),
-  //     so confirm interactively unless --yes.
-  //   (The package-owned `.claude/` assets are removed by the agent target's
-  //   uninstall above; user-added files outside the manifest survive.)
-  try {
-    const { uninstallTimelineHooks } = await import('../../core/timeline/installer');
-    const tlReport = uninstallTimelineHooks(process.cwd(), {});
-    if (tlReport.removedHookEvents.length > 0) {
-      clack.log.success(
-        `Developer Timeline:已移除 hooks(${tlReport.removedHookEvents.join(', ')})`,
-      );
-    }
-    if (tlReport.gitHookRemoved) {
-      clack.log.success('Developer Timeline:已移除 git post-commit hook');
-    }
-  } catch (err) {
-    clack.log.warn(
-      `timeline uninstall 失败:${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-  try {
-    const { uninstallTaskHooks } = await import('../../core/task');
-    const taskReport = uninstallTaskHooks(process.cwd());
-    if (taskReport.removed.length > 0) {
-      clack.log.success(`开发任务绑定:已移除 hooks(${taskReport.removed.join(', ')})`);
-    }
-  } catch (err) {
-    clack.log.warn(
-      `task hook uninstall 失败:${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
+  // Step 4:撤销 install 在 agent target 之外做的事——逐 agent 移除 timeline / 任务绑定 hook
+  //   (部分卸载保留 git post-commit 钩子);彻底卸载再按规则删除 `.cgraphx/`
+  //   (破坏性,非 --yes 时交互确认;--keep-data 保留)。
+  await uninstallAgentHooks(clack, process.cwd(), targets, partial);
 
-  // Remove the `.cgraphx/` data dir (the folded `uninit`).
+  // 删除 `.cgraphx/`(折叠进来的 `uninit`);部分卸载(-t)跳过,并在已无已装 agent 时提示。
   const dataDir = getCodeGraphDir(process.cwd());
-  if (fs.existsSync(dataDir)) {
+  if (partial) {
+    if (!anyAgentInstalled(location)) {
+      clack.log.info('项目中已没有已装 cgraphx 的 agent。如需彻底卸载请执行不带 -t 的 cgraphx uninstall');
+    }
+  } else if (fs.existsSync(dataDir)) {
     if (opts.keepData === true) {
       clack.log.info(`保留 ${dataDir}(--keep-data)。如需删除:rm -rf ${dataDir}`);
     } else {
@@ -518,16 +441,6 @@ export async function ensureProjectInitialized(
 }
 
 /**
- * Replace home-directory prefix in a path with `~/` for cleaner log
- * lines. Pure cosmetic.
- */
-function tildify(p: string): string {
-  const home = require('os').homedir();
-  if (p.startsWith(home + path.sep)) return '~' + p.substring(home.length);
-  return p;
-}
-
-/**
  * Detect whether the `cgraphx` command is already resolvable on PATH.
  *
  * Cross-platform: `command -v` works on POSIX, `where` on Windows. Returns
@@ -579,24 +492,4 @@ function formatInstallHint(stderr: string): string {
     return `Try: open PowerShell as Administrator and run \`npm install -g ${NPM_PACKAGE}\`. Or change npm prefix to a user-writable directory: \`npm config set prefix "$APPDATA\\npm"\`.`;
   }
   return `Try: \`sudo npm install -g ${NPM_PACKAGE}\`, or change npm prefix to avoid sudo.`;
-}
-
-/**
- * Resolve the (legacy) --target flag in 2.0. With only Claude shipped,
- * there's no multi-select prompt — we just validate the flag and return
- * the registry's targets. Defaults to "all targets" (= Claude) when no
- * flag is present.
- */
-async function resolveTargets(
-  _clack: typeof import('@clack/prompts'),
-  opts: RunInstallerOptions,
-  _useDefaults: boolean,
-): Promise<AgentTarget[]> {
-  if (opts.target !== undefined) {
-    return resolveTargetFlag(opts.target, 'local');
-  }
-  // Surface detection (info-only) so the user sees whether Claude was
-  // found — harmless when nothing's installed.
-  void detectAll('local');
-  return [...ALL_TARGETS];
 }

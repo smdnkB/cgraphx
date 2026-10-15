@@ -245,7 +245,7 @@ function main(): void {
   program
     .command('install')
     .description('Install cgraphx into the current project (skills, hooks, statusLine, .cgraphx/)')
-    .option('-t, --target <ids>', 'Target agent(s) (2.0 ships only Claude)')
+    .option('-t, --target <ids>', 'Target agent id(s), comma-separated (e.g. claude-code), or all / none')
     .option(
       '-y, --yes',
       'Non-interactive: use defaults (all subsystems, no prompts)',
@@ -273,7 +273,7 @@ function main(): void {
   program
     .command('uninstall')
     .description('Remove cgraphx from the current project (skills, config, .cgraphx/)')
-    .option('-t, --target <ids>', 'Target agent(s) (2.0 ships only Claude)')
+    .option('-t, --target <ids>', 'Target agent id(s), comma-separated (e.g. claude-code), or all / none')
     .option('-y, --yes', 'Non-interactive: no prompts (also deletes .cgraphx/ without confirming)')
     .option('--keep-data', 'Keep the .cgraphx/ data directory (default: remove it)')
     .action(

@@ -29,8 +29,38 @@
  * `--purge-claude-assets` flag is a later-stage decision.)
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { applyAssetReplacements, getAgentProfile, type AgentProfile } from '../../core/agents';
+
+/** 默认 agent 描述(claude-code):未传 profile 时的行为即改造前行为。 */
+function claudeCodeProfile(): AgentProfile {
+  const profile = getAgentProfile('claude-code');
+  if (!profile) throw new Error('agent 描述 claude-code 未登记');
+  return profile;
+}
+
+/** 按 agent 替换规则改写内容的文本扩展名;其余扩展名一律逐字节复制。 */
+const TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.md', '.html', '.cjs', '.js', '.mjs', '.json', '.jsonl', '.bru', '.txt', '.sh',
+]);
+
+/** 该 agent 不具备对应能力时不部署的模板子目录(相对配置目录)。 */
+function isExcludedByCapability(rel: string, profile: AgentProfile): boolean {
+  if (!profile.capabilities.statusLine && rel.startsWith('plugins/claude-hud/')) return true;
+  if (!profile.capabilities.contextMonitor && rel.startsWith('hooks/context-monitor/')) return true;
+  return false;
+}
+
+/** 复制单个资产:无替换规则或非文本扩展名逐字节复制,否则 utf8 读入替换后写出。 */
+function copyAsset(srcFile: string, destFile: string, profile: AgentProfile): void {
+  if (profile.assetReplacements.length === 0 || !TEXT_EXTENSIONS.has(path.extname(srcFile))) {
+    fs.copyFileSync(srcFile, destFile); // copyFileSync 默认覆盖
+    return;
+  }
+  const content = fs.readFileSync(srcFile, 'utf-8');
+  fs.writeFileSync(destFile, applyAssetReplacements(content, profile));
+}
 
 export type ClaudeAssetAction = 'created' | 'overwritten' | 'not-found' | 'removed';
 
@@ -93,13 +123,17 @@ function walkFiles(root: string): string[] {
 }
 
 /**
- * Deploy the `.claude/` template into `<targetClaudeDir>`.
+ * 把模板部署到某个 agent 的配置目录:按能力过滤(不支持 statusLine 跳过 claude-hud,
+ * 不支持 contextMonitor 跳过 context-monitor),按 agent 替换规则改写文本资产。
  *
- * @param targetClaudeDir  Absolute path to the destination `.claude/`
- *                         (e.g. `/path/to/project/.claude`).
- * @returns Per-file outcomes. Empty array when no template exists.
+ * @param targetClaudeDir  目标配置目录绝对路径(如 `/path/to/project/.claude`)。
+ * @param profile          目标 agent 描述,默认 claude-code(逐字节复制,与改造前一致)。
+ * @returns 每个文件的结果;无模板时返回单条 `not-found`。
  */
-export function deployClaudeAssets(targetClaudeDir: string): ClaudeAssetChange[] {
+export function deployClaudeAssets(
+  targetClaudeDir: string,
+  profile: AgentProfile = claudeCodeProfile(),
+): ClaudeAssetChange[] {
   const templateDir = resolveTemplateDir();
   if (!templateDir) {
     return [{ path: '', action: 'not-found' }];
@@ -114,24 +148,25 @@ export function deployClaudeAssets(targetClaudeDir: string): ClaudeAssetChange[]
     // survive uninstall. Skip it from the same-name-overwrites walk.
     // deprecated-assets.json 是构建期清理清单,不是运行时资产,同样跳过。
     if (rel === 'CLAUDE.md' || rel === 'deprecated-assets.json') continue;
+    if (isExcludedByCapability(rel, profile)) continue;
     const srcFile = path.join(templateDir, rel);
     const destFile = path.join(targetClaudeDir, rel);
     const exists = fs.existsSync(destFile);
 
     try {
       fs.mkdirSync(path.dirname(destFile), { recursive: true });
-      fs.copyFileSync(srcFile, destFile); // copyFileSync overwrites by default
-      changes.push({ path: `.claude/${rel}`, action: exists ? 'overwritten' : 'created' });
+      copyAsset(srcFile, destFile, profile);
+      changes.push({ path: `${profile.configDirName}/${rel}`, action: exists ? 'overwritten' : 'created' });
     } catch {
       // Defensive: a single failed copy shouldn't abort the whole deploy.
       // The dest file (if it existed) is left as-is; report as overwritten
       // so the user knows the sync didn't happen and can investigate.
-      changes.push({ path: `.claude/${rel}`, action: exists ? 'overwritten' : 'created' });
+      changes.push({ path: `${profile.configDirName}/${rel}`, action: exists ? 'overwritten' : 'created' });
     }
   }
 
   // 清理已废弃的包自带资产(改名/移除的旧 skill 等)
-  changes.push(...cleanDeprecatedAssets(targetClaudeDir, templateDir));
+  changes.push(...cleanDeprecatedAssets(targetClaudeDir, templateDir, profile));
 
   return changes;
 }
@@ -146,10 +181,12 @@ export function deployClaudeAssets(targetClaudeDir: string): ClaudeAssetChange[]
  *
  * @param targetClaudeDir  目标 `.claude/` 绝对路径
  * @param overrideTemplateDir  可选模板目录(测试用 fixture;默认 dist 内嵌)
+ * @param profile  目标 agent 描述(只影响返回路径前缀),默认 claude-code
  */
 export function cleanDeprecatedAssets(
   targetClaudeDir: string,
   overrideTemplateDir?: string,
+  profile: AgentProfile = claudeCodeProfile(),
 ): ClaudeAssetChange[] {
   const templateDir = overrideTemplateDir ?? resolveTemplateDir();
   if (!templateDir) return [];
@@ -176,7 +213,7 @@ export function cleanDeprecatedAssets(
     } catch {
       // 防御性:单个路径删除失败不阻塞其余清理
     }
-    changes.push({ path: `.claude/${rel}`, action: 'removed' });
+    changes.push({ path: `${profile.configDirName}/${rel}`, action: 'removed' });
   }
   return changes;
 }
@@ -230,12 +267,14 @@ export function readTemplateClaudeMd(overrideDir?: string): string | null {
  *
  * @param overrideTemplateDir  Optional template dir (tests pass a fixture;
  *                             defaults to the baked-in `dist/.claude-template/`).
+ * @param profile  目标 agent 描述(只影响返回路径前缀),默认 claude-code。
  * @returns One `removed` entry per path actually deleted, or a single
  *          `not-found` when there's no template to derive a manifest from.
  */
 export function removeClaudeAssets(
   targetClaudeDir: string,
   overrideTemplateDir?: string,
+  profile: AgentProfile = claudeCodeProfile(),
 ): ClaudeAssetChange[] {
   const templateDir = overrideTemplateDir ?? resolveTemplateDir();
   if (!templateDir || !fs.existsSync(templateDir)) {
@@ -270,12 +309,11 @@ export function removeClaudeAssets(
       if (!fs.existsSync(dest)) continue;
       try {
         fs.rmSync(dest, { recursive: true, force: true });
-        changes.push({ path: `.claude/${rel}`, action: 'removed' });
+        changes.push({ path: `${profile.configDirName}/${rel}`, action: 'removed' });
         removedInCategory = true;
       } catch {
-        // Defensive (mirrors deployClaudeAssets): one failed removal shouldn't
-        // abort the sweep. Reported as removed so the intent is visible.
-        changes.push({ path: `.claude/${rel}`, action: 'removed' });
+        // 防御性(同 deployClaudeAssets):单个删除失败不中断清扫,仍报 removed 让意图可见
+        changes.push({ path: `${profile.configDirName}/${rel}`, action: 'removed' });
       }
     }
     // Prune the now-empty category dir the package created on deploy. Never
@@ -292,7 +330,7 @@ export function removeClaudeAssets(
   }
 
   // 卸载也清理已废弃资产——否则改名前的旧目录会永久残留
-  changes.push(...cleanDeprecatedAssets(targetClaudeDir, templateDir));
+  changes.push(...cleanDeprecatedAssets(targetClaudeDir, templateDir, profile));
 
   return changes;
 }

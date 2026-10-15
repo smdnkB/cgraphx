@@ -1,15 +1,14 @@
 /**
  * Agent target abstraction for the installer.
  *
- * Each agent (currently Claude Code only in 2.0) implements this interface so
+ * Each agent implements this interface so
  * the installer orchestrator can write the right hooks / statusLine / assets
  * for that agent without baking client-specific paths into core code.
  *
- * 2.0 note: the multi-target scaffolding is retained (it cleanly separates
- * the orchestrator from per-agent file writes), but only Claude Code is
- * shipped. The other 1.x agent targets (Cursor / Codex / Gemini / etc.)
- * wrote only the now-removed server config and were dropped together with it.
+ * 每个 target 由 agent 描述(`src/core/agents`)生成,见 `agent-target.ts`。
  */
+
+import type { AgentId, AgentProfile } from '../../../core/agents';
 
 /**
  * Where a target's config lives. 2.0 is project-local only — the flow
@@ -20,30 +19,18 @@
  */
 export type Location = 'local';
 
-/**
- * Stable string id used in the `--target` CLI flag and the registry
- * lookup. 2.0 ships only `claude`; the union is kept as a non-empty
- * list so the orchestrator's typing stays meaningful.
- */
-export type TargetId = 'claude';
+/** `--target` 参数与注册表使用的稳定 id,即 agent id。 */
+export type TargetId = AgentId;
 
 /**
- * Result of `target.detect(location)`.
- *
- * `installed` is a best-effort heuristic that the agent's CLI / app /
- * config dir is present on this system. False positives are acceptable
- * (we still write); false negatives just mean the user has to opt in
- * manually.
- *
- * `alreadyConfigured` reports whether cgraphx has already been wired
- * into this target at this location — drives the "Updated"-vs-"Added"
- * log line. In 2.0 (no server config), "configured" means our hooks or
- * statusLine are present in the agent's settings.
+ * `target.detect(location)` 的结果。
+ * - `detected`:项目内存在该 agent 的配置目录,或其 CLI 在 PATH 上(交互安装默认勾选依据)。
+ * - `installed`:该 agent 已装过 cgraphx(`-y` / upgrade 的安装对象依据)。
  */
 export interface DetectionResult {
+  detected: boolean;
   installed: boolean;
-  alreadyConfigured: boolean;
-  /** Path inspected; surfaced in diagnostic / dry-run output. */
+  /** 检查的 settings 路径,用于诊断输出。 */
   configPath?: string;
 }
 
@@ -77,8 +64,10 @@ export interface WriteResult {
 export interface InstallOptions {}
 
 export interface AgentTarget {
-  /** Stable id; matches the `TargetId` union. */
+  /** 稳定 id,与 `TargetId` 一致。 */
   readonly id: TargetId;
+  /** 生成该 target 的 agent 描述。 */
+  readonly profile: AgentProfile;
   /** Human-readable name shown in clack prompts and log lines. */
   readonly displayName: string;
   /** Optional URL for "where do I learn more about this agent." */
