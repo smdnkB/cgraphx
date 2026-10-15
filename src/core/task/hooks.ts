@@ -1,5 +1,5 @@
 /**
- * task 的 Claude Code hook 入口(spec §6.3 自动绑定、§7 会话开始提醒、§9 降级与关闭开关)。
+ * task 的 agent hook 入口(spec §6.3 自动绑定、§7 会话开始提醒、§9 降级与关闭开关)。
  *
  * 两个隐藏命令共用的规则:
  *   - CGRAPHX_NO_TIMELINE 生效时直接返回:不读 stdin、不输出;
@@ -12,6 +12,7 @@
  * 因此不复用 timeline 的 runHook(它的契约是 stdout 恒空)。
  */
 
+import type { AgentProfile } from '../agents';
 import { resolveProjectRoot } from '../directory';
 import { isKillSwitchOn } from '../timeline';
 import { getCurrentBinding } from './binding';
@@ -20,9 +21,6 @@ import type { CurrentBinding } from './types';
 
 /** 单次 hook 耗时预算(与 timeline 一致),超出写 stderr 告警。 */
 const HOOK_PERF_WARN_MS = 50;
-
-/** 触发需求目录自动绑定的写类工具。 */
-const WRITE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'] as const;
 
 type HookEventName = 'SessionStart' | 'PostToolUse';
 
@@ -33,7 +31,7 @@ interface TaskHookPayload {
 }
 
 /** SessionStart:向 agent 注入当前绑定的任务(未绑定时只注入会话 id,不提示绑定);查询失败不输出任何内容。 */
-export async function taskSessionStartHook(): Promise<void> {
+export async function taskSessionStartHook(_profile: AgentProfile): Promise<void> {
   await runTaskHook(async (payload) => {
     const projectRoot = resolveProjectRoot(payload.cwd ?? process.cwd());
     const current = getCurrentBinding(projectRoot, payload.sessionId);
@@ -41,11 +39,11 @@ export async function taskSessionStartHook(): Promise<void> {
   });
 }
 
-/** PostToolUse(写类工具):改动需求目录内文件时自动绑定;需提醒时回传提醒文本。 */
-export async function taskPostToolUseHook(): Promise<void> {
+/** PostToolUse(该 agent 的写类工具):改动需求目录内文件时自动绑定;需提醒时回传提醒文本。 */
+export async function taskPostToolUseHook(profile: AgentProfile): Promise<void> {
   await runTaskHook(async (payload) => {
     const toolName = payload.raw.tool_name;
-    if (typeof toolName !== 'string' || !(WRITE_TOOLS as readonly string[]).includes(toolName)) return;
+    if (typeof toolName !== 'string' || !profile.writeTools.includes(toolName)) return;
 
     const filePath = readEditedPath(toolName, payload.raw.tool_input);
     if (filePath === null) return;

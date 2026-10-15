@@ -5,19 +5,18 @@
  * 绑定 / 切换 / 关闭各自在一个事务里完成。
  */
 
-import { CLAUDE_SESSION_ID_ENV, getSessionStats } from '../timeline';
+import { resolveSessionIdFromEnv } from '../agents';
+import { getSessionStats } from '../timeline';
 import { TaskArgError, TaskError, TaskStoreError } from './errors';
 import { openTaskDb } from './schema-bootstrap';
 import { TaskStore } from './store';
 import type { BindResult, BindSource, CurrentBinding, TaskItem } from './types';
 
-/** 会话判定:非空的显式值 ?? 非空的 Claude Code 会话环境变量 ?? null。 */
+/** 会话判定:非空的显式值 ?? 各 agent 会话环境变量(按登记顺序)?? null。 */
 export function resolveSessionId(explicit?: string): string | null {
   const fromArg = explicit?.trim();
   if (fromArg) return fromArg;
-  const fromEnv = process.env[CLAUDE_SESSION_ID_ENV]?.trim();
-  if (fromEnv) return fromEnv;
-  return null;
+  return resolveSessionIdFromEnv()?.sessionId ?? null;
 }
 
 /** 当前会话的生效绑定及其任务;未绑定返回 null。 */

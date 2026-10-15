@@ -16,6 +16,7 @@
 
 import type { Command } from 'commander';
 
+import { resolveHookAgent } from '../agents';
 import { resolveProjectRoot } from '../directory';
 import { describeEvent, type TimelineEvent } from '../timeline';
 import {
@@ -394,11 +395,14 @@ export function registerTaskCommands(program: Command): void {
       }
     });
 
-  // 隐藏 hook 入口:由目标项目 .claude/settings.json 的 SessionStart / PostToolUse 调起,退出码恒为 0
+  // 隐藏 hook 入口:由目标项目 agent settings 的 SessionStart / PostToolUse 调起,退出码恒为 0;
+  // --agent 缺省或无法识别时按 Claude Code 处理
   program
     .command('task-session-start-hook', { hidden: true })
-    .action(async () => { await taskSessionStartHook(); });
+    .option('--agent <id>')
+    .action(async (opts: { agent?: string }) => { await taskSessionStartHook(resolveHookAgent(opts.agent)); });
   program
     .command('task-post-tool-use-hook', { hidden: true })
-    .action(async () => { await taskPostToolUseHook(); });
+    .option('--agent <id>')
+    .action(async (opts: { agent?: string }) => { await taskPostToolUseHook(resolveHookAgent(opts.agent)); });
 }

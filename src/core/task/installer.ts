@@ -1,7 +1,8 @@
 /**
  * task hook 的项目级接入与移除(spec §10、§12)。
  *
- * 只读写目标项目的 `<projectRoot>/.claude/settings.json`,不碰全局 `~/.claude/`。
+ * 只读写目标项目中该 agent 的项目共享 settings(Claude Code 为 `<projectRoot>/.claude/settings.json`),
+ * 不碰全局配置。
  *   - 幂等:同一事件已有相同命令就跳过,重复安装不产生重复项;
  *   - 可逆:卸载只移除命令里带 `cgraphx task-` 标记的项,不碰用户其它 hook,
  *     清掉因此变空的组和事件键。
@@ -11,6 +12,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+
+import { agentSettingsPath, getAgentProfile, hookCommand, resolveHookAgent } from '../agents';
+import type { AgentId, AgentProfile } from '../agents';
 
 interface HookEntry {
   type: 'command';
@@ -32,30 +36,41 @@ interface SettingsJson {
 /** 卸载识别标记:命令里包含它的 hook 项属于 task。 */
 const TASK_HOOK_MARKER = 'cgraphx task-';
 
-/** task 接入的 hook:SessionStart 全量触发,PostToolUse 用 matcher 限定写类工具。 */
-const TASK_HOOK_GROUPS: ReadonlyArray<{ event: string; group: HookGroup }> = [
-  {
-    event: 'SessionStart',
-    group: { hooks: [{ type: 'command', command: 'cgraphx task-session-start-hook' }] },
-  },
-  {
-    event: 'PostToolUse',
-    group: {
-      matcher: 'Edit|Write|MultiEdit|NotebookEdit',
-      hooks: [{ type: 'command', command: 'cgraphx task-post-tool-use-hook' }],
+/** task 接入的 hook:SessionStart 全量触发,PostToolUse 用 matcher 限定该 agent 的写类工具。 */
+function taskHookGroups(profile: AgentProfile): ReadonlyArray<{ event: string; group: HookGroup }> {
+  return [
+    {
+      event: 'SessionStart',
+      group: { hooks: [{ type: 'command', command: hookCommand('cgraphx task-session-start-hook', profile) }] },
     },
-  },
-];
+    {
+      event: 'PostToolUse',
+      group: {
+        matcher: profile.writeTools.join('|'),
+        hooks: [{ type: 'command', command: hookCommand('cgraphx task-post-tool-use-hook', profile) }],
+      },
+    },
+  ];
+}
+
+/** 取 agent 描述:缺省为 claude-code;未登记的 id 按 claude-code 处理。 */
+function profileOf(agent: AgentId | undefined): AgentProfile {
+  return (agent ? getAgentProfile(agent) : undefined) ?? resolveHookAgent(undefined);
+}
 
 /** 写入 task hook;返回本次写入的事件与因已存在而跳过的事件。 */
-export function installTaskHooks(projectRoot: string): { written: string[]; skipped: string[] } {
-  const settingsPath = settingsPathOf(projectRoot);
+export function installTaskHooks(
+  projectRoot: string,
+  opts: { agent?: AgentId } = {},
+): { written: string[]; skipped: string[] } {
+  const profile = profileOf(opts.agent);
+  const settingsPath = agentSettingsPath(projectRoot, profile);
   const settings = readSettings(settingsPath);
   const hooks: HooksConfig = settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {};
 
   const written: string[] = [];
   const skipped: string[] = [];
-  for (const { event, group } of TASK_HOOK_GROUPS) {
+  for (const { event, group } of taskHookGroups(profile)) {
     const existing = Array.isArray(hooks[event]) ? hooks[event] : [];
     const commands = group.hooks.map((h) => h.command);
     const alreadyThere = existing.some((g) =>
@@ -77,8 +92,11 @@ export function installTaskHooks(projectRoot: string): { written: string[]; skip
 }
 
 /** 移除命令里带 `cgraphx task-` 的 hook 项;返回有项被移除的事件。 */
-export function uninstallTaskHooks(projectRoot: string): { removed: string[] } {
-  const settingsPath = settingsPathOf(projectRoot);
+export function uninstallTaskHooks(
+  projectRoot: string,
+  opts: { agent?: AgentId } = {},
+): { removed: string[] } {
+  const settingsPath = agentSettingsPath(projectRoot, profileOf(opts.agent));
   if (!fs.existsSync(settingsPath)) return { removed: [] };
 
   const settings = readSettings(settingsPath);
@@ -118,10 +136,6 @@ export function uninstallTaskHooks(projectRoot: string): { removed: string[] } {
 }
 
 // ─── settings 读写 ──────────────────────────────────────────────────────────
-
-function settingsPathOf(projectRoot: string): string {
-  return path.join(path.resolve(projectRoot), '.claude', 'settings.json');
-}
 
 function isTaskEntry(entry: unknown): boolean {
   if (!entry || typeof entry !== 'object') return false;
