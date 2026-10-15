@@ -72,12 +72,15 @@ function hasPlanIndex(featureDir: string): boolean {
   }
 }
 
-/** ui功能测试/ 子目录里是否有 UI 功能测试报告(*-ui功能测试报告.md)。 */
+/**
+ * ui功能测试/ 子目录里是否有 UI 功能测试报告:*-ui功能测试报告.xlsx(现行)
+ * 或 *-ui功能测试报告.md(存量兼容)。结构化结果 JSON、截图不算报告。
+ */
 function hasUiTestReport(featureDir: string): boolean {
   try {
     return fs
       .readdirSync(path.join(featureDir, 'ui功能测试'))
-      .some((n) => n.endsWith('-ui功能测试报告.md'));
+      .some((n) => n.endsWith('-ui功能测试报告.md') || n.endsWith('-ui功能测试报告.xlsx'));
   } catch {
     return false;
   }
@@ -146,7 +149,7 @@ function findMetaFile(featureDir: string): string | null {
  * 优先级 已验证 > 已规划 > 已规格,三个里程碑各自独立探测(允许跨阶,
  * 如 spec + 测试报告但无 plan → 已验证)。已验证只看测试「报告」(run-api-test
  * 的 *-接口测试报告.md / write-unit-test-code 的 *-单元测试报告.md / run-ui-test
- * 的 ui功能测试/*-ui功能测试报告.md(子目录产物);2026-08 改名前的旧名
+ * 的 ui功能测试/*-ui功能测试报告.xlsx|.md(子目录产物,md 为存量);2026-08 改名前的旧名
  * *-测试报告.md 仍识别,存量产物不回退),测试「规格」不算。
  */
 function deriveStage(featureDir: string): FeatureStage | null {
