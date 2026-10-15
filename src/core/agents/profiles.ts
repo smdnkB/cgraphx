@@ -19,4 +19,30 @@ const CLAUDE_CODE: AgentProfile = {
   assetReplacements: [],
 };
 
-export const AGENT_PROFILES: readonly AgentProfile[] = [CLAUDE_CODE];
+/**
+ * CodeBuddy 描述:部署到 .codebuddy/,不支持 statusLine 与 context-monitor。
+ * - sessionIdEnv:实测 CodeBuddy 2.167.0 向 Bash 子进程注入 CODEBUDDY_SESSION_ID(值即 hook payload 的 session_id)。
+ * - cliCommands / writeTools:实测命令名为 codebuddy;写类工具与 Claude Code 同名(另有别名 NotebookWrite,本批不覆盖)。
+ */
+const CODEBUDDY: AgentProfile = {
+  id: 'codebuddy',
+  displayName: 'CodeBuddy',
+  legacyIds: [],
+  configDirName: '.codebuddy',
+  instructionsFileName: 'CODEBUDDY.md',
+  settingsFileName: 'settings.json',
+  projectDirEnv: 'CODEBUDDY_PROJECT_DIR',
+  sessionIdEnv: 'CODEBUDDY_SESSION_ID',
+  cliCommands: ['codebuddy'],
+  writeTools: ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'],
+  capabilities: { statusLine: false, contextMonitor: false },
+  // 顺序即替换顺序:先替换目录路径,再替换指引文件名与环境变量
+  assetReplacements: [
+    ['.claude/', '.codebuddy/'],
+    ['CLAUDE.md', 'CODEBUDDY.md'],
+    ['CLAUDE_PROJECT_DIR', 'CODEBUDDY_PROJECT_DIR'],
+    ['CLAUDE_CODE_SESSION_ID', 'CODEBUDDY_SESSION_ID'],
+  ],
+};
+
+export const AGENT_PROFILES: readonly AgentProfile[] = [CLAUDE_CODE, CODEBUDDY];
