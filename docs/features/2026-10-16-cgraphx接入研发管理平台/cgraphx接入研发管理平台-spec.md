@@ -9,7 +9,7 @@
 
 员工用平台账号给本仓库接入一次，本地 cgraphx 就成为研发管理平台的客户端：本地采集的会话、事件、绑定段、commit、产出、参考按白名单自动同步到平台，1 小时内可见。离线时数据积压，联网后补传，一条不丢；重复上报不重复计数。hook 照常只写本地库，自己不发网络请求，同步由 hook 拉起的脱离进程完成。接入前的本地历史全部回传。本地 web 与本地既有业务规则不变。
 
-协议以需求①（`docs/features/2026-10-15-研发管理服务端/研发管理服务端-spec.md` §7）和已发布的契约包 `@cgraphx-server/contract`（`client.ts`、`enums.ts`）为准。
+协议以需求①（cgraphx-server 仓库 `docs/features/2026-10-15-研发管理服务端/研发管理服务端-spec.md` §7）和已发布的契约包 `@cgraphx-server/contract`（`client.ts`、`enums.ts`）为准。
 
 ```mermaid
 flowchart TD
