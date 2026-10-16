@@ -170,3 +170,19 @@ export function insertReferenceRecord(
     'INSERT OR IGNORE INTO sync_reference_records (session_id, kind, value, ts) VALUES (?, ?, ?, ?)',
   ).run(record.sessionId, record.kind, record.value, record.ts);
 }
+
+/** 本会话的精确参考记录,按 id 升序。 */
+export function listReferenceRecords(
+  db: SqliteDatabase,
+  sessionId: string,
+): Array<{ kind: 'concept' | 'file'; value: string; ts: string }> {
+  const rows = db
+    .prepare('SELECT kind, value, ts FROM sync_reference_records WHERE session_id = ? ORDER BY id ASC')
+    .all(sessionId) as Array<{ kind: string; value: string; ts: string }>;
+  const result: Array<{ kind: 'concept' | 'file'; value: string; ts: string }> = [];
+  for (const row of rows) {
+    if (row.kind !== 'concept' && row.kind !== 'file') continue;
+    result.push({ kind: row.kind, value: row.value, ts: row.ts });
+  }
+  return result;
+}
