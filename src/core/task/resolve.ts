@@ -3,8 +3,12 @@
  *
  * 解析序号沿用 spec §5.2:
  *   1 纯数字且等于本地 id → 2 等于接口任务 external_id → 3 已配置接口:刷新一次后再按 external_id
- *   → 4 等于手动任务 name → 5/6 未配置接口或带 --manual:按名称新建手动任务 → 7 报错。
- * findTask 只走 1、2、4(不联网、不新建)。
+ *   → 3.5 接口任务名称(规整后相等,需求「任务绑定名称匹配」)→ 4 等于手动任务 name
+ *   → 5/6 未配置接口或带 --manual:按名称新建手动任务 → 7 报错。
+ * findTask 只走 1、2、3.5、4(不联网、不新建)。
+ *
+ * 3.5 存在的原因:接口任务原先只能按编号指认,用名称指认时会落到序 5/6,
+ * 静默新建一个与接口任务同名的手动任务(或在 spec 头部声明里建出假的接口占位)。
  */
 
 import { resolveSessionId } from './binding';
@@ -14,7 +18,22 @@ import { fetchRemoteTasks, loadTaskSourceConfig } from './source';
 import { TaskStore } from './store';
 import type { TaskItem, TaskListResult, TaskSourceConfig } from './types';
 
-/** 按序 1(本地 id)→ 2(接口任务 external_id)→ 4(手动任务 name)查找;都不中返回 null。 */
+/** 名称规整:去掉所有空白(含全角空格)并忽略大小写。只做完全相等比较,不做模糊匹配。 */
+export function normalizeTaskName(name: string): string {
+  return name.replace(/\s+/gu, '').toLowerCase();
+}
+
+/** 规整后名称与 value 相等的接口任务(按本地 id 升序);可能为空或多个。 */
+function findApiTasksByName(store: TaskStore, value: string): TaskItem[] {
+  const key = normalizeTaskName(value);
+  if (!key) return [];
+  return store.listApiTasks().filter((t) => normalizeTaskName(t.name) === key);
+}
+
+/**
+ * 按序 1(本地 id)→ 2(接口任务 external_id)→ 3.5(接口任务名称,唯一时)→ 4(手动任务 name)查找;
+ * 都不中返回 null。名称对应多个接口任务时视同未命中(调用方不联网、不报错的场景)。
+ */
 export function findTask(store: TaskStore, value: string): TaskItem | null {
   const v = value.trim();
   if (!v) return null;
@@ -22,7 +41,11 @@ export function findTask(store: TaskStore, value: string): TaskItem | null {
     const byId = store.getTaskById(Number(v));
     if (byId) return byId;
   }
-  return store.findApiTaskByExternalId(v) ?? store.findManualTaskByName(v);
+  const byExternalId = store.findApiTaskByExternalId(v);
+  if (byExternalId) return byExternalId;
+  const byName = findApiTasksByName(store, v);
+  if (byName.length === 1) return byName[0]!;
+  return store.findManualTaskByName(v);
 }
 
 /**
@@ -80,6 +103,14 @@ export async function resolveTaskForUse(
         if (!(err instanceof TaskSourceUnavailableError) || !manual) throw err;
         process.stderr.write(`[task] 任务接口不可用:${err.reason};继续按 --manual 解析\n`);
       }
+    }
+
+    // 序 3.5:接口任务名称(规整后相等)。唯一 → 直接用,带 --manual 也不新建;多个 → 报错列候选
+    const apiByName = findApiTasksByName(store, v);
+    if (apiByName.length === 1) return apiByName[0]!;
+    if (apiByName.length > 1) {
+      const candidates = apiByName.map((t) => `${t.externalId ?? '-'} ${t.name}`).join('、');
+      throw new TaskArgError(`名称「${v}」对应多个接口任务:${candidates};请用编号指定`);
     }
 
     // 序 4:手动任务 name

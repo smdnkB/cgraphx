@@ -122,6 +122,14 @@ export class TaskStore {
     return row ? rowToTask(row) : null;
   }
 
+  /** 全部接口任务(按 id 排序),供按名称规整匹配。 */
+  listApiTasks(): TaskItem[] {
+    const rows = this.guard('列出接口任务', () =>
+      this.db.prepare(`SELECT ${TASK_COLUMNS} FROM task_items WHERE source = 'api' ORDER BY id`).all(),
+    ) as TaskItemRow[];
+    return rows.map(rowToTask);
+  }
+
   /** 全部任务,按 source、id 排序。 */
   listTasks(): TaskItem[] {
     const rows = this.guard('列出任务', () =>
