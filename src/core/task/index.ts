@@ -6,11 +6,17 @@
  */
 
 export { ensureTaskSchema, openTaskDb } from './schema-bootstrap';
-export { loadTaskSourceConfig, fetchRemoteTasks } from './source';
+export {
+  getTaskSourceConfigPath,
+  loadTaskSourceConfig,
+  writeTaskSourceConfig,
+  removeTaskSourceConfig,
+  fetchRemoteTasks,
+} from './source';
 export { findTaskByValue, resolveTaskForUse, resolveDeclaredTask, listTasks } from './resolve';
 export { bindSession, getCurrentBinding, clearBinding, resolveSessionId } from './binding';
 export { autoBindFromFeatureDir, getTaskDetail } from './feature-link';
-export { listTaskSummaries, getTaskReport, computeSegmentStats } from './report';
+export { listTaskSummaries, getTaskReport, computeSegmentStats, listBindingsWithTask } from './report';
 export { classifyArtifactPath } from './artifacts';
 export { taskSessionStartHook, taskPostToolUseHook } from './hooks';
 export { installTaskHooks, uninstallTaskHooks } from './installer';

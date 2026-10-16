@@ -78,4 +78,40 @@ export async function getSessionStats(
   }
 }
 
+/** 每个会话的最大事件 id(只读;供 sync 判定增量)。 */
+export async function listSessionEventMaxIds(
+  projectRoot: string,
+): Promise<Array<{ sessionId: string; maxId: number }>> {
+  const conn = openTimelineDb(projectRoot);
+  try {
+    return new TimelineStore(conn.getDb()).listSessionMaxIds();
+  } finally {
+    conn.close();
+  }
+}
+
+/** 指定会话中 id > afterId 的全部事件,id 升序,无上限(只读;供 sync 增量上报)。 */
+export async function listSessionEventsAfter(
+  projectRoot: string,
+  sessionId: string,
+  afterId: number,
+): Promise<TimelineEvent[]> {
+  const conn = openTimelineDb(projectRoot);
+  try {
+    return new TimelineStore(conn.getDb()).listSessionEventsAfter(sessionId, afterId);
+  } finally {
+    conn.close();
+  }
+}
+
+/** 全部 git_commit 事件(含终端 commit),ts、id 升序,无上限(只读;供 sync 上报 commit)。 */
+export async function listCommitEvents(projectRoot: string): Promise<TimelineEvent[]> {
+  const conn = openTimelineDb(projectRoot);
+  try {
+    return new TimelineStore(conn.getDb()).listCommitEvents();
+  } finally {
+    conn.close();
+  }
+}
+
 export { resolveTimeBound };

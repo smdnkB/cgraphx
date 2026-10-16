@@ -6,7 +6,17 @@
  */
 
 export { recordEvent, type EventEnricher } from './recorder';
-export { queryEvents, getEventById, getEventStats, getMostRecentPre, getSessionStats, resolveTimeBound } from './indexer';
+export {
+  queryEvents,
+  getEventById,
+  getEventStats,
+  getMostRecentPre,
+  getSessionStats,
+  listSessionEventMaxIds,
+  listSessionEventsAfter,
+  listCommitEvents,
+  resolveTimeBound,
+} from './indexer';
 export { installTimelineHooks, uninstallTimelineHooks } from './installer';
 export { isKillSwitchOn } from './hook-runner';
 export { describeEvent } from './describe';
