@@ -9,8 +9,9 @@ import { resolveSessionIdFromEnv } from '../agents';
 import { isInitialized } from '../directory';
 import { TaskConfigError, loadTaskSourceConfig, removeTaskSourceConfig, writeTaskSourceConfig } from '../task';
 import { getStatus, postConnect } from './client';
-import { CLIENT_NAME, TASKS_PATH_SUFFIX } from './constants';
-import { SyncArgError, SyncNotInitializedError, SyncPlatformError } from './errors';
+import { CLIENT_NAME, FOREGROUND_LOCK_WAIT_MS, TASKS_PATH_SUFFIX } from './constants';
+import { SyncArgError, SyncBusyError, SyncNotInitializedError, SyncPlatformError } from './errors';
+import { acquireLock, releaseLock } from './lock';
 import { getOriginUrl } from './git';
 import { openSyncDb } from './schema-bootstrap';
 import {
@@ -119,6 +120,26 @@ export async function connectPlatform(projectRoot: string, input: ConnectInput):
   if (password === '') {
     throw new SyncArgError('密码为空,请重新输入');
   }
+  // 7–9 持同步锁执行:防止运行中的同步在清空 sync_sessions 之后写回旧账号的确认进度,
+  // 导致部分会话不再向新账号回传。拿不到锁就在签发凭据之前放弃,不留半成品。
+  if (!acquireLock(projectRoot, FOREGROUND_LOCK_WAIT_MS)) {
+    throw new SyncBusyError('后台同步正在进行,稍后再试');
+  }
+  try {
+    return await connectLocked(projectRoot, serverUrl, username, password, remoteUrl, existing !== null);
+  } finally {
+    releaseLock(projectRoot);
+  }
+}
+
+async function connectLocked(
+  projectRoot: string,
+  serverUrl: string,
+  username: string,
+  password: string,
+  remoteUrl: string,
+  replacedExisting: boolean,
+): Promise<ConnectOutcome> {
   // 7
   const resp = await postConnect(serverUrl, {
     username,
@@ -147,7 +168,7 @@ export async function connectPlatform(projectRoot: string, input: ConnectInput):
     conn.close();
   }
   // 10
-  return { kind: 'connected', connection, replacedExisting: existing !== null };
+  return { kind: 'connected', connection, replacedExisting };
 }
 
 /**
