@@ -186,3 +186,92 @@ export function listReferenceRecords(
   }
   return result;
 }
+
+// ─── session progress ───────────────────────────────────────────────────────
+
+/** `sync_sessions` 行(snake_case 原样,供 runner / status 判定增量)。 */
+export interface SyncSessionRow {
+  client_session_id: string;
+  last_event_id: number;
+  bindings_hash: string | null;
+  extras_hash: string | null;
+  pending_push: number;
+  uploaded_at: string | null;
+  isolated_reason: string | null;
+  isolated_client_version: string | null;
+}
+
+/** 全部会话进度,按 client_session_id 建 Map。 */
+export function listSessions(db: SqliteDatabase): Map<string, SyncSessionRow> {
+  const rows = db
+    .prepare(
+      `SELECT client_session_id, last_event_id, bindings_hash, extras_hash, pending_push, uploaded_at,
+              isolated_reason, isolated_client_version
+         FROM sync_sessions`,
+    )
+    .all() as unknown as SyncSessionRow[];
+  const map = new Map<string, SyncSessionRow>();
+  for (const row of rows) {
+    map.set(row.client_session_id, { ...row, last_event_id: Number(row.last_event_id), pending_push: Number(row.pending_push) });
+  }
+  return map;
+}
+
+/** 非最后一块确认后:只推进事件水位(不动哈希与隔离标记)。 */
+export function advanceSessionEvents(db: SqliteDatabase, sessionId: string, lastEventId: number): void {
+  db.prepare(
+    `INSERT INTO sync_sessions (client_session_id, last_event_id) VALUES (?, ?)
+     ON CONFLICT(client_session_id) DO UPDATE SET last_event_id = max(sync_sessions.last_event_id, excluded.last_event_id)`,
+  ).run(sessionId, lastEventId);
+}
+
+/** 会话最后一块确认后:写满进度并清隔离标记。 */
+export function ackSession(
+  db: SqliteDatabase,
+  ack: {
+    sessionId: string;
+    lastEventId: number;
+    bindingsHash: string;
+    extrasHash: string;
+    pendingPush: boolean;
+    uploadedAt: string;
+  },
+): void {
+  db.prepare(
+    `INSERT INTO sync_sessions
+       (client_session_id, last_event_id, bindings_hash, extras_hash, pending_push, uploaded_at,
+        isolated_reason, isolated_client_version)
+     VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
+     ON CONFLICT(client_session_id) DO UPDATE SET
+       last_event_id = excluded.last_event_id,
+       bindings_hash = excluded.bindings_hash,
+       extras_hash = excluded.extras_hash,
+       pending_push = excluded.pending_push,
+       uploaded_at = excluded.uploaded_at,
+       isolated_reason = NULL,
+       isolated_client_version = NULL`,
+  ).run(ack.sessionId, ack.lastEventId, ack.bindingsHash, ack.extrasHash, ack.pendingPush ? 1 : 0, ack.uploadedAt);
+}
+
+/** 只更新 pending_push(行不存在时不建行)。 */
+export function updatePendingPush(db: SqliteDatabase, sessionId: string, pendingPush: boolean): void {
+  db.prepare('UPDATE sync_sessions SET pending_push = ? WHERE client_session_id = ?').run(pendingPush ? 1 : 0, sessionId);
+}
+
+/** 标记会话被平台拒收(数据不删,记录拒收原因与当时的客户端版本;升级后自动重试)。 */
+export function isolateSession(db: SqliteDatabase, sessionId: string, reason: string, clientVersion: string): void {
+  db.prepare(
+    `INSERT INTO sync_sessions (client_session_id, isolated_reason, isolated_client_version) VALUES (?, ?, ?)
+     ON CONFLICT(client_session_id) DO UPDATE SET
+       isolated_reason = excluded.isolated_reason,
+       isolated_client_version = excluded.isolated_client_version`,
+  ).run(sessionId, reason, clientVersion);
+}
+
+/** 被隔离的会话数。 */
+export function countIsolatedSessions(db: SqliteDatabase): number {
+  const row = db.prepare('SELECT count(*) AS n FROM sync_sessions WHERE isolated_reason IS NOT NULL').get() as
+    | { n: number }
+    | undefined;
+  return Number(row?.n ?? 0);
+}

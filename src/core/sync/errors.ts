@@ -5,6 +5,8 @@
  * 错误消息不得包含 token 或密码。
  */
 
+import type { SyncRunResult } from './types';
+
 export class SyncError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
@@ -84,4 +86,20 @@ export function exitCodeForError(err: unknown): number {
   if (err instanceof SyncNetworkError) return 5;
   if (err instanceof SyncBusyError) return 1;
   return 1;
+}
+
+/** 一轮同步结果 → CLI 退出码(`sync now`)。 */
+export function exitCodeForRunResult(result: SyncRunResult): number {
+  switch (result.stoppedBy) {
+    case null:
+      return 0;
+    case 'paused':
+      return 4;
+    case 'failing':
+      return 5;
+    case 'busy':
+      return 1;
+    case 'not_connected':
+      return 2;
+  }
 }

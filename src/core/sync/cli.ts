@@ -4,9 +4,12 @@
  * 导出 `registerSyncCommands(program)`,由主 CLI(src/cli/index.ts)调用一次。本任务命令面:
  *   - cgraphx sync connect    [--server <url>] [--user <name>] [--force] [--password-stdin] [--json]
  *   - cgraphx sync disconnect [--json]
+ *   - cgraphx sync now        [--json]
+ *   - cgraphx sync status     [--json]
+ *   - cgraphx sync-worker     [--project <path>]   (隐藏顶层命令,由 hook / connect 拉起)
  *
  * 密码不进命令行参数:终端交互关回显输入,或 `--password-stdin` 从 stdin 读第一行。
- * 退出码经 exitCodeForError。stderr 错误带 `[sync]` 前缀;错误输出不含 token / 密码。
+ * 退出码经 exitCodeForError / exitCodeForRunResult。stderr 错误带 `[sync]` 前缀;错误输出不含 token / 密码。
  */
 
 import readline from 'node:readline';
@@ -15,33 +18,29 @@ import { Writable } from 'node:stream';
 import type { Command } from 'commander';
 
 import { resolveProjectRoot } from '../directory';
+import { PLATFORM_HINTS } from './constants';
 import {
   SyncArgError,
   SyncNetworkError,
+  SyncNotConnectedError,
   SyncPlatformError,
   connectPlatform,
   disconnectPlatform,
   exitCodeForError,
+  exitCodeForRunResult,
+  getSyncStatus,
   readConnection,
+  runSync,
+  runWorker,
   spawnSyncWorker,
 } from './index';
-import type { ConnectOutcome } from './types';
+import type { ConnectOutcome, SyncRunResult, SyncStatusReport } from './types';
 
 // ─── 输出 ───────────────────────────────────────────────────────────────────
 
 function writeJson(value: unknown): void {
   process.stdout.write(JSON.stringify(value, null, 2) + '\n');
 }
-
-/** 平台错误码 → 提示(spec §3.3)。 */
-const PLATFORM_HINTS: Record<string, string> = {
-  invalid_credentials: '账号或密码错误',
-  account_disabled: '平台账号已停用,请联系平台管理员',
-  repo_not_registered: '本仓库未在平台登记,请联系项目管理员',
-  repo_disabled: '本仓库的平台登记已停用',
-  not_project_member: '你不是该仓库所属项目的成员',
-  invalid_token: '上报凭据已失效,请重新接入(cgraphx sync connect)',
-};
 
 /** stderr 输出 `[sync] <提示>`,设置退出码。 */
 function renderError(err: unknown, serverUrl: string | null): void {
@@ -68,6 +67,43 @@ function renderConnect(outcome: ConnectOutcome): string {
   if (outcome.replacedExisting) {
     lines.push('已替换本地旧凭据;旧凭据在平台上仍有效(服务端尚不作废旧凭据)。');
   }
+  return lines.join('\n');
+}
+
+function renderRunResult(result: SyncRunResult): { stdout: string | null; stderr: string | null } {
+  if (result.stoppedBy === 'paused') return { stdout: null, stderr: `[sync] 同步已暂停:${result.error ?? '-'}` };
+  if (result.stoppedBy === 'failing') {
+    return { stdout: null, stderr: `[sync] 同步失败:${result.error ?? '-'},本地数据已保留,稍后自动重试` };
+  }
+  let line = `同步完成:上报 ${result.sessionsSent} 个会话、${result.recordsSent} 条记录`;
+  if (result.isolatedNew > 0) line += `;${result.isolatedNew} 个会话被平台拒收,已隔离`;
+  return { stdout: line, stderr: null };
+}
+
+function describeRunResult(result: SyncRunResult): string {
+  if (result.stoppedBy === 'paused') return `${result.at} 已暂停:${result.error ?? '-'}`;
+  if (result.stoppedBy === 'failing') return `${result.at} 失败:${result.error ?? '-'}`;
+  if (result.stoppedBy !== null) return `${result.at} 未执行(${result.stoppedBy})`;
+  return `${result.at} 成功,上报 ${result.sessionsSent} 个会话、${result.recordsSent} 条记录${
+    result.warnings > 0 ? `,平台提示 ${result.warnings} 条` : ''
+  }`;
+}
+
+/** `sync status` 的文本输出(`sync connect` 已接入分支复用)。 */
+function renderStatus(report: SyncStatusReport): string {
+  const c = report.connection;
+  const s = report.state;
+  const lines = [
+    `平台地址:${c?.serverUrl ?? '-'}`,
+    `项目:${c?.projectName ?? '-'}`,
+    `账号:${c?.username ?? '-'}`,
+    `最后成功同步:${s.lastSuccessAt ?? '尚未成功同步'}`,
+    `积压:${report.backlogEvents} 条事件 / ${report.pendingSessions} 个会话`,
+  ];
+  if (s.pausedReason !== null) lines.push(`已暂停:${PLATFORM_HINTS[s.pausedReason] ?? s.pausedReason}`);
+  if (report.isolatedSessions > 0) lines.push(`有 ${report.isolatedSessions} 个会话被平台拒收`);
+  if (s.lastResult !== null) lines.push(`最近一次:${describeRunResult(s.lastResult)}`);
+  if (s.lastError !== null && s.lastResult?.stoppedBy !== 'failing') lines.push(`最近错误:${s.lastError}`);
   return lines.join('\n');
 }
 
@@ -159,7 +195,12 @@ export function registerSyncCommands(program: Command): void {
             readPassword: makePasswordReader(opts.passwordStdin === true),
           });
           if (outcome.kind === 'connected') spawnSyncWorker(projectRoot);
-          if (opts.json) writeJson(outcome);
+          if (outcome.kind === 'already') {
+            // spec §3.1:已接入 → 显示同步状态
+            const status = await getSyncStatus(projectRoot);
+            if (opts.json) writeJson({ ...outcome, status });
+            else process.stdout.write(renderConnect(outcome) + '\n' + renderStatus(status) + '\n');
+          } else if (opts.json) writeJson(outcome);
           else process.stdout.write(renderConnect(outcome) + '\n');
         } catch (err) {
           let serverUrl: string | null = opts.server?.trim().replace(/\/+$/, '') ?? null;
@@ -190,6 +231,54 @@ export function registerSyncCommands(program: Command): void {
           );
       } catch (err) {
         renderError(err, null);
+      }
+    });
+
+  sync
+    .command('now')
+    .description('立即同步:前台上报本仓库积压的研发数据')
+    .option('--json', '输出机器可读 JSON')
+    .action(async (opts: { json?: boolean }) => {
+      try {
+        const projectRoot = resolveProjectRoot(process.cwd());
+        const result = await runSync(projectRoot, 'foreground');
+        if (opts.json) writeJson(result);
+        else {
+          const out = renderRunResult(result);
+          if (out.stdout !== null) process.stdout.write(out.stdout + '\n');
+          if (out.stderr !== null) process.stderr.write(out.stderr + '\n');
+        }
+        process.exitCode = exitCodeForRunResult(result);
+      } catch (err) {
+        renderError(err, null);
+      }
+    });
+
+  sync
+    .command('status')
+    .description('查看本仓库的同步状态(接入信息、积压、暂停原因、最近结果)')
+    .option('--json', '输出机器可读 JSON')
+    .action(async (opts: { json?: boolean }) => {
+      try {
+        const projectRoot = resolveProjectRoot(process.cwd());
+        const report = await getSyncStatus(projectRoot);
+        if (!report.connected) throw new SyncNotConnectedError('未接入平台(cgraphx sync connect 接入)');
+        if (opts.json) writeJson(report);
+        else process.stdout.write(renderStatus(report) + '\n');
+      } catch (err) {
+        renderError(err, null);
+      }
+    });
+
+  // 隐藏顶层命令:后台 worker(stdout 恒空,退出码恒 0)
+  program
+    .command('sync-worker', { hidden: true })
+    .option('--project <path>', '项目根目录')
+    .action(async (opts: { project?: string }) => {
+      try {
+        await runWorker(opts.project ?? resolveProjectRoot(process.cwd()));
+      } catch {
+        // runWorker 自行写 stderr;此处兜底保证退出码 0
       }
     });
 }

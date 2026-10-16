@@ -192,3 +192,16 @@ export interface ReferenceHit {
   value: string;
   sessionId?: string;
 }
+
+/** `getSyncStatus` 的本地同步状态报告(spec §7)。 */
+export interface SyncStatusReport {
+  connected: boolean;
+  connection: SyncConnection | null;
+  state: SyncStatusState;
+  /** 各候选会话中尚未上报的事件数之和。 */
+  backlogEvents: number;
+  /** 需要上报的会话数(含终端会话需发送时)。 */
+  pendingSessions: number;
+  /** 被平台拒收而隔离的会话数。 */
+  isolatedSessions: number;
+}

@@ -8,6 +8,8 @@
 export { openSyncDb, ensureSyncSchema } from './schema-bootstrap';
 export { connectPlatform, disconnectPlatform, readConnection, recordReferenceHit } from './connection';
 export { spawnSyncWorker } from './spawn';
+export { runSync, runWorker } from './runner';
+export { getSyncStatus } from './status';
 export { getClientVersion } from './version';
 export {
   SYNC_SCHEMA_VERSION,
@@ -20,6 +22,14 @@ export {
   LOCK_FILENAME,
   TRIGGER_FILENAME,
   LOCK_STALE_MS,
+  WORKER_PID_FILENAME,
+  PAUSE_PROBE_MS,
+  FAIL_NOTICE_MS,
+  WORKER_TRAIL_MS,
+  BATCH_MAX_SESSIONS,
+  BATCH_MAX_EVENTS,
+  BATCH_MAX_BYTES,
+  FOREGROUND_LOCK_WAIT_MS,
 } from './constants';
 export { ARTIFACT_TYPES, CLIENT_ERROR_CODES, PAUSE_REASONS } from './types';
 export type {
@@ -44,6 +54,7 @@ export type {
   ConnectInput,
   ConnectOutcome,
   ReferenceHit,
+  SyncStatusReport,
 } from './types';
 export {
   SyncError,
@@ -55,4 +66,5 @@ export {
   SyncNetworkError,
   SyncBusyError,
   exitCodeForError,
+  exitCodeForRunResult,
 } from './errors';

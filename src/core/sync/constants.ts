@@ -31,3 +31,37 @@ export const TRIGGER_FILENAME = 'sync-trigger';
 
 /** 锁超过此时长视为陈旧,可接管。 */
 export const LOCK_STALE_MS = 2 * 3600_000;
+
+/** worker 存活标记文件名(位于 `.cgraphx/`;worker 整个生命周期持有)。 */
+export const WORKER_PID_FILENAME = 'sync-worker.pid';
+
+/** 非凭据类暂停时,后台探测平台恢复的最小间隔。 */
+export const PAUSE_PROBE_MS = 30 * 60_000;
+
+/** 连续失败超过此时长,会话开始时提示一行。 */
+export const FAIL_NOTICE_MS = 60 * 60_000;
+
+/** worker 一轮同步后尾随等待的时长(≤ 15 分钟)。 */
+export const WORKER_TRAIL_MS = 10 * 60_000;
+
+/** 单个请求最多会话块数。 */
+export const BATCH_MAX_SESSIONS = 50;
+
+/** 单个请求最多事件数(也是单块的事件上限)。 */
+export const BATCH_MAX_EVENTS = 5000;
+
+/** 单个请求序列化后最大字节数。 */
+export const BATCH_MAX_BYTES = 4 * 1024 * 1024;
+
+/** 前台 `sync now` 等待同步锁的最长时间。 */
+export const FOREGROUND_LOCK_WAIT_MS = 30_000;
+
+/** 平台错误码 → 提示(spec §3.3;接入失败与同步暂停共用)。 */
+export const PLATFORM_HINTS: Readonly<Record<string, string>> = {
+  invalid_credentials: '账号或密码错误',
+  account_disabled: '平台账号已停用,请联系平台管理员',
+  repo_not_registered: '本仓库未在平台登记,请联系项目管理员',
+  repo_disabled: '本仓库的平台登记已停用',
+  not_project_member: '你不是该仓库所属项目的成员',
+  invalid_token: '上报凭据已失效,请重新接入(cgraphx sync connect)',
+};
