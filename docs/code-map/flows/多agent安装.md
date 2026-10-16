@@ -19,9 +19,10 @@ related_code:
   - src/core/agents/profiles.ts
   - src/core/timeline/installer.ts
   - src/core/task/installer.ts
-source_commit: 74313b9
+  - src/core/sync/installer.ts
+source_commit: 8f6df9e
 provider: ai
-generated: 2026-10-15
+generated: 2026-10-16
 ---
 
 # 多 agent 安装 · 代码地图
@@ -40,7 +41,7 @@ generated: 2026-10-15
 
 - settings hook、指引块;
 - 按能力过滤、按替换规则改写后的资产;
-- timeline 与 task 的 hook。
+- timeline、task 与 sync(平台同步)的 hook。sync hook 的命令带 `2>/dev/null || true`,旧版全局 cgraphx 不认识时不报错。
 
 项目级的事每个项目只做一次:`.cgraphx/` 初始化、docs / db 子系统、git post-commit 钩子。
 
@@ -65,6 +66,7 @@ sequenceDiagram
   participant CA as claude-assets.ts
   participant TL as timeline installer
   participant TK as task installer
+  participant SY as sync installer
 
   U->>IX: install [-t ids] [-y](upgrade 跑 install -y)
   IX->>AS: selectInstallTargets
@@ -88,6 +90,7 @@ sequenceDiagram
   loop 每个选中 agent
     AS->>TL: installTimelineHooks(root, agent),git 钩子幂等写一份
     AS->>TK: installTaskHooks(root, agent)
+    AS->>SY: installSyncHooks(root, agent)<br/>SessionStart / Stop / SessionEnd 三项
   end
 ```
 
@@ -106,6 +109,7 @@ sequenceDiagram
   participant TG as agent-target.ts
   participant TL as timeline installer
   participant TK as task installer
+  participant SY as sync installer
 
   U->>IX: uninstall [-t ids] [-y] [--keep-data]
   alt 带 -t
@@ -118,6 +122,7 @@ sequenceDiagram
   IX->>AS: uninstallAgentHooks(targets, keepGitHook = 带 -t, involved)
   AS->>TL: uninstallTimelineHooks(root, agent, keepGitHook)
   AS->>TK: uninstallTaskHooks(root, agent)
+  AS->>SY: uninstallSyncHooks(root, agent),按 cgraphx sync- 识别
   alt 带 -t
     IX->>AS: anyAgentInstalled → 已无已装 agent 时提示彻底卸载
   else 不带 -t
@@ -143,6 +148,8 @@ flowchart LR
   tl -- 命令原样 --> cset
   tk[task installer] -- 命令带 agent 参数 --> bset
   tk -- 命令原样 --> cset
+  sy[sync installer] -- 命令带 agent 参数 + 静默兜底 --> bset
+  sy -- 命令原样 + 静默兜底 --> cset
   tl -- 每项目一份 --> pc[(.git/hooks/post-commit)]
   init[ensureProjectInitialized] --> data[(.cgraphx/cgraphx.db)]
 ```
@@ -158,7 +165,7 @@ flowchart LR
 | 通用 target | `src/cli/installer/targets/agent-target.ts`:`createAgentTarget`。`commandsFor` 按描述拼命令;`cleanupDeadHooks` 清理死 hook。`src/cli/installer/targets/claude.ts` 只保留兼容导出 `claudeTarget` | AI 读代码 |
 | 资产部署 / 移除 | `src/cli/installer/claude-assets.ts`:`deployClaudeAssets` / `removeClaudeAssets` / `cleanDeprecatedAssets` / `readTemplateClaudeMd` | AI 读代码 |
 | agent 描述与判定 | `src/core/agents/index.ts`:`parseAgentList` / `selectInstalledAgents` / `isAgentInstalled` / `isAgentDetected` / `applyAssetReplacements` / `agentConfigDir`;取值来自 `src/core/agents/profiles.ts` | AI 读代码 |
-| timeline / task hook 写入 | `src/core/timeline/installer.ts`:`installTimelineHooks` / `uninstallTimelineHooks`;`src/core/task/installer.ts`:`installTaskHooks` / `uninstallTaskHooks` | AI 读代码 |
+| timeline / task / sync hook 写入 | `src/core/timeline/installer.ts`:`installTimelineHooks` / `uninstallTimelineHooks`;`src/core/task/installer.ts`:`installTaskHooks` / `uninstallTaskHooks`;`src/core/sync/installer.ts`:`installSyncHooks` / `uninstallSyncHooks`(`silent` 加兜底后缀) | AI 读代码 |
 | upgrade 触发重装 | `src/cli/upgrade/index.ts`:拉包后以新入口执行 `install -y` | AI 读代码 |
 
 ## 已知盲区
