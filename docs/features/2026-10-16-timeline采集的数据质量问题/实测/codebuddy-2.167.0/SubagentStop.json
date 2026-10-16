@@ -1,0 +1,18 @@
+{
+  "session_id": "01a1438d-12b5-7229-b36b-f8384da47ba0",
+  "transcript_path": "/Users/smdnk/.codebuddy/projects/private-tmp-claude-501-Users-smdnk-objects-ai-cgraphx-ea609e33-ac64-466d-9863-94f9b284104d-scratchpad-probe-proj/01a1438d-12b5-7229-b36b-f8384da47ba0/subagents/agent-d139bcbf-7983-466a-aa27-0f2527fea2ae.jsonl",
+  "cwd": "/private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj",
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/Users/smdnk/.codebuddy/projects/private-tmp-claude-501-Users-smdnk-objects-ai-cgraphx-ea609e33-ac64-466d-9863-94f9b284104d-scratchpad-probe-proj/01a1438d-12b5-7229-b36b-f8384da47ba0/subagents/agent-d139bcbf-7983-466a-aa27-0f2527fea2ae.jsonl",
+  "agent_type": "Explore",
+  "agent_id": "agent-d139bcbf-7983-466a-aa27-0f2527fea2ae",
+  "last_assistant_message": "Contents of `/private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj/a.txt`:\n\n`world` (followed by a newline)",
+  "background_tasks": [],
+  "session_crons": [],
+  "permission_mode": "bypassPermissions",
+  "client": "CLI",
+  "version": "2.167.0",
+  "generation_id": "591ded598efb4c6da36c96c6d4a1351d",
+  "model": "hy4-preview"
+}

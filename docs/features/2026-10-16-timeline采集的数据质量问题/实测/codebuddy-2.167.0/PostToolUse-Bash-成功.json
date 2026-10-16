@@ -1,0 +1,28 @@
+{
+  "session_id": "01a1438d-12b5-7229-b36b-f8384da47ba0",
+  "transcript_path": "/Users/smdnk/.codebuddy/projects/private-tmp-claude-501-Users-smdnk-objects-ai-cgraphx-ea609e33-ac64-466d-9863-94f9b284104d-scratchpad-probe-proj/01a1438d-12b5-7229-b36b-f8384da47ba0.jsonl",
+  "cwd": "/private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo ok",
+    "description": "Echo ok"
+  },
+  "tool_response": {
+    "exitCode": 0,
+    "signal": null,
+    "interrupted": false,
+    "sandboxDenied": false,
+    "stderrBytesTruncated": 0,
+    "stdoutBytesTruncated": 0,
+    "tool_error_code": "0"
+  },
+  "call_id": "chatcmpl-tool-b106c517f2fdd974",
+  "tool_use_id": "chatcmpl-tool-b106c517f2fdd974",
+  "agent_type": "cli",
+  "permission_mode": "bypassPermissions",
+  "client": "CLI",
+  "version": "2.167.0",
+  "generation_id": "01a1438d1319780bb4435057107339b4",
+  "model": "hy4-preview"
+}

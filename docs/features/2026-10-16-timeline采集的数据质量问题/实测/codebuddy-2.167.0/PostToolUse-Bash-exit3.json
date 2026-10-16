@@ -1,0 +1,30 @@
+{
+  "session_id": "01a1438d-12b5-7229-b36b-f8384da47ba0",
+  "transcript_path": "/Users/smdnk/.codebuddy/projects/private-tmp-claude-501-Users-smdnk-objects-ai-cgraphx-ea609e33-ac64-466d-9863-94f9b284104d-scratchpad-probe-proj/01a1438d-12b5-7229-b36b-f8384da47ba0.jsonl",
+  "cwd": "/private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "exit 3",
+    "description": "Exit with code 3"
+  },
+  "tool_response": {
+    "exitCode": 3,
+    "signal": null,
+    "interrupted": false,
+    "sandboxDenied": false,
+    "stderrBytesTruncated": 0,
+    "stdoutBytesTruncated": 0,
+    "tool_error_code": "8002",
+    "is_error": true,
+    "error": "Command: exit 3\nStdout: (empty)\nStderr: (empty)\nExit Code: 3\nSignal: (none)"
+  },
+  "call_id": "chatcmpl-tool-b0bbe6875e70b53b",
+  "tool_use_id": "chatcmpl-tool-b0bbe6875e70b53b",
+  "agent_type": "cli",
+  "permission_mode": "bypassPermissions",
+  "client": "CLI",
+  "version": "2.167.0",
+  "generation_id": "01a1438d1319780bb4435057107339b4",
+  "model": "hy4-preview"
+}

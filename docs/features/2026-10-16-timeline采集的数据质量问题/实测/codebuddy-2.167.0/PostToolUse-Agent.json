@@ -1,0 +1,21 @@
+{
+  "session_id": "01a1438d-12b5-7229-b36b-f8384da47ba0",
+  "transcript_path": "/Users/smdnk/.codebuddy/projects/private-tmp-claude-501-Users-smdnk-objects-ai-cgraphx-ea609e33-ac64-466d-9863-94f9b284104d-scratchpad-probe-proj/01a1438d-12b5-7229-b36b-f8384da47ba0.jsonl",
+  "cwd": "/private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Read a.txt and report",
+    "prompt": "Read the file /private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj/a.txt using the Read tool and report its exact contents back to me. Do not modify anything. Report in under 30 words.",
+    "subagent_type": "Explore"
+  },
+  "tool_response": "Contents of `/private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj/a.txt`:\n\n`world` (followed by a newline)\n\n[Agent ID: agent-d139bcbf-7983-466a-aa27-0f2527fea2ae]",
+  "call_id": "chatcmpl-tool-a440869605770b5e",
+  "tool_use_id": "chatcmpl-tool-a440869605770b5e",
+  "agent_type": "cli",
+  "permission_mode": "bypassPermissions",
+  "client": "CLI",
+  "version": "2.167.0",
+  "generation_id": "01a1438d1319780bb4435057107339b4",
+  "model": "hy4-preview"
+}

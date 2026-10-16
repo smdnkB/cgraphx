@@ -1,0 +1,21 @@
+{
+  "session_id": "01a1438d-12b5-7229-b36b-f8384da47ba0",
+  "transcript_path": "/Users/smdnk/.codebuddy/projects/private-tmp-claude-501-Users-smdnk-objects-ai-cgraphx-ea609e33-ac64-466d-9863-94f9b284104d-scratchpad-probe-proj/01a1438d-12b5-7229-b36b-f8384da47ba0.jsonl",
+  "cwd": "/private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj/a.txt",
+    "new_string": "world",
+    "old_string": "hello"
+  },
+  "tool_response": "Successfully edited file: /private/tmp/claude-501/-Users-smdnk-objects-ai-cgraphx/ea609e33-ac64-466d-9863-94f9b284104d/scratchpad/probe/proj/a.txt",
+  "call_id": "chatcmpl-tool-8d7a67fe9734f3ae",
+  "tool_use_id": "chatcmpl-tool-8d7a67fe9734f3ae",
+  "agent_type": "cli",
+  "permission_mode": "bypassPermissions",
+  "client": "CLI",
+  "version": "2.167.0",
+  "generation_id": "01a1438d1319780bb4435057107339b4",
+  "model": "hy4-preview"
+}
