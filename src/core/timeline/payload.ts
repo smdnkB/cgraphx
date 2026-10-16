@@ -45,6 +45,17 @@ export interface HookPayload {
   source?: string;
   /** SessionEnd 的结束原因。 */
   reason?: string;
+  /** 工具调用 id(两个 agent 的 Pre/PostToolUse 都带),写入 metadata.tool_use_id。 */
+  tool_use_id?: string;
+  /** 子 agent 内的工具事件才有;主会话的事件没有(CodeBuddy 主会话只有 agent_type)。 */
+  agent_id?: string;
+  agent_type?: string;
+  /** 宿主测量的工具耗时(Claude Code 的 PostToolUse / PostToolUseFailure)。 */
+  duration_ms?: number;
+  /** PostToolUseFailure 的失败文本。 */
+  error?: string;
+  /** PostToolUseFailure:以中断而非工具报错的形式失败。 */
+  is_interrupt?: boolean;
 }
 
 export function extractHookPayload(raw: unknown): HookPayload {
@@ -61,6 +72,14 @@ export function extractHookPayload(raw: unknown): HookPayload {
     turn_id: typeof obj.turn_id === 'string' ? obj.turn_id : null,
     source: typeof obj.source === 'string' ? obj.source : undefined,
     reason: typeof obj.reason === 'string' ? obj.reason : undefined,
+    tool_use_id: typeof obj.tool_use_id === 'string' && obj.tool_use_id !== '' ? obj.tool_use_id : undefined,
+    agent_id: typeof obj.agent_id === 'string' && obj.agent_id !== '' ? obj.agent_id : undefined,
+    agent_type: typeof obj.agent_type === 'string' ? obj.agent_type : undefined,
+    duration_ms: typeof obj.duration_ms === 'number' && Number.isFinite(obj.duration_ms) && obj.duration_ms >= 0
+      ? obj.duration_ms
+      : undefined,
+    error: typeof obj.error === 'string' ? obj.error : undefined,
+    is_interrupt: typeof obj.is_interrupt === 'boolean' ? obj.is_interrupt : undefined,
   };
 }
 

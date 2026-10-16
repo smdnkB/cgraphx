@@ -277,43 +277,38 @@ describe('summarizeToolResponse — Bash + non-semantic fallback', () => {
 });
 
 describe('summarizeToolResponse — no regression for Read/Write/Edit', () => {
-  it('Read extracts file_path + lines_changed', () => {
-    const resp = { file_path: 'src/foo.ts', lines_changed: 42 };
-    const result = parseSummary(summarizeToolResponse('Read', resp));
+  // v2:路径 / 子 agent 类型 / url 一律取自调用参数(两个 agent 一致);v1 的 lines_changed 已移除。
+  it('Read takes file from tool_input', () => {
+    const resp = { type: 'text', file: { filePath: 'src/foo.ts' } };
+    const result = parseSummary(summarizeToolResponse('Read', resp, { file_path: 'src/foo.ts' }));
     expect(result.payload.file).toBe('src/foo.ts');
-    expect(result.payload.lines_changed).toBe(42);
+    expect(result.payload.lines_changed).toBeUndefined();
   });
 
-  it('Write extracts file_path', () => {
-    const resp = { file_path: 'src/new.ts', lines_changed: 100 };
-    const result = parseSummary(summarizeToolResponse('Write', resp));
+  it('Write takes file from tool_input', () => {
+    const resp = { type: 'create', filePath: 'src/new.ts' };
+    const result = parseSummary(summarizeToolResponse('Write', resp, { file_path: 'src/new.ts', content: 'x' }));
     expect(result.payload.file).toBe('src/new.ts');
-    expect(result.payload.lines_changed).toBe(100);
   });
 
-  it('Edit extracts file_path', () => {
-    const resp = { file_path: 'src/edit.ts' };
-    const result = parseSummary(summarizeToolResponse('Edit', resp));
+  it('Edit takes file from tool_input (CodeBuddy string response)', () => {
+    const result = parseSummary(summarizeToolResponse('Edit', 'Successfully edited file: src/edit.ts', { file_path: 'src/edit.ts' }));
     expect(result.payload.file).toBe('src/edit.ts');
   });
 
-  it('MultiEdit extracts file_path', () => {
-    const resp = { file_path: 'src/multi.ts' };
-    const result = parseSummary(summarizeToolResponse('MultiEdit', resp));
+  it('MultiEdit takes file from tool_input', () => {
+    const result = parseSummary(summarizeToolResponse('MultiEdit', {}, { file_path: 'src/multi.ts', edits: [] }));
     expect(result.payload.file).toBe('src/multi.ts');
   });
 
-  it('Task/Agent extracts subagent_type', () => {
-    const resp = { subagent_type: 'code-reviewer' };
-    const result = parseSummary(summarizeToolResponse('Agent', resp));
+  it('Task/Agent takes subagent_type from tool_input', () => {
+    const result = parseSummary(summarizeToolResponse('Agent', { status: 'completed' }, { subagent_type: 'code-reviewer' }));
     expect(result.payload.subagent_type).toBe('code-reviewer');
   });
 
-  it('WebFetch extracts url + status', () => {
-    const resp = { url: 'https://example.com', status: 200 };
-    const result = parseSummary(summarizeToolResponse('WebFetch', resp));
+  it('WebFetch takes url from tool_input', () => {
+    const result = parseSummary(summarizeToolResponse('WebFetch', { code: 200 }, { url: 'https://example.com' }));
     expect(result.payload.url).toBe('https://example.com');
-    expect(result.payload.status).toBe(200);
   });
 
   it('unknown tool falls back to response_preview', () => {

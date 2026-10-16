@@ -190,8 +190,8 @@
   - Claude Code 形状回放(构造的 payload,形状取自本机 transcript),在同一个临时目录执行:
 
     ```bash
-    echo '{"session_id":"s1","cwd":"'"$T"'","hook_event_name":"PostToolUse","tool_name":"Edit","tool_use_id":"toolu_1","duration_ms":37,"tool_input":{"file_path":"'"$T"'/a.txt","old_string":"a","new_string":"b"},"tool_response":{"filePath":"'"$T"'/a.txt","oldString":"a","newString":"b","originalFile":"a\n","structuredPatch":[],"userModified":false,"replaceAll":false}}' | node dist/cli/index.js timeline-post-tool-use-hook
-    echo '{"session_id":"s1","cwd":"'"$T"'","hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"toolu_2","duration_ms":5,"tool_input":{"command":"cat big"},"tool_response":{"stdout":"'"$(head -c 9000 /dev/zero | tr '\0' x)"'","stderr":"'"$(head -c 9000 /dev/zero | tr '\0' y)"'","interrupted":false,"isImage":false,"noOutputExpected":false}}' | node dist/cli/index.js timeline-post-tool-use-hook
+    printf '%s' '{"session_id":"s1","cwd":"'"$T"'","hook_event_name":"PostToolUse","tool_name":"Edit","tool_use_id":"toolu_1","duration_ms":37,"tool_input":{"file_path":"'"$T"'/a.txt","old_string":"a","new_string":"b"},"tool_response":{"filePath":"'"$T"'/a.txt","oldString":"a","newString":"b","originalFile":"a\n","structuredPatch":[],"userModified":false,"replaceAll":false}}' | node dist/cli/index.js timeline-post-tool-use-hook
+    printf '%s' '{"session_id":"s1","cwd":"'"$T"'","hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"toolu_2","duration_ms":5,"tool_input":{"command":"cat big"},"tool_response":{"stdout":"'"$(head -c 9000 /dev/zero | tr '\0' x)"'","stderr":"'"$(head -c 9000 /dev/zero | tr '\0' y)"'","interrupted":false,"isImage":false,"noOutputExpected":false}}' | node dist/cli/index.js timeline-post-tool-use-hook
     ```
 
     期望:
@@ -259,7 +259,7 @@
   - **失败事件回放**(在 T-2 的临时目录 `$T` 中执行):
 
     ```bash
-    echo '{"session_id":"s1","cwd":"'"$T"'","hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_use_id":"toolu_3","tool_input":{"command":"ls /nope"},"error":"Exit code 1\nls: /nope: No such file or directory","is_interrupt":false,"duration_ms":12}' | node dist/cli/index.js timeline-post-tool-use-failure-hook; echo "exit=$?"
+    printf '%s' '{"session_id":"s1","cwd":"'"$T"'","hook_event_name":"PostToolUseFailure","tool_name":"Bash","tool_use_id":"toolu_3","tool_input":{"command":"ls /nope"},"error":"Exit code 1\nls: /nope: No such file or directory","is_interrupt":false,"duration_ms":12}' | node dist/cli/index.js timeline-post-tool-use-failure-hook; echo "exit=$?"
     ```
 
     期望:

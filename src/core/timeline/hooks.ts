@@ -10,15 +10,37 @@
  */
 
 import { runHook, isKillSwitchOn } from './hook-runner';
-import { extractHookPayload } from './payload';
+import { extractHookPayload, type HookPayload } from './payload';
 import { resolveProjectRoot } from '../directory';
 import { summarizeToolResponse } from './post-tool-summary';
+import { sanitizeToolArgs } from './tool-args';
 import { COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
 import { readCurrentTurnId, writeCurrentTurn, removeTurnState } from './turn-state';
 import type { TimelineEventInput } from './types';
 import { DEFAULT_AGENT_ID, resolveSessionIdFromEnv, type AgentId } from '../agents';
 import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
+
+/**
+ * 工具事件的 metadata:tool_use_id、子 agent 归属(只写入,读取方不展示)。
+ * 没有任何键时返回 undefined,与不带 metadata 的旧行为一致。
+ */
+function toolEventMetadata(payload: HookPayload): Record<string, unknown> | undefined {
+  const meta: Record<string, unknown> = {};
+  if (payload.tool_use_id !== undefined) meta.tool_use_id = payload.tool_use_id;
+  if (payload.agent_id !== undefined) {
+    meta.subagent = { id: payload.agent_id, type: payload.agent_type ?? null };
+  }
+  return Object.keys(meta).length > 0 ? meta : undefined;
+}
+
+/** 宿主测量的耗时写入事件,并标明来源;宿主没给返回 false(交给估算)。 */
+function applyHostDuration(event: TimelineEventInput, payload: HookPayload): boolean {
+  if (payload.duration_ms === undefined) return false;
+  event.duration_ms = Math.round(payload.duration_ms);
+  event.metadata = { ...(event.metadata ?? {}), duration_source: 'host' };
+  return true;
+}
 
 export async function userPromptHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   await runHook((payload) => {
@@ -62,10 +84,11 @@ export async function preToolUseHook(agent: AgentId = DEFAULT_AGENT_ID): Promise
       event_type: 'pre_tool_use',
       session_id: payload.session_id ?? null,
       tool_name: payload.tool_name,
-      tool_args: payload.tool_input,
+      tool_args: sanitizeToolArgs(payload.tool_name, payload.tool_input),
       turn_id,
       cwd: payload.cwd,
       agent,
+      metadata: toolEventMetadata(payload),
     } satisfies TimelineEventInput;
   });
 }
@@ -79,16 +102,19 @@ export async function postToolUseHook(agent: AgentId = DEFAULT_AGENT_ID): Promis
       payload.session_id ?? null,
       resolveProjectRoot(payload.cwd ?? process.cwd()),
     );
-    return {
+    const event: TimelineEventInput = {
       event_type: 'post_tool_use',
       session_id: payload.session_id ?? null,
       tool_name: payload.tool_name,
-      tool_args: payload.tool_input,
+      tool_args: sanitizeToolArgs(payload.tool_name, payload.tool_input),
       tool_result_summary: summary,
       turn_id,
       cwd: payload.cwd,
       agent,
-    } satisfies TimelineEventInput;
+      metadata: toolEventMetadata(payload),
+    };
+    applyHostDuration(event, payload);
+    return event;
   }, {
     // Enricher runs inside recordEvent before insert. Computes duration_ms
     // = post.ts - pre.ts for write-tool post events by looking up the
@@ -99,7 +125,9 @@ export async function postToolUseHook(agent: AgentId = DEFAULT_AGENT_ID): Promis
     // Inner try/catch is belt-and-suspenders: a faulty lookup degrades to
     // "post still recorded, duration_ms null" rather than blocking the hook
     // or losing the event. Same pattern as stopHook's enricher below.
+    // 宿主已给耗时(duration_ms 已写入)时不再估算;估算出值时标明来源。
     enricher: (store, event) => {
+      if (event.duration_ms !== undefined) return;
       const toolName = event.tool_name;
       if (!toolName) return;
       if (!WRITE_TOOLS_WHITELIST.has(toolName)) return;
@@ -117,6 +145,7 @@ export async function postToolUseHook(agent: AgentId = DEFAULT_AGENT_ID): Promis
         // Math.max guards against clock-skew / bad ts ordering producing
         // negative durations; we'd rather record 0 than a misleading negative.
         event.duration_ms = Math.max(0, delta);
+        event.metadata = { ...(event.metadata ?? {}), duration_source: 'estimated' };
       } catch (err) {
         process.stderr.write(`[timeline] duration enrich failed: ${err instanceof Error ? err.message : String(err)}\n`);
       }

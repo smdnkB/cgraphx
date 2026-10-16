@@ -1,206 +1,204 @@
 /**
- * PostToolUse `tool_result_summary` algorithm (spec §4.2).
+ * 工具结果摘要(tool_result_summary)生成器 —— 摘要契约 v2 的唯一产出方。
  *
- * PostToolUse payloads include `tool_response` which can be large (Read of a
- * 5000-line file, Bash with 100KB stdout). We never store the full response —
- * just a per-tool summary capped at RESULT_SUMMARY_MAX_BYTES.
- *
- * B-3 (timeline-data-quality) additions:
- *   - TaskUpdate / TaskCreate / TaskGet cases — extract subject/status/taskId
- *     so the post event carries usable content instead of an empty payload.
- *   - Bash case — detect semantic category (test/build/lint/git_write) and
- *     parse pass/fail counts from stdout; fall back to stdout_preview for
- *     non-semantic commands.
+ * 形状:`{ v: 2, success, payload }`。payload 按工具区分,取不到的字段一律不写
+ * (不写 null),两个 agent(Claude Code / CodeBuddy)共用同一份契约:
+ *   - 能从调用参数(tool_input)取的信息都取自调用参数,两边一致;
+ *   - 宿主没给的信息就缺省,不推测(如 CodeBuddy 的 Bash 不给 stdout)。
+ * 失败有两种来源:Claude Code 的 PostToolUseFailure(经 failure 参数传入)、
+ * CodeBuddy 带 `is_error:true` 的 PostToolUse 响应;被中断也算失败。
+ * 字段契约成文见 docs/knowledge/开发时间线工具事件契约.md。
  */
 
-import { RESULT_SUMMARY_MAX_BYTES, TRUNCATED_SUFFIX } from './constants';
+import {
+  RESULT_SUMMARY_MAX_BYTES,
+  SUMMARY_FIELD_MAX_BYTES,
+  SUMMARY_VERSION,
+  TRUNCATED_SUFFIX,
+} from './constants';
 import { detectBashSemantics } from './bash-semantics';
+import { capJsonValue, truncateUtf8 } from './json-cap';
 
-interface ResponseSummary {
+/** 摘要契约 v2。 */
+export interface ToolResultSummaryV2 {
+  v: 2;
   success: boolean;
   payload: Record<string, unknown>;
 }
 
-function looksLikeError(response: unknown): boolean {
-  if (response === null || typeof response !== 'object') return false;
-  const r = response as Record<string, unknown>;
-  if (r.error !== undefined && r.error !== null) return true;
-  if (typeof r.stderr === 'string' && r.stderr.length > 0) {
-    // Bash responses include stderr on success too — only treat as error if
-    // there's also a non-zero exit_code or explicit error field.
-    if (typeof r.exit_code === 'number' && r.exit_code !== 0) return true;
-  }
-  return false;
+/** 宿主报告的失败(Claude Code PostToolUseFailure 的 error / is_interrupt)。 */
+export interface ToolFailure {
+  error?: string;
+  isInterrupt?: boolean;
 }
 
-function truncate(s: string): string {
-  if (s.length <= RESULT_SUMMARY_MAX_BYTES) return s;
-  return s.slice(0, RESULT_SUMMARY_MAX_BYTES - TRUNCATED_SUFFIX.length) + TRUNCATED_SUFFIX;
-}
-
-/** Per-field cap for the task subject (B-3). */
+/** 任务标题的单字段上限(字符数,沿用 v1)。 */
 const SUBJECT_MAX_CHARS = 200;
+
+/** Claude Code 失败文本以 "Exit code N" 开头。 */
+const EXIT_CODE_IN_ERROR = /^Exit code (\d+)/;
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null;
+}
+
+function nonEmptyString(v: unknown): string | undefined {
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
 
 function truncateSubject(s: string): string {
   if (s.length <= SUBJECT_MAX_CHARS) return s;
   return s.slice(0, SUBJECT_MAX_CHARS - TRUNCATED_SUFFIX.length) + TRUNCATED_SUFFIX;
 }
 
-/**
- * Try to pull a string field from a record at any of the given keys, returning
- * the first string hit. Used when a field's path varies slightly across tool
- * variants (taskId at root vs nested in task{}).
- */
+/** 按 key 顺序取第一个非空字符串(字段位置随工具变体略有不同时用)。 */
 function pickString(rec: Record<string, unknown>, keys: string[]): string | undefined {
   for (const k of keys) {
-    const v = rec[k];
-    if (typeof v === 'string' && v.length > 0) return v;
+    const v = nonEmptyString(rec[k]);
+    if (v !== undefined) return v;
   }
   return undefined;
 }
 
-/**
- * Best-effort extract the Bash command string from the tool_args (preferred)
- * or fall back to a command-shaped field on the tool_response itself.
- *
- * Claude Code's Bash tool_args carries the command at `command`. The tool_response
- * carries stdout / stderr / exit_code but NOT the command, so we prefer toolArgs
- * when the caller passes it; otherwise we scan tool_response for a command-like
- * field (some tool variants echo it back) and return '' when nothing is found.
- */
-function extractBashCommand(
-  toolResponse: Record<string, unknown>,
-  toolArgs?: unknown,
-): string {
-  if (toolArgs && typeof toolArgs === 'object') {
-    const a = toolArgs as Record<string, unknown>;
-    if (typeof a.command === 'string') return a.command;
+/** 退出码:响应的 exit_code / exitCode(CodeBuddy),否则从失败文本解析;都没有返回 undefined。 */
+function resolveExitCode(response: Record<string, unknown> | null, failure?: ToolFailure): number | undefined {
+  if (response) {
+    if (typeof response.exit_code === 'number') return response.exit_code;
+    if (typeof response.exitCode === 'number') return response.exitCode;
   }
-  // tool_response sometimes echoes the command (varies by Claude Code version).
-  if (typeof toolResponse.command === 'string') return toolResponse.command;
-  return '';
+  const m = failure?.error !== undefined ? EXIT_CODE_IN_ERROR.exec(failure.error) : null;
+  return m ? Number(m[1]) : undefined;
+}
+
+/** 把值写进 payload;undefined 不写。 */
+function put(payload: Record<string, unknown>, key: string, value: unknown): void {
+  if (value !== undefined) payload[key] = value;
+}
+
+function preview(s: string): string {
+  return truncateUtf8(s, SUMMARY_FIELD_MAX_BYTES);
+}
+
+/** Task* 工具:taskId 在根上(TaskUpdate)或 task{} 下(Create / Get),status 位置同理。 */
+function taskPayload(payload: Record<string, unknown>, r: Record<string, unknown>): void {
+  const nested = asRecord(r.task);
+  const statusChange = asRecord(r.statusChange);
+  const subject = pickString(r, ['subject']) ?? (nested ? pickString(nested, ['subject']) : undefined);
+  put(payload, 'taskId', pickString(r, ['taskId', 'task_id', 'id'])
+    ?? (nested ? pickString(nested, ['id', 'taskId', 'task_id']) : undefined));
+  put(payload, 'subject', subject !== undefined ? truncateSubject(subject) : undefined);
+  put(payload, 'status', pickString(r, ['status'])
+    ?? (statusChange ? pickString(statusChange, ['to', 'status']) : undefined)
+    ?? (nested ? pickString(nested, ['status']) : undefined));
+}
+
+function bashPayload(
+  payload: Record<string, unknown>,
+  r: Record<string, unknown> | null,
+  args: Record<string, unknown> | null,
+  exitCode: number | undefined,
+): void {
+  put(payload, 'exit_code', exitCode);
+  const stdout = r && typeof r.stdout === 'string' ? r.stdout : '';
+  const semantics = detectBashSemantics({
+    command: args && typeof args.command === 'string' ? args.command : '',
+    stdout,
+    exit_code: exitCode,
+  });
+  if (semantics) {
+    payload.category = semantics.category;
+    put(payload, 'pass', semantics.pass);
+    put(payload, 'fail', semantics.fail);
+    put(payload, 'duration_ms', semantics.duration_ms);
+  } else if (stdout.length > 0) {
+    payload.stdout_preview = preview(stdout);
+  }
+  const stderr = r ? nonEmptyString(r.stderr) : undefined;
+  if (stderr !== undefined) payload.stderr_preview = preview(stderr);
+}
+
+/** 未专门处理的工具:响应的字符串本身或 JSON 文本做预览。 */
+function responsePreview(toolResponse: unknown): string | undefined {
+  if (typeof toolResponse === 'string') return preview(toolResponse);
+  if (toolResponse === null || typeof toolResponse !== 'object') return undefined;
+  try {
+    const json = JSON.stringify(toolResponse);
+    return json ? preview(json) : undefined;
+  } catch {
+    return '<unserializable>';
+  }
 }
 
 /**
- * Build a per-tool summary object, JSON-stringified by the store.
- * Unknown tools get a generic shape with a small response_preview.
+ * 生成一次工具调用的摘要(JSON 文本,契约 v2)。
  *
- * @param toolName    Claude Code tool name (Read/Write/Bash/TaskUpdate/...)
- * @param toolResponse  The `tool_response` payload from Claude Code.
- * @param toolArgs    Optional `tool_input` payload — passed by callers that have
- *   it (B-3 uses it to find the Bash command string). When omitted, Bash
- *   semantic detection degrades gracefully (no command → null → stdout_preview
- *   fallback), and Task* tools still work because taskId/subject/status are
- *   mirrored onto tool_response by Claude Code. Backwards-compatible: the old
- *   two-arg signature still works.
+ * @param toolName      工具名(Read / Bash / Edit / ...)
+ * @param toolResponse  宿主的 tool_response;失败事件(PostToolUseFailure)没有,传 undefined
+ * @param toolArgs      宿主的 tool_input(原始值,未经净化)
+ * @param failure       宿主报告的失败;传入即视为失败
  */
 export function summarizeToolResponse(
   toolName: string | undefined,
   toolResponse: unknown,
   toolArgs?: unknown,
+  failure?: ToolFailure,
 ): string {
-  const summary: ResponseSummary = {
-    success: !looksLikeError(toolResponse),
-    payload: {},
-  };
+  const r = asRecord(toolResponse);
+  const args = asRecord(toolArgs);
+  const exitCode = resolveExitCode(r, failure);
+  const interrupted = r?.interrupted === true || failure?.isInterrupt === true;
+  const responseError = r ? nonEmptyString(r.error) : undefined;
 
-  // Skill:skill 名取自调用参数(tool_input.skill),不论响应形态如何都不写 response_preview。
-  if (toolName === 'Skill') {
-    const a = toolArgs && typeof toolArgs === 'object' ? toolArgs as Record<string, unknown> : null;
-    summary.payload.skill = a && typeof a.skill === 'string' ? a.skill : undefined;
-    return JSON.stringify(summary);
-  }
+  const success = !(
+    failure !== undefined
+    || r?.is_error === true
+    || interrupted
+    || (exitCode !== undefined && exitCode !== 0)
+    || responseError !== undefined
+  );
 
-  if (toolResponse === null || typeof toolResponse !== 'object') {
-    if (typeof toolResponse === 'string') {
-      summary.payload.response_preview = truncate(toolResponse);
-    }
-    return JSON.stringify(summary);
-  }
-
-  const r = toolResponse as Record<string, unknown>;
-
+  const payload: Record<string, unknown> = {};
   switch (toolName) {
     case 'Read':
-    case 'Write':
     case 'Edit':
+    case 'Write':
     case 'MultiEdit':
+      put(payload, 'file', args ? nonEmptyString(args.file_path) : undefined);
+      break;
     case 'NotebookEdit':
-      summary.payload.file = typeof r.file_path === 'string' ? r.file_path : undefined;
-      summary.payload.lines_changed = typeof r.lines_changed === 'number' ? r.lines_changed : undefined;
+      put(payload, 'file', args ? nonEmptyString(args.notebook_path) ?? nonEmptyString(args.file_path) : undefined);
       break;
-
-    case 'TaskUpdate':
-    case 'TaskCreate':
-    case 'TaskGet': {
-      // Field paths verified against real Claude Code events (B-3):
-      //   TaskUpdate tool_response: { taskId, statusChange:{to}, updatedFields }
-      //   TaskCreate tool_response: { task:{ id, subject } }
-      //   TaskGet    tool_response: { task:{ id, subject, status } }
-      // taskId is at root for TaskUpdate; nested under task{} for Create/Get.
-      const nestedTask = r.task && typeof r.task === 'object'
-        ? r.task as Record<string, unknown>
-        : null;
-      const taskId = pickString(r, ['taskId', 'task_id', 'id'])
-        ?? (nestedTask ? pickString(nestedTask, ['id', 'taskId', 'task_id']) : undefined);
-      const subject = pickString(r, ['subject'])
-        ?? (nestedTask ? pickString(nestedTask, ['subject']) : undefined);
-      // status — TaskUpdate puts it under statusChange.to; TaskGet under task.status.
-      const statusChange = r.statusChange && typeof r.statusChange === 'object'
-        ? r.statusChange as Record<string, unknown>
-        : null;
-      const status = pickString(r, ['status'])
-        ?? (statusChange ? pickString(statusChange, ['to', 'status']) : undefined)
-        ?? (nestedTask ? pickString(nestedTask, ['status']) : undefined);
-      summary.payload.taskId = taskId;
-      summary.payload.subject = subject !== undefined ? truncateSubject(subject) : undefined;
-      summary.payload.status = status;
+    case 'Bash':
+      bashPayload(payload, r, args, exitCode);
       break;
-    }
-
-    case 'Bash': {
-      summary.payload.exit_code = typeof r.exit_code === 'number' ? r.exit_code : undefined;
-      const command = extractBashCommand(r, toolArgs);
-      const stdout = typeof r.stdout === 'string' ? r.stdout : '';
-      const semantics = detectBashSemantics({
-        command,
-        stdout,
-        exit_code: typeof r.exit_code === 'number' ? r.exit_code : undefined,
-      });
-      if (semantics) {
-        summary.payload.category = semantics.category;
-        if (semantics.pass !== undefined) summary.payload.pass = semantics.pass;
-        if (semantics.fail !== undefined) summary.payload.fail = semantics.fail;
-        if (semantics.duration_ms !== undefined) summary.payload.duration_ms = semantics.duration_ms;
-      } else {
-        // Non-semantic command — keep the stdout_preview the old code wrote,
-        // so non-test/build/lint/git Bash events don't regress.
-        if (typeof r.stdout === 'string') summary.payload.stdout_preview = truncate(r.stdout);
-      }
-      if (typeof r.stderr === 'string') summary.payload.stderr_preview = truncate(r.stderr);
-      break;
-    }
-
     case 'Task':
     case 'Agent':
-      summary.payload.subagent_type = typeof r.subagent_type === 'string' ? r.subagent_type : undefined;
+      put(payload, 'subagent_type', args ? nonEmptyString(args.subagent_type) : undefined);
       break;
-
+    case 'Skill':
+      put(payload, 'skill', args ? nonEmptyString(args.skill) : undefined);
+      break;
     case 'WebFetch':
     case 'WebSearch':
-      summary.payload.url = typeof r.url === 'string' ? r.url : undefined;
-      summary.payload.status = typeof r.status === 'number' ? r.status : undefined;
+      put(payload, 'url', args ? nonEmptyString(args.url) : undefined);
       break;
-
+    case 'TaskUpdate':
+    case 'TaskCreate':
+    case 'TaskGet':
+      if (r) taskPayload(payload, r);
+      break;
     default:
-      // Unknown tool — store a small preview of the response if stringifiable.
-      try {
-        const json = JSON.stringify(r);
-        if (json) summary.payload.response_preview = truncate(json);
-      } catch {
-        summary.payload.response_preview = '<unserializable>';
-      }
+      put(payload, 'response_preview', responsePreview(toolResponse));
   }
 
-  return JSON.stringify(summary);
+  // Bash 已在 bashPayload 写入 exit_code;其它工具失败时有退出码也记下
+  if (toolName !== 'Bash' && !success) put(payload, 'exit_code', exitCode);
+  if (interrupted) payload.interrupted = true;
+  if (!success) {
+    const error = failure?.error ?? responseError;
+    if (error !== undefined) payload.error = preview(error);
+  }
+
+  const summary: ToolResultSummaryV2 = { v: SUMMARY_VERSION, success, payload };
+  return capJsonValue(summary, { maxStringBytes: SUMMARY_FIELD_MAX_BYTES, maxTotalBytes: RESULT_SUMMARY_MAX_BYTES });
 }
