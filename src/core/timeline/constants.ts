@@ -58,7 +58,28 @@ export const HOOK_EVENTS_TO_COMMANDS = [
   { event: 'Stop', subcommand: 'timeline-stop-hook' },
   { event: 'SessionStart', subcommand: 'timeline-session-start-hook' },
   { event: 'SessionEnd', subcommand: 'timeline-session-end-hook' },
-] as const;
+  // 只接入有该事件的 agent;命令带容错后缀,PATH 命中旧版全局 cgraphx 时不让宿主显示报错
+  {
+    event: 'PostToolUseFailure',
+    subcommand: 'timeline-post-tool-use-failure-hook',
+    requiresCapability: 'postToolUseFailure',
+    tolerateLegacyBinary: true,
+  },
+] as const satisfies readonly HookEventEntry[];
+
+/** hook 名单项:requiresCapability 为 agent 描述 capabilities 的键,不具备该能力的 agent 不接入。 */
+export interface HookEventEntry {
+  readonly event: string;
+  readonly subcommand: string;
+  readonly requiresCapability?: 'postToolUseFailure';
+  readonly tolerateLegacyBinary?: boolean;
+}
+
+/**
+ * 新增 hook 命令的旧版容错后缀:旧版全局 cgraphx 不认识新子命令会报 unknown command
+ * 并以 1 退出;加后缀后静默成功。已有 6 个 hook 的命令串保持不变,不加。
+ */
+export const LEGACY_BINARY_TOLERANT_SUFFIX = ' 2>/dev/null || true';
 
 /** timeline 接入的 Claude Code hook 事件名联合(由 HOOK_EVENTS_TO_COMMANDS 推出)。 */
 export type HookEventName = (typeof HOOK_EVENTS_TO_COMMANDS)[number]['event'];

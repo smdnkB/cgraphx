@@ -16,7 +16,14 @@ import { execSync } from 'node:child_process';
 
 import { agentSettingsPath, DEFAULT_AGENT_ID, hookCommand, requireAgentProfile, type AgentId } from '../agents';
 import { DatabaseConnection } from '../db';
-import { COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, GIT_COMMIT_SUBCOMMAND, HOOK_EVENTS_TO_COMMANDS } from './constants';
+import {
+  COMMIT_BRANCH_ENV,
+  COMMIT_SHA_ENV,
+  GIT_COMMIT_SUBCOMMAND,
+  HOOK_EVENTS_TO_COMMANDS,
+  LEGACY_BINARY_TOLERANT_SUFFIX,
+  type HookEventEntry,
+} from './constants';
 import { cleanDebrisCgraphxDirs } from './debris';
 import { LEGACY_TURN_STATE_FILENAME } from './turn-state';
 
@@ -159,8 +166,12 @@ export function installTimelineHooks(
   const written: string[] = [];
   const skipped: string[] = [];
 
-  for (const { event, subcommand } of HOOK_EVENTS_TO_COMMANDS) {
-    const command = hookCommand(`cgraphx ${subcommand}`, profile);
+  for (const entry of HOOK_EVENTS_TO_COMMANDS as readonly HookEventEntry[]) {
+    const { event, subcommand } = entry;
+    // agent 没有该 hook 事件(如 CodeBuddy 无 PostToolUseFailure):不写,也不计入报告
+    if (entry.requiresCapability !== undefined && profile.capabilities[entry.requiresCapability] !== true) continue;
+    const command = hookCommand(`cgraphx ${subcommand}`, profile)
+      + (entry.tolerateLegacyBinary === true ? LEGACY_BINARY_TOLERANT_SUFFIX : '');
     const existing = hooks[event] ?? [];
 
     // Idempotent: skip if any group already has this exact command.

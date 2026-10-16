@@ -153,6 +153,37 @@ export async function postToolUseHook(agent: AgentId = DEFAULT_AGENT_ID): Promis
   });
 }
 
+/**
+ * 工具失败(Claude Code 的 PostToolUseFailure):记为 post_tool_use + success:false。
+ * 失败 payload 不带 tool_response;耗时只取宿主给的值,不估算。
+ * CodeBuddy 没有该事件(失败走 PostToolUse 并带 is_error),由安装器按能力开关不接入。
+ */
+export async function postToolUseFailureHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
+  await runHook(async (payload) => {
+    if (!payload.tool_name) return null;
+    const turn_id = await readCurrentTurnId(
+      payload.session_id ?? null,
+      resolveProjectRoot(payload.cwd ?? process.cwd()),
+    );
+    const event: TimelineEventInput = {
+      event_type: 'post_tool_use',
+      session_id: payload.session_id ?? null,
+      tool_name: payload.tool_name,
+      tool_args: sanitizeToolArgs(payload.tool_name, payload.tool_input),
+      tool_result_summary: summarizeToolResponse(payload.tool_name, undefined, payload.tool_input, {
+        error: payload.error,
+        isInterrupt: payload.is_interrupt,
+      }),
+      turn_id,
+      cwd: payload.cwd,
+      agent,
+      metadata: toolEventMetadata(payload),
+    };
+    applyHostDuration(event, payload);
+    return event;
+  });
+}
+
 export async function stopHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   await runHook(async (payload) => {
     const turn_id = await readCurrentTurnId(
