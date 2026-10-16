@@ -13,11 +13,12 @@ import type { Command } from 'commander';
 
 import { DocumentNotFoundError, ProjectNotInitializedError } from './errors';
 import { indexMarkdownKnowledgeBase } from './indexer';
-import { parseFrontmatter } from './frontmatter-parser';
+import { parseFrontmatter, stripFrontmatter } from './frontmatter-parser';
 import { validateFrontmatter } from './validator';
 import { MarkdownQuery } from './query';
 import { openMarkdownDb } from './schema-bootstrap';
 import { resolveProjectRoot } from '../directory';
+import { recordReferenceHit } from '../sync';
 import type {
   ConceptSummary,
   DedupResponse,
@@ -150,6 +151,7 @@ export function registerDocsCommands(program: Command): void {
     .option('--q <keyword>', 'Full-text keyword (matches title + summary)')
     .option('--limit <n>', 'Max results (default 20, max 100)', '20')
     .option('--json', 'Output JSON')
+    .option('--session <id>', 'Session id for reference recording (defaults to host env)')
     .action(
       async (
         pathArg: string | undefined,
@@ -162,6 +164,7 @@ export function registerDocsCommands(program: Command): void {
           q?: string;
           limit?: string;
           json?: boolean;
+          session?: string;
         },
       ) => {
         const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
@@ -181,6 +184,11 @@ export function registerDocsCommands(program: Command): void {
             process.stdout.write(JSON.stringify(results, null, 2) + '\n');
           } else {
             process.stdout.write(formatFindResults(results));
+          }
+          // 精确参考:按概念检索且命中(结果 concepts 含完全相同的概念名)才记录;不影响输出
+          const concept = options.concept;
+          if (concept && results.some(r => r.concepts.includes(concept))) {
+            recordReferenceHit(projectRoot, { kind: 'concept', value: concept, sessionId: options.session });
           }
         } catch (err) {
           handleQueryError(err);
@@ -325,13 +333,15 @@ export function registerDocsCommands(program: Command): void {
 
   docs
     .command('show <doc-id-or-path> [project-path]')
-    .description('Show metadata + summary for a document (does not print the full body)')
+    .description('Show metadata + summary for a document (--body prints the full body)')
     .option('--json', 'Output JSON')
+    .option('--body', 'Print the full document body (frontmatter stripped)')
+    .option('--session <id>', 'Session id for reference recording (defaults to host env)')
     .action(
       async (
         docIdOrPath: string,
         pathArg: string | undefined,
-        options: { json?: boolean },
+        options: { json?: boolean; body?: boolean; session?: string },
       ) => {
         const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
         try {
@@ -340,6 +350,10 @@ export function registerDocsCommands(program: Command): void {
           if (detail === null) {
             process.stderr.write(`Document not found: ${docIdOrPath}\n`);
             process.exitCode = 1;
+            return;
+          }
+          if (options.body) {
+            writeDocumentBody(projectRoot, detail, options);
             return;
           }
           if (options.json) {
@@ -393,6 +407,32 @@ export function registerDocsCommands(program: Command): void {
 }
 
 // ----- helpers -----------------------------------------------------------
+
+/**
+ * `docs show --body`:读文档原文去掉 frontmatter 后输出,成功后记为本会话参考(kind=file)。
+ * 读文件失败 → stderr 提示、退出码 1、不记录。
+ */
+function writeDocumentBody(
+  projectRoot: string,
+  detail: DocumentDetail,
+  options: { json?: boolean; session?: string },
+): void {
+  let body: string;
+  try {
+    body = stripFrontmatter(readFileSync(path.join(projectRoot, detail.path), 'utf8'));
+  } catch {
+    process.stderr.write(`Document file unreadable: ${detail.path}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  if (options.json) {
+    process.stdout.write(JSON.stringify({ ...detail, body }, null, 2) + '\n');
+  } else {
+    const text = body.endsWith('\n') ? body : body + '\n';
+    process.stdout.write(`# ${detail.title}\n> path: ${detail.path}\n\n${text}`);
+  }
+  recordReferenceHit(projectRoot, { kind: 'file', value: detail.path, sessionId: options.session });
+}
 
 /**
  * Open the DB, ensure markdown schema, run a query, close.
