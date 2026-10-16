@@ -70,6 +70,45 @@ export function loadTaskSourceConfig(projectRoot: string): TaskSourceConfig | nu
   return { url: url.trim(), headers };
 }
 
+/**
+ * 写入任务源配置 `{"url":…,"headers":{…}}`(2 空格缩进 + 换行),文件权限 0o600。
+ *
+ * @throws TaskConfigError `.cgraphx/` 不存在(项目未初始化)或写入失败。
+ */
+export function writeTaskSourceConfig(projectRoot: string, config: TaskSourceConfig): void {
+  const dir = getCodeGraphDir(path.resolve(projectRoot));
+  if (!fs.existsSync(dir)) {
+    throw new TaskConfigError(`cgraphx 未在 ${path.resolve(projectRoot)} 初始化,请先运行 \`cgraphx install\``);
+  }
+  const file = getTaskSourceConfigPath(projectRoot);
+  const text = JSON.stringify({ url: config.url, headers: config.headers }, null, 2) + '\n';
+  try {
+    fs.writeFileSync(file, text, { encoding: 'utf-8', mode: 0o600 });
+    // 文件已存在时 writeFileSync 不改权限,显式收紧
+    fs.chmodSync(file, 0o600);
+  } catch (err) {
+    throw new TaskConfigError(
+      `无法写入任务接口配置 ${file}:${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
+}
+
+/** 删除任务源配置;文件不存在返回 false。 */
+export function removeTaskSourceConfig(projectRoot: string): boolean {
+  const file = getTaskSourceConfigPath(projectRoot);
+  try {
+    fs.unlinkSync(file);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return false;
+    throw new TaskConfigError(
+      `无法删除任务接口配置 ${file}:${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
+}
+
 function nonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim() !== '';
 }

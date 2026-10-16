@@ -285,6 +285,50 @@ export class TimelineStore {
     }
   }
 
+  /** 每个会话的最大事件 id(session_id 为空的事件不计)。 */
+  listSessionMaxIds(): Array<{ sessionId: string; maxId: number }> {
+    try {
+      const rows = this.db
+        .prepare(
+          'SELECT session_id, max(id) AS max_id FROM timeline_events WHERE session_id IS NOT NULL GROUP BY session_id',
+        )
+        .all() as Array<{ session_id: string; max_id: number }>;
+      return rows.map((r) => ({ sessionId: r.session_id, maxId: Number(r.max_id) }));
+    } catch (err) {
+      throw new StoreQueryError(
+        `Timeline 会话水位查询失败:${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /** 指定会话中 id 大于 afterId 的全部事件,按 id 升序,不设上限(不同于 query 的 limit + ts 倒序)。 */
+  listSessionEventsAfter(sessionId: string, afterId: number): TimelineEvent[] {
+    try {
+      const rows = this.db
+        .prepare('SELECT * FROM timeline_events WHERE session_id = ? AND id > ? ORDER BY id ASC')
+        .all(sessionId, afterId) as EventRow[];
+      return rows.map(rowToEvent);
+    } catch (err) {
+      throw new StoreQueryError(
+        `Timeline 会话增量事件查询失败:${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /** 全部 git_commit 事件(含 session_id 为空的终端 commit),按 ts、id 升序,不设上限。 */
+  listCommitEvents(): TimelineEvent[] {
+    try {
+      const rows = this.db
+        .prepare("SELECT * FROM timeline_events WHERE event_type = 'git_commit' ORDER BY ts ASC, id ASC")
+        .all() as EventRow[];
+      return rows.map(rowToEvent);
+    } catch (err) {
+      throw new StoreQueryError(
+        `Timeline commit 事件查询失败:${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   /**
    * Find the most recent pre_tool_use event matching the given filter.
    *

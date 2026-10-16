@@ -19,7 +19,8 @@ description: 从项目 markdown 知识库召回业务概念 — 当用户聊业�
 2. **直接采纳** 子 agent 返回的命中概念列表 —— 不要再自己调 `cgraphx docs concepts/find` 重新查(那是浪费,且会把全量表拉进主上下文)
 3. 拿到命中概念后,主 agent 决定下一步:
    - 概念够清晰,直接回答用户
-   - **命中里有标"实体主条目"的** → 优先 `Read` 它:那是概念的枢纽(定义 / 黑话 / 关键约束 / 代码入口)。要"该实体参与了哪些业务"的全景,再 `cgraphx docs find --concept=<实体>` 反查引用它的流程条目(这是实体参与业务的派生视图,不是重复查询)
-   - 需要流程细节 → `Read` 子 agent 返回的流程文档 path,再从条目的代码入口进代码
+   - **命中里有标"实体主条目"的** → 优先用 `cgraphx docs show <path> --body` 读正文:那是概念的枢纽(定义 / 黑话 / 关键约束 / 代码入口)。要"该实体参与了哪些业务"的全景,再 `cgraphx docs find --concept=<实体>` 反查引用它的流程条目(这是实体参与业务的派生视图,不是重复查询)
+   - 需要流程细节 → 用 `cgraphx docs show <path> --body` 读子 agent 返回的流程文档正文,再从条目的代码入口进代码
+   - 读 docs/knowledge 正文一律用 docs show --body,不用 cat / sed / Read——这样读过的文档才会被记录为任务参考。若提示 unknown option '--body',说明全局 cgraphx 未升级——先 npm i -g cgraphx 升级。
    - 需要精确查某个概念的其他文档 → 调 `knowledge-api` skill
    - 子 agent 说"没有命中"→ 告诉用户项目里没沉淀这个概念,问要不要记录;是业务实体(名词、有属性和生命周期)就走 `knowledge-write` 的实体主条目(`business-entity`)

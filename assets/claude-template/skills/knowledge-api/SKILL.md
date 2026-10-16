@@ -27,6 +27,7 @@ cgraphx docs <subcommand> [options] [project-path]
 | 多维过滤查询 | `cgraphx docs find [project-path] --concept=X --domain=Y --tag=Z --status=active --type=decision --q=关键词 --limit=20` |
 | 文档引用关系 | `cgraphx docs refs <doc-id-or-path> [project-path]` |
 | 文档详情(摘要+元数据) | `cgraphx docs show <doc-id-or-path> [project-path]` |
+| 文档正文 | `cgraphx docs show <doc-id-or-path> --body` |
 
 所有命令支持 `--json` 切换为机器可读格式。
 
@@ -42,11 +43,13 @@ cgraphx docs <subcommand> [options] [project-path]
    → 返回该 concept 关联的所有文档,含:
      - title / type / status / updated
      - summary(Summary 章节内容,作为"是否需要读全文"的依据)
-     - path(项目根相对,用 Read 工具看全文)
+     - path(项目根相对,用 `cgraphx docs show <path> --body` 看全文)
 
 3. summary 够用 → 直接采纳,开始开发
-   summary 不够 → Read 返回的 path 原文,再判断
+   summary 不够 → cgraphx docs show <path> --body 读原文,再判断
 ```
+
+读 docs/knowledge 正文一律用 docs show --body,不用 cat / sed / Read——这样读过的文档才会被记录为任务参考。若提示 unknown option '--body',说明全局 cgraphx 未升级——先 npm i -g cgraphx 升级。
 
 ## 何时派子 agent(让上下文更干净)
 
@@ -109,13 +112,13 @@ cgraphx docs index              # 全量扫 docs/knowledge/,事务性覆盖
 - 重新 clone 仓库后
 
 不需要跑:
-- 改了 .md 的非 Summary 章节(那些不进索引,改完直接 Read 就行)
+- 改了 .md 的非 Summary 章节(那些不进索引,改完直接 `cgraphx docs show <path> --body` 读就行)
 
 ## 文档规范要点(写新文档时遵守,详见 knowledge-write skill)
 
 frontmatter **7 必填**(缺一即被跳过):`title` / `document_type` / `domains` / `concepts` / `status` / `source_type` / `updated`
 
-**章节**:**只有 `## Summary`(或 `## 摘要`)进索引**,其他章节留文件里,AI 想看就 Read。
+**章节**:**只有 `## Summary`(或 `## 摘要`)进索引**,其他章节留文件里,AI 想看就用 `cgraphx docs show <path> --body`。
 
 详细 frontmatter 枚举值、稳定标题、命名规则、模板 → 见 `knowledge-write` skill。
 
@@ -126,7 +129,7 @@ frontmatter **7 必填**(缺一即被跳过):`title` / `document_type` / `domain
 ## 排除范围(明确不做)
 
 - ❌ 不扫 `docs/knowledge/` 之外(README、CHANGELOG、第三方文档一律忽略)
-- ❌ 不存文档全文(只存 title + Summary + 元数据 + 关系;其他章节 AI 自己 Read)
+- ❌ 不存文档全文(只存 title + Summary + 元数据 + 关系;其他章节 AI 自己用 `cgraphx docs show <path> --body` 读)
 - ❌ 不修改文档(变更只能由人/AI 写文件后重新 `docs index`)
 - ❌ 不与代码索引打通(文档不会自动建立到代码符号的反向链接)
 - ❌ 不预计算 concept↔concept 关联(AI 从 find 返回的 concepts 列表自己推断)

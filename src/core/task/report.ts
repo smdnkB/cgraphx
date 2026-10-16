@@ -11,7 +11,7 @@ import type { TimelineEvent } from '../timeline';
 import { collectOutputs, collectReferences } from './artifacts';
 import { queryBindingEvents } from './attribution';
 import { ACTIVE_GAP_MS } from './constants';
-import { TaskArgError } from './errors';
+import { TaskArgError, TaskConfigError, TaskNotEnabledError } from './errors';
 import { findTask } from './resolve';
 import { openTaskDbReadOnly } from './schema-bootstrap';
 import { TaskStore } from './store';
@@ -198,4 +198,29 @@ export async function getTaskReport(
     references: collectReferences(projectRoot, allEvents, outputPaths),
     truncated,
   };
+}
+
+/**
+ * 全部绑定及其任务(只读;供 sync 上报绑定段),按 binding.id 升序。
+ * 项目未初始化或没有 task 表时返回空数组。
+ */
+export function listBindingsWithTask(projectRoot: string): Array<{ binding: TaskBinding; task: TaskItem }> {
+  let conn;
+  try {
+    conn = openTaskDbReadOnly(projectRoot);
+  } catch (err) {
+    if (err instanceof TaskConfigError || err instanceof TaskNotEnabledError) return [];
+    throw err;
+  }
+  try {
+    const store = new TaskStore(conn.getDb());
+    const result: Array<{ binding: TaskBinding; task: TaskItem }> = [];
+    for (const binding of store.listAllBindings()) {
+      const task = store.getTaskById(binding.taskId);
+      if (task) result.push({ binding, task });
+    }
+    return result.sort((a, b) => a.binding.id - b.binding.id);
+  } finally {
+    conn.close();
+  }
 }

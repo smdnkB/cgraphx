@@ -18,14 +18,14 @@
 | `cgraphx docs find --concept=X --domain=Y --tag=Z --q=关键词 --limit=20` | 多维过滤查询,返回 title / type / status / summary / path |
 | `cgraphx docs show <doc-id-or-path>` | 单文档详情(摘要 + 元数据) |
 | `cgraphx docs refs <doc-id-or-path>` | 文档双向引用(Outgoing + Incoming) |
-| `Read` | 读 docs/knowledge/*.md 全文(summary 不够时) |
+| `cgraphx docs show <path> --body` | 读 docs/knowledge/*.md 全文(summary 不够时) |
 
 ## 探索策略
 
 1. **先 `cgraphx docs concepts`** 看全局 concept 清单,语义匹配任务涉及的 concept
 2. 命中 concept → `cgraphx docs find --concept=X` 拿关联文档清单(含 Summary)
-3. **不要立即 Read 全文** —— 先看 find 返回的 Summary,够用就直接用
-4. Summary 不够 → `cgraphx docs show <id>` 或 `Read` 全文(只读你确定需要的)
+3. **不要立即读全文** —— 先看 find 返回的 Summary,够用就直接用
+4. Summary 不够 → `cgraphx docs show <id>` 或 `cgraphx docs show <path> --body` 读全文(只读你确定需要的)
 5. 跨文档关系 → `cgraphx docs refs <id>` 看引用图
 6. **不要遍历所有文档** —— 任务范围内够用就停
 

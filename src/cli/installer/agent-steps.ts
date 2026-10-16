@@ -1,6 +1,6 @@
 /**
  * 安装器中按 agent 执行的步骤:安装对象选择(spec §4.1)、逐 agent 写配置、
- * 逐 agent 接入 / 移除 timeline 与任务绑定 hook。每个 agent 失败只 warn,继续其他 agent(spec §12)。
+ * 逐 agent 接入 / 移除 timeline、任务绑定与平台同步 hook。每个 agent 失败只 warn,继续其他 agent(spec §12)。
  */
 
 import * as os from 'node:os';
@@ -108,7 +108,7 @@ export function installAgentTargets(
 }
 
 /**
- * 「可选子系统」的 Developer Timeline 项:对每个选中 agent 依次接入 timeline 与任务绑定 hook。
+ * 「可选子系统」的 Developer Timeline 项:对每个选中 agent 依次接入 timeline、任务绑定与平台同步 hook。
  * git post-commit 钩子每项目一个(首个 agent 写入,其后幂等)。已初始化项目先打开库应用
  * task schema(只做一次),保证老项目重装后也有 task 表。
  */
@@ -123,6 +123,7 @@ export async function installAgentHooks(
   }
   const { installTimelineHooks } = await import('../../core/timeline');
   const { installTaskHooks, openTaskDb } = await import('../../core/task');
+  const { installSyncHooks } = await import('../../core/sync');
   let taskSchemaReady = false;
 
   for (const target of targets) {
@@ -152,11 +153,19 @@ export async function installAgentHooks(
     } catch (err) {
       clack.log.warn(`${prefix}task hook install 失败:${errorMessage(err)}`);
     }
+
+    try {
+      const report = installSyncHooks(projectRoot, { agent: target.id });
+      const events = report.written.length > 0 ? report.written.join('/') : '已存在(幂等)';
+      clack.log.success(`${prefix}平台同步 hook 已装:${events}`);
+    } catch (err) {
+      clack.log.warn(`${prefix}sync hook install 失败:${errorMessage(err)}`);
+    }
   }
 }
 
 /**
- * 逐 agent 移除 timeline 与任务绑定 hook。`keepGitHook` 为真(`uninstall -t`)时不动
+ * 逐 agent 移除 timeline、任务绑定与平台同步 hook。`keepGitHook` 为真(`uninstall -t`)时不动
  * git post-commit 钩子;否则随首个 agent 一并移除。`involved` 是日志前缀计算所依据的
  * 「本次涉及的 agent」(彻底卸载时为清扫前已装的 agent),缺省即 `targets`。
  */
@@ -169,6 +178,7 @@ export async function uninstallAgentHooks(
 ): Promise<void> {
   const { uninstallTimelineHooks } = await import('../../core/timeline');
   const { uninstallTaskHooks } = await import('../../core/task');
+  const { uninstallSyncHooks } = await import('../../core/sync');
 
   for (const target of targets) {
     const prefix = hookLogPrefix(involved, target);
@@ -192,6 +202,14 @@ export async function uninstallAgentHooks(
       }
     } catch (err) {
       clack.log.warn(`${prefix}task hook uninstall 失败:${errorMessage(err)}`);
+    }
+    try {
+      const syncReport = uninstallSyncHooks(projectRoot, { agent: target.id });
+      if (syncReport.removed.length > 0) {
+        clack.log.success(`${prefix}平台同步:已移除 hooks(${syncReport.removed.join(', ')})`);
+      }
+    } catch (err) {
+      clack.log.warn(`${prefix}sync hook uninstall 失败:${errorMessage(err)}`);
     }
   }
 }
