@@ -7,6 +7,7 @@
  *   - cgraphx sync now        [--json]
  *   - cgraphx sync status     [--json]
  *   - cgraphx sync-worker     [--project <path>]   (隐藏顶层命令,由 hook / connect 拉起)
+ *   - cgraphx sync-session-start-hook [--agent <id>] / sync-stop-hook [--agent <id>](隐藏 hook 入口)
  *
  * 密码不进命令行参数:终端交互关回显输入,或 `--password-stdin` 从 stdin 读第一行。
  * 退出码经 exitCodeForError / exitCodeForRunResult。stderr 错误带 `[sync]` 前缀;错误输出不含 token / 密码。
@@ -17,6 +18,7 @@ import { Writable } from 'node:stream';
 
 import type { Command } from 'commander';
 
+import { AGENT_OPTION_FLAG, resolveHookAgent } from '../agents';
 import { resolveProjectRoot } from '../directory';
 import { PLATFORM_HINTS } from './constants';
 import {
@@ -33,6 +35,8 @@ import {
   runSync,
   runWorker,
   spawnSyncWorker,
+  syncSessionStartHook,
+  syncStopHook,
 } from './index';
 import type { ConnectOutcome, SyncRunResult, SyncStatusReport } from './types';
 
@@ -281,4 +285,15 @@ export function registerSyncCommands(program: Command): void {
         // runWorker 自行写 stderr;此处兜底保证退出码 0
       }
     });
+
+  // 隐藏 hook 入口:由目标项目 agent settings 的 SessionStart / Stop / SessionEnd 调起,退出码恒为 0;
+  // --agent 缺省或无法识别时按 Claude Code 处理
+  program
+    .command('sync-session-start-hook', { hidden: true })
+    .option(`${AGENT_OPTION_FLAG} <id>`)
+    .action(async (opts: { agent?: string }) => { await syncSessionStartHook(resolveHookAgent(opts.agent)); });
+  program
+    .command('sync-stop-hook', { hidden: true })
+    .option(`${AGENT_OPTION_FLAG} <id>`)
+    .action(async (opts: { agent?: string }) => { await syncStopHook(resolveHookAgent(opts.agent)); });
 }

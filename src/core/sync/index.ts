@@ -11,6 +11,8 @@ export { spawnSyncWorker } from './spawn';
 export { runSync, runWorker } from './runner';
 export { getSyncStatus } from './status';
 export { getClientVersion } from './version';
+export { syncSessionStartHook, syncStopHook } from './hooks';
+export { installSyncHooks, uninstallSyncHooks } from './installer';
 export {
   SYNC_SCHEMA_VERSION,
   CLIENT_NAME,
@@ -30,6 +32,10 @@ export {
   BATCH_MAX_EVENTS,
   BATCH_MAX_BYTES,
   FOREGROUND_LOCK_WAIT_MS,
+  TRIGGER_THROTTLE_MS,
+  HOOK_PERF_WARN_MS,
+  SYNC_HOOK_MARKER,
+  PAUSE_NOTICES,
 } from './constants';
 export { ARTIFACT_TYPES, CLIENT_ERROR_CODES, PAUSE_REASONS } from './types';
 export type {

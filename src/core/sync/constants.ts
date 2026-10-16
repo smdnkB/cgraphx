@@ -2,6 +2,8 @@
  * sync 子系统常量。T-4 / T-5 的常量由各自任务追加到本文件。
  */
 
+import type { PauseReason } from './types';
+
 /** sync schema 版本(独立的 sync_schema_versions 表)。 */
 export const SYNC_SCHEMA_VERSION = 1;
 
@@ -64,4 +66,22 @@ export const PLATFORM_HINTS: Readonly<Record<string, string>> = {
   repo_disabled: '本仓库的平台登记已停用',
   not_project_member: '你不是该仓库所属项目的成员',
   invalid_token: '上报凭据已失效,请重新接入(cgraphx sync connect)',
+};
+
+/** hook 拉起节流:触发文件 mtime 距今小于此值时不再拉起 worker。 */
+export const TRIGGER_THROTTLE_MS = 60_000;
+
+/** 单次 sync hook 耗时预算(与 timeline / task 一致),超出写 stderr 告警。 */
+export const HOOK_PERF_WARN_MS = 50;
+
+/** hook 识别标记:settings 中命令含此串的 hook 项属于 sync(安装 / 卸载共用)。 */
+export const SYNC_HOOK_MARKER = 'cgraphx sync-';
+
+/** 暂停原因 → 会话开始提示中的原因文案(同 PLATFORM_HINTS 对应行;invalid_token 指向重新接入)。 */
+export const PAUSE_NOTICES: Readonly<Record<PauseReason, string>> = {
+  invalid_token: '上报凭据已失效,请运行 cgraphx sync connect 重新接入',
+  account_disabled: '平台账号已停用,请联系平台管理员',
+  repo_not_registered: '本仓库未在平台登记,请联系项目管理员',
+  repo_disabled: '本仓库的平台登记已停用',
+  not_project_member: '你不是该仓库所属项目的成员',
 };
