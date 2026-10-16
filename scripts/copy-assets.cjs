@@ -13,6 +13,7 @@
  *   src/core/markdown/schema.sql  → dist/core/markdown/schema.sql
  *   src/core/timeline/schema.sql  → dist/core/timeline/schema.sql
  *   src/core/task/schema.sql      → dist/core/task/schema.sql
+ *   src/core/sync/schema.sql      → dist/core/sync/schema.sql
  *   assets/claude-template/**     → dist/.claude-template/**
  *   src/web/public/**             → dist/web/public/**
  *
@@ -53,7 +54,7 @@ function walk(from, to) {
   }
 }
 
-// 1) SQL schemas — markdown + timeline + task subsystems. The dist/ path mirrors the
+// 1) SQL schemas — markdown + timeline + task + sync subsystems. The dist/ path mirrors the
 //    src/ layout including the `core/` nesting, because runtime resolvers look
 //    them up relative to the compiled module file (schema-bootstrap.ts).
 copyFile(
@@ -67,6 +68,10 @@ copyFile(
 copyFile(
   path.join(root, 'src/core/task/schema.sql'),
   path.join(dist, 'core/task/schema.sql')
+);
+copyFile(
+  path.join(root, 'src/core/sync/schema.sql'),
+  path.join(dist, 'core/sync/schema.sql')
 );
 
 // 2) Claude skill/agent/hooks template — walked recursively.
