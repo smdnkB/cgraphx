@@ -14,11 +14,14 @@
 import type { SqliteDatabase } from '../db';
 import {
   RESULT_SUMMARY_MAX_BYTES,
+  SUMMARY_FIELD_MAX_BYTES,
   PROMPT_MAX_BYTES,
   COMMIT_MESSAGE_MAX_BYTES,
   COMMIT_FILES_MAX,
   METADATA_MAX_BYTES,
-  TRUNCATED_SUFFIX,
+  METADATA_FIELD_MAX_BYTES,
+  ARGS_MAX_BYTES,
+  ARGS_FIELD_MAX_BYTES,
   DEFAULT_QUERY_LIMIT,
   MAX_QUERY_LIMIT,
   READ_FILE_TOOLS,
@@ -32,29 +35,30 @@ import {
   type TimelineStats,
 } from './types';
 import { StoreInsertError, StoreQueryError } from './errors';
+import { capJsonValue, truncateUtf8 } from './json-cap';
 
-// ─── Field-size enforcement (spec §2.3) ────────────────────────────────────
+// ─── Field-size enforcement ────────────────────────────────────────────────
 
-function truncateString(s: string | undefined, maxBytes: number): { value: string | null; truncated: boolean } {
-  if (s === undefined || s === null) return { value: null, truncated: false };
-  const buf = Buffer.from(s, 'utf8');
-  if (buf.length <= maxBytes) return { value: s, truncated: false };
-  return {
-    value: buf.subarray(0, maxBytes - TRUNCATED_SUFFIX.length).toString('utf8') + TRUNCATED_SUFFIX,
-    truncated: true,
-  };
+/** 纯文本列(prompt / commit message)按字节截断。 */
+function truncateText(s: string | undefined, maxBytes: number): string | null {
+  if (s === undefined || s === null) return null;
+  return truncateUtf8(s, maxBytes);
 }
 
-/** Safe JSON.stringify with cycle protection. */
-function safeStringify(value: unknown, maxBytes: number): { value: string | null; truncated: boolean } {
-  let json: string;
+/**
+ * 摘要列:能解析且不超限原样写入;超限按字段截断;不能解析写占位对象。
+ * 保证写入值永远是合法 JSON(spec R1)。
+ */
+function capSummary(summary: string | undefined): string | null {
+  if (summary === undefined || summary === null) return null;
+  let parsed: unknown;
   try {
-    json = JSON.stringify(value);
+    parsed = JSON.parse(summary);
   } catch {
-    // Cyclic or otherwise unserializable — record the failure but don't crash.
-    json = JSON.stringify({ _error: 'unserializable payload' });
+    return JSON.stringify({ _invalid: true });
   }
-  return truncateString(json, maxBytes);
+  if (Buffer.byteLength(summary, 'utf8') <= RESULT_SUMMARY_MAX_BYTES) return summary;
+  return capJsonValue(parsed, { maxStringBytes: SUMMARY_FIELD_MAX_BYTES, maxTotalBytes: RESULT_SUMMARY_MAX_BYTES });
 }
 
 // ─── Time window parsing (spec §5.2) ───────────────────────────────────────
@@ -172,21 +176,13 @@ export class TimelineStore {
     const ts = input.ts ?? new Date().toISOString();
     const cwd = input.cwd ?? process.cwd();
 
-    // tool_args: store full JSON without truncation. Field-size caps for
-    // tool_args were dropped from MVP (spec §2.3 amendment) — truncating a
-    // JSON blob mid-string corrupts it past JSON.parse, losing the structure
-    // callers depend on. Most real tool_args fit comfortably under 64KB;
-    // when they don't (a Read of a huge file), the user opted into the
-    // payload by calling the tool.
-    let argsValue: string | null = null;
-    if (input.tool_args !== undefined) {
-      const r = safeStringify(input.tool_args, Number.MAX_SAFE_INTEGER);
-      argsValue = r.value;
-    }
-
-    const summaryRes = truncateString(input.tool_result_summary, RESULT_SUMMARY_MAX_BYTES);
-    const promptRes = truncateString(input.prompt_text, PROMPT_MAX_BYTES);
-    const msgRes = truncateString(input.commit_message, COMMIT_MESSAGE_MAX_BYTES);
+    // 三个 JSON 列统一收口:超长只截字段的值,整串永远合法(spec R1)。
+    const argsValue = input.tool_args !== undefined
+      ? capJsonValue(input.tool_args, { maxStringBytes: ARGS_FIELD_MAX_BYTES, maxTotalBytes: ARGS_MAX_BYTES })
+      : null;
+    const summaryValue = capSummary(input.tool_result_summary);
+    const promptValue = truncateText(input.prompt_text, PROMPT_MAX_BYTES);
+    const msgValue = truncateText(input.commit_message, COMMIT_MESSAGE_MAX_BYTES);
 
     let filesJson: string | null = null;
     if (input.commit_files && input.commit_files.length > 0) {
@@ -197,7 +193,9 @@ export class TimelineStore {
       filesJson = payload;
     }
 
-    const metaRes = input.metadata ? safeStringify(input.metadata, METADATA_MAX_BYTES) : { value: null };
+    const metaValue = input.metadata
+      ? capJsonValue(input.metadata, { maxStringBytes: METADATA_FIELD_MAX_BYTES, maxTotalBytes: METADATA_MAX_BYTES })
+      : null;
 
     try {
       const result = this.db
@@ -215,14 +213,14 @@ export class TimelineStore {
           input.event_type,
           input.tool_name ?? null,
           argsValue,
-          summaryRes.value,
-          promptRes.value,
+          summaryValue,
+          promptValue,
           input.duration_ms ?? null,
           input.commit_hash ?? null,
-          msgRes.value,
+          msgValue,
           filesJson,
           cwd,
-          metaRes.value,
+          metaValue,
           input.turn_id ?? null,
           input.commit_insertions ?? null,
           input.commit_deletions ?? null,

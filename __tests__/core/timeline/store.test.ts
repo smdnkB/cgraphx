@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import { DatabaseConnection } from '../../../src/core/db';
 import { ensureTimelineSchema } from '../../../src/core/timeline/schema-bootstrap';
 import { TimelineStore, resolveTimeBound } from '../../../src/core/timeline/store';
-import { ARGS_MAX_BYTES, TRUNCATED_SUFFIX } from '../../../src/core/timeline/constants';
+import { ARGS_MAX_BYTES, ARGS_FIELD_MAX_BYTES, TRUNCATED_SUFFIX } from '../../../src/core/timeline/constants';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cg-tl-'));
@@ -76,9 +76,8 @@ describe('TimelineStore.insert + query', () => {
     expect(events[0]!.commit_files).toEqual(['src/a.ts', 'src/b.ts']);
   });
 
-  it('stores oversized tool_args without truncation (MVP: no field-size cap on JSON args)', () => {
-    // Spec §2.3 originally capped tool_args at 64KB, but truncating mid-JSON
-    // corrupts it past JSON.parse. MVP stores full payload.
+  it('oversized tool_args: truncates field values, column stays valid JSON', () => {
+    // 整体超过 ARGS_MAX_BYTES 时只截字段的值,整列仍能解析(spec R1)。
     const hugeArg = 'x'.repeat(ARGS_MAX_BYTES + 1000);
     store.insert({
       event_type: 'pre_tool_use',
@@ -87,8 +86,8 @@ describe('TimelineStore.insert + query', () => {
     });
     const events = store.query({});
     const args = events[0]!.tool_args as { command: string };
-    expect(args.command).toBe(hugeArg);
-    expect(args.command.length).toBeGreaterThan(ARGS_MAX_BYTES);
+    expect(Buffer.byteLength(args.command, 'utf8')).toBeLessThanOrEqual(ARGS_FIELD_MAX_BYTES);
+    expect(args.command.endsWith(TRUNCATED_SUFFIX)).toBe(true);
   });
 
   it('handles unserializable (cyclic) tool_args without crash', () => {

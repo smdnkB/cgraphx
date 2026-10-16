@@ -12,11 +12,24 @@ export const TIMELINE_SCHEMA_VERSION = 2;
 
 /** Field size caps (spec §2.3). */
 export const ARGS_MAX_BYTES = 64 * 1024;
-export const RESULT_SUMMARY_MAX_BYTES = 4 * 1024;
+export const RESULT_SUMMARY_MAX_BYTES = 8 * 1024;
 export const PROMPT_MAX_BYTES = 64 * 1024;
 export const COMMIT_MESSAGE_MAX_BYTES = 16 * 1024;
 export const COMMIT_FILES_MAX = 1000;
 export const METADATA_MAX_BYTES = 8 * 1024;
+
+/** JSON 列整体超限时,单个字符串值的截断上限(见 json-cap.ts)。 */
+export const ARGS_FIELD_MAX_BYTES = 16 * 1024;
+export const METADATA_FIELD_MAX_BYTES = 2 * 1024;
+/** 摘要里各预览字段(stdout / stderr / error / response)的单字段上限。 */
+export const SUMMARY_FIELD_MAX_BYTES = 2 * 1024;
+/** Edit / MultiEdit 调用参数里改前、改后片段的单字段上限。 */
+export const EDIT_SNIPPET_MAX_BYTES = 4 * 1024;
+/** 整体超限重试时字符串上限的下限,低于它仍超限则退化为截断占位对象。 */
+export const CAP_MIN_STRING_BYTES = 256;
+
+/** 工具结果摘要的契约版本(无此字段的旧摘要按 v1 理解)。 */
+export const SUMMARY_VERSION = 2;
 
 /** Default query limit; hard ceiling on rows returned. */
 export const DEFAULT_QUERY_LIMIT = 100;
