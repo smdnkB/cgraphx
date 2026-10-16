@@ -110,7 +110,7 @@ cgraphx docs find --concept=<concept-name> --json
 ## 约束
 
 - **不要返回全量 concept 表** —— 主 agent 不需要看,你只返回命中项
-- **不要返回文档正文** —— 只返回 path + 一行说明,主 agent 要看正文会自己 Read
+- **不要返回文档正文** —— 只返回 path + 一行说明,主 agent 要看正文会用 `cgraphx docs show <path> --body`
 - **不要返回中间过程** —— 匹配推理、命令输出都不要,主 agent 只看最终结论
 - **不要自己 Read 文档全文** —— summary 够你写一行说明了,Read 全文是浪费
 - **不要建议主 agent 派第二次子 agent** —— 一次没找到就如实说未命中
