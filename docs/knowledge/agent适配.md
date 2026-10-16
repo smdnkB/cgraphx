@@ -30,11 +30,12 @@ related_code:
   - src/cli/installer/claude-assets.ts
   - src/core/timeline/schema-bootstrap.ts
 related_documents:
+  - docs/knowledge/开发时间线工具事件契约.md
   - docs/knowledge/会话id来源约束.md
   - docs/knowledge/开发任务绑定.md
   - docs/features/2026-10-15-多agent适配/多agent适配-spec.md
 created: 2026-10-15
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 
 # agent 适配
@@ -73,6 +74,11 @@ hook 命令末尾的 `--agent <id>` 标明来源,不带就视为 Claude Code。�
   - hook 事件名、stdin 字段、settings 里 hooks 的结构、`hookSpecificOutput.additionalContext` 都与 Claude Code 一致;
   - 项目记忆可以放在 `.codebuddy/CODEBUDDY.md`;
   - 写类工具名与 Claude 相同,另有别名 `NotebookWrite`。
+- **工具响应和失败事件不同构。** 2026-10-16 在 CodeBuddy 2.167.0 实测:
+  - CodeBuddy 没有 PostToolUseFailure,失败调用走 PostToolUse,响应带 `is_error:true`;
+  - Bash 的响应只给 `exitCode`(驼峰),不给 stdout / stderr;
+  - Read / Edit / Write / Agent 的响应是一段纯文本。
+  - 因此摘要字段一律优先取自 `tool_input`。agent 描述用 `capabilities.postToolUseFailure` 区分是否接入失败事件。字段在各 agent 下能否拿到,见「开发时间线工具事件契约」。
 
 ## Evidence
 
