@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Added — cgraphx sync: report to the R&D management platform
+
+- New `cgraphx sync connect | now | status | disconnect`. `connect` asks for
+  the password at a prompt or reads it from `--password-stdin`; the password
+  is never stored. Use `--force` to switch to another account.
+- Hooks never touch the network: they only spawn a detached `sync-worker`.
+  `cgraphx install` adds Stop / SessionEnd / SessionStart hooks, wrapped with
+  `2>/dev/null || true` so older global binaries stay silent.
+- Upload whitelist: event type / tool name / skill name, task bindings,
+  commits, artifacts mapped to platform types, and references to
+  `docs/knowledge/`, `docs/schema-knowledge/`, `docs/code-map/` and
+  `docs/design-map/`. Prompts, command text, file contents and absolute paths
+  are never sent.
+- Failures are retried; account / repo / membership rejections pause syncing
+  with a one-line notice at session start; sessions the platform rejects are
+  isolated instead of blocking the rest.
+- New `sync_*` tables with their own schema version.
+- `cgraphx docs show --body`, and `--session` on `docs find` / `docs show`,
+  record precise references for the session.
+- knowledge-recall / knowledge-api skills now read bodies via
+  `docs show --body`.
+
 ### Fixed — git commits lost when committing in quick succession
 
 - The post-commit hook ran the recorder in the background, which read `HEAD`

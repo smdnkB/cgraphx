@@ -35,6 +35,7 @@ import { openSyncDb } from './schema-bootstrap';
 import {
   ackSession,
   advanceSessionEvents,
+  getConnection,
   getStatus as readStatusState,
   isolateSession,
   listSessions,
@@ -521,12 +522,31 @@ function openSyncDbLocked(projectRoot: string): ReturnType<typeof openSyncDb> {
 
 // ─── worker ─────────────────────────────────────────────────────────────────
 
-/** 本地活动标记:各会话最大事件 id 的最大值 + commit 事件数。 */
+/**
+ * 本地活动标记:各会话最大事件 id 的最大值 + commit 事件数 + 接入时间。
+ *
+ * 含接入时间是为了让尾随中的旧 worker 在 connect(清空进度、写入新 connectedAt)后
+ * 判定为有新活动,再跑一轮完成历史回传。
+ */
 async function activityMark(projectRoot: string): Promise<string> {
   let max = 0;
   for (const { maxId } of await listSessionEventMaxIds(projectRoot)) if (maxId > max) max = maxId;
   const commits = (await listCommitEvents(projectRoot)).length;
-  return `${max}:${commits}`;
+  return `${max}:${commits}:${readConnectedAt(projectRoot)}`;
+}
+
+/** 读 `sync_state` 连接的 connectedAt;无连接、无值或开库失败均为空串,不抛。 */
+function readConnectedAt(projectRoot: string): string {
+  try {
+    const conn = openSyncDb(projectRoot);
+    try {
+      return getConnection(conn.getDb())?.connectedAt ?? '';
+    } finally {
+      conn.close();
+    }
+  } catch {
+    return '';
+  }
 }
 
 function sleep(ms: number): Promise<void> {

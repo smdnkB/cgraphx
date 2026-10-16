@@ -171,18 +171,17 @@ export function insertReferenceRecord(
   ).run(record.sessionId, record.kind, record.value, record.ts);
 }
 
-/** 本会话的精确参考记录,按 id 升序。 */
-export function listReferenceRecords(
+/** 全部参考精确记录(含 session_id),按 id 升序;一轮同步开始时一次性预载用。 */
+export function listAllReferenceRecords(
   db: SqliteDatabase,
-  sessionId: string,
-): Array<{ kind: 'concept' | 'file'; value: string; ts: string }> {
+): Array<{ sessionId: string; kind: 'concept' | 'file'; value: string; ts: string }> {
   const rows = db
-    .prepare('SELECT kind, value, ts FROM sync_reference_records WHERE session_id = ? ORDER BY id ASC')
-    .all(sessionId) as Array<{ kind: string; value: string; ts: string }>;
-  const result: Array<{ kind: 'concept' | 'file'; value: string; ts: string }> = [];
+    .prepare('SELECT session_id, kind, value, ts FROM sync_reference_records ORDER BY id ASC')
+    .all() as Array<{ session_id: string; kind: string; value: string; ts: string }>;
+  const result: Array<{ sessionId: string; kind: 'concept' | 'file'; value: string; ts: string }> = [];
   for (const row of rows) {
     if (row.kind !== 'concept' && row.kind !== 'file') continue;
-    result.push({ kind: row.kind, value: row.value, ts: row.ts });
+    result.push({ sessionId: row.session_id, kind: row.kind, value: row.value, ts: row.ts });
   }
   return result;
 }

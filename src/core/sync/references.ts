@@ -12,8 +12,6 @@ import type { TimelineEvent } from '../timeline';
 import { SEDIMENT_DIRS } from './constants';
 import { createPathResolver, isSafeRelPath, type PathResolver } from './paths';
 import type { SyncContext } from './payload';
-import { openSyncDb } from './schema-bootstrap';
-import { listReferenceRecords } from './store';
 import type { IngestReference } from './types';
 
 /** 项目相对路径是否位于沉淀目录(`SEDIMENT_DIRS` 唯一定义于 constants.ts)。 */
@@ -131,15 +129,8 @@ export function collectSessionReferences(
     if (prev === undefined || earlier(ref.ts, prev.ts)) merged.set(key, ref);
   };
 
-  // 精确记录(主)
-  const conn = openSyncDb(ctx.projectRoot);
-  let records: ReturnType<typeof listReferenceRecords>;
-  try {
-    records = listReferenceRecords(conn.getDb(), sessionId);
-  } finally {
-    conn.close();
-  }
-  for (const r of records) {
+  // 精确记录(主):取自上下文预载,不再开库
+  for (const r of ctx.referenceRecords.get(sessionId) ?? []) {
     if (r.kind === 'concept') {
       add({ kind: 'concept', value: r.value, ts: r.ts });
       continue;

@@ -19,6 +19,8 @@ import { SyncArgError } from './errors';
 import { createGitCache, getOriginUrl, getRepoToplevel, type GitCache } from './git';
 import { isSafeRelPath } from './paths';
 import { collectSessionReferences } from './references';
+import { openSyncDb } from './schema-bootstrap';
+import { listAllReferenceRecords } from './store';
 import type { IngestBinding, IngestCommit, IngestEvent, IngestSession } from './types';
 import { getClientVersion } from './version';
 
@@ -33,6 +35,8 @@ export interface SyncContext {
   git: GitCache;
   /** 各已登记 agent 的项目级与用户级 `<configDir>/skills`。 */
   skillDirs: string[];
+  /** 参考精确记录按会话分组(各组内 id 升序);一轮同步开始时一次性预载。 */
+  referenceRecords: Map<string, Array<{ kind: 'concept' | 'file'; value: string; ts: string }>>;
 }
 
 export interface BuiltSession {
@@ -83,7 +87,30 @@ export async function createSyncContext(projectRoot: string): Promise<SyncContex
     bindingsBySession,
     git: createGitCache(repoRoot),
     skillDirs,
+    referenceRecords: loadReferenceRecords(root),
   };
+}
+
+/** 一次开库预载全部参考精确记录并按会话分组;库未初始化等异常 → 空 Map,不抛。 */
+function loadReferenceRecords(projectRoot: string): SyncContext['referenceRecords'] {
+  const grouped: SyncContext['referenceRecords'] = new Map();
+  let rows: ReturnType<typeof listAllReferenceRecords>;
+  try {
+    const conn = openSyncDb(projectRoot);
+    try {
+      rows = listAllReferenceRecords(conn.getDb());
+    } finally {
+      conn.close();
+    }
+  } catch {
+    return grouped;
+  }
+  for (const { sessionId, kind, value, ts } of rows) {
+    const list = grouped.get(sessionId);
+    if (list === undefined) grouped.set(sessionId, [{ kind, value, ts }]);
+    else list.push({ kind, value, ts });
+  }
+  return grouped;
 }
 
 // ─── 字段构造 ───────────────────────────────────────────────────────────────
