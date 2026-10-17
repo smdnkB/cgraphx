@@ -14,6 +14,9 @@
                         │       ▲
                         │       ▼ 涉及 UI 时,可在 clarify 前/后/spec 后,来回迭代
                         │   write-wireframe(低保真 HTML 线框 v1/v2/…)
+                        │
+                        ├── 探索结束要开新会话 → handoff-session
+                        │   (确认产出目录 + 交接文件,可拆 1~N 个;新会话从 write-spec 继续)
                         ▼
                   write-spec ◄── 唯一契约(声明负责人,进个人需求索引;引用已确认的线框版本)
                         │
@@ -45,11 +48,11 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 ## 设计流程
 
-- **链**:`/clarify-requirements` → `/write-spec` →(`/write-plan` 可选);涉及 UI → `/write-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框)
+- **链**:`/clarify-requirements` → `/write-spec` →(`/write-plan` 可选);涉及 UI → `/write-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框);探索结束要开新会话 → `/handoff-session`
 - **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示)
 - **分工**:clarify 只锁业务边界 + 技术约束(读无界、决策有界);spec 是唯一契约,澄清总结只是输入;手段选型在 plan 结合代码定,按业务可观察性分档——无业务可观察后果的 plan 自主并记录,有的回跳 spec 业务拍板
 - **人工确认点(写给人看,图表优先)**:clarify 总结上半部分(流程图 + 业务决策表)→ 人拍板业务口径;线框(涉及 UI 时)→ 人看着界面确认布局与交互;spec「一图看懂」→ 人确认做完是什么样;plan index「设计预览」(架构 / 主流程 / 数据结构 / 关键取舍)→ 人确认后才进实现
-- **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`plan/<前缀>-index.md` 等;spec 头部声明 `> 负责人:`,收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
+- **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`<前缀>-交接提示词.md`、`plan/<前缀>-index.md` 等;spec / 交接文件头部声明 `> 负责人:`(也是任务负责人判定依据),会话按读写的产出目录自动关联任务;收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
 - **PRD 不在主链上**:`/write-prd` 是补充文档,任意时刻可执行,推荐功能发布后按需执行——发布后写的是实际交付的行为,不存在文档与系统漂移的问题
 
 ## 开发流程
