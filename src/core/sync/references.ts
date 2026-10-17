@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { TimelineEvent } from '../timeline';
+import { extractCommandPathCandidates, type TimelineEvent } from '../timeline';
 import { SEDIMENT_DIRS } from './constants';
 import { createPathResolver, isSafeRelPath, type PathResolver } from './paths';
 import type { SyncContext } from './payload';
@@ -18,11 +18,6 @@ import type { IngestReference } from './types';
 export function isSedimentPath(projectRel: string): boolean {
   return SEDIMENT_DIRS.some((d) => projectRel.startsWith(d));
 }
-
-/** `cd <目录> && …` / `cd <目录>; …` 前缀。 */
-const CD_PREFIX_RE = /^\s*cd\s+("([^"]+)"|'([^']+)'|([^\s;&|]+))\s*(&&|;)/;
-/** 命令文本切分符。 */
-const TOKEN_SPLIT_RE = /[\s'"`|;&<>()=,]+/;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -40,29 +35,6 @@ function isExistingFile(abs: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * Bash 命令 → 待解析的 (候选基准目录, 片段) 列表。
- *
- * 有 cd 前缀时依次尝试「cwd + cd 目录」与 cwd 本身:宿主记录的 post_tool_use 的 cwd
- * 可能已是 cd 之后的目录(实测 Claude Code 如此),此时前者会多拼一层,退回 cwd 才对。
- */
-function bashCandidates(command: string, cwd: string): Array<{ bases: string[]; token: string }> {
-  let bases = [cwd];
-  let rest = command;
-  const m = CD_PREFIX_RE.exec(command);
-  if (m !== null) {
-    const dir = m[2] ?? m[3] ?? m[4];
-    if (dir !== undefined) bases = [path.resolve(cwd, dir), cwd];
-    rest = command.slice(m[0].length);
-  }
-  const result: Array<{ bases: string[]; token: string }> = [];
-  for (const token of rest.split(TOKEN_SPLIT_RE)) {
-    if (token === '' || token.includes('$')) continue;
-    result.push({ bases, token });
-  }
-  return result;
 }
 
 /**
@@ -97,7 +69,7 @@ function inferWithResolver(ctx: SyncContext, events: TimelineEvent[], resolver: 
     } else if (e.tool_name === 'Bash') {
       const command = argString(e, 'command');
       if (command === null) continue;
-      for (const { bases, token } of bashCandidates(command, e.cwd)) {
+      for (const { bases, token } of extractCommandPathCandidates(command, e.cwd)) {
         for (const base of bases) if (consider(token, base, e.ts)) break;
       }
     }

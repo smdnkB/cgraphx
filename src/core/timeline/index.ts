@@ -20,6 +20,7 @@ export {
 export { installTimelineHooks, uninstallTimelineHooks } from './installer';
 export { isKillSwitchOn } from './hook-runner';
 export { describeEvent } from './describe';
+export { extractCommandPathCandidates } from './command-paths';
 export type {
   EventType,
   TimelineEvent,
