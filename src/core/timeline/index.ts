@@ -19,6 +19,7 @@ export {
 } from './indexer';
 export { installTimelineHooks, uninstallTimelineHooks } from './installer';
 export { isKillSwitchOn } from './hook-runner';
+export { LEGACY_BINARY_TOLERANT_SUFFIX } from './constants';
 export { describeEvent } from './describe';
 export { extractCommandPathCandidates } from './command-paths';
 export type {

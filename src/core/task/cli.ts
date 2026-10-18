@@ -32,6 +32,7 @@ import {
   stopAutoBinding,
   taskPostToolUseHook,
   taskSessionStartHook,
+  taskStopHook,
 } from './index';
 import { TaskArgError, TaskConfigError, TaskStoreError } from './errors';
 import type {
@@ -451,12 +452,17 @@ export function registerTaskCommands(program: Command): void {
       }
     });
 
-  // 隐藏 hook 入口:由目标项目 agent settings 的 SessionStart / PostToolUse 调起,退出码恒为 0;
+  // 隐藏 hook 入口:由目标项目 agent settings 的 SessionStart / Stop 调起,退出码恒为 0;
+  // task-post-tool-use-hook 保留注册,兼容旧配置的 PostToolUse 调用(读 stdin 后直接返回)。
   // --agent 缺省或无法识别时按 Claude Code 处理
   program
     .command('task-session-start-hook', { hidden: true })
     .option(`${AGENT_OPTION_FLAG} <id>`)
     .action(async (opts: { agent?: string }) => { await taskSessionStartHook(resolveHookAgent(opts.agent)); });
+  program
+    .command('task-stop-hook', { hidden: true })
+    .option(`${AGENT_OPTION_FLAG} <id>`)
+    .action(async (opts: { agent?: string }) => { await taskStopHook(resolveHookAgent(opts.agent)); });
   program
     .command('task-post-tool-use-hook', { hidden: true })
     .option(`${AGENT_OPTION_FLAG} <id>`)

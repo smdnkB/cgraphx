@@ -267,6 +267,19 @@ export interface RefreshAutoBindingsResult {
   historyPass: boolean;
 }
 
+/**
+ * 首轮历史派生是否已完成(Stop hook 据此决定本次是否全量刷新)。
+ * 与 refreshAutoBindings 共用同一个元信息键;DB 未初始化时抛错,由 hook 骨架吞掉。
+ */
+export function isHistoryPassDone(projectRoot: string): boolean {
+  const conn = openTaskDb(path.resolve(projectRoot));
+  try {
+    return new TaskStore(conn.getDb()).getMeta(HISTORY_PASS_META_KEY) !== null;
+  } finally {
+    conn.close();
+  }
+}
+
 /** 保留绑定中最早的 bound_at;predicate 用于首轮只考虑接口任务手动行。 */
 function earliestBoundAt(
   bindings: TaskBinding[] | undefined,

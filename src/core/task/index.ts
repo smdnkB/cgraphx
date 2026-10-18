@@ -30,7 +30,7 @@ export {
   getCurrentEffectiveBinding,
 } from './report';
 export { classifyArtifactPath } from './artifacts';
-export { taskSessionStartHook, taskPostToolUseHook } from './hooks';
+export { taskSessionStartHook, taskStopHook, taskPostToolUseHook } from './hooks';
 export { installTaskHooks, uninstallTaskHooks } from './installer';
 export {
   TASK_SCHEMA_VERSION,
