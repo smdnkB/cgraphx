@@ -8,6 +8,7 @@
 import { resolveSessionIdFromEnv } from '../agents';
 import { getSessionStats } from '../timeline';
 import { TaskArgError, TaskError, TaskStoreError } from './errors';
+import { featureTaskBindError } from './feature-task';
 import { openTaskDb } from './schema-bootstrap';
 import { TaskStore } from './store';
 import type { BindResult, BindSource, CurrentBinding, TaskItem } from './types';
@@ -46,7 +47,7 @@ export function clearBinding(projectRoot: string, sessionId: string): boolean {
 
 /**
  * 记录自动规则的停止点(R6):此后该会话不再恢复自动关联。
- * 会话没有派生行时为空操作(不存在可停止的自动绑定)。
+ * 会话还没有派生行时也写入停止点,避免「clear 之后首次 refresh 又重新绑定」。
  */
 export function stopAutoBinding(projectRoot: string, sessionId: string): void {
   const conn = openTaskDb(projectRoot);
@@ -102,6 +103,10 @@ export async function bindSessionCore(
     const store = new TaskStore(conn.getDb());
     const task = store.getTaskById(taskId);
     if (!task) throw new TaskArgError(`找不到本地任务 ${taskId};用 cgraphx task list 查看可用任务`);
+    // 目录任务不在 task_items,task_sessions 的外键无法接受;统一按参数错误拒绝(防御)。
+    if (task.source === 'feature') {
+      throw featureTaskBindError(task.featureId ?? String(task.id));
+    }
 
     // 首次绑定的回溯时间:getSessionStats 自己开连接,必须在事务外先取到
     let firstEventTs: string | null = null;

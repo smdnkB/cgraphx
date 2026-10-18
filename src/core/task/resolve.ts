@@ -5,7 +5,7 @@
  *   1 纯数字且等于本地 id → 2 等于接口任务 external_id → 3 已配置接口:刷新一次后再按 external_id
  *   → 3.5 接口任务名称(规整后相等,需求「任务绑定名称匹配」)→ 4 等于手动任务 name
  *   → 5/6 未配置接口或带 --manual:按名称新建手动任务 → 7 报错。
- * findTask 只走 1、2、3.5、4(不联网、不新建)。
+ * findTask 只走 1、2、目录任务平台编号、3.5、4(不联网、不新建)。
  *
  * 3.5 存在的原因:接口任务原先只能按编号指认,用名称指认时会落到序 5/6,
  * 静默新建一个与接口任务同名的手动任务(或在 spec 头部声明里建出假的接口占位)。
@@ -14,7 +14,7 @@
 import type { SqliteDatabase } from '../db';
 import { resolveSessionId } from './binding';
 import { TaskArgError, TaskSourceUnavailableError } from './errors';
-import { featureTaskName } from './feature-task';
+import { featureTaskBindError, featureTaskName, isEligibleFeatureDir } from './feature-task';
 import { openTaskDb } from './schema-bootstrap';
 import { fetchRemoteTasks, loadTaskSourceConfig } from './source';
 import { TaskStore } from './store';
@@ -40,7 +40,8 @@ function findApiTasksByName(store: TaskStore, value: string): TaskItem[] {
 }
 
 /**
- * 按序 1(本地 id)→ 2(接口任务 external_id)→ 3.5(接口任务名称,唯一时)→ 4(手动任务 name)查找;
+ * 按序 1(本地 id)→ 2(接口任务 external_id)→ 目录任务 platform_task_id
+ * → 3.5(接口任务名称,唯一时)→ 4(手动任务 name)查找;
  * 都不中返回 null。名称对应多个接口任务时视同未命中(调用方不联网、不报错的场景)。
  */
 export function findTask(store: TaskStore, value: string): TaskItem | null {
@@ -52,6 +53,12 @@ export function findTask(store: TaskStore, value: string): TaskItem | null {
   }
   const byExternalId = store.findApiTaskByExternalId(v);
   if (byExternalId) return byExternalId;
+  // 目录任务映射的平台编号(task list 显示 T-xxx,task show T-xxx 也要能命中)。
+  // 只读读取方可能打开本需求之前的旧库(无该表),此时降级为不查目录任务。
+  if (store.hasFeatureTaskTable()) {
+    const byFeaturePlatformId = store.listFeatureTasks().find((task) => task.externalId === v);
+    if (byFeaturePlatformId !== undefined) return byFeaturePlatformId;
+  }
   const byName = findApiTasksByName(store, v);
   if (byName.length === 1) return byName[0]!;
   return store.findManualTaskByName(v);
@@ -85,10 +92,24 @@ export function findTaskByValue(projectRoot: string, value: string): TaskItem | 
   }
 }
 
+/** 目录任务查找(platform_task_id → feature-id → 目录任务名称),供 task use 拒绝用。 */
+function findFeatureTaskForUse(store: TaskStore, value: string): TaskItem | null {
+  const byPlatformId = store.listFeatureTasks().find((task) => task.externalId === value);
+  if (byPlatformId !== undefined) return byPlatformId;
+  const byFeatureId = store.findFeatureTaskByFeatureId(value);
+  if (byFeatureId !== null) return byFeatureId;
+  return (
+    store.listFeatureTasks().find(
+      (task) => task.featureId !== null && featureTaskName(task.featureId) === value,
+    ) ?? null
+  );
+}
+
 /**
  * 解析 `task use` 的参数为任务,严格按 spec §5.2 的顺序,先命中先用。
  *
- * @throws TaskArgError 参数为空,或已配置接口、不带 manual 且接口中找不到。
+ * @throws TaskArgError 参数为空,或已配置接口、不带 manual 且接口中找不到,
+ *   或参数指向目录任务(目录任务只能由会话读写自动关联)。
  * @throws TaskSourceUnavailableError 已配置接口、不带 manual 且拉取失败。
  * @throws TaskConfigError 配置文件非法或项目未初始化。
  */
@@ -106,15 +127,23 @@ export async function resolveTaskForUse(
   try {
     const store = new TaskStore(conn.getDb());
 
-    // 序 1:本地 id
+    // 序 1:本地 id(目录任务 id 也从这里命中,但不能手动绑定)
     if (/^\d+$/.test(v)) {
       const byId = store.getTaskById(Number(v));
-      if (byId) return byId;
+      if (byId) {
+        if (byId.source === 'feature') throw featureTaskBindError(v);
+        return byId;
+      }
     }
 
     // 序 2:已缓存的接口任务 external_id
     const cached = store.findApiTaskByExternalId(v);
     if (cached) return cached;
+
+    // 序 2.5:目录任务(platform_task_id / feature-id / 名称)不能手动绑定。
+    // 头部声明平台编号的目录没有目录任务行,按目录资格再拦一次,避免落到手动任务新建。
+    const featureTask = findFeatureTaskForUse(store, v);
+    if (featureTask !== null || isEligibleFeatureDir(projectRoot, v)) throw featureTaskBindError(v);
 
     // 序 3:已配置接口 → 拉取一次并 upsert 后再找
     if (config) {

@@ -9,7 +9,7 @@
 import type { SqliteDatabase } from '../db';
 import { FEATURE_TASK_ID_BASE } from './constants';
 import { TaskError, TaskStoreError } from './errors';
-import { featureTaskName } from './feature-task';
+import { featureTaskName } from './feature-name';
 import type {
   AutoSession,
   AutoStrength,
@@ -205,6 +205,15 @@ export class TaskStore {
   }
 
   // ── 目录任务 ──
+
+  /** 旧库(本需求之前的 schema)没有目录任务表;只读读取方据此降级。 */
+  hasFeatureTaskTable(): boolean {
+    return (
+      this.db
+        .prepare("SELECT 1 AS hit FROM sqlite_master WHERE type = 'table' AND name = 'task_feature_tasks'")
+        .get() !== undefined
+    );
+  }
 
   getFeatureTaskById(id: number): TaskItem | null {
     const row = this.guard('按 id 查目录任务', () =>
@@ -470,12 +479,20 @@ export class TaskStore {
     );
   }
 
-  /** 记录自动规则停止点(手动 task use / clear);没有派生行时忽略。 */
+  /**
+   * 记录自动规则停止点(手动 task use / clear)。没有派生行时也插入一行:
+   * derived_max_event_id = 0 保证下次刷新重算,stopped_at 由 upsertAutoSession 保留。
+   */
   setAutoStop(sessionId: string, stoppedAt: string): void {
     this.guard('记录自动绑定停止点', () =>
       this.db
-        .prepare('UPDATE task_auto_sessions SET stopped_at = ? WHERE session_id = ?')
-        .run(stoppedAt, sessionId),
+        .prepare(
+          `INSERT INTO task_auto_sessions
+             (session_id, derived_max_event_id, feature_id, strength, bound_at, stopped_at, derived_at)
+           VALUES (?, 0, NULL, NULL, NULL, ?, ?)
+           ON CONFLICT(session_id) DO UPDATE SET stopped_at = excluded.stopped_at`,
+        )
+        .run(sessionId, stoppedAt, stoppedAt),
     );
   }
 

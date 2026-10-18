@@ -9,26 +9,17 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { FEATURES_DIR, gitUserName, readFeatureOwner, readFeatureTask } from '../features';
+import { TaskArgError } from './errors';
+import { featureTaskName } from './feature-name';
 import { openTaskDb } from './schema-bootstrap';
 import { TaskStore } from './store';
 import type { TaskItem } from './types';
 
-/** feature-id 开头的日期前缀(YYYY-MM-DD)。 */
-const DATE_PREFIX_PATTERN = /^(\d{4}-\d{2}-\d{2})-/;
+// 命名解析抽到 feature-name.ts(store 也用它),这里保留导出面。
+export { featureDatePrefix, featureTaskName } from './feature-name';
 
 /** 平台任务编号(spec §4.1)。 */
 const PLATFORM_TASK_PATTERN = /^T-\d+$/;
-
-/** feature-id 开头的日期前缀;取不到返回 null(视为最早)。 */
-export function featureDatePrefix(featureId: string): string | null {
-  return DATE_PREFIX_PATTERN.exec(featureId)?.[1] ?? null;
-}
-
-/** 目录任务名称:去掉日期前缀后的文件前缀;无日期前缀返回原值。 */
-export function featureTaskName(featureId: string): string {
-  const prefix = featureDatePrefix(featureId);
-  return prefix === null ? featureId : featureId.slice(prefix.length + 1);
-}
 
 /** feature-id 只能是 docs/features/ 下的单段目录名。 */
 function isPlainFeatureId(featureId: string): boolean {
@@ -58,6 +49,13 @@ function isPlatformTaskValue(declared: string | null): declared is string {
   return declared !== null && PLATFORM_TASK_PATTERN.test(declared);
 }
 
+/** 目录任务不能手动绑定(spec §4.1):统一参数错误文案。 */
+export function featureTaskBindError(value: string): TaskArgError {
+  return new TaskArgError(
+    `${value} 是产出目录对应的目录任务,由会话读写产出目录自动关联,不能手动绑定;如需修正归属请在平台改绑`,
+  );
+}
+
 /**
  * 目录 → 任务(spec §4.1):不合格目录 → null;头部声明平台编号 → 该接口任务
  * (本地没有则建占位);否则 → 目录任务(不存在则新建)。
@@ -75,13 +73,18 @@ export function resolveFeatureTarget(
   return store.ensureFeatureTask(featureId, new Date().toISOString());
 }
 
-/** 只读版目录 → 任务:目录任务行或接口任务不存在时返回 null,不写库。 */
+/**
+ * 只读版目录 → 任务:目录任务行或接口任务不存在时返回 null,不写库。
+ * 目录已被删除 / 负责人头部移除时回退到已持久化的目录任务(spec §9:已产生的绑定保留)。
+ */
 export function resolveFeatureTargetReadOnly(
   projectRoot: string,
   store: TaskStore,
   featureId: string,
 ): TaskItem | null {
-  if (!isEligibleFeatureDir(projectRoot, featureId)) return null;
+  if (!isEligibleFeatureDir(projectRoot, featureId)) {
+    return store.findFeatureTaskByFeatureId(featureId);
+  }
   const declared = readFeatureTask(projectRoot, featureId);
   if (isPlatformTaskValue(declared)) return store.findApiTaskByExternalId(declared);
   return store.findFeatureTaskByFeatureId(featureId);

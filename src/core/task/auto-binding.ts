@@ -403,7 +403,10 @@ export async function refreshAutoBindings(
           for (const b of obsolete) store.supersedeBinding(b.id, now);
           if (auto !== null) {
             const declared = readFeatureTask(root, auto.featureId);
-            if (declared === null || !PLATFORM_TASK_PATTERN.test(declared)) {
+            if (declared !== null && PLATFORM_TASK_PATTERN.test(declared)) {
+              // 头部声明平台编号:本机没有占位时补建,否则读取 / 上报解析不到任务。
+              store.ensureApiPlaceholder(declared, now);
+            } else {
               store.ensureFeatureTask(auto.featureId, now);
             }
           }

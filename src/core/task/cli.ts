@@ -408,9 +408,13 @@ export function registerTaskCommands(program: Command): void {
       try {
         const projectRoot = resolveProjectRoot(process.cwd());
         const sessionId = requireSessionId(opts.session);
+        // 先刷新派生,避免「有读写事件但尚未落行」时 clear 看不到自动绑定。
+        await refreshAutoBindingsForRead(projectRoot);
         const current = getCurrentEffectiveBinding(projectRoot, sessionId);
         let outcome: ClearOutcome;
         if (current === null) {
+          // 自动派生可能还没有落行:同样记录停止点,之后的刷新不会重新绑定。
+          stopAutoBinding(projectRoot, sessionId);
           outcome = 'none';
         } else if (isAutoBinding(current.binding)) {
           // R6:停止本会话的自动关联,之后的刷新不再恢复。
