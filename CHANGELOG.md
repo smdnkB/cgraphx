@@ -24,6 +24,17 @@
 - knowledge-recall / knowledge-api skills now read bodies via
   `docs show --body`.
 
+### Fixed — sync stopped declaring tasks on platform protocol 1.2 and later
+
+- Sync checked the platform protocol version for an exact `1.1`, so against a
+  1.2 or later platform it stopped sending task declarations and binding task
+  keys: tasks for new `docs/features/` directories were never created on the
+  platform, and their sessions were reported as unassigned. Versions are now
+  compared numerically by major.minor.
+- Projects that already synced against such a platform re-send their
+  bindings once on the next sync, which fills in the missing declarations and
+  task keys.
+
 ### Fixed — git commits lost when committing in quick succession
 
 - The post-commit hook ran the recorder in the background, which read `HEAD`

@@ -29,7 +29,7 @@ export interface SyncContext {
   repoRoot: string;
   remoteUrl: string;
   clientVersion: string;
-  /** 服务端是否支持任务声明与任务键(协议 1.1);参与绑定段哈希。 */
+  /** 服务端是否支持任务声明与任务键(协议 ≥ 1.1);参与绑定段哈希。 */
   supportsTaskKey: boolean;
   /** 全部 git_commit 事件(listCommitEvents,ts、id 升序)。 */
   commitEvents: TimelineEvent[];
@@ -228,7 +228,7 @@ function sortedBindings(bindings: IngestBinding[]): IngestBinding[] {
 
 /**
  * 绑定段哈希:先映射成 IngestBinding 再求(任务名 / 状态变化不触发重发)。
- * 输入包含「服务端是否支持任务键」:服务端首次升级到 1.1 时各会话哈希变化,自动重报一次。
+ * 输入包含「服务端是否支持任务键」:支持与否变化时(如服务端升级到 1.1 及以上)各会话哈希变化,自动重报一次。
  */
 export function bindingsHashOf(entries: EffectiveBinding[], supportsTaskKey: boolean): string {
   return sha256(

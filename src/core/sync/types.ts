@@ -159,7 +159,7 @@ export interface IngestResponse {
   protocolVersion?: string;
 }
 
-/** 支持任务声明与任务键的服务端协议版本。 */
+/** 支持任务声明与任务键的最低服务端协议版本(用 protocolAtLeast 比较)。 */
 export const TASK_KEY_PROTOCOL_VERSION = '1.1';
 
 // ─── 本地类型 ───────────────────────────────────────────────────────────────

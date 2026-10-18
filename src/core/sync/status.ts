@@ -13,7 +13,7 @@ import { openSyncDb } from './schema-bootstrap';
 import { countIsolatedSessions, emptyStatus, getConnection, getStatus, listSessions, type SyncSessionRow } from './store';
 import { SyncError } from './errors';
 import { TASK_KEY_PROTOCOL_VERSION, type SyncStatusReport } from './types';
-import { getClientVersion } from './version';
+import { getClientVersion, protocolAtLeast } from './version';
 
 /** 本地同步状态。未初始化时除 `connected` 外均为空值。 */
 export async function getSyncStatus(projectRoot: string): Promise<SyncStatusReport> {
@@ -51,7 +51,7 @@ export async function getSyncStatus(projectRoot: string): Promise<SyncStatusRepo
   }
 
   // 取不到 origin 等导致上下文构造失败时,退化为不比较绑定段、不计终端会话
-  const supportsTaskKey = report.state.serverProtocolVersion === TASK_KEY_PROTOCOL_VERSION;
+  const supportsTaskKey = protocolAtLeast(report.state.serverProtocolVersion, TASK_KEY_PROTOCOL_VERSION);
   let ctx: SyncContext | null = null;
   try {
     ctx = await createSyncContext(projectRoot, { supportsTaskKey });

@@ -54,6 +54,7 @@ import {
   type SyncRunResult,
   type SyncStatusState,
 } from './types';
+import { protocolAtLeast } from './version';
 
 type SyncMode = 'foreground' | 'background';
 
@@ -498,7 +499,7 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
     // 5. 记尝试时间,构造上下文
     status.lastAttemptAt = now;
     setStatus(db, status, now);
-    const supportsTaskKey = status.serverProtocolVersion === TASK_KEY_PROTOCOL_VERSION;
+    const supportsTaskKey = protocolAtLeast(status.serverProtocolVersion, TASK_KEY_PROTOCOL_VERSION);
     let ctx: SyncContext;
     try {
       ctx = await createSyncContext(projectRoot, { supportsTaskKey });
