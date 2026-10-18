@@ -156,7 +156,7 @@ describe('config: edge cases (spec §2.3)', () => {
     writeConfig(tmpProject, {
       p1: { type: 'sqlite', host: 'h', user: 'u', password: 'p', database: 'd' },
     });
-    expect(() => loadProfiles(tmpProject)).toThrow(/type must be 'mysql' or 'postgres'/);
+    expect(() => loadProfiles(tmpProject)).toThrow(/type must be 'mysql', 'postgres', or 'http'/);
   });
 
   it('reports default pointing to nonexistent profile', () => {
