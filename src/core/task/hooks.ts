@@ -1,5 +1,5 @@
 /**
- * task 的 agent hook 入口(spec §6.3 自动绑定、§7 会话开始提醒、§9 降级与关闭开关)。
+ * task 的 agent hook 入口(spec §7 会话开始注入、§9 降级与关闭开关)。
  *
  * 两个隐藏命令共用的规则:
  *   - CGRAPHX_NO_TIMELINE 生效时直接返回:不读 stdin、不输出;
@@ -16,7 +16,6 @@ import type { AgentProfile } from '../agents';
 import { resolveProjectRoot } from '../directory';
 import { isKillSwitchOn } from '../timeline';
 import { getCurrentBinding } from './binding';
-import { autoBindFromFeatureDir } from './feature-link';
 import type { CurrentBinding } from './types';
 
 /** 单次 hook 耗时预算(与 timeline 一致),超出写 stderr 告警。 */
@@ -39,19 +38,13 @@ export async function taskSessionStartHook(_profile: AgentProfile): Promise<void
   });
 }
 
-/** PostToolUse(该 agent 的写类工具):改动需求目录内文件时自动绑定;需提醒时回传提醒文本。 */
-export async function taskPostToolUseHook(profile: AgentProfile): Promise<void> {
-  await runTaskHook(async (payload) => {
-    const toolName = payload.raw.tool_name;
-    if (typeof toolName !== 'string' || !profile.writeTools.includes(toolName)) return;
-
-    const filePath = readEditedPath(toolName, payload.raw.tool_input);
-    if (filePath === null) return;
-    if (hasErrorField(payload.raw.tool_response)) return;
-
-    const projectRoot = resolveProjectRoot(payload.cwd ?? process.cwd());
-    const outcome = await autoBindFromFeatureDir(projectRoot, payload.sessionId, filePath);
-    if (outcome.kind === 'remind') writeAdditionalContext('PostToolUse', outcome.message);
+/**
+ * PostToolUse(旧配置仍可能调用):自动绑定已改为按会话派生,本入口只保留兼容——
+ * 读完 stdin 后直接返回,退出码恒为 0、stdout 为空。
+ */
+export async function taskPostToolUseHook(_profile: AgentProfile): Promise<void> {
+  await runTaskHook(async () => {
+    // 兼容入口:不读事件、不写库、不输出。
   });
 }
 
@@ -104,19 +97,7 @@ function writeAdditionalContext(hookEventName: HookEventName, additionalContext:
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext } }) + '\n');
 }
 
-// ─── 取值与文案 ─────────────────────────────────────────────────────────────
-
-/** NotebookEdit 取 notebook_path,其余写类工具取 file_path;不是非空字符串返回 null。 */
-function readEditedPath(toolName: string, toolInput: unknown): string | null {
-  if (toolInput === null || typeof toolInput !== 'object') return null;
-  const key = toolName === 'NotebookEdit' ? 'notebook_path' : 'file_path';
-  const value = (toolInput as Record<string, unknown>)[key];
-  return typeof value === 'string' && value ? value : null;
-}
-
-function hasErrorField(toolResponse: unknown): boolean {
-  return toolResponse !== null && typeof toolResponse === 'object' && 'error' in toolResponse;
-}
+// ─── 文案 ───────────────────────────────────────────────────────────────────
 
 function sessionStartContext(sessionId: string, current: CurrentBinding | null): string {
   if (current !== null) {

@@ -141,8 +141,13 @@ export const TASK_SEGMENT_EVENT_LIMIT = 500;
 /** 任务来源显示名。 */
 export const TASK_SOURCE_LABELS: Record<TaskSource, string> = { api: '接口', manual: '手动', feature: '目录' };
 
-/** 绑定来源显示名。 */
-export const BIND_SOURCE_LABELS: Record<BindSource, string> = { cli: '显式绑定', feature_dir: '需求目录自动绑定' };
+/** 绑定来源显示名(auto_* 为读取时合成的派生绑定)。 */
+export const BIND_SOURCE_LABELS: Record<BindSource, string> = {
+  cli: '显式绑定',
+  feature_dir: '需求目录自动绑定',
+  auto_read: '自动(读)',
+  auto_write: '自动(写)',
+};
 
 /** 产出 / 参考类别显示名(spec §5.2)。 */
 export const ARTIFACT_CATEGORY_LABELS: Record<ArtifactCategory, string> = {

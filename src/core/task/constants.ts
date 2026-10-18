@@ -16,8 +16,11 @@ export const TASK_SOURCE_TIMEOUT_MS = 10_000;
 /** 任务来源:接口任务 / 手动任务 / 目录任务。DB 的 task_items CHECK 仍只有前两者(目录任务另表)。 */
 export const TASK_SOURCES = ['api', 'manual', 'feature'] as const;
 
-/** 绑定来源:显式绑定 / 需求目录自动绑定。 */
-export const BIND_SOURCES = ['cli', 'feature_dir'] as const;
+/**
+ * 绑定来源:显式绑定 / 需求目录自动绑定 / 派生绑定(读暂定、写确定)。
+ * auto_* 只出现在读取时合成的派生绑定上,不写入 task_sessions(表 CHECK 仍只有前两者)。
+ */
+export const BIND_SOURCES = ['cli', 'feature_dir', 'auto_read', 'auto_write'] as const;
 
 /** 目录任务 id 起点;task_items 自增 id 远小于此值,两个 id 空间不重叠。 */
 export const FEATURE_TASK_ID_BASE = 1_000_000_001;

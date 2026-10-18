@@ -85,17 +85,26 @@ export interface CurrentBinding {
   task: TaskItem;
 }
 
-export type AutoBindOutcome =
-  | { kind: 'none' }
-  | { kind: 'bound'; task: TaskItem }
-  | { kind: 'remind'; boundTask: TaskItem; otherTask: TaskItem; message: string };
+/**
+ * 有效绑定:本地读取方统一消费的绑定视图。
+ *
+ * 手动 / 旧绑定来自 task_sessions(bindingKey = String(id));派生绑定来自
+ * task_auto_sessions 在读取时合成(bindingKey = auto:<sessionId>),不单独存储。
+ */
+export interface EffectiveBinding {
+  bindingKey: string;
+  binding: TaskBinding;
+  task: TaskItem;
+  /** 是否为首轮历史派生取代的旧绑定(仅 includeSuperseded 时出现)。 */
+  superseded: boolean;
+}
 
 export interface TaskDetail {
   task: TaskItem;
   /** 主 spec 头部声明了该任务的需求目录(仓库相对 POSIX 路径)。 */
   featureDirs: string[];
-  /** 该任务的全部绑定,按 boundAt 升序。 */
-  sessions: TaskBinding[];
+  /** 该任务的全部生效绑定,按 boundAt 升序;bindingKey 区分手动行与派生段。 */
+  sessions: Array<{ bindingKey: string; binding: TaskBinding }>;
   /** 归属该任务的 git_commit 事件,按 ts 升序。 */
   commits: TimelineEvent[];
   /** 归属事件按 event_type 计数。 */
@@ -143,6 +152,8 @@ export interface TaskSummary {
 }
 
 export interface SegmentReport {
+  /** 段唯一键:手动 / 旧绑定为 String(task_sessions.id),派生段为 auto:<sessionId>。 */
+  bindingKey: string;
   binding: TaskBinding;
   stats: SegmentStats;
   /** 段内最早的 eventLimitPerSegment 条归属事件,ts/id 升序。 */
@@ -172,7 +183,7 @@ export interface TaskReport {
   featureDirs: string[];
   inProgress: boolean;
   totals: TaskTotals | null;
-  /** 一条绑定段一项,按 bound_at、id 升序。 */
+  /** 一条绑定段一项,按 bound_at、bindingKey 升序。 */
   segments: SegmentReport[];
   /** 全部归属事件按 event_type 计数。 */
   eventCounts: Record<string, number>;

@@ -23,11 +23,13 @@ import {
   bindSession,
   clearBinding,
   findTaskByValue,
-  getCurrentBinding,
+  getCurrentEffectiveBinding,
   getTaskDetail,
   listTasks,
+  refreshAutoBindings,
   resolveSessionId,
   resolveTaskForUse,
+  stopAutoBinding,
   taskPostToolUseHook,
   taskSessionStartHook,
 } from './index';
@@ -35,7 +37,7 @@ import { TaskArgError, TaskConfigError, TaskStoreError } from './errors';
 import type {
   BindResult,
   BindSource,
-  CurrentBinding,
+  EffectiveBinding,
   TaskBinding,
   TaskDetail,
   TaskItem,
@@ -80,7 +82,12 @@ function writeJson(value: unknown): void {
 // ─── 人读输出 ───────────────────────────────────────────────────────────────
 
 const SOURCE_LABELS: Record<TaskSource, string> = { api: '接口', manual: '手动', feature: '目录' };
-const BIND_SOURCE_LABELS: Record<BindSource, string> = { cli: '显式绑定', feature_dir: '需求目录' };
+const BIND_SOURCE_LABELS: Record<BindSource, string> = {
+  cli: '显式绑定',
+  feature_dir: '需求目录',
+  auto_read: '自动(读)',
+  auto_write: '自动(写)',
+};
 
 /** 终端显示宽度:CJK / 全角字符按 2 列计,其余 1 列(表格对齐用)。 */
 function displayWidth(s: string): number {
@@ -177,7 +184,7 @@ function renderUse(result: BindResult): string {
   }
 }
 
-function renderCurrent(sessionId: string, current: CurrentBinding | null): string {
+function renderCurrent(sessionId: string, current: EffectiveBinding | null): string {
   if (current === null) return `会话 ${sessionId} 未绑定任务`;
   const { binding, task } = current;
   return (
@@ -186,13 +193,23 @@ function renderCurrent(sessionId: string, current: CurrentBinding | null): strin
   );
 }
 
-function renderClear(sessionId: string, cleared: boolean): string {
-  return cleared ? `已解除会话 ${sessionId} 的任务绑定` : `会话 ${sessionId} 未绑定任务,无需解除`;
+/** clear 的三种结果:解除手动绑定 / 停止自动关联 / 本来未绑定。 */
+type ClearOutcome = 'cleared' | 'auto_stopped' | 'none';
+
+function renderClear(sessionId: string, outcome: ClearOutcome): string {
+  switch (outcome) {
+    case 'cleared':
+      return `已解除会话 ${sessionId} 的任务绑定`;
+    case 'auto_stopped':
+      return '已停止本会话的自动关联';
+    case 'none':
+      return `会话 ${sessionId} 未绑定任务,无需解除`;
+  }
 }
 
-function renderSessions(sessions: TaskBinding[]): string {
+function renderSessions(sessions: TaskDetail['sessions']): string {
   if (sessions.length === 0) return '  (无)';
-  const cells = sessions.map((b) => [
+  const cells = sessions.map(({ binding: b }) => [
     b.sessionId,
     formatLocalTs(b.boundAt),
     b.unboundAt === null ? '生效中' : formatLocalTs(b.unboundAt),
@@ -284,13 +301,30 @@ function parseLimit(raw: string | undefined): number | undefined {
   return Number(raw);
 }
 
-/** `show` 只按本地 id → 接口编号 → 手动任务名称解析(spec §5.5),不联网、不新建。 */
+/** `show` 只按本地 id → 接口编号 → 手动任务名称 → 目录任务解析(spec §5.5),不联网、不新建。 */
 function findTaskOrThrow(projectRoot: string, value: string): TaskItem {
   const task = findTaskByValue(projectRoot, value);
   if (!task) {
-    throw new TaskArgError(`找不到任务 ${value};用 cgraphx task list 查看可用任务的本地 id / 编号 / 名称`);
+    throw new TaskArgError(
+      `找不到任务 ${value};用 cgraphx task list 查看可用任务的本地 id / 编号 / 名称 / 目录任务`,
+    );
   }
   return task;
+}
+
+/** 本地读取前刷新自动派生;失败只警告,不影响已有数据展示。 */
+async function refreshAutoBindingsForRead(projectRoot: string): Promise<void> {
+  try {
+    await refreshAutoBindings(projectRoot);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`${withPrefix(`自动关联刷新失败,已按现有数据展示:${msg}`)}\n`);
+  }
+}
+
+/** 派生绑定的来源标记(auto_* 只出现在读取时合成的绑定上)。 */
+function isAutoBinding(binding: TaskBinding): boolean {
+  return binding.bindSource === 'auto_read' || binding.bindSource === 'auto_write';
 }
 
 /** 把 `task` 命令组挂到 commander 程序上。主 CLI 调用一次。 */
@@ -309,7 +343,13 @@ export function registerTaskCommands(program: Command): void {
     .action(async (opts: { local?: boolean; json?: boolean }) => {
       try {
         const projectRoot = resolveProjectRoot(process.cwd());
+        await refreshAutoBindingsForRead(projectRoot);
         const result = await listTasks(projectRoot, { local: opts.local === true });
+        // 当前任务以有效绑定为准(含派生绑定);listTasks 内部的 open binding 只是兜底。
+        const sessionId = resolveSessionId();
+        if (sessionId !== null) {
+          result.currentTaskId = getCurrentEffectiveBinding(projectRoot, sessionId)?.task.id ?? null;
+        }
         if (result.warning !== null) process.stderr.write(`${withPrefix(result.warning)}\n`);
         if (opts.json) writeJson(result);
         else process.stdout.write(renderList(result) + '\n');
@@ -344,12 +384,13 @@ export function registerTaskCommands(program: Command): void {
     .description('显示会话当前绑定的开发任务')
     .option('--session <id>', '指定会话 id(默认当前 Claude Code 会话)')
     .option('--json', '输出机器可读 JSON')
-    .action((opts: { session?: string; json?: boolean }) => {
+    .action(async (opts: { session?: string; json?: boolean }) => {
       try {
         const projectRoot = resolveProjectRoot(process.cwd());
         const sessionId = requireSessionId(opts.session);
-        const current = getCurrentBinding(projectRoot, sessionId);
-        if (opts.json) writeJson(current);
+        await refreshAutoBindingsForRead(projectRoot);
+        const current = getCurrentEffectiveBinding(projectRoot, sessionId);
+        if (opts.json) writeJson(current === null ? null : { binding: current.binding, task: current.task });
         else process.stdout.write(renderCurrent(sessionId, current) + '\n');
       } catch (err) {
         renderError(err);
@@ -362,13 +403,27 @@ export function registerTaskCommands(program: Command): void {
     .description('解除会话当前的开发任务绑定(未绑定时为空操作)')
     .option('--session <id>', '指定会话 id(默认当前 Claude Code 会话)')
     .option('--json', '输出机器可读 JSON')
-    .action((opts: { session?: string; json?: boolean }) => {
+    .action(async (opts: { session?: string; json?: boolean }) => {
       try {
         const projectRoot = resolveProjectRoot(process.cwd());
         const sessionId = requireSessionId(opts.session);
-        const cleared = clearBinding(projectRoot, sessionId);
-        if (opts.json) writeJson({ cleared });
-        else process.stdout.write(renderClear(sessionId, cleared) + '\n');
+        const current = getCurrentEffectiveBinding(projectRoot, sessionId);
+        let outcome: ClearOutcome;
+        if (current === null) {
+          outcome = 'none';
+        } else if (isAutoBinding(current.binding)) {
+          // R6:停止本会话的自动关联,之后的刷新不再恢复。
+          stopAutoBinding(projectRoot, sessionId);
+          outcome = 'auto_stopped';
+        } else {
+          clearBinding(projectRoot, sessionId);
+          outcome = 'cleared';
+        }
+        if (opts.json) {
+          writeJson({ cleared: outcome === 'cleared', autoStopped: outcome === 'auto_stopped' });
+        } else {
+          process.stdout.write(renderClear(sessionId, outcome) + '\n');
+        }
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
@@ -385,6 +440,7 @@ export function registerTaskCommands(program: Command): void {
       try {
         const projectRoot = resolveProjectRoot(process.cwd());
         const limit = parseLimit(opts.limit);
+        await refreshAutoBindingsForRead(projectRoot);
         const target = findTaskOrThrow(projectRoot, value);
         const detail = await getTaskDetail(projectRoot, target.id, { events: opts.events === true, limit });
         if (opts.json) writeJson(detail);

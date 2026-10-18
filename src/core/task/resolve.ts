@@ -11,12 +11,21 @@
  * 静默新建一个与接口任务同名的手动任务(或在 spec 头部声明里建出假的接口占位)。
  */
 
+import type { SqliteDatabase } from '../db';
 import { resolveSessionId } from './binding';
 import { TaskArgError, TaskSourceUnavailableError } from './errors';
+import { featureTaskName } from './feature-task';
 import { openTaskDb } from './schema-bootstrap';
 import { fetchRemoteTasks, loadTaskSourceConfig } from './source';
 import { TaskStore } from './store';
 import type { TaskItem, TaskListResult, TaskSourceConfig } from './types';
+
+/** sqlite_master 探测:旧库没有目录任务表时降级为不查目录任务。 */
+function tableExists(db: SqliteDatabase, name: string): boolean {
+  return (
+    db.prepare(`SELECT 1 AS hit FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name) !== undefined
+  );
+}
 
 /** 名称规整:去掉所有空白(含全角空格)并忽略大小写。只做完全相等比较,不做模糊匹配。 */
 export function normalizeTaskName(name: string): string {
@@ -49,14 +58,28 @@ export function findTask(store: TaskStore, value: string): TaskItem | null {
 }
 
 /**
- * 自行开关连接的 findTask:按本地 id → 接口编号 → 手动任务名称查找,不联网、不新建。
+ * 自行开关连接的 findTask:按本地 id → 接口编号 → 手动任务名称 → feature-id →
+ * 目录任务名称查找,不联网、不新建。
  *
  * @throws TaskConfigError 项目未初始化。
  */
 export function findTaskByValue(projectRoot: string, value: string): TaskItem | null {
   const conn = openTaskDb(projectRoot);
   try {
-    return findTask(new TaskStore(conn.getDb()), value);
+    const db = conn.getDb();
+    const store = new TaskStore(db);
+    const found = findTask(store, value);
+    if (found !== null) return found;
+    if (!tableExists(db, 'task_feature_tasks')) return null;
+    const v = value.trim();
+    if (!v) return null;
+    // 目录任务:先按 feature-id 精确匹配,再按去掉日期前缀的任务名称精确匹配。
+    const byFeatureId = store.findFeatureTaskByFeatureId(v);
+    if (byFeatureId !== null) return byFeatureId;
+    return (
+      store.listFeatureTasks().find((task) => task.featureId !== null && featureTaskName(task.featureId) === v) ??
+      null
+    );
   } finally {
     conn.close();
   }
@@ -155,7 +178,8 @@ export async function listTasks(
 
   const conn = openTaskDb(projectRoot);
   try {
-    const store = new TaskStore(conn.getDb());
+    const db = conn.getDb();
+    const store = new TaskStore(db);
 
     let warning: string | null = null;
     if (config) {
@@ -167,9 +191,12 @@ export async function listTasks(
       }
     }
 
+    const tasks = store.listTasks();
+    if (tableExists(db, 'task_feature_tasks')) tasks.push(...store.listFeatureTasks());
+
     const sessionId = resolveSessionId();
     const currentTaskId = sessionId ? (store.getOpenBinding(sessionId)?.taskId ?? null) : null;
-    return { tasks: store.listTasks(), currentTaskId, warning };
+    return { tasks, currentTaskId, warning };
   } finally {
     conn.close();
   }

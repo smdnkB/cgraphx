@@ -14,14 +14,21 @@ export {
   fetchRemoteTasks,
 } from './source';
 export { findTaskByValue, resolveTaskForUse, resolveDeclaredTask, listTasks } from './resolve';
-export { bindSession, getCurrentBinding, clearBinding, resolveSessionId } from './binding';
-export { autoBindFromFeatureDir, getTaskDetail } from './feature-link';
+export { bindSession, getCurrentBinding, clearBinding, stopAutoBinding, resolveSessionId } from './binding';
+export { getTaskDetail } from './feature-link';
 export {
   recordFeatureTaskMappings,
   listMyFeatureTaskDeclarations,
 } from './feature-task';
 export { refreshAutoBindings } from './auto-binding';
-export { listTaskSummaries, getTaskReport, computeSegmentStats, listBindingsWithTask } from './report';
+export {
+  listTaskSummaries,
+  getTaskReport,
+  computeSegmentStats,
+  listBindingsWithTask,
+  listEffectiveBindings,
+  getCurrentEffectiveBinding,
+} from './report';
 export { classifyArtifactPath } from './artifacts';
 export { taskSessionStartHook, taskPostToolUseHook } from './hooks';
 export { installTaskHooks, uninstallTaskHooks } from './installer';
@@ -50,7 +57,7 @@ export type {
   TaskListResult,
   BindResult,
   CurrentBinding,
-  AutoBindOutcome,
+  EffectiveBinding,
   TaskDetail,
   SegmentStats,
   TaskTotals,

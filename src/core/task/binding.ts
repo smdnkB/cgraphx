@@ -45,6 +45,19 @@ export function clearBinding(projectRoot: string, sessionId: string): boolean {
 }
 
 /**
+ * 记录自动规则的停止点(R6):此后该会话不再恢复自动关联。
+ * 会话没有派生行时为空操作(不存在可停止的自动绑定)。
+ */
+export function stopAutoBinding(projectRoot: string, sessionId: string): void {
+  const conn = openTaskDb(projectRoot);
+  try {
+    new TaskStore(conn.getDb()).setAutoStop(sessionId, new Date().toISOString());
+  } finally {
+    conn.close();
+  }
+}
+
+/**
  * 把会话绑定到任务:
  *   - 已绑定同一任务 → already(无变化);
  *   - 已绑定其它任务 → 旧绑定 unbound_at = now、新绑定 bound_at = now → switched;
