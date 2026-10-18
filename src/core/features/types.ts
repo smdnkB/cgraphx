@@ -19,7 +19,7 @@ export interface FeatureEntry {
   date: string | null;
   /** 需求标题(目录名去掉日期前缀)。 */
   title: string;
-  /** 负责人(文档头部 `> 负责人:` 行);未声明为 null。 */
+  /** 负责人(`> 负责人:` 行,依次取主 spec → 交接文件 → plan index 头部);都未声明为 null。 */
   owner: string | null;
   /** 派生阶段(已规格/已规划/已验证);无可识别产物为 null(未规格)。 */
   stage: FeatureStage | null;

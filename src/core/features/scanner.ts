@@ -178,6 +178,8 @@ function deriveStage(featureDir: string): FeatureStage | null {
 /**
  * 扫描 <projectRoot>/docs/features/,每个子目录解析为一个 FeatureEntry。
  * 目录不存在或不可读 → 返回空数组(不是错误:项目可能没用 features 流程)。
+ * 负责人与任务负责人同一口径(readFeatureOwner:主 spec → 交接文件),都没有时才取 plan index 头部,
+ * 所以只有交接文件的目录也进「我的需求」。
  * 结果按日期倒序、标题升序排好。
  */
 export function scanFeatures(projectRoot: string): FeatureEntry[] {
@@ -207,7 +209,7 @@ export function scanFeatures(projectRoot: string): FeatureEntry[] {
       featureId: name,
       date: meta.date ?? dateFromName,
       title,
-      owner: meta.owner,
+      owner: readFeatureOwner(projectRoot, name) ?? meta.owner,
       stage: deriveStage(featureDir),
       path: `${posixFeaturesDir}/${name}`,
     });
