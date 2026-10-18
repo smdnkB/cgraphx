@@ -161,7 +161,7 @@ async function connectLocked(
     const db = conn.getDb();
     db.transaction(() => {
       setConnection(db, connection, now);
-      setStatus(db, emptyStatus(), now);
+      setStatus(db, { ...emptyStatus(), serverProtocolVersion: resp.protocolVersion ?? null }, now);
       clearSessions(db); // 重新回传全部历史(spec §3.2 / §4.3)
     })();
   } finally {

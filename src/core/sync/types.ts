@@ -61,6 +61,8 @@ export interface ConnectResponse {
   token: string;
   project: { id: number; name: string };
   repo: { id: number; defaultBranch: string };
+  /** 服务端协议版本(如 '1.1');旧服务端不返回。 */
+  protocolVersion?: string;
 }
 
 export interface ClientStatus {
@@ -79,8 +81,17 @@ export interface IngestEvent {
 export interface IngestBinding {
   bindingId: string;
   taskId: string | null;
+  /** 任务键(目录任务 feature-id);未带 taskId 时用任务键指向任务,两者都带以 taskId 为准。 */
+  taskKey?: string;
   start: string;
   end: string | null;
+}
+
+/** 任务声明:随上报批次携带,按(仓库, 任务键)幂等建任务。 */
+export interface IngestTaskDeclaration {
+  taskKey: string;
+  name: string;
+  declaredAt: string;
 }
 
 export interface IngestCommit {
@@ -122,12 +133,16 @@ export interface IngestRequest {
   clientName: string;
   clientVersion: string;
   backlog?: number;
+  taskDeclarations?: IngestTaskDeclaration[];
   sessions: IngestSession[];
 }
 
 export type IngestWarning =
   | { kind: 'binding_ineffective'; bindingId: string; reason: 'task_not_found' | 'not_owner' | 'task_closed' }
-  | { kind: 'path_dropped'; path: string };
+  | { kind: 'path_dropped'; path: string }
+  | { kind: 'binding_pending'; bindingId: string; taskKey: string }
+  | { kind: 'task_key_declared_by_other'; taskKey: string }
+  | { kind: 'task_declaration_invalid'; taskKey: string; reason: 'invalid_key' | 'invalid_name' };
 
 export interface IngestResponse {
   accepted: {
@@ -138,7 +153,14 @@ export interface IngestResponse {
     references: number;
   };
   warnings: IngestWarning[];
+  /** 本批涉及的任务键 → 平台任务 id(含已存在的任务);挂起的任务键不在其中。 */
+  taskKeys?: Array<{ taskKey: string; taskId: string }>;
+  /** 服务端协议版本(如 '1.1');旧服务端不返回。 */
+  protocolVersion?: string;
 }
+
+/** 支持任务声明与任务键的服务端协议版本。 */
+export const TASK_KEY_PROTOCOL_VERSION = '1.1';
 
 // ─── 本地类型 ───────────────────────────────────────────────────────────────
 
@@ -171,6 +193,8 @@ export interface SyncStatusState {
   pausedReason: PauseReason | null;
   pausedAt: string | null;
   lastProbeAt: string | null;
+  /** 平台返回的协议版本;未知(旧服务端 / 尚未上报)为 null。 */
+  serverProtocolVersion: string | null;
   lastResult: SyncRunResult | null;
 }
 

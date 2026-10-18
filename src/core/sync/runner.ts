@@ -6,6 +6,7 @@
  */
 
 import type { SqliteDatabase } from '../db';
+import { recordFeatureTaskMappings, refreshAutoBindings } from '../task';
 import { listCommitEvents, listSessionEventMaxIds } from '../timeline';
 import { getStatus as probePlatformStatus, postIngest } from './client';
 import { readConnection } from './connection';
@@ -28,6 +29,7 @@ import {
   buildSessionPayload,
   buildTerminalPayload,
   createSyncContext,
+  taskDeclarationsFor,
   type BuiltSession,
   type SyncContext,
 } from './payload';
@@ -43,7 +45,15 @@ import {
   updatePendingPush,
   type SyncSessionRow,
 } from './store';
-import { PAUSE_REASONS, type IngestSession, type PauseReason, type SyncRunResult, type SyncStatusState } from './types';
+import {
+  PAUSE_REASONS,
+  TASK_KEY_PROTOCOL_VERSION,
+  type IngestRequest,
+  type IngestSession,
+  type PauseReason,
+  type SyncRunResult,
+  type SyncStatusState,
+} from './types';
 
 type SyncMode = 'foreground' | 'background';
 
@@ -69,7 +79,7 @@ export function isExcludedByIsolation(row: SyncSessionRow | undefined, clientVer
 
 /** agent 会话候选判定(plan T-4 runSync 第 5 步)。 */
 export function isAgentCandidate(
-  ctx: Pick<SyncContext, 'bindingsBySession' | 'clientVersion'>,
+  ctx: Pick<SyncContext, 'bindingsBySession' | 'clientVersion' | 'supportsTaskKey'>,
   sessionId: string,
   maxId: number,
   row: SyncSessionRow | undefined,
@@ -78,7 +88,7 @@ export function isAgentCandidate(
   if (row === undefined) return true;
   if (maxId > row.last_event_id) return true;
   if (row.pending_push === 1) return true;
-  if (bindingsHashOf(ctx.bindingsBySession.get(sessionId) ?? []) !== row.bindings_hash) return true;
+  if (bindingsHashOf(ctx.bindingsBySession.get(sessionId) ?? [], ctx.supportsTaskKey) !== row.bindings_hash) return true;
   return row.isolated_reason !== null && row.isolated_client_version !== ctx.clientVersion;
 }
 
@@ -289,13 +299,30 @@ async function sendBatch(round: Round, input: Chunk[]): Promise<Stop | null> {
   if (single) round.singleSessionSent = true;
 
   try {
-    const resp = await postIngest(round.serverUrl, round.token, {
+    // 声明按「本批任一绑定段指向的任务键」过滤;块可能只含事件,故取 built 的完整会话绑定。
+    const taskDeclarations = taskDeclarationsFor(
+      round.ctx,
+      chunks.flatMap((c) => c.built.session.bindings),
+    );
+    const request: IngestRequest = {
       remoteUrl: round.ctx.remoteUrl,
       clientName: CLIENT_NAME,
       clientVersion: round.ctx.clientVersion,
       backlog: Math.max(0, round.remaining),
       sessions: chunks.map((c) => c.session),
-    });
+    };
+    if (taskDeclarations !== undefined) request.taskDeclarations = taskDeclarations;
+
+    const resp = await postIngest(round.serverUrl, round.token, request);
+    // 平台协议版本写回状态:下一次构造哈希时据此决定是否携带任务键。
+    if (resp.protocolVersion !== undefined) round.status.serverProtocolVersion = resp.protocolVersion;
+    // 回执映射先写回再确认进度,写失败时下一轮会重发同一批。
+    if (resp.taskKeys !== undefined && resp.taskKeys.length > 0) {
+      recordFeatureTaskMappings(
+        round.ctx.projectRoot,
+        resp.taskKeys.map(({ taskKey, taskId }) => ({ featureId: taskKey, taskId })),
+      );
+    }
     ackChunks(round, chunks);
     round.warnings += resp.warnings.length;
     return null;
@@ -459,12 +486,22 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
       }
     }
 
-    // 4. 记尝试时间,构造上下文
+    // 4. 先刷新自动绑定派生;失败只记为本轮错误,沿用上次派生结果继续同步
+    let refreshError: string | null = null;
+    try {
+      await refreshAutoBindings(projectRoot);
+    } catch (err) {
+      refreshError = errorMessage(err);
+      process.stderr.write(`[sync] 自动关联刷新失败,沿用上次派生结果:${refreshError}\n`);
+    }
+
+    // 5. 记尝试时间,构造上下文
     status.lastAttemptAt = now;
     setStatus(db, status, now);
+    const supportsTaskKey = status.serverProtocolVersion === TASK_KEY_PROTOCOL_VERSION;
     let ctx: SyncContext;
     try {
-      ctx = await createSyncContext(projectRoot);
+      ctx = await createSyncContext(projectRoot, { supportsTaskKey });
     } catch (err) {
       if (!(err instanceof SyncError)) throw err;
       status.failingSince ??= now;
@@ -488,21 +525,21 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
       singleSessionSent: false,
     };
 
-    // 5–8. 候选 → 构造 → 断言 → 分块装箱
+    // 6–9. 候选 → 构造 → 断言 → 分块装箱
     const chunks = await collectChunks(round);
     round.remaining = chunks.reduce((sum, c) => sum + c.recordCount, 0);
     const batches = packBatches(chunks, envelopeBytes(ctx));
 
-    // 9. 逐批上报
+    // 10. 逐批上报
     for (const batch of batches) {
       const stop = await sendBatch(round, batch);
       if (stop !== null) return finish(round, stop);
     }
 
-    // 10. 全部成功
+    // 11. 全部成功;同步成功不代表派生刷新成功,保留该错误供 status 展示
     status.lastSuccessAt = now;
     status.failingSince = null;
-    status.lastError = null;
+    status.lastError = refreshError;
     return finish(round, null);
   } finally {
     dbConn.close();

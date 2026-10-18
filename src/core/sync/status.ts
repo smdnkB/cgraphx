@@ -12,7 +12,7 @@ import { isAgentCandidate, terminalNeedsSend } from './runner';
 import { openSyncDb } from './schema-bootstrap';
 import { countIsolatedSessions, emptyStatus, getConnection, getStatus, listSessions, type SyncSessionRow } from './store';
 import { SyncError } from './errors';
-import type { SyncStatusReport } from './types';
+import { TASK_KEY_PROTOCOL_VERSION, type SyncStatusReport } from './types';
 import { getClientVersion } from './version';
 
 /** 本地同步状态。未初始化时除 `connected` 外均为空值。 */
@@ -51,13 +51,14 @@ export async function getSyncStatus(projectRoot: string): Promise<SyncStatusRepo
   }
 
   // 取不到 origin 等导致上下文构造失败时,退化为不比较绑定段、不计终端会话
+  const supportsTaskKey = report.state.serverProtocolVersion === TASK_KEY_PROTOCOL_VERSION;
   let ctx: SyncContext | null = null;
   try {
-    ctx = await createSyncContext(projectRoot);
+    ctx = await createSyncContext(projectRoot, { supportsTaskKey });
   } catch (err) {
     if (!(err instanceof SyncError)) throw err;
   }
-  const judge = ctx ?? { bindingsBySession: new Map(), clientVersion: getClientVersion() };
+  const judge = ctx ?? { bindingsBySession: new Map(), clientVersion: getClientVersion(), supportsTaskKey };
 
   for (const { sessionId, maxId } of await listSessionEventMaxIds(projectRoot)) {
     const row = rows.get(sessionId);

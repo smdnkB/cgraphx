@@ -348,13 +348,3 @@ export async function getTaskReport(
     truncated,
   };
 }
-
-/**
- * 全部有效绑定及其任务(只读),按 boundAt、bindingKey 升序。
- * @deprecated 用 listEffectiveBindings(本函数只是薄包装,待调用方迁移后删除)。
- */
-export function listBindingsWithTask(
-  projectRoot: string,
-): Array<{ binding: TaskBinding; task: TaskItem }> {
-  return listEffectiveBindings(projectRoot).map(({ binding, task }) => ({ binding, task }));
-}

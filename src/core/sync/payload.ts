@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { agentConfigDir, listAgentProfiles } from '../agents';
-import { listBindingsWithTask, type TaskBinding, type TaskItem } from '../task';
+import { listEffectiveBindings, listMyFeatureTaskDeclarations, type EffectiveBinding } from '../task';
 import { listCommitEvents, listSessionEventsAfter, type TimelineEvent } from '../timeline';
 import { collectSessionArtifacts } from './artifacts';
 import { TERMINAL_SESSION_PREFIX } from './constants';
@@ -21,7 +21,7 @@ import { isSafeRelPath } from './paths';
 import { collectSessionReferences } from './references';
 import { openSyncDb } from './schema-bootstrap';
 import { listAllReferenceRecords } from './store';
-import type { IngestBinding, IngestCommit, IngestEvent, IngestSession } from './types';
+import type { IngestBinding, IngestCommit, IngestEvent, IngestSession, IngestTaskDeclaration } from './types';
 import { getClientVersion } from './version';
 
 export interface SyncContext {
@@ -29,9 +29,12 @@ export interface SyncContext {
   repoRoot: string;
   remoteUrl: string;
   clientVersion: string;
+  /** 服务端是否支持任务声明与任务键(协议 1.1);参与绑定段哈希。 */
+  supportsTaskKey: boolean;
   /** 全部 git_commit 事件(listCommitEvents,ts、id 升序)。 */
   commitEvents: TimelineEvent[];
-  bindingsBySession: Map<string, Array<{ binding: TaskBinding; task: TaskItem }>>;
+  /** 有效绑定(含被取代段),按会话分组。 */
+  bindingsBySession: Map<string, EffectiveBinding[]>;
   git: GitCache;
   /** 各已登记 agent 的项目级与用户级 `<configDir>/skills`。 */
   skillDirs: string[];
@@ -54,7 +57,10 @@ export interface BuiltSession {
  *
  * @throws SyncArgError 取不到 origin 远程地址或仓库根。
  */
-export async function createSyncContext(projectRoot: string): Promise<SyncContext> {
+export async function createSyncContext(
+  projectRoot: string,
+  opts: { supportsTaskKey?: boolean } = {},
+): Promise<SyncContext> {
   const root = path.resolve(projectRoot);
   const remoteUrl = getOriginUrl(root);
   if (remoteUrl === null) {
@@ -65,8 +71,8 @@ export async function createSyncContext(projectRoot: string): Promise<SyncContex
     throw new SyncArgError(`${root} 不在 git 仓库内,请在 git 仓库内运行`);
   }
 
-  const bindingsBySession = new Map<string, Array<{ binding: TaskBinding; task: TaskItem }>>();
-  for (const entry of listBindingsWithTask(root)) {
+  const bindingsBySession = new Map<string, EffectiveBinding[]>();
+  for (const entry of listEffectiveBindings(root, { includeSuperseded: true })) {
     const list = bindingsBySession.get(entry.binding.sessionId);
     if (list === undefined) bindingsBySession.set(entry.binding.sessionId, [entry]);
     else list.push(entry);
@@ -83,6 +89,7 @@ export async function createSyncContext(projectRoot: string): Promise<SyncContex
     repoRoot,
     remoteUrl,
     clientVersion: getClientVersion(),
+    supportsTaskKey: opts.supportsTaskKey === true,
     commitEvents: await listCommitEvents(root),
     bindingsBySession,
     git: createGitCache(repoRoot),
@@ -147,13 +154,25 @@ function toIngestEvent(e: TimelineEvent, skillDirs: string[]): IngestEvent {
   return event;
 }
 
-function toIngestBinding(entry: { binding: TaskBinding; task: TaskItem }): IngestBinding {
-  return {
-    bindingId: String(entry.binding.id),
-    taskId: entry.task.source === 'api' ? entry.task.externalId : null,
-    start: entry.binding.boundAt,
-    end: entry.binding.unboundAt,
+/**
+ * 有效绑定 → 协议绑定段。
+ *
+ * - 被取代段按零长度区间(end = start)重报,平台以段 id 最新为准,避免与派生段重叠双算;
+ * - 目录任务带任务键(服务端支持 1.1 时),有回执映射时同时带平台任务 id;
+ * - 头部关联的平台任务只带平台任务 id;本地手动任务都不带(平台算未归属)。
+ */
+function toIngestBinding(entry: EffectiveBinding, supportsTaskKey: boolean): IngestBinding {
+  const { binding, task } = entry;
+  const out: IngestBinding = {
+    bindingId: entry.bindingKey,
+    taskId: task.source === 'api' || task.source === 'feature' ? task.externalId : null,
+    start: binding.boundAt,
+    end: entry.superseded ? binding.boundAt : binding.unboundAt,
   };
+  if (supportsTaskKey && task.source === 'feature' && task.featureId !== null) {
+    out.taskKey = task.featureId;
+  }
+  return out;
 }
 
 /** commit 事件 → IngestCommit;无 hash 的跳过,按 hash 去重保留首条。 */
@@ -207,9 +226,37 @@ function sortedBindings(bindings: IngestBinding[]): IngestBinding[] {
   return byKey(bindings, (b) => b.bindingId);
 }
 
-/** 绑定段哈希:先映射成 IngestBinding 再求(任务名 / 状态变化不触发重发)。 */
-export function bindingsHashOf(entries: Array<{ binding: TaskBinding; task: TaskItem }>): string {
-  return sha256(stableStringify(sortedBindings(entries.map(toIngestBinding))));
+/**
+ * 绑定段哈希:先映射成 IngestBinding 再求(任务名 / 状态变化不触发重发)。
+ * 输入包含「服务端是否支持任务键」:服务端首次升级到 1.1 时各会话哈希变化,自动重报一次。
+ */
+export function bindingsHashOf(entries: EffectiveBinding[], supportsTaskKey: boolean): string {
+  return sha256(
+    stableStringify({
+      supportsTaskKey,
+      bindings: sortedBindings(entries.map((entry) => toIngestBinding(entry, supportsTaskKey))),
+    }),
+  );
+}
+
+/**
+ * 本批的任务声明:本人负责、且任务键出现在本批任一绑定段上的目录任务。
+ * 服务端不支持 1.1 或本批没有可声明的任务时返回 undefined(请求体不带该字段)。
+ */
+export function taskDeclarationsFor(
+  ctx: SyncContext,
+  bindings: IngestBinding[],
+): IngestTaskDeclaration[] | undefined {
+  if (!ctx.supportsTaskKey) return undefined;
+  const keys = new Set<string>();
+  for (const binding of bindings) {
+    if (binding.taskKey !== undefined) keys.add(binding.taskKey);
+  }
+  if (keys.size === 0) return undefined;
+  const declarations = listMyFeatureTaskDeclarations(ctx.projectRoot)
+    .filter((d) => keys.has(d.featureId))
+    .map((d) => ({ taskKey: d.featureId, name: d.name, declaredAt: d.declaredAt }));
+  return declarations.length > 0 ? declarations : undefined;
 }
 
 /** bindings / commits / artifacts / references 的哈希(不含 events)。 */
@@ -262,12 +309,12 @@ export async function buildSessionPayload(
   const session: IngestSession = {
     clientSessionId: sessionId,
     events: allEvents.filter((e) => e.id > afterEventId).map((e) => toIngestEvent(e, ctx.skillDirs)),
-    bindings: entries.map(toIngestBinding),
+    bindings: entries.map((entry) => toIngestBinding(entry, ctx.supportsTaskKey)),
     commits,
     artifacts,
     references,
   };
-  return finish(session, maxEventId, bindingsHashOf(entries));
+  return finish(session, maxEventId, bindingsHashOf(entries, ctx.supportsTaskKey));
 }
 
 /** 本仓库终端会话 id:前缀 + sha256(origin 远程地址) 前 16 位十六进制。 */
@@ -293,5 +340,5 @@ export function buildTerminalPayload(ctx: SyncContext): BuiltSession | null {
     artifacts,
     references: [],
   };
-  return finish(session, maxEventId, bindingsHashOf([]));
+  return finish(session, maxEventId, bindingsHashOf([], ctx.supportsTaskKey));
 }

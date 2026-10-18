@@ -37,7 +37,7 @@ export {
   SYNC_HOOK_MARKER,
   PAUSE_NOTICES,
 } from './constants';
-export { ARTIFACT_TYPES, CLIENT_ERROR_CODES, PAUSE_REASONS } from './types';
+export { ARTIFACT_TYPES, CLIENT_ERROR_CODES, PAUSE_REASONS, TASK_KEY_PROTOCOL_VERSION } from './types';
 export type {
   ArtifactType,
   ClientErrorCode,
@@ -51,6 +51,7 @@ export type {
   IngestArtifact,
   IngestReference,
   IngestSession,
+  IngestTaskDeclaration,
   IngestRequest,
   IngestWarning,
   IngestResponse,

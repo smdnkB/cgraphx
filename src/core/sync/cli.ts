@@ -101,6 +101,7 @@ function renderStatus(report: SyncStatusReport): string {
     `平台地址:${c?.serverUrl ?? '-'}`,
     `项目:${c?.projectName ?? '-'}`,
     `账号:${c?.username ?? '-'}`,
+    `平台协议版本:${s.serverProtocolVersion ?? '未知'}`,
     `最后成功同步:${s.lastSuccessAt ?? '尚未成功同步'}`,
     `积压:${report.backlogEvents} 条事件 / ${report.pendingSessions} 个会话`,
   ];

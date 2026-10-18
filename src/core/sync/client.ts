@@ -102,7 +102,7 @@ export async function postConnect(serverUrl: string, body: ConnectRequest): Prom
   const project = data.project;
   if (!isRecord(project) || typeof project.name !== 'string') throw invalidResponse(status, '缺少 project.name');
   const repo = isRecord(data.repo) ? data.repo : {};
-  return {
+  const response: ConnectResponse = {
     token,
     project: { id: typeof project.id === 'number' ? project.id : 0, name: project.name },
     repo: {
@@ -110,6 +110,8 @@ export async function postConnect(serverUrl: string, body: ConnectRequest): Prom
       defaultBranch: typeof repo.defaultBranch === 'string' ? repo.defaultBranch : '',
     },
   };
+  if (typeof data.protocolVersion === 'string') response.protocolVersion = data.protocolVersion;
+  return response;
 }
 
 /** `GET /status?remoteUrl=`:平台视角的接入状态(也用于探测凭据是否可用)。 */
@@ -133,7 +135,7 @@ export async function postIngest(serverUrl: string, token: string, body: IngestR
   const a = data.accepted;
   const num = (x: unknown): number => (typeof x === 'number' ? x : 0);
   const warnings = Array.isArray(data.warnings) ? (data.warnings as IngestResponse['warnings']) : [];
-  return {
+  const response: IngestResponse = {
     accepted: {
       events: num(a.events),
       bindings: num(a.bindings),
@@ -143,4 +145,14 @@ export async function postIngest(serverUrl: string, token: string, body: IngestR
     },
     warnings,
   };
+  if (Array.isArray(data.taskKeys)) {
+    const taskKeys: Array<{ taskKey: string; taskId: string }> = [];
+    for (const item of data.taskKeys) {
+      if (!isRecord(item) || typeof item.taskKey !== 'string' || typeof item.taskId !== 'string') continue;
+      taskKeys.push({ taskKey: item.taskKey, taskId: item.taskId });
+    }
+    response.taskKeys = taskKeys;
+  }
+  if (typeof data.protocolVersion === 'string') response.protocolVersion = data.protocolVersion;
+  return response;
 }

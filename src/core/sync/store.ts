@@ -85,6 +85,7 @@ export function emptyStatus(): SyncStatusState {
     pausedReason: null,
     pausedAt: null,
     lastProbeAt: null,
+    serverProtocolVersion: null,
     lastResult: null,
   };
 }
@@ -124,6 +125,7 @@ export function getStatus(db: SqliteDatabase): SyncStatusState {
     pausedReason: toPauseReason(raw.pausedReason),
     pausedAt: stringOrNull(raw.pausedAt),
     lastProbeAt: stringOrNull(raw.lastProbeAt),
+    serverProtocolVersion: stringOrNull(raw.serverProtocolVersion),
     lastResult: toRunResult(raw.lastResult),
   };
 }
@@ -141,6 +143,7 @@ export function setStatus(db: SqliteDatabase, status: SyncStatusState, now: stri
       pausedReason: status.pausedReason,
       pausedAt: status.pausedAt,
       lastProbeAt: status.lastProbeAt,
+      serverProtocolVersion: status.serverProtocolVersion,
       lastResult: status.lastResult,
     },
     now,

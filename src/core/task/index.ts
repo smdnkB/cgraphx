@@ -25,7 +25,6 @@ export {
   listTaskSummaries,
   getTaskReport,
   computeSegmentStats,
-  listBindingsWithTask,
   listEffectiveBindings,
   getCurrentEffectiveBinding,
 } from './report';
