@@ -9,7 +9,19 @@
 import { scanFeatures } from './scanner';
 import type { FeatureEntry, FeatureFilter } from './types';
 
-export type { FeatureEntry, FeatureFilter } from './types';
+export type {
+  FeatureEntry,
+  FeatureFilter,
+  FeatureStage,
+  BasisState,
+  FeatureArtifactRow,
+  FeaturePhase,
+  FeaturePhaseRow,
+  FeatureDetail,
+  CheckCode,
+  CheckFinding,
+  CheckReport,
+} from './types';
 export {
   scanFeatures,
   readFeatureTask,
@@ -17,6 +29,17 @@ export {
   scanFeatureTasks,
   FEATURES_DIR,
 } from './scanner';
+export { showFeature, resolveFeatureId } from './show';
+export { checkFeatures } from './check';
+export type { CheckOptions } from './check';
+export {
+  FeaturesError,
+  FeatureNotFoundError,
+  FeatureAmbiguousError,
+  CheckTargetNotFoundError,
+  exitCodeForError,
+  exitCodeForCheckReport,
+} from './errors';
 export { gitUserName } from './sync';
 
 /** 按 owner / q / stage 过滤(多条件取交集;空条件不过滤)。 */

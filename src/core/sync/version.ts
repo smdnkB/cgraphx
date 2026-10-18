@@ -8,6 +8,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { ARTIFACT_TASK_KEY_PROTOCOL_VERSION, PROJECT_SPEC_PROTOCOL_VERSION, TASK_KEY_PROTOCOL_VERSION } from './types';
+
+/** 服务端协议档位(spec §11.1):按「主.次」数值向下归类。 */
+export type ServerTier = '1.0' | '1.1' | '1.2' | '1.3';
+
 let cached: string | null = null;
 
 export function getClientVersion(): string {
@@ -42,4 +47,15 @@ export function protocolAtLeast(version: string | null, min: string): boolean {
   const m = parseMajorMinor(min);
   if (v === null || m === null) return false;
   return v.major !== m.major ? v.major > m.major : v.minor >= m.minor;
+}
+
+/**
+ * 服务端协议版本 → 档位:≥ '1.3' → '1.3';≥ '1.2' → '1.2';≥ '1.1' → '1.1';
+ * 其余(含 null、不合法)按 '1.0'。
+ */
+export function serverTier(version: string | null): ServerTier {
+  if (protocolAtLeast(version, PROJECT_SPEC_PROTOCOL_VERSION)) return '1.3';
+  if (protocolAtLeast(version, ARTIFACT_TASK_KEY_PROTOCOL_VERSION)) return '1.2';
+  if (protocolAtLeast(version, TASK_KEY_PROTOCOL_VERSION)) return '1.1';
+  return '1.0';
 }

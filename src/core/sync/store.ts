@@ -2,11 +2,20 @@
  * sync 本地状态存取(`sync_*` 表)。
  *
  * 原始行类型 `XxxRow` 保留 snake_case,行 → 领域类型在本模块内映射,不外泄。
- * `sync_state` 只允许 `connection` / `status` 两个键;不存 token。
+ * `sync_state` 只允许 `connection` / `status` / `platform_spec` / `warnings` / `basis` 五个键;不存 token。
  */
 
 import type { SqliteDatabase } from '../db';
-import { PAUSE_REASONS, type PauseReason, type SyncConnection, type SyncRunResult, type SyncStatusState } from './types';
+import {
+  PAUSE_REASONS,
+  type PauseReason,
+  type PlatformSpecCache,
+  type SyncConnection,
+  type SyncRunResult,
+  type SyncStatusState,
+  type UnreportedArtifact,
+  type WarningsRecord,
+} from './types';
 
 /** `sync_state` 行。 */
 interface SyncStateRow {
@@ -15,7 +24,7 @@ interface SyncStateRow {
   updated_at: string;
 }
 
-type StateKey = 'connection' | 'status';
+type StateKey = 'connection' | 'status' | 'platform_spec' | 'warnings' | 'basis';
 
 function readState(db: SqliteDatabase, key: StateKey): unknown {
   const row = db.prepare('SELECT key, value, updated_at FROM sync_state WHERE key = ?').get(key) as
@@ -108,6 +117,8 @@ function toRunResult(v: unknown): SyncRunResult | null {
     recordsSent: num(v.recordsSent),
     isolatedNew: num(v.isolatedNew),
     warnings: num(v.warnings),
+    // 持久化的结果摘要不含告警明细(spec §11.4:明细单独存 'warnings' 键)
+    warningItems: [],
     stoppedBy,
     error: stringOrNull(v.error),
   };
@@ -144,15 +155,133 @@ export function setStatus(db: SqliteDatabase, status: SyncStatusState, now: stri
       pausedAt: status.pausedAt,
       lastProbeAt: status.lastProbeAt,
       serverProtocolVersion: status.serverProtocolVersion,
-      lastResult: status.lastResult,
+      // 告警明细单独存 'warnings' 键;结果摘要里不写 warningItems
+      lastResult:
+        status.lastResult === null
+          ? null
+          : {
+              at: status.lastResult.at,
+              ok: status.lastResult.ok,
+              sessionsSent: status.lastResult.sessionsSent,
+              recordsSent: status.lastResult.recordsSent,
+              isolatedNew: status.lastResult.isolatedNew,
+              warnings: status.lastResult.warnings,
+              stoppedBy: status.lastResult.stoppedBy,
+              error: status.lastResult.error,
+            },
     },
     now,
   );
 }
 
+// ─── platform_spec ──────────────────────────────────────────────────────────
+
+/** 读本项目类型表缓存;缺失或损坏返回 null。缺 `key` 的条目丢弃。 */
+export function getPlatformSpec(db: SqliteDatabase): PlatformSpecCache | null {
+  const raw = readState(db, 'platform_spec');
+  if (!isRecord(raw) || !Array.isArray(raw.artifactTypes)) return null;
+  const artifactTypes: PlatformSpecCache['artifactTypes'] = [];
+  for (const item of raw.artifactTypes) {
+    if (!isRecord(item) || typeof item.key !== 'string') continue;
+    artifactTypes.push({
+      key: item.key,
+      name: typeof item.name === 'string' ? item.name : '',
+      phase: typeof item.phase === 'string' ? item.phase : '',
+    });
+  }
+  return {
+    fetchedAt: typeof raw.fetchedAt === 'string' ? raw.fetchedAt : '',
+    artifactTypes,
+  };
+}
+
+/** 写本项目类型表缓存(逐字段赋值)。 */
+export function setPlatformSpec(db: SqliteDatabase, cache: PlatformSpecCache, now: string): void {
+  writeState(
+    db,
+    'platform_spec',
+    {
+      fetchedAt: cache.fetchedAt,
+      artifactTypes: cache.artifactTypes.map((type) => ({
+        key: type.key,
+        name: type.name,
+        phase: type.phase,
+      })),
+    },
+    now,
+  );
+}
+
+// ─── warnings / basis ───────────────────────────────────────────────────────
+
+/** 读最近一次平台告警;缺失或结构不合法返回 null。 */
+export function getLastWarnings(db: SqliteDatabase): WarningsRecord | null {
+  const raw = readState(db, 'warnings');
+  if (!isRecord(raw) || typeof raw.at !== 'string' || !Array.isArray(raw.items)) return null;
+  const items = raw.items.filter(
+    (item): item is WarningsRecord['items'][number] =>
+      isRecord(item) && typeof item.kind === 'string',
+  );
+  return { at: raw.at, items };
+}
+
+/** 写最近一次平台告警(逐字段赋值)。 */
+export function setLastWarnings(db: SqliteDatabase, record: WarningsRecord, now: string): void {
+  writeState(db, 'warnings', { at: record.at, items: record.items }, now);
+}
+
+/** 读最近一次成功同步时的重新评估基准;缺失返回 null。 */
+export function getBasis(db: SqliteDatabase): string | null {
+  const raw = readState(db, 'basis');
+  return typeof raw === 'string' ? raw : null;
+}
+
+/** 写重新评估基准。 */
+export function setBasis(db: SqliteDatabase, basis: string, now: string): void {
+  writeState(db, 'basis', basis, now);
+}
+
+/** 删除 platform_spec / warnings / basis 三键(接入时清空上一轮平台状态)。 */
+export function clearPlatformState(db: SqliteDatabase): void {
+  db.prepare(`DELETE FROM sync_state WHERE key IN ('platform_spec', 'warnings', 'basis')`).run();
+}
+
 /** 删除 connection 与 status 两键(断开时用)。 */
 export function clearConnectionState(db: SqliteDatabase): void {
   db.prepare(`DELETE FROM sync_state WHERE key IN ('connection', 'status')`).run();
+}
+
+// ─── unreported artifacts ───────────────────────────────────────────────────
+
+/** 用本轮构造结果替换某会话的未上报产出(先删该会话全部行再插入)。 */
+export function replaceUnreported(db: SqliteDatabase, sessionId: string, items: UnreportedArtifact[]): void {
+  db.transaction(() => {
+    db.prepare('DELETE FROM sync_unreported_artifacts WHERE client_session_id = ?').run(sessionId);
+    const insert = db.prepare(
+      'INSERT INTO sync_unreported_artifacts (client_session_id, type, path) VALUES (?, ?, ?)',
+    );
+    for (const item of items) insert.run(sessionId, item.type, item.path);
+  })();
+}
+
+/** 当前未上报产出按类型汇总:条数为行数,示例路径取 MIN(path),按类型升序。 */
+export function summarizeUnreported(
+  db: SqliteDatabase,
+): Array<{ type: string; count: number; samplePath: string }> {
+  const rows = db
+    .prepare(
+      `SELECT type, count(*) AS n, MIN(path) AS sample_path
+         FROM sync_unreported_artifacts
+        GROUP BY type
+        ORDER BY type ASC`,
+    )
+    .all() as unknown as Array<{ type: string; n: number; sample_path: string }>;
+  return rows.map((row) => ({ type: row.type, count: Number(row.n), samplePath: row.sample_path }));
+}
+
+/** 清空全部未上报产出(接入时用)。 */
+export function clearUnreported(db: SqliteDatabase): void {
+  db.prepare('DELETE FROM sync_unreported_artifacts').run();
 }
 
 // ─── sessions ───────────────────────────────────────────────────────────────

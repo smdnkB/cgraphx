@@ -133,13 +133,13 @@ describe('scanFeatures', () => {
     });
   });
 
-  it('falls back to plan index header when no spec exists (stage 已规划)', () => {
+  it('owner is null when only plan index declares it (stage 已规划)', () => {
     mkFeature('2026-07-05-纯计划需求', {
       planIndex: '# plan\n> 负责人: 李四\n',
     });
     const rows = scanFeatures(root);
     expect(rows[0]).toMatchObject({
-      owner: '李四',
+      owner: null,
       stage: '已规划',
     });
   });

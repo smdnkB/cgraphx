@@ -39,6 +39,7 @@ import {
   syncStopHook,
 } from './index';
 import type { ConnectOutcome, SyncRunResult, SyncStatusReport } from './types';
+import { groupWarnings } from './warnings';
 
 // ─── 输出 ───────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,16 @@ function renderConnect(outcome: ConnectOutcome): string {
   return lines.join('\n');
 }
 
+/** 平台告警分组明细(`sync now` / `sync status` 共用格式)。 */
+function warningGroupLines(items: ReadonlyArray<{ kind: string } & Record<string, unknown>>): string[] {
+  const lines: string[] = [];
+  for (const group of groupWarnings(items)) {
+    lines.push(`  ${group.kind}`);
+    for (const line of group.lines) lines.push(`    ${line}`);
+  }
+  return lines;
+}
+
 function renderRunResult(result: SyncRunResult): { stdout: string | null; stderr: string | null } {
   if (result.stoppedBy === 'paused') return { stdout: null, stderr: `[sync] 同步已暂停:${result.error ?? '-'}` };
   if (result.stoppedBy === 'failing') {
@@ -81,6 +92,9 @@ function renderRunResult(result: SyncRunResult): { stdout: string | null; stderr
   }
   let line = `同步完成:上报 ${result.sessionsSent} 个会话、${result.recordsSent} 条记录`;
   if (result.isolatedNew > 0) line += `;${result.isolatedNew} 个会话被平台拒收,已隔离`;
+  if (result.warningItems.length > 0) {
+    line += '\n平台告警:\n' + warningGroupLines(result.warningItems).join('\n');
+  }
   return { stdout: line, stderr: null };
 }
 
@@ -97,11 +111,14 @@ function describeRunResult(result: SyncRunResult): string {
 function renderStatus(report: SyncStatusReport): string {
   const c = report.connection;
   const s = report.state;
+  const protocol = `平台协议版本:${s.serverProtocolVersion ?? '未知'}`;
   const lines = [
     `平台地址:${c?.serverUrl ?? '-'}`,
     `项目:${c?.projectName ?? '-'}`,
     `账号:${c?.username ?? '-'}`,
-    `平台协议版本:${s.serverProtocolVersion ?? '未知'}`,
+    report.platformSpec === null
+      ? protocol
+      : `${protocol}(本项目产物类型 ${report.platformSpec.typeCount} 类,刷新于 ${report.platformSpec.fetchedAt})`,
     `最后成功同步:${s.lastSuccessAt ?? '尚未成功同步'}`,
     `积压:${report.backlogEvents} 条事件 / ${report.pendingSessions} 个会话`,
   ];
@@ -109,6 +126,20 @@ function renderStatus(report: SyncStatusReport): string {
   if (report.isolatedSessions > 0) lines.push(`有 ${report.isolatedSessions} 个会话被平台拒收`);
   if (s.lastResult !== null) lines.push(`最近一次:${describeRunResult(s.lastResult)}`);
   if (s.lastError !== null && s.lastResult?.stoppedBy !== 'failing') lines.push(`最近错误:${s.lastError}`);
+  if (report.unreported.length > 0) {
+    lines.push('未上报产出:');
+    for (const item of report.unreported) {
+      lines.push(`  ${item.type} ×${item.count}(${item.samplePath}${item.count > 1 ? ' 等' : ''})`);
+    }
+    lines.push('  请联系项目管理员配置该产物类型');
+  }
+  if (report.lastWarnings !== null && report.lastWarnings.items.length > 0) {
+    lines.push(`最近一次平台告警(${report.lastWarnings.at}):`);
+    for (const group of groupWarnings(report.lastWarnings.items)) {
+      lines.push(`  ${group.kind}`);
+      for (const line of group.lines) lines.push(`    ${line}`);
+    }
+  }
   return lines.join('\n');
 }
 

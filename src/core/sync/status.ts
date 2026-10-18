@@ -10,10 +10,20 @@ import { readConnection } from './connection';
 import { buildTerminalPayload, createSyncContext, type SyncContext } from './payload';
 import { isAgentCandidate, terminalNeedsSend } from './runner';
 import { openSyncDb } from './schema-bootstrap';
-import { countIsolatedSessions, emptyStatus, getConnection, getStatus, listSessions, type SyncSessionRow } from './store';
+import {
+  countIsolatedSessions,
+  emptyStatus,
+  getConnection,
+  getLastWarnings,
+  getPlatformSpec,
+  getStatus,
+  listSessions,
+  summarizeUnreported,
+  type SyncSessionRow,
+} from './store';
 import { SyncError } from './errors';
-import { TASK_KEY_PROTOCOL_VERSION, type SyncStatusReport } from './types';
-import { getClientVersion, protocolAtLeast } from './version';
+import type { SyncStatusReport } from './types';
+import { getClientVersion, serverTier } from './version';
 
 /** 本地同步状态。未初始化时除 `connected` 外均为空值。 */
 export async function getSyncStatus(projectRoot: string): Promise<SyncStatusReport> {
@@ -25,6 +35,10 @@ export async function getSyncStatus(projectRoot: string): Promise<SyncStatusRepo
     backlogEvents: 0,
     pendingSessions: 0,
     isolatedSessions: 0,
+    tier: '1.0',
+    platformSpec: null,
+    lastWarnings: null,
+    unreported: [],
   };
   if (!isInitialized(projectRoot)) {
     if (cred !== null) report.connection = { serverUrl: cred.serverUrl, username: null, projectName: null, connectedAt: null };
@@ -32,6 +46,7 @@ export async function getSyncStatus(projectRoot: string): Promise<SyncStatusRepo
   }
 
   let rows: Map<string, SyncSessionRow>;
+  let projectTypes: string[] | null = null;
   const conn = openSyncDb(projectRoot);
   try {
     const db = conn.getDb();
@@ -44,6 +59,16 @@ export async function getSyncStatus(projectRoot: string): Promise<SyncStatusRepo
       };
     }
     report.state = getStatus(db);
+    report.tier = serverTier(report.state.serverProtocolVersion);
+    const spec = getPlatformSpec(db);
+    if (spec !== null) {
+      projectTypes = spec.artifactTypes.map((type) => type.key);
+      if (report.tier === '1.3') {
+        report.platformSpec = { typeCount: spec.artifactTypes.length, fetchedAt: spec.fetchedAt };
+      }
+    }
+    report.lastWarnings = getLastWarnings(db);
+    report.unreported = summarizeUnreported(db);
     report.isolatedSessions = countIsolatedSessions(db);
     rows = listSessions(db);
   } finally {
@@ -51,14 +76,20 @@ export async function getSyncStatus(projectRoot: string): Promise<SyncStatusRepo
   }
 
   // 取不到 origin 等导致上下文构造失败时,退化为不比较绑定段、不计终端会话
-  const supportsTaskKey = protocolAtLeast(report.state.serverProtocolVersion, TASK_KEY_PROTOCOL_VERSION);
+  const tier = report.tier;
   let ctx: SyncContext | null = null;
   try {
-    ctx = await createSyncContext(projectRoot, { supportsTaskKey });
+    ctx = await createSyncContext(projectRoot, { tier, projectTypes });
   } catch (err) {
     if (!(err instanceof SyncError)) throw err;
   }
-  const judge = ctx ?? { bindingsBySession: new Map(), clientVersion: getClientVersion(), supportsTaskKey };
+  // 重新评估只影响同步收尾的补报;status 的待上报会话数不计入「仅因重新评估」进候选的会话
+  const judge = ctx ?? {
+    bindingsBySession: new Map(),
+    clientVersion: getClientVersion(),
+    supportsTaskKey: tier !== '1.0',
+    reevaluateAll: false,
+  };
 
   for (const { sessionId, maxId } of await listSessionEventMaxIds(projectRoot)) {
     const row = rows.get(sessionId);

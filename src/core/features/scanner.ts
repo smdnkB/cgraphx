@@ -2,37 +2,44 @@
  * features 索引扫描器。
  *
  * 单一职责:把 <project>/docs/features/ 下的每个子目录解析成一个
- * FeatureEntry。头部元数据(负责人/日期)优先级:spec 文件头部 > plan/index 头部 > 目录名。
- * spec 候选按主 spec 优先(文件长度升序)遍历,取第一个头部读出负责人的——
- * 避免派生 spec(接口测试-spec/单元测试-spec,含旧名 api-spec)遮蔽主 spec 导致负责人丢失。
+ * FeatureEntry。产物识别一律经产物注册表(头部优先,否则路径规则),
+ * 本模块不另写类型表或路径规则。
  *
- * 头部行约定(与 write-spec / write-plan 的产物头部一致):
+ * 负责人口径(spec §5):主 spec 的 `> 负责人:`;主 spec 不存在或没写时,
+ * 回退到交接文件的 `> 负责人:`;都没有 → null(不回退 plan/index)。
+ * 主 spec = 产出目录顶层、注册表类型为 spec 的文件(测试规格不算);
+ * 多个时按文件名长度升序、同长按字典序,取第一个读得出负责人的。
  *
- *   # 规格说明: <需求名称>
- *   > feature-id: <feature-id>
- *   > 负责人: 张三
- *   > 日期: YYYY-MM-DD
+ * 日期:主 spec 头部的 `> 日期:`(沿用 readHeaderMeta),否则 plan/index
+ * 文件头部,再否则目录名。带 `> 产物:` 的文件,负责人 / 任务只从注册表
+ * 头部读;没有 `> 产物:` 的旧文件沿用原有前 30 行口径。
  *
  * 主 spec 头部的任务声明(`> 任务: <值>`)由 readFeatureTask / scanFeatureTasks 单独读取,
  * 不进 FeatureEntry。
  *
- * 需求阶段不读头部,由产物存在性派生(deriveStage):有测试报告 → 已验证,
- * 有 plan → 已规划,有 spec → 已规格,都没有 → null(未规格)。
+ * 需求阶段不读状态,由产物存在性经注册表里程碑派生(deriveFeatureStage):
+ * 有测试报告 → 已验证,有 plan/index → 已规划,有顶层规格类文件 → 已规格,都没有 → null。
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import {
+  FEATURES_DIR_POSIX,
+  HEADER_SCAN_LINES,
+  OWNER_SOURCE_TYPES,
+  identifyArtifact,
+  isTopLevelFeatureFile,
+  readArtifactHeader,
+  stageMilestoneOf,
+} from '../artifact-registry';
 import type { FeatureEntry, FeatureStage } from './types';
 
-/** 扫描目录(仓库相对)。 */
-export const FEATURES_DIR = path.join('docs', 'features');
+/** 扫描目录(仓库相对,按当前平台分隔符)。 */
+export const FEATURES_DIR = path.join(...FEATURES_DIR_POSIX.split('/'));
 
 /** feature-id 目录名:日期前缀 + 标题(标题可能含 [业务ID-] 段,不强行拆)。 */
 const FEATURE_ID_PATTERN = /^(\d{4}-\d{2}-\d{2})-(.+)$/;
-
-/** 只读文件头部这么多行找元数据,头部之后没有要解析的东西。 */
-const HEADER_SCAN_LINES = 30;
 
 interface HeaderMeta {
   owner: string | null;
@@ -61,33 +68,57 @@ function readHeaderMeta(file: string): HeaderMeta {
   return meta;
 }
 
-/** plan/ 子目录里是否有 index 文件(*-index.md 或 index.md)。 */
-function hasPlanIndex(featureDir: string): boolean {
-  try {
-    return fs
-      .readdirSync(path.join(featureDir, 'plan'))
-      .some((n) => n.endsWith('-index.md') || n === 'index.md');
-  } catch {
-    return false;
-  }
+/** 项目相对 POSIX 路径 → 绝对路径。 */
+function absolutePath(projectRoot: string, projectRelPath: string): string {
+  return path.join(projectRoot, ...projectRelPath.split('/'));
 }
 
 /**
- * ui功能测试/ 子目录里是否有 UI 功能测试报告:*-ui功能测试报告.xlsx(现行)
- * 或 *-ui功能测试报告.md(存量兼容)。结构化结果 JSON、截图不算报告。
+ * 旧文件(没有 `> 产物:` 行)的任务声明:前 30 行内第一条 `> 任务:` 行,
+ * 空值等同于未声明。读不了 → null。
  */
-function hasUiTestReport(featureDir: string): boolean {
+const TASK_HEADER_PATTERN = /^>\s*任务\s*[:：]\s*(.*?)\s*$/;
+
+function readLegacyTaskLine(file: string): string | null {
+  let text: string;
   try {
-    return fs
-      .readdirSync(path.join(featureDir, 'ui功能测试'))
-      .some((n) => n.endsWith('-ui功能测试报告.md') || n.endsWith('-ui功能测试报告.xlsx'));
+    text = fs.readFileSync(file, 'utf-8');
   } catch {
-    return false;
+    return null;
   }
+  for (const line of text.split('\n').slice(0, HEADER_SCAN_LINES)) {
+    const m = TASK_HEADER_PATTERN.exec(line);
+    if (!m) continue;
+    const value = (m[1] ?? '').trim();
+    return value === '' ? null : value;
+  }
+  return null;
 }
 
 /**
- * spec 候选排序:主 spec 优先。主 spec `<前缀>-spec.md`(或 `spec.md`)恒短于
+ * 读文件声明的负责人:有 `> 产物:` 行时只认注册表头部;否则沿用旧口径
+ * (前 30 行内最后一条 `> 负责人:`)。读不了 → null。
+ */
+function ownerOf(projectRoot: string, projectRelPath: string): string | null {
+  const absPath = absolutePath(projectRoot, projectRelPath);
+  const header = readArtifactHeader(absPath);
+  if (header !== null && header.typeRaw !== null) return header.owner;
+  return readHeaderMeta(absPath).owner;
+}
+
+/**
+ * 读文件声明的任务:有 `> 产物:` 行时只认注册表头部;否则沿用旧口径
+ * (前 30 行内第一条 `> 任务:`)。读不了 → null。
+ */
+function taskOf(projectRoot: string, projectRelPath: string): string | null {
+  const absPath = absolutePath(projectRoot, projectRelPath);
+  const header = readArtifactHeader(absPath);
+  if (header !== null && header.typeRaw !== null) return header.task;
+  return readLegacyTaskLine(absPath);
+}
+
+/**
+ * 候选排序:主 spec 优先。主 spec `<前缀>-spec.md`(或 `spec.md`)恒短于
  * 同前缀的派生 spec(`<前缀>-接口测试-spec.md` / `<前缀>-单元测试-spec.md`,
  * 含旧名 `<前缀>-api-spec.md`,文件名多一段),
  * 按「长度升序、同名再按字典序」排,主 spec 必排最前。
@@ -96,90 +127,144 @@ function compareSpecCandidates(a: string, b: string): number {
   return a.length - b.length || a.localeCompare(b);
 }
 
-/**
- * 认定需求目录的主 spec(读 负责人 / 任务 共用):*-spec.md(或 spec.md)候选按主 spec
- * 优先遍历,取第一个头部读出负责人的——主 spec 头部残缺时仍可能从其他候选读出,
- * 且派生 spec 不再遮蔽主 spec(api-spec 的 'a' 字典序曾排在主 spec 的 's' 前,
- * 导致负责人恒丢失)。都读不出负责人取排序后的第一个;没有 spec → null。
- */
-function findMainSpec(featureDir: string): string | null {
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(featureDir);
-  } catch {
-    return null;
-  }
-  const specs = entries
-    .filter((n) => n.endsWith('-spec.md') || n === 'spec.md')
-    .sort(compareSpecCandidates);
-  let first: string | null = null;
-  for (const name of specs) {
-    const file = path.join(featureDir, name);
-    if (first === null) first = file;
-    if (readHeaderMeta(file).owner !== null) return file;
-  }
-  return first;
+/** feature-id 只能是 docs/features/ 下的单段目录名。 */
+export function isPlainFeatureId(featureId: string): boolean {
+  return (
+    featureId !== '' &&
+    featureId !== '.' &&
+    featureId !== '..' &&
+    !featureId.includes('/') &&
+    !featureId.includes('\\')
+  );
 }
 
 /**
- * 在一个 feature 目录里找元数据文件(读 负责人/日期 用):先主 spec(findMainSpec),
- * 再 plan/*-index.md(或 plan/index.md)。都没有 → null(仅目录名可解析)。
+ * 列出产出目录下全部普通文件(递归,不跟随符号链接),
+ * 返回项目相对 POSIX 路径,升序。目录不存在 / feature-id 非法 → []。
  */
-function findMetaFile(featureDir: string): string | null {
-  const mainSpec = findMainSpec(featureDir);
-  if (mainSpec !== null) return mainSpec;
-  try {
-    const planEntries = fs.readdirSync(path.join(featureDir, 'plan'));
-    const index = planEntries
-      .filter((n) => n.endsWith('-index.md') || n === 'index.md')
-      .sort(compareSpecCandidates)[0];
-    if (index) {
-      return path.join(featureDir, 'plan', index);
+export function listFeatureFiles(projectRoot: string, featureId: string): string[] {
+  if (!isPlainFeatureId(featureId)) return [];
+  const files: string[] = [];
+  const relRoot = `${FEATURES_DIR_POSIX}/${featureId}`;
+  const walk = (absDir: string, relDir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(absDir, { withFileTypes: true });
+    } catch {
+      return;
     }
-  } catch {
-    // 没有 plan 目录,落到目录名解析
+    for (const entry of entries) {
+      const rel = `${relDir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(path.join(absDir, entry.name), rel);
+      } else if (entry.isFile()) {
+        files.push(rel);
+      }
+    }
+  };
+  walk(path.join(projectRoot, FEATURES_DIR, featureId), relRoot);
+  return files.sort();
+}
+
+/** 顶层文件里注册表类型为 type 的全部相对路径。 */
+function topLevelFilesOfType(
+  projectRoot: string,
+  files: readonly string[],
+  type: string,
+): string[] {
+  return files.filter(
+    (rel) =>
+      isTopLevelFeatureFile(rel) &&
+      identifyArtifact(projectRoot, rel)?.type === type,
+  );
+}
+
+/** 按文件名长度升序、同长按字典序排序(原地)。 */
+function sortByFileName(files: string[]): string[] {
+  return files.sort((a, b) =>
+    compareSpecCandidates(path.posix.basename(a), path.posix.basename(b)),
+  );
+}
+
+/**
+ * 主 spec 认定(spec §5):顶层类型为 spec 的文件按文件名排序,
+ * 取第一个读得出负责人的;都读不出取第一个;没有候选 → null。
+ */
+function mainSpecRelFromFiles(
+  projectRoot: string,
+  files: readonly string[],
+): string | null {
+  const candidates = sortByFileName(
+    topLevelFilesOfType(projectRoot, files, 'spec'),
+  );
+  for (const rel of candidates) {
+    if (ownerOf(projectRoot, rel) !== null) return rel;
   }
-  return null;
+  return candidates[0] ?? null;
+}
+
+/** 主 spec 的项目相对 POSIX 路径;没有 → null。 */
+export function findMainSpecRel(
+  projectRoot: string,
+  featureId: string,
+): string | null {
+  if (!isPlainFeatureId(featureId)) return null;
+  return mainSpecRelFromFiles(
+    projectRoot,
+    listFeatureFiles(projectRoot, featureId),
+  );
 }
 
 /**
  * 从需求目录的产物存在性派生阶段(实时,不落盘):
- *   有测试报告 → 已验证;否则有 plan → 已规划;否则有 spec → 已规格;都没有 → null(未规格)。
+ *   有测试报告 → 已验证;否则有 plan/index → 已规划;否则有顶层规格类文件 → 已规格;
+ *   都没有 → null(未规格)。
  *
  * 优先级 已验证 > 已规划 > 已规格,三个里程碑各自独立探测(允许跨阶,
- * 如 spec + 测试报告但无 plan → 已验证)。已验证只看测试「报告」(run-api-test
- * 的 *-接口测试报告.md / write-unit-test-code 的 *-单元测试报告.md / run-ui-test
- * 的 ui功能测试/*-ui功能测试报告.xlsx|.md(子目录产物,md 为存量);2026-08 改名前的旧名
- * *-测试报告.md 仍识别,存量产物不回退),测试「规格」不算。
+ * 如 spec + 测试报告但无 plan → 已验证)。里程碑类型与文件判定全部经注册表
+ * (stageMilestoneOf):测试「规格」不算已验证,结构化结果(json/jsonl)不算报告。
  */
-function deriveStage(featureDir: string): FeatureStage | null {
-  let entries: string[];
+export function deriveFeatureStage(
+  projectRoot: string,
+  featureId: string,
+): FeatureStage | null {
+  if (!isPlainFeatureId(featureId)) return null;
+  let hasSpecLike = false;
+  let hasPlanIndex = false;
+  for (const rel of listFeatureFiles(projectRoot, featureId)) {
+    const identity = identifyArtifact(projectRoot, rel);
+    if (identity === null) continue;
+    const milestone = stageMilestoneOf(identity, rel);
+    if (milestone === 'report') return '已验证';
+    if (milestone === 'plan_index') hasPlanIndex = true;
+    else if (milestone === 'spec_like') hasSpecLike = true;
+  }
+  if (hasPlanIndex) return '已规划';
+  if (hasSpecLike) return '已规格';
+  return null;
+}
+
+/**
+ * plan 目录下的 index 文件(*-index.md 或 index.md),按主 spec 优先排序取第一个。
+ * 只用于读日期(负责人不再回退 plan/index)。
+ */
+function findPlanIndexFile(featureDir: string): string | null {
   try {
-    entries = fs.readdirSync(featureDir);
+    const index = fs
+      .readdirSync(path.join(featureDir, 'plan'))
+      .filter((n) => n.endsWith('-index.md') || n === 'index.md')
+      .sort(compareSpecCandidates)[0];
+    return index === undefined ? null : path.join(featureDir, 'plan', index);
   } catch {
     return null;
   }
-  const hasReport =
-    entries.some(
-      (n) =>
-        n.endsWith('-单元测试报告.md') ||
-        n.endsWith('-接口测试报告.md') ||
-        n.endsWith('-测试报告.md'),
-    ) || hasUiTestReport(featureDir);
-  if (hasReport) return '已验证';
-  if (hasPlanIndex(featureDir)) return '已规划';
-  const hasSpec = entries.some(
-    (n) => n.endsWith('-spec.md') || n === 'spec.md',
-  );
-  if (hasSpec) return '已规格';
-  return null;
 }
 
 /**
  * 扫描 <projectRoot>/docs/features/,每个子目录解析为一个 FeatureEntry。
  * 目录不存在或不可读 → 返回空数组(不是错误:项目可能没用 features 流程)。
- * 负责人与任务负责人同一口径(readFeatureOwner:主 spec → 交接文件),都没有时才取 plan index 头部,
- * 所以只有交接文件的目录也进「我的需求」。
+ * 负责人只认主 spec → 交接文件(readFeatureOwner,与任务负责人同一口径),
+ * 所以只有交接文件的目录也进「我的需求」;只有 plan 的目录负责人为 null。
  * 结果按日期倒序、标题升序排好。
  */
 export function scanFeatures(projectRoot: string): FeatureEntry[] {
@@ -194,24 +279,26 @@ export function scanFeatures(projectRoot: string): FeatureEntry[] {
     return [];
   }
 
-  const posixFeaturesDir = FEATURES_DIR.split(path.sep).join('/');
   const result: FeatureEntry[] = [];
   for (const name of dirNames) {
     const m = FEATURE_ID_PATTERN.exec(name);
     const dateFromName = m?.[1] ?? null;
     const title = m?.[2] ?? name;
     const featureDir = path.join(featuresRoot, name);
-    const metaFile = findMetaFile(featureDir);
-    const meta = metaFile
-      ? readHeaderMeta(metaFile)
-      : { owner: null, date: null };
+    // 日期元数据文件:主 spec → plan/index(日期取值逻辑不变)。
+    const mainSpecRel = findMainSpecRel(projectRoot, name);
+    const metaFile =
+      mainSpecRel !== null
+        ? absolutePath(projectRoot, mainSpecRel)
+        : findPlanIndexFile(featureDir);
+    const meta = metaFile !== null ? readHeaderMeta(metaFile) : null;
     result.push({
       featureId: name,
-      date: meta.date ?? dateFromName,
+      date: meta?.date ?? dateFromName,
       title,
-      owner: readFeatureOwner(projectRoot, name) ?? meta.owner,
-      stage: deriveStage(featureDir),
-      path: `${posixFeaturesDir}/${name}`,
+      owner: readFeatureOwner(projectRoot, name),
+      stage: deriveFeatureStage(projectRoot, name),
+      path: `${FEATURES_DIR_POSIX}/${name}`,
     });
   }
   result.sort(
@@ -222,72 +309,49 @@ export function scanFeatures(projectRoot: string): FeatureEntry[] {
   return result;
 }
 
-/** 主 spec 头部的任务声明行(`> 任务: <值>`,全角冒号也认)。 */
-const TASK_HEADER_PATTERN = /^>\s*任务\s*[:：]\s*(.*?)\s*$/;
-
-/** feature-id 只能是 docs/features/ 下的单段目录名。 */
-function isPlainFeatureId(featureId: string): boolean {
-  return (
-    featureId !== '' &&
-    featureId !== '.' &&
-    featureId !== '..' &&
-    !featureId.includes('/') &&
-    !featureId.includes('\\')
-  );
-}
-
 /**
- * 读需求目录主 spec 头部声明的任务值(spec §6.1)。
- *
- * 主 spec 的认定与读负责人相同(findMainSpec),不回退到 plan/index——任务只在 spec 里声明。
- * 头部 30 行内只认第一条 `> 任务:` 行;值为空等同于未声明。目录 / spec 不存在或读不了 → null。
+ * 读需求目录的负责人(spec §5):来源顺序取自 OWNER_SOURCE_TYPES——
+ * 主 spec 的 `> 负责人:` 优先;主 spec 不存在或没写,取顶层交接文件
+ * (按文件名长度升序、同长按字典序取第一个)的 `> 负责人:`。
+ * 两者都没有 → null。
  */
-export function readFeatureTask(projectRoot: string, featureId: string): string | null {
+export function readFeatureOwner(
+  projectRoot: string,
+  featureId: string,
+): string | null {
   if (!isPlainFeatureId(featureId)) return null;
-  const mainSpec = findMainSpec(path.join(projectRoot, FEATURES_DIR, featureId));
-  if (mainSpec === null) return null;
-  let text: string;
-  try {
-    text = fs.readFileSync(mainSpec, 'utf-8');
-  } catch {
-    return null;
-  }
-  for (const line of text.split('\n').slice(0, HEADER_SCAN_LINES)) {
-    const m = TASK_HEADER_PATTERN.exec(line);
-    if (!m) continue;
-    const value = (m[1] ?? '').trim();
-    return value === '' ? null : value;
+  const files = listFeatureFiles(projectRoot, featureId);
+  for (const sourceType of OWNER_SOURCE_TYPES) {
+    if (sourceType === 'spec') {
+      const mainSpecRel = mainSpecRelFromFiles(projectRoot, files);
+      if (mainSpecRel === null) continue;
+      const owner = ownerOf(projectRoot, mainSpecRel);
+      if (owner !== null) return owner;
+      continue;
+    }
+    const handoffRel = sortByFileName(
+      topLevelFilesOfType(projectRoot, files, sourceType),
+    )[0];
+    if (handoffRel !== undefined) return ownerOf(projectRoot, handoffRel);
   }
   return null;
 }
 
 /**
- * 读产出目录负责人(spec §2、§4.2):主 spec 头部 `> 负责人:` 优先;
- * 主 spec 没有该行(或没有主 spec)时,回退到交接文件 `<前缀>-交接提示词.md` 头部。
- * 多个交接文件按 compareSpecCandidates 取第一个,不再向后找。
- * 目录 / 文件不存在或都没有负责人 → null。
+ * 读需求目录主 spec 头部声明的任务值(spec §5、§6.1)。
+ *
+ * 主 spec 的认定与读负责人相同(findMainSpecRel),不回退到 plan/index——
+ * 任务只在主 spec 里声明。头部 30 行内只认第一条 `> 任务:` 行;
+ * 值为空等同于未声明。目录 / spec 不存在或读不了 → null。
  */
-export function readFeatureOwner(projectRoot: string, featureId: string): string | null {
+export function readFeatureTask(
+  projectRoot: string,
+  featureId: string,
+): string | null {
   if (!isPlainFeatureId(featureId)) return null;
-  const featureDir = path.join(projectRoot, FEATURES_DIR, featureId);
-
-  const mainSpec = findMainSpec(featureDir);
-  if (mainSpec !== null) {
-    const owner = readHeaderMeta(mainSpec).owner;
-    if (owner !== null) return owner;
-  }
-
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(featureDir);
-  } catch {
-    return null;
-  }
-  const handoff = entries
-    .filter((n) => n.endsWith('-交接提示词.md'))
-    .sort(compareSpecCandidates)[0];
-  if (handoff === undefined) return null;
-  return readHeaderMeta(path.join(featureDir, handoff)).owner;
+  const mainSpecRel = findMainSpecRel(projectRoot, featureId);
+  if (mainSpecRel === null) return null;
+  return taskOf(projectRoot, mainSpecRel);
 }
 
 /**
@@ -307,12 +371,11 @@ export function scanFeatureTasks(
   } catch {
     return [];
   }
-  const posixFeaturesDir = FEATURES_DIR.split(path.sep).join('/');
   const result: Array<{ featureId: string; path: string; task: string }> = [];
   for (const name of dirNames) {
     const task = readFeatureTask(projectRoot, name);
     if (task !== null) {
-      result.push({ featureId: name, path: `${posixFeaturesDir}/${name}`, task });
+      result.push({ featureId: name, path: `${FEATURES_DIR_POSIX}/${name}`, task });
     }
   }
   return result;

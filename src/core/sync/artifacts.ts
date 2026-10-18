@@ -1,46 +1,37 @@
 /**
- * 上报产出(spec §5.5):产物类型映射 + 本会话产出收集。
+ * 上报产出(spec §11.1–§11.3、§11.5):类型识别经产物注册表 + 本会话产出收集。
  *
- * 口径只服务平台上报,与 `src/core/task/artifacts.ts`(本地 web)相互独立,不得互相引用。
+ * 口径只服务平台上报;类型标识与路径规则唯一定义在 `src/core/artifact-registry/`。
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 
+import {
+  getBuiltinArtifactType,
+  identifyArtifact,
+  reportableTypeKeys,
+  type ReportTier,
+} from '../artifact-registry';
 import type { TimelineEvent } from '../timeline';
 import { createPathResolver } from './paths';
 import type { SyncContext } from './payload';
-import type { ArtifactType, IngestArtifact, IngestCommit } from './types';
+import type { IngestArtifact, IngestCommit, UnreportedArtifact } from './types';
+import type { ServerTier } from './version';
 
-/** 需求目录前缀 `docs/features/<feature-id>/`。 */
-const F = '^docs/features/[^/]+/';
-
-/** 产物类型映射表,先命中先用(spec §5.5 表顺序)。 */
-const ARTIFACT_RULES: ReadonlyArray<{ type: ArtifactType; re: RegExp }> = [
-  { type: 'ui_test_spec', re: new RegExp(`${F}ui功能测试/[^/]*-ui功能测试-spec\\.md$`) },
-  {
-    type: 'ui_test_report',
-    re: new RegExp(`${F}ui功能测试/([^/]*-ui功能测试报告\\.(xlsx|md)|[^/]*-ui功能测试结果\\.json|[^/]*\\.png)$`),
-  },
-  { type: 'api_test_spec', re: new RegExp(`${F}[^/]*-接口测试-spec\\.md$`) },
-  { type: 'api_test_report', re: new RegExp(`${F}[^/]*(-接口测试报告\\.md|-测试报告\\.md|-接口测试验证\\.jsonl)$`) },
-  { type: 'unit_test_spec', re: new RegExp(`${F}[^/]*-单元测试-spec\\.md$`) },
-  { type: 'unit_test_report', re: new RegExp(`${F}[^/]*-单元测试报告\\.md$`) },
-  { type: 'spec', re: new RegExp(`${F}[^/]*-spec\\.md$`) },
-  { type: 'plan', re: new RegExp(`${F}plan/.+`) },
-  { type: 'wireframe', re: new RegExp(`${F}[^/]*-线框-v\\d+\\.html$`) },
-  { type: 'knowledge', re: /^docs\/knowledge\/.+/ },
-  { type: 'code_map', re: /^docs\/code-map\/.+/ },
-  { type: 'design_map', re: /^docs\/design-map\/.+/ },
-  { type: 'schema_knowledge', re: /^docs\/schema-knowledge\/.+/ },
-];
-
-/** 项目相对路径 → 平台产物类型;不命中返回 null(不作为产出上报)。 */
-export function classifyArtifactType(projectRelPath: string): ArtifactType | null {
-  for (const rule of ARTIFACT_RULES) {
-    if (rule.re.test(projectRelPath)) return rule.type;
+/**
+ * 某档位可上报的产出类型集合(spec §11.1)。
+ *
+ * 1.0 / 1.1 只发 13 个基础类型;1.2 发 18 个固定类型;1.3 以本项目类型表为准
+ * (未取到缓存时退回 19 个默认类型)。本地专用类型在任何档位都不在集合内。
+ */
+export function reportableTypesFor(tier: ServerTier, projectTypes: readonly string[] | null): ReadonlySet<string> {
+  if (tier === '1.3' && projectTypes !== null) {
+    // 项目类型表是权威集合:去掉本地专用类型(注册表 minTier 为 null),自定义类型保留。
+    return new Set(projectTypes.filter((key) => getBuiltinArtifactType(key)?.minTier !== null));
   }
-  return null;
+  const reportTier: ReportTier = tier === '1.1' ? '1.0' : tier;
+  return reportableTypeKeys(reportTier);
 }
 
 const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
@@ -76,13 +67,15 @@ function laterTs(a: string, b: string): string {
  *
  * @param events 本会话全部事件(终端会话传空数组)。
  * @param sessionCommits 本会话已构造好的 commit(终端会话传终端 commit)。
- * @returns artifacts:命中映射表的产出;outputPaths:全部候选的项目相对路径(映射前,供参考排除)。
+ * @returns artifacts:经注册表识别、且在档位可上报集合内的产出;
+ *          outputPaths:全部候选的项目相对路径(识别前,供参考排除);
+ *          unreported:可上报集合外、本轮不发送的产出(仓库相对路径,spec §11.4)。
  */
 export function collectSessionArtifacts(
   ctx: SyncContext,
   events: TimelineEvent[],
   sessionCommits: IngestCommit[],
-): { artifacts: IngestArtifact[]; outputPaths: Set<string> } {
+): { artifacts: IngestArtifact[]; outputPaths: Set<string>; unreported: UnreportedArtifact[] } {
   const resolver = createPathResolver(ctx.projectRoot, ctx.repoRoot);
   // repoRel → { projectRel, lastChangeTs }
   const candidates = new Map<string, { projectRel: string; lastChangeTs: string }>();
@@ -110,39 +103,54 @@ export function collectSessionArtifacts(
   for (const c of candidates.values()) outputPaths.add(c.projectRel);
 
   const artifacts: IngestArtifact[] = [];
+  const unreported: UnreportedArtifact[] = [];
   for (const [repoRel, { projectRel, lastChangeTs }] of candidates) {
-    const type = classifyArtifactType(projectRel);
-    if (type === null) continue;
+    const identity = identifyArtifact(ctx.projectRoot, projectRel);
+    if (identity === null || identity.localOnly) continue;
 
     const changeMs = Date.parse(lastChangeTs);
     const commit = ctx.commitEvents.find(
       (ce) => ce.commit_hash !== null && Date.parse(ce.ts) >= changeMs && ce.commit_files.includes(repoRel),
     );
+    const hasCommit = commit !== undefined && commit.commit_hash !== null;
 
+    // 无 commit:改过又删掉、从未进入 commit 的文件不上报
+    if (!hasCommit && !fs.existsSync(path.join(ctx.repoRoot, repoRel))) continue;
+
+    // 档位可上报集合之外:不发送,记为未上报产出
+    if (!ctx.allowedTypes.has(identity.type)) {
+      unreported.push({ type: identity.type, path: repoRel });
+      continue;
+    }
+
+    let artifact: IngestArtifact;
     if (commit !== undefined && commit.commit_hash !== null) {
       const hash = commit.commit_hash;
-      artifacts.push({
-        type,
+      artifact = {
+        type: identity.type,
         path: repoRel,
         action: ctx.git.fileAddedIn(hash, repoRel) ? 'create' : 'modify',
         commitHash: ctx.git.isOnRemote(hash) ? hash : null,
         branch: typeof commit.metadata.branch === 'string' ? commit.metadata.branch : null,
         ts: lastChangeTs,
-      });
-      continue;
+      };
+    } else {
+      artifact = {
+        type: identity.type,
+        path: repoRel,
+        action: ctx.git.isTracked(repoRel) ? 'modify' : 'create',
+        commitHash: null,
+        branch: null,
+        ts: lastChangeTs,
+      };
     }
 
-    // 无 commit:改过又删掉、从未进入 commit 的文件不上报
-    if (!fs.existsSync(path.join(ctx.repoRoot, repoRel))) continue;
-    artifacts.push({
-      type,
-      path: repoRel,
-      action: ctx.git.isTracked(repoRel) ? 'modify' : 'create',
-      commitHash: null,
-      branch: null,
-      ts: lastChangeTs,
-    });
+    // 任务键:协议 ≥ 1.2 且产出位于需求目录(spec §11.5)
+    if ((ctx.tier === '1.2' || ctx.tier === '1.3') && identity.featureId !== null) {
+      artifact.taskKey = identity.featureId;
+    }
+    artifacts.push(artifact);
   }
 
-  return { artifacts, outputPaths };
+  return { artifacts, outputPaths, unreported };
 }

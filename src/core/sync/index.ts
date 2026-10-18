@@ -10,7 +10,8 @@ export { connectPlatform, disconnectPlatform, readConnection, recordReferenceHit
 export { spawnSyncWorker } from './spawn';
 export { runSync, runWorker } from './runner';
 export { getSyncStatus } from './status';
-export { getClientVersion } from './version';
+export { readCachedProjectArtifactTypes } from './platform-spec';
+export { getClientVersion, serverTier, type ServerTier } from './version';
 export { syncSessionStartHook, syncStopHook } from './hooks';
 export { installSyncHooks, uninstallSyncHooks } from './installer';
 export {
@@ -37,9 +38,18 @@ export {
   SYNC_HOOK_MARKER,
   PAUSE_NOTICES,
 } from './constants';
-export { ARTIFACT_TYPES, CLIENT_ERROR_CODES, PAUSE_REASONS, TASK_KEY_PROTOCOL_VERSION } from './types';
+export {
+  ARTIFACT_TASK_KEY_PROTOCOL_VERSION,
+  CLIENT_ERROR_CODES,
+  PAUSE_REASONS,
+  PROJECT_SPEC_PROTOCOL_VERSION,
+  TASK_KEY_PROTOCOL_VERSION,
+} from './types';
 export type {
   ArtifactType,
+  UnreportedArtifact,
+  PlatformSpecCache,
+  WarningsRecord,
   ClientErrorCode,
   PauseReason,
   ConnectRequest,

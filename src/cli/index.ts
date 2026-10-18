@@ -32,6 +32,7 @@ import { registerDocsCommands } from '../core/markdown/cli';
 import { registerDbCommands } from '../core/dbquery/cli';
 import { registerTimelineCommands } from '../core/timeline/cli';
 import { registerFeaturesCommands } from '../core/features/cli';
+import { readCachedProjectArtifactTypes } from '../core/sync';
 import { registerTaskCommands } from '../core/task/cli';
 import { registerSyncCommands } from '../core/sync/cli';
 import { registerReportCommands } from '../core/report/cli';
@@ -163,7 +164,9 @@ function main(): void {
   registerDocsCommands(program);
   registerDbCommands(program);
   registerTimelineCommands(program);
-  registerFeaturesCommands(program);
+  registerFeaturesCommands(program, {
+    readProjectArtifactTypes: readCachedProjectArtifactTypes,
+  });
   registerTaskCommands(program);
   registerSyncCommands(program);
   registerReportCommands(program);

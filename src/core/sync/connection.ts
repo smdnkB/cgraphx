@@ -13,10 +13,13 @@ import { CLIENT_NAME, FOREGROUND_LOCK_WAIT_MS, TASKS_PATH_SUFFIX } from './const
 import { SyncArgError, SyncBusyError, SyncNotInitializedError, SyncPlatformError } from './errors';
 import { acquireLock, releaseLock } from './lock';
 import { getOriginUrl } from './git';
+import { refreshPlatformSpec } from './platform-spec';
 import { openSyncDb } from './schema-bootstrap';
 import {
   clearConnectionState,
+  clearPlatformState,
   clearSessions,
+  clearUnreported,
   emptyStatus,
   getConnection,
   insertReferenceRecord,
@@ -24,7 +27,7 @@ import {
   setStatus,
 } from './store';
 import type { ConnectInput, ConnectOutcome, ReferenceHit, SyncConnection } from './types';
-import { getClientVersion } from './version';
+import { getClientVersion, serverTier } from './version';
 
 const BEARER_PREFIX = 'Bearer ';
 
@@ -163,11 +166,26 @@ async function connectLocked(
       setConnection(db, connection, now);
       setStatus(db, { ...emptyStatus(), serverProtocolVersion: resp.protocolVersion ?? null }, now);
       clearSessions(db); // 重新回传全部历史(spec §3.2 / §4.3)
+      clearPlatformState(db); // 接入时清空上一轮的类型表缓存、告警与基准(spec §11.4)
+      clearUnreported(db);
     })();
   } finally {
     conn.close();
   }
-  // 10
+  // 10. 档位 ≥ 1.3:接入成功后拉一次本项目类型表;失败只写 stderr,不影响接入结果
+  if (serverTier(resp.protocolVersion ?? null) === '1.3') {
+    try {
+      const specConn = openSyncDb(projectRoot);
+      try {
+        await refreshPlatformSpec(specConn.getDb(), serverUrl, resp.token, remoteUrl, now);
+      } finally {
+        specConn.close();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[sync] 拉取本项目产物类型表失败,本轮按默认类型表上报:${message}\n`);
+    }
+  }
   return { kind: 'connected', connection, replacedExisting };
 }
 

@@ -1,19 +1,19 @@
 /**
  * 同步执行器(spec §4.1–§4.6、§9):候选判定 → 构造 → 发送前断言 → 分批上报 → 失败分级 → 进度推进。
  *
- * 进度只按「整批成功响应」推进(spec §4.6),不使用回执里的 `accepted` 计数;`warnings` 只计数,不重试、不提示。
+ * 进度只按「整批成功响应」推进(spec §4.6),不使用回执里的 `accepted` 计数;`warnings` 不重试,
+ * 明细随结果返回并持久化,`sync status` / `sync now` 展示。
  * 一轮同步期间持有 `.cgraphx/sync.lock`;worker 另持 `.cgraphx/sync-worker.pid`(见 lock.ts)。
  */
 
 import type { SqliteDatabase } from '../db';
 import { recordFeatureTaskMappings, refreshAutoBindings } from '../task';
 import { listCommitEvents, listSessionEventMaxIds } from '../timeline';
+import { chunkSession, envelopeBytes, groupBySession, packBatches, splitChunkEvents, type Chunk } from './batching';
 import { getStatus as probePlatformStatus, postIngest } from './client';
 import { readConnection } from './connection';
 import {
-  BATCH_MAX_BYTES,
   BATCH_MAX_EVENTS,
-  BATCH_MAX_SESSIONS,
   CLIENT_NAME,
   FOREGROUND_LOCK_WAIT_MS,
   PAUSE_PROBE_MS,
@@ -25,6 +25,7 @@ import { getOriginUrl } from './git';
 import { acquireLock, claimWorker, refreshWorker, releaseLock, releaseWorker } from './lock';
 import { isSafeRelPath } from './paths';
 import {
+  basisOf,
   bindingsHashOf,
   buildSessionPayload,
   buildTerminalPayload,
@@ -33,28 +34,33 @@ import {
   type BuiltSession,
   type SyncContext,
 } from './payload';
+import { refreshPlatformSpec } from './platform-spec';
 import { openSyncDb } from './schema-bootstrap';
 import {
   ackSession,
   advanceSessionEvents,
+  getBasis,
   getConnection,
   getStatus as readStatusState,
   isolateSession,
   listSessions,
+  replaceUnreported,
+  setBasis,
+  setLastWarnings,
   setStatus,
   updatePendingPush,
   type SyncSessionRow,
 } from './store';
 import {
   PAUSE_REASONS,
-  TASK_KEY_PROTOCOL_VERSION,
   type IngestRequest,
   type IngestSession,
+  type IngestWarning,
   type PauseReason,
   type SyncRunResult,
   type SyncStatusState,
 } from './types';
-import { protocolAtLeast } from './version';
+import { serverTier } from './version';
 
 type SyncMode = 'foreground' | 'background';
 
@@ -80,12 +86,13 @@ export function isExcludedByIsolation(row: SyncSessionRow | undefined, clientVer
 
 /** agent 会话候选判定(plan T-4 runSync 第 5 步)。 */
 export function isAgentCandidate(
-  ctx: Pick<SyncContext, 'bindingsBySession' | 'clientVersion' | 'supportsTaskKey'>,
+  ctx: Pick<SyncContext, 'bindingsBySession' | 'clientVersion' | 'supportsTaskKey' | 'reevaluateAll'>,
   sessionId: string,
   maxId: number,
   row: SyncSessionRow | undefined,
 ): boolean {
   if (isExcludedByIsolation(row, ctx.clientVersion)) return false;
+  if (ctx.reevaluateAll) return true;
   if (row === undefined) return true;
   if (maxId > row.last_event_id) return true;
   if (row.pending_push === 1) return true;
@@ -124,109 +131,6 @@ function dropUnsafePaths(session: IngestSession): number {
   return dropped;
 }
 
-// ─── 分块与装箱 ─────────────────────────────────────────────────────────────
-
-/** 一个会话的一块:非最后块只含事件;最后块带 bindings / commits / artifacts / references。 */
-interface Chunk {
-  session: IngestSession;
-  built: BuiltSession;
-  isLast: boolean;
-  recordCount: number;
-  bytes: number;
-}
-
-function makeChunk(built: BuiltSession, session: IngestSession, isLast: boolean): Chunk {
-  const recordCount =
-    session.events.length +
-    session.bindings.length +
-    session.commits.length +
-    session.artifacts.length +
-    session.references.length;
-  return { session, built, isLast, recordCount, bytes: Buffer.byteLength(JSON.stringify(session), 'utf-8') };
-}
-
-/** 把会话的事件切成 ≤ BATCH_MAX_EVENTS 的块;其余字段只放最后一块。 */
-function chunkSession(built: BuiltSession, maxEvents: number): Chunk[] {
-  const s = built.session;
-  const chunks: Chunk[] = [];
-  let start = 0;
-  while (s.events.length - start > maxEvents) {
-    const events = s.events.slice(start, start + maxEvents);
-    chunks.push(
-      makeChunk(built, { clientSessionId: s.clientSessionId, events, bindings: [], commits: [], artifacts: [], references: [] }, false),
-    );
-    start += maxEvents;
-  }
-  chunks.push(makeChunk(built, { ...s, events: s.events.slice(start) }, true));
-  return chunks;
-}
-
-/** 单块事件对半切(413 后重发用);事件 < 2 条返回 null。 */
-function splitChunkEvents(chunk: Chunk): [Chunk, Chunk] | null {
-  const s = chunk.session;
-  if (s.events.length < 2) return null;
-  const mid = Math.ceil(s.events.length / 2);
-  const head = makeChunk(
-    chunk.built,
-    { clientSessionId: s.clientSessionId, events: s.events.slice(0, mid), bindings: [], commits: [], artifacts: [], references: [] },
-    false,
-  );
-  const tail = makeChunk(chunk.built, { ...s, events: s.events.slice(mid) }, chunk.isLast);
-  return [head, tail];
-}
-
-/** 请求信封(不含 sessions)的近似字节数。 */
-function envelopeBytes(ctx: SyncContext): number {
-  return Buffer.byteLength(
-    JSON.stringify({
-      remoteUrl: ctx.remoteUrl,
-      clientName: CLIENT_NAME,
-      clientVersion: ctx.clientVersion,
-      backlog: Number.MAX_SAFE_INTEGER,
-      sessions: [],
-    }),
-    'utf-8',
-  );
-}
-
-/** 按会话数 / 事件数 / 字节数装箱,保持块顺序(同会话的块先后不变)。 */
-function packBatches(chunks: Chunk[], baseBytes: number): Chunk[][] {
-  const batches: Chunk[][] = [];
-  let current: Chunk[] = [];
-  let events = 0;
-  let bytes = baseBytes;
-  for (const chunk of chunks) {
-    const n = chunk.session.events.length;
-    const fits =
-      current.length < BATCH_MAX_SESSIONS &&
-      events + n <= BATCH_MAX_EVENTS &&
-      bytes + chunk.bytes + 1 <= BATCH_MAX_BYTES;
-    if (!fits && current.length > 0) {
-      batches.push(current);
-      current = [];
-      events = 0;
-      bytes = baseBytes;
-    }
-    current.push(chunk);
-    events += n;
-    bytes += chunk.bytes + 1;
-  }
-  if (current.length > 0) batches.push(current);
-  return batches;
-}
-
-/** 按会话分组(保持首次出现顺序)。 */
-function groupBySession(chunks: Chunk[]): Chunk[][] {
-  const groups = new Map<string, Chunk[]>();
-  for (const chunk of chunks) {
-    const id = chunk.session.clientSessionId;
-    const list = groups.get(id);
-    if (list === undefined) groups.set(id, [chunk]);
-    else list.push(chunk);
-  }
-  return [...groups.values()];
-}
-
 // ─── 一轮上报 ───────────────────────────────────────────────────────────────
 
 interface Stop {
@@ -247,6 +151,8 @@ interface Round {
   recordsSent: number;
   isolatedNew: number;
   warnings: number;
+  /** 本轮收到的平台告警(按到达顺序);`warnings` 恒等于其长度。 */
+  warningItems: IngestWarning[];
   /** 本轮被隔离的会话:其后续块不再发送,防止水位越过被拒数据。 */
   isolated: Set<string>;
   /** 是否已发过单会话请求(判定「首个单会话请求被拒 + 涉及远程地址」为整批级错误)。 */
@@ -325,7 +231,8 @@ async function sendBatch(round: Round, input: Chunk[]): Promise<Stop | null> {
       );
     }
     ackChunks(round, chunks);
-    round.warnings += resp.warnings.length;
+    round.warningItems.push(...resp.warnings);
+    round.warnings = round.warningItems.length;
     return null;
   } catch (err) {
     if (!(err instanceof SyncPlatformError)) {
@@ -387,6 +294,8 @@ async function collectChunks(round: Round): Promise<Chunk[]> {
     const row = rows.get(sessionId);
     if (!isAgentCandidate(ctx, sessionId, maxId, row)) continue;
     const built = await buildSessionPayload(ctx, sessionId, row?.last_event_id ?? 0);
+    // 未上报产出按会话整体替换;放在「无新事件且内容未变跳过」之前,缓存变化后照样更新
+    replaceUnreported(db, sessionId, built.unreported);
     if (built.session.events.length === 0 && built.extrasHash === row?.extras_hash) {
       if (row !== undefined && (row.pending_push === 1) !== built.pendingPush) {
         updatePendingPush(db, sessionId, built.pendingPush);
@@ -397,6 +306,7 @@ async function collectChunks(round: Round): Promise<Chunk[]> {
   }
 
   const terminal = buildTerminalPayload(ctx);
+  if (terminal !== null) replaceUnreported(db, terminal.session.clientSessionId, terminal.unreported);
   if (terminalNeedsSend(terminal, rows, ctx.clientVersion)) builtList.push(terminal);
 
   const chunks: Chunk[] = [];
@@ -422,6 +332,7 @@ function makeResult(
     recordsSent: round?.recordsSent ?? 0,
     isolatedNew: round?.isolatedNew ?? 0,
     warnings: round?.warnings ?? 0,
+    warningItems: round?.warningItems ?? [],
     stoppedBy: by,
     error: stop?.error ?? null,
   };
@@ -456,6 +367,10 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
     const now = new Date().toISOString();
     const finish = (round: Round | null, stop: Stop | null): SyncRunResult => {
       const result = makeResult(now, round, stop);
+      // 中途停止的轮次同样记录本轮已收到的告警;没收到告警的轮次不清空上次记录
+      if (round !== null && round.warningItems.length > 0) {
+        setLastWarnings(db, { at: now, items: round.warningItems }, now);
+      }
       status.lastResult = result;
       setStatus(db, status, now);
       return result;
@@ -499,16 +414,25 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
     // 5. 记尝试时间,构造上下文
     status.lastAttemptAt = now;
     setStatus(db, status, now);
-    const supportsTaskKey = protocolAtLeast(status.serverProtocolVersion, TASK_KEY_PROTOCOL_VERSION);
+    const tier = serverTier(status.serverProtocolVersion);
+    // 档位 ≥ 1.3 每轮上报前刷新本项目类型表;失败按默认类型表继续,不暂停、不计为同步失败
+    let projectTypes: string[] | null = null;
+    if (tier === '1.3') {
+      const remoteUrl = getOriginUrl(projectRoot);
+      if (remoteUrl !== null) projectTypes = await refreshPlatformSpec(db, conn.serverUrl, conn.token, remoteUrl, now);
+    }
     let ctx: SyncContext;
     try {
-      ctx = await createSyncContext(projectRoot, { supportsTaskKey });
+      ctx = await createSyncContext(projectRoot, { tier, projectTypes });
     } catch (err) {
       if (!(err instanceof SyncError)) throw err;
       status.failingSince ??= now;
       status.lastError = err.message;
       return finish(null, { stoppedBy: 'failing', error: err.message });
     }
+    // 档位 / 本项目类型表 / 映射版本变化后,下一轮重新评估全部会话的产出(spec §11.6)
+    const basis = basisOf(ctx);
+    ctx.reevaluateAll = getBasis(db) !== basis;
 
     const round: Round = {
       db,
@@ -522,6 +446,7 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
       recordsSent: 0,
       isolatedNew: 0,
       warnings: 0,
+      warningItems: [],
       isolated: new Set(),
       singleSessionSent: false,
     };
@@ -541,6 +466,8 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
     status.lastSuccessAt = now;
     status.failingSince = null;
     status.lastError = refreshError;
+    // 基准只在整轮成功后写入:中途停止的轮次下一轮仍会重新评估、补报
+    setBasis(db, basis, now);
     return finish(round, null);
   } finally {
     dbConn.close();

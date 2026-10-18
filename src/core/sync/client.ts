@@ -5,9 +5,16 @@
  * 网络失败 / 超时 → SyncNetworkError。错误消息不得包含 token 或密码。
  */
 
+import { isValidArtifactTypeKey } from '../artifact-registry';
 import { CLIENT_API_PREFIX, CLIENT_TIMEOUT_MS } from './constants';
 import { SyncNetworkError, SyncPlatformError } from './errors';
 import type { ClientStatus, ConnectRequest, ConnectResponse, IngestRequest, IngestResponse } from './types';
+
+/** `/spec` 返回的本项目类型表条目(只保留合法类型标识)。 */
+interface ProjectSpecResponse {
+  protocolVersion?: string;
+  artifactTypes: Array<{ key: string; name: string; phase: string }>;
+}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -126,6 +133,34 @@ export async function getStatus(serverUrl: string, token: string, remoteUrl: str
     lastSyncAt: typeof data.lastSyncAt === 'string' ? data.lastSyncAt : null,
     backlog: typeof data.backlog === 'number' ? data.backlog : null,
   };
+}
+
+/**
+ * `GET /spec?remoteUrl=`:拉取本项目产物类型表(spec §11.3)。
+ *
+ * 顶层不是对象、或 `artifactTypes` 不是数组 → invalid_response;
+ * 条目只保留类型标识合法(产物注册表口径)的项,`name` / `phase` 非字符串时分别用 key / ''。
+ */
+export async function getSpec(serverUrl: string, token: string, remoteUrl: string): Promise<ProjectSpecResponse> {
+  const { status, body: data } = await requestJson(
+    serverUrl,
+    `/spec?remoteUrl=${encodeURIComponent(remoteUrl)}`,
+    { method: 'GET', token },
+  );
+  if (!isRecord(data)) throw invalidResponse(status, '顶层不是对象');
+  if (!Array.isArray(data.artifactTypes)) throw invalidResponse(status, '缺少 artifactTypes');
+  const artifactTypes: ProjectSpecResponse['artifactTypes'] = [];
+  for (const item of data.artifactTypes) {
+    if (!isRecord(item) || typeof item.key !== 'string' || !isValidArtifactTypeKey(item.key)) continue;
+    artifactTypes.push({
+      key: item.key,
+      name: typeof item.name === 'string' ? item.name : item.key,
+      phase: typeof item.phase === 'string' ? item.phase : '',
+    });
+  }
+  const response: ProjectSpecResponse = { artifactTypes };
+  if (typeof data.protocolVersion === 'string') response.protocolVersion = data.protocolVersion;
+  return response;
 }
 
 /** `POST /ingest`:上报一批会话。 */

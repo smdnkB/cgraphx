@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { FEATURES_DIR_POSIX, SEDIMENT_TYPE_ROOTS } from '../artifact-registry';
 import type { TimelineEvent } from '../timeline';
 import { ARTIFACT_CATEGORIES, REFERENCE_CATEGORIES } from './constants';
 import type { ArtifactCategory, ArtifactGroup, ReferenceReport } from './types';
@@ -26,10 +27,20 @@ const CONCEPT_ARG = /--concept(?:=|\s+)(?:"([^"]+)"|'([^']+)'|([^\s"'|;&]+))/g;
 
 /** spec §5.2,先命中先用;relPath 为项目相对 POSIX 路径。 */
 export function classifyArtifactPath(relPath: string): ArtifactCategory {
-  if (relPath.startsWith('docs/features/')) return 'feature-doc';
-  if (relPath.startsWith('docs/knowledge/')) return 'knowledge';
-  if (relPath.startsWith('docs/schema-knowledge/') || relPath.endsWith('.sql')) return 'schema';
-  if (relPath.startsWith('docs/code-map/') || relPath.startsWith('docs/design-map/')) return 'diagram';
+  if (relPath.startsWith(FEATURES_DIR_POSIX + '/')) return 'feature-doc';
+  if (relPath.startsWith(SEDIMENT_TYPE_ROOTS.knowledge)) return 'knowledge';
+  if (
+    relPath.startsWith(SEDIMENT_TYPE_ROOTS.schema_knowledge) ||
+    relPath.endsWith('.sql')
+  ) {
+    return 'schema';
+  }
+  if (
+    relPath.startsWith(SEDIMENT_TYPE_ROOTS.code_map) ||
+    relPath.startsWith(SEDIMENT_TYPE_ROOTS.design_map)
+  ) {
+    return 'diagram';
+  }
   if (relPath.startsWith('docs/bruno/')) return 'api-test';
   return 'code';
 }

@@ -2,6 +2,7 @@
  * sync 子系统常量。T-4 / T-5 的常量由各自任务追加到本文件。
  */
 
+import { SEDIMENT_DIR_PREFIXES } from '../artifact-registry';
 import type { PauseReason } from './types';
 
 /** sync schema 版本(独立的 sync_schema_versions 表)。 */
@@ -22,8 +23,8 @@ export const CLIENT_TIMEOUT_MS = 30_000;
 /** 终端会话 id 前缀(后接 16 位十六进制)。 */
 export const TERMINAL_SESSION_PREFIX = 'cgraphx-terminal-';
 
-/** 沉淀目录(项目根相对 POSIX 路径前缀;唯一定义处)。 */
-export const SEDIMENT_DIRS = ['docs/knowledge/', 'docs/schema-knowledge/', 'docs/code-map/', 'docs/design-map/'] as const;
+/** 沉淀目录(项目根相对 POSIX 路径前缀;唯一定义处是产物注册表)。 */
+export const SEDIMENT_DIRS = SEDIMENT_DIR_PREFIXES;
 
 /** 一次 runSync 期间持有的互斥锁文件名(位于 `.cgraphx/`)。 */
 export const LOCK_FILENAME = 'sync.lock';

@@ -2,28 +2,16 @@
  * sync 子系统类型。
  *
  * 上半部分为平台客户端协议类型:镜像 @cgraphx-server/contract client.ts v1,只增不改
- * (字段名与可选性逐字同契约)。下半部分为本地类型(连接信息、同步状态、接入入参与结果)。
+ * (字段名与可选性逐字同契约)。产出 type 放宽为字符串(服务端自契约 0.3.0 起按字符串接收)。
+ * 下半部分为本地类型(连接信息、同步状态、接入入参与结果)。
  */
+
+import type { ServerTier } from './version';
 
 // ─── 协议类型(镜像 @cgraphx-server/contract client.ts v1,只增不改) ──────────
 
-/** 产物类型,顺序同契约 enums.ts。 */
-export const ARTIFACT_TYPES = [
-  'spec',
-  'plan',
-  'wireframe',
-  'api_test_spec',
-  'api_test_report',
-  'unit_test_spec',
-  'unit_test_report',
-  'ui_test_spec',
-  'ui_test_report',
-  'knowledge',
-  'code_map',
-  'design_map',
-  'schema_knowledge',
-] as const;
-export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
+/** 产物类型标识:内置类型 + 项目自定义类型(合法标识口径见产物注册表)。 */
+export type ArtifactType = string;
 
 /** 平台错误码(错误体 `{ error, message, retryable }` 的 error)。 */
 export const CLIENT_ERROR_CODES = [
@@ -111,6 +99,8 @@ export interface IngestArtifact {
   commitHash: string | null;
   branch: string | null;
   ts: string;
+  /** 任务键(所在产出目录的 feature-id);协议 ≥ 1.2 且位于需求目录时携带。 */
+  taskKey?: string;
 }
 
 export interface IngestReference {
@@ -142,7 +132,8 @@ export type IngestWarning =
   | { kind: 'path_dropped'; path: string }
   | { kind: 'binding_pending'; bindingId: string; taskKey: string }
   | { kind: 'task_key_declared_by_other'; taskKey: string }
-  | { kind: 'task_declaration_invalid'; taskKey: string; reason: 'invalid_key' | 'invalid_name' };
+  | { kind: 'task_declaration_invalid'; taskKey: string; reason: 'invalid_key' | 'invalid_name' }
+  | { kind: 'artifact_type_unknown'; path: string; type: string };
 
 export interface IngestResponse {
   accepted: {
@@ -162,6 +153,12 @@ export interface IngestResponse {
 /** 支持任务声明与任务键的最低服务端协议版本(用 protocolAtLeast 比较)。 */
 export const TASK_KEY_PROTOCOL_VERSION = '1.1';
 
+/** 产出携带任务键的最低服务端协议版本(spec §11.1)。 */
+export const ARTIFACT_TASK_KEY_PROTOCOL_VERSION = '1.2';
+
+/** 调用 `/spec` 拉取本项目类型表的最低服务端协议版本(spec §11.1)。 */
+export const PROJECT_SPEC_PROTOCOL_VERSION = '1.3';
+
 // ─── 本地类型 ───────────────────────────────────────────────────────────────
 
 /** 本地连接信息(`sync_state.connection`);手工存量配置时后三项为 null。不含 token。 */
@@ -172,6 +169,24 @@ export interface SyncConnection {
   connectedAt: string | null;
 }
 
+/** 本轮在档位可上报集合外、不发送的产出(path 为仓库相对路径,spec §11.4)。 */
+export interface UnreportedArtifact {
+  type: string;
+  path: string;
+}
+
+/** `sync_state.platform_spec`:最近一次 `/spec` 返回的本项目类型表缓存。 */
+export interface PlatformSpecCache {
+  fetchedAt: string;
+  artifactTypes: Array<{ key: string; name: string; phase: string }>;
+}
+
+/** `sync_state.warnings`:最近一次收到的平台告警(spec §11.4)。 */
+export interface WarningsRecord {
+  at: string;
+  items: IngestWarning[];
+}
+
 /** 一轮同步的结果摘要。 */
 export interface SyncRunResult {
   at: string;
@@ -180,6 +195,8 @@ export interface SyncRunResult {
   recordsSent: number;
   isolatedNew: number;
   warnings: number;
+  /** 本轮收到的平台告警(按到达顺序);持久化到状态时不保存。 */
+  warningItems: IngestWarning[];
   stoppedBy: 'paused' | 'failing' | 'not_connected' | 'busy' | null;
   error: string | null;
 }
@@ -228,4 +245,12 @@ export interface SyncStatusReport {
   pendingSessions: number;
   /** 被平台拒收而隔离的会话数。 */
   isolatedSessions: number;
+  /** 服务端协议档位(spec §11.1)。 */
+  tier: ServerTier;
+  /** 档位 1.3 且已有缓存时的本项目类型表摘要。 */
+  platformSpec: { typeCount: number; fetchedAt: string } | null;
+  /** 最近一次收到的平台告警(spec §11.4)。 */
+  lastWarnings: WarningsRecord | null;
+  /** 当前未上报产出,按类型汇总。 */
+  unreported: Array<{ type: string; count: number; samplePath: string }>;
 }

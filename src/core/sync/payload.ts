@@ -11,9 +11,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { agentConfigDir, listAgentProfiles } from '../agents';
+import { ARTIFACT_MAPPING_VERSION } from '../artifact-registry';
 import { listEffectiveBindings, listMyFeatureTaskDeclarations, type EffectiveBinding } from '../task';
 import { listCommitEvents, listSessionEventsAfter, type TimelineEvent } from '../timeline';
-import { collectSessionArtifacts } from './artifacts';
+import { collectSessionArtifacts, reportableTypesFor } from './artifacts';
 import { TERMINAL_SESSION_PREFIX } from './constants';
 import { SyncArgError } from './errors';
 import { createGitCache, getOriginUrl, getRepoToplevel, type GitCache } from './git';
@@ -21,16 +22,29 @@ import { isSafeRelPath } from './paths';
 import { collectSessionReferences } from './references';
 import { openSyncDb } from './schema-bootstrap';
 import { listAllReferenceRecords } from './store';
-import type { IngestBinding, IngestCommit, IngestEvent, IngestSession, IngestTaskDeclaration } from './types';
-import { getClientVersion } from './version';
+import type {
+  IngestBinding,
+  IngestCommit,
+  IngestEvent,
+  IngestSession,
+  IngestTaskDeclaration,
+  UnreportedArtifact,
+} from './types';
+import { getClientVersion, type ServerTier } from './version';
 
 export interface SyncContext {
   projectRoot: string;
   repoRoot: string;
   remoteUrl: string;
   clientVersion: string;
-  /** 服务端是否支持任务声明与任务键(协议 ≥ 1.1);参与绑定段哈希。 */
+  /** 服务端协议档位(spec §11.1)。 */
+  tier: ServerTier;
+  /** 服务端是否支持任务声明与任务键(协议 ≥ 1.1,即 tier !== '1.0');参与绑定段哈希。 */
   supportsTaskKey: boolean;
+  /** 本档位可上报的产出类型集合(spec §11.1)。 */
+  allowedTypes: ReadonlySet<string>;
+  /** 是否重新评估全部会话;createSyncContext 恒置 false,由 runner 改写。 */
+  reevaluateAll: boolean;
   /** 全部 git_commit 事件(listCommitEvents,ts、id 升序)。 */
   commitEvents: TimelineEvent[];
   /** 有效绑定(含被取代段),按会话分组。 */
@@ -49,6 +63,8 @@ export interface BuiltSession {
   extrasHash: string;
   /** 存在 `commitHash = null` 的产出(未提交或未推送),推送后需重新上报。 */
   pendingPush: boolean;
+  /** 档位过滤后不发送的产出(不参与上报与哈希)。 */
+  unreported: UnreportedArtifact[];
   recordCount: number;
 }
 
@@ -59,7 +75,7 @@ export interface BuiltSession {
  */
 export async function createSyncContext(
   projectRoot: string,
-  opts: { supportsTaskKey?: boolean } = {},
+  opts?: { tier?: ServerTier; projectTypes?: readonly string[] | null },
 ): Promise<SyncContext> {
   const root = path.resolve(projectRoot);
   const remoteUrl = getOriginUrl(root);
@@ -84,12 +100,17 @@ export async function createSyncContext(
     skillDirs.push(path.join(os.homedir(), profile.configDirName, 'skills'));
   }
 
+  const tier = opts?.tier ?? '1.0';
+
   return {
     projectRoot: root,
     repoRoot,
     remoteUrl,
     clientVersion: getClientVersion(),
-    supportsTaskKey: opts.supportsTaskKey === true,
+    tier,
+    supportsTaskKey: tier !== '1.0',
+    allowedTypes: reportableTypesFor(tier, opts?.projectTypes ?? null),
+    reevaluateAll: false,
     commitEvents: await listCommitEvents(root),
     bindingsBySession,
     git: createGitCache(repoRoot),
@@ -214,6 +235,20 @@ function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf-8').digest('hex');
 }
 
+/**
+ * 重新评估基准(spec §11.6):映射版本、档位、可上报类型集合任一变化 → 基准变化,
+ * 下一轮重新评估全部会话的产出。
+ */
+export function basisOf(ctx: SyncContext): string {
+  return sha256(
+    stableStringify({
+      mapping: ARTIFACT_MAPPING_VERSION,
+      tier: ctx.tier,
+      allowed: [...ctx.allowedTypes].sort(),
+    }),
+  );
+}
+
 function byKey<T>(items: T[], key: (item: T) => string): T[] {
   return [...items].sort((a, b) => {
     const ka = key(a);
@@ -271,13 +306,19 @@ export function extrasHashOf(session: IngestSession): string {
   );
 }
 
-function finish(session: IngestSession, maxEventId: number, bindingsHash: string): BuiltSession {
+function finish(
+  session: IngestSession,
+  maxEventId: number,
+  bindingsHash: string,
+  unreported: UnreportedArtifact[],
+): BuiltSession {
   return {
     session,
     maxEventId,
     bindingsHash,
     extrasHash: extrasHashOf(session),
     pendingPush: session.artifacts.some((a) => a.commitHash === null),
+    unreported,
     recordCount:
       session.events.length +
       session.bindings.length +
@@ -300,7 +341,7 @@ export async function buildSessionPayload(
   const allEvents = await listSessionEventsAfter(ctx.projectRoot, sessionId, 0);
   const entries = ctx.bindingsBySession.get(sessionId) ?? [];
   const commits = toIngestCommits(ctx.commitEvents.filter((e) => e.session_id === sessionId));
-  const { artifacts, outputPaths } = collectSessionArtifacts(ctx, allEvents, commits);
+  const { artifacts, outputPaths, unreported } = collectSessionArtifacts(ctx, allEvents, commits);
   const references = collectSessionReferences(ctx, sessionId, allEvents, outputPaths);
 
   let maxEventId = afterEventId;
@@ -314,7 +355,7 @@ export async function buildSessionPayload(
     artifacts,
     references,
   };
-  return finish(session, maxEventId, bindingsHashOf(entries, ctx.supportsTaskKey));
+  return finish(session, maxEventId, bindingsHashOf(entries, ctx.supportsTaskKey), unreported);
 }
 
 /** 本仓库终端会话 id:前缀 + sha256(origin 远程地址) 前 16 位十六进制。 */
@@ -327,7 +368,7 @@ export function buildTerminalPayload(ctx: SyncContext): BuiltSession | null {
   const terminalEvents = ctx.commitEvents.filter((e) => e.session_id === null);
   const commits = toIngestCommits(terminalEvents);
   if (commits.length === 0) return null;
-  const { artifacts } = collectSessionArtifacts(ctx, [], commits);
+  const { artifacts, unreported } = collectSessionArtifacts(ctx, [], commits);
 
   let maxEventId = 0;
   for (const e of terminalEvents) if (e.id > maxEventId) maxEventId = e.id;
@@ -340,5 +381,5 @@ export function buildTerminalPayload(ctx: SyncContext): BuiltSession | null {
     artifacts,
     references: [],
   };
-  return finish(session, maxEventId, bindingsHashOf([], ctx.supportsTaskKey));
+  return finish(session, maxEventId, bindingsHashOf([], ctx.supportsTaskKey), unreported);
 }
