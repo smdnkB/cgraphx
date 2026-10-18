@@ -260,6 +260,35 @@ export function readFeatureTask(projectRoot: string, featureId: string): string 
 }
 
 /**
+ * 读产出目录负责人(spec §2、§4.2):主 spec 头部 `> 负责人:` 优先;
+ * 主 spec 没有该行(或没有主 spec)时,回退到交接文件 `<前缀>-交接提示词.md` 头部。
+ * 多个交接文件按 compareSpecCandidates 取第一个,不再向后找。
+ * 目录 / 文件不存在或都没有负责人 → null。
+ */
+export function readFeatureOwner(projectRoot: string, featureId: string): string | null {
+  if (!isPlainFeatureId(featureId)) return null;
+  const featureDir = path.join(projectRoot, FEATURES_DIR, featureId);
+
+  const mainSpec = findMainSpec(featureDir);
+  if (mainSpec !== null) {
+    const owner = readHeaderMeta(mainSpec).owner;
+    if (owner !== null) return owner;
+  }
+
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(featureDir);
+  } catch {
+    return null;
+  }
+  const handoff = entries
+    .filter((n) => n.endsWith('-交接提示词.md'))
+    .sort(compareSpecCandidates)[0];
+  if (handoff === undefined) return null;
+  return readHeaderMeta(path.join(featureDir, handoff)).owner;
+}
+
+/**
  * 扫描 docs/features/ 下所有主 spec 声明了任务的需求目录(只列有声明的)。
  * path 为仓库相对 POSIX 路径(与 FeatureEntry.path 同格式)。目录不存在 → 空数组。
  */

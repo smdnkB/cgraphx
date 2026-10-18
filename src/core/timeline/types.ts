@@ -33,7 +33,7 @@ export interface TimelineEventInput {
   turn_id?: string | null;
   commit_insertions?: number | null;
   commit_deletions?: number | null;
-  /** 来源 agent;仅写入,读取侧 TimelineEvent 不暴露。git_commit 未归属会话时为 null。 */
+  /** 来源 agent;git_commit 未归属会话时为 null。 */
   agent?: AgentId | null;
 }
 
@@ -55,6 +55,8 @@ export interface TimelineEvent {
   turn_id: string | null;
   commit_insertions: number | null;
   commit_deletions: number | null;
+  /** 来源 agent;旧事件可能为 null(按默认 agent 处理)。 */
+  agent?: AgentId | null;
 }
 
 export interface TimelineQueryFilter {

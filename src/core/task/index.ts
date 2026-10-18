@@ -16,6 +16,11 @@ export {
 export { findTaskByValue, resolveTaskForUse, resolveDeclaredTask, listTasks } from './resolve';
 export { bindSession, getCurrentBinding, clearBinding, resolveSessionId } from './binding';
 export { autoBindFromFeatureDir, getTaskDetail } from './feature-link';
+export {
+  recordFeatureTaskMappings,
+  listMyFeatureTaskDeclarations,
+} from './feature-task';
+export { refreshAutoBindings } from './auto-binding';
 export { listTaskSummaries, getTaskReport, computeSegmentStats, listBindingsWithTask } from './report';
 export { classifyArtifactPath } from './artifacts';
 export { taskSessionStartHook, taskPostToolUseHook } from './hooks';
@@ -29,10 +34,15 @@ export {
   ACTIVE_GAP_MS,
   ARTIFACT_CATEGORIES,
   REFERENCE_CATEGORIES,
+  FEATURE_TASK_ID_BASE,
+  AUTO_STRENGTHS,
+  AUTO_META_KEYS,
 } from './constants';
 export type {
   TaskSource,
   BindSource,
+  AutoStrength,
+  AutoSession,
   TaskItem,
   TaskBinding,
   TaskSourceConfig,

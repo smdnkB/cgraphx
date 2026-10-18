@@ -134,7 +134,7 @@ interface EventRow {
   turn_id: string | null;
   commit_insertions: number | null;
   commit_deletions: number | null;
-  /** 来源 agent 原始值;rowToEvent 不映射,读取侧输出不含该字段。 */
+  /** 来源 agent 原始值;未知值读取侧按默认 agent 处理。 */
   agent?: string | null;
 }
 
@@ -160,6 +160,7 @@ function rowToEvent(row: EventRow): TimelineEvent {
     turn_id: row.turn_id,
     commit_insertions: row.commit_insertions,
     commit_deletions: row.commit_deletions,
+    agent: (row.agent as TimelineEvent['agent']) ?? null,
   };
 }
 

@@ -1,5 +1,6 @@
 -- task 子系统 schema(与 timeline / markdown 共用 .cgraphx/cgraphx.db,表前缀 task_)。
 -- spec §3.1。全部 IF NOT EXISTS,可重复应用。
+-- 只加表不升版本:旧版全局 cgraphx 兼容(旧二进制只跑自己的 schema.sql,新表不影响)。
 
 CREATE TABLE IF NOT EXISTS task_schema_versions (
   version INTEGER PRIMARY KEY,
@@ -48,4 +49,36 @@ CREATE TABLE IF NOT EXISTS task_reminders (
   other_task_id INTEGER NOT NULL,
   created_at TEXT NOT NULL,
   PRIMARY KEY (session_id, bound_task_id, other_task_id)
+);
+
+-- 目录任务:一个产出目录对应一个任务,feature_id 即任务键;id 从 1000000001 起与 task_items 隔离。
+CREATE TABLE IF NOT EXISTS task_feature_tasks (
+  id INTEGER PRIMARY KEY,
+  feature_id TEXT NOT NULL UNIQUE,
+  platform_task_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- 会话自动绑定派生结果:每会话一行,feature_id 为空表示派生无结果;derived_max_event_id 用于增量刷新。
+CREATE TABLE IF NOT EXISTS task_auto_sessions (
+  session_id TEXT PRIMARY KEY,
+  derived_max_event_id INTEGER NOT NULL,
+  feature_id TEXT,
+  strength TEXT CHECK (strength IN ('read', 'write')),
+  bound_at TEXT,
+  stopped_at TEXT,
+  derived_at TEXT NOT NULL
+);
+
+-- 被取代的旧绑定:首轮历史派生时标记,不删除、不改 task_sessions 原行。
+CREATE TABLE IF NOT EXISTS task_superseded_bindings (
+  binding_id INTEGER PRIMARY KEY REFERENCES task_sessions(id),
+  superseded_at TEXT NOT NULL
+);
+
+-- 自动绑定派生元信息:键值对,目前只记 history_pass_done(首轮历史派生是否完成)。
+CREATE TABLE IF NOT EXISTS task_auto_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );

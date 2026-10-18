@@ -7,8 +7,18 @@
  */
 
 import type { SqliteDatabase } from '../db';
+import { FEATURE_TASK_ID_BASE } from './constants';
 import { TaskError, TaskStoreError } from './errors';
-import type { BindSource, RemoteTask, TaskBinding, TaskItem, TaskSource } from './types';
+import { featureTaskName } from './feature-task';
+import type {
+  AutoSession,
+  AutoStrength,
+  BindSource,
+  RemoteTask,
+  TaskBinding,
+  TaskItem,
+  TaskSource,
+} from './types';
 
 // ─── 行类型与映射 ──────────────────────────────────────────────────────────
 
@@ -33,6 +43,29 @@ interface TaskSessionRow {
   bind_source: string;
 }
 
+interface FeatureTaskRow {
+  id: number;
+  feature_id: string;
+  platform_task_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface AutoSessionRow {
+  session_id: string;
+  derived_max_event_id: number;
+  feature_id: string | null;
+  strength: string | null;
+  bound_at: string | null;
+  stopped_at: string | null;
+  derived_at: string;
+}
+
+interface AutoMetaRow {
+  key: string;
+  value: string;
+}
+
 function rowToTask(row: TaskItemRow): TaskItem {
   return {
     id: row.id,
@@ -41,8 +74,36 @@ function rowToTask(row: TaskItemRow): TaskItem {
     name: row.name,
     url: row.url,
     status: row.status,
+    featureId: null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+/** 目录任务行 → 领域任务(task_items 之外单独成表,source 固定 feature)。 */
+function rowToFeatureTask(row: FeatureTaskRow): TaskItem {
+  return {
+    id: row.id,
+    source: 'feature',
+    externalId: row.platform_task_id,
+    name: featureTaskName(row.feature_id),
+    url: null,
+    status: null,
+    featureId: row.feature_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function rowToAutoSession(row: AutoSessionRow): AutoSession {
+  return {
+    sessionId: row.session_id,
+    derivedMaxEventId: row.derived_max_event_id,
+    featureId: row.feature_id,
+    strength: row.strength as AutoStrength | null,
+    boundAt: row.bound_at,
+    stoppedAt: row.stopped_at,
+    derivedAt: row.derived_at,
   };
 }
 
@@ -59,6 +120,9 @@ function rowToBinding(row: TaskSessionRow): TaskBinding {
 
 const TASK_COLUMNS = 'id, source, external_id, name, url, status, raw, created_at, updated_at';
 const BINDING_COLUMNS = 'id, session_id, task_id, bound_at, unbound_at, bind_source';
+const FEATURE_TASK_COLUMNS = 'id, feature_id, platform_task_id, created_at, updated_at';
+const AUTO_SESSION_COLUMNS =
+  'session_id, derived_max_event_id, feature_id, strength, bound_at, stopped_at, derived_at';
 
 /** 是否为「同一会话已有生效绑定」的唯一约束冲突(task_sessions_open_idx)。 */
 function isOpenBindingConflict(err: unknown): boolean {
@@ -98,6 +162,8 @@ export class TaskStore {
   // ── 任务 ──
 
   getTaskById(id: number): TaskItem | null {
+    // 目录任务单独成表,id 空间从 FEATURE_TASK_ID_BASE 起。
+    if (id >= FEATURE_TASK_ID_BASE) return this.getFeatureTaskById(id);
     const row = this.guard('按 id 查任务', () =>
       this.db.prepare(`SELECT ${TASK_COLUMNS} FROM task_items WHERE id = ?`).get(id),
     ) as TaskItemRow | undefined;
@@ -136,6 +202,75 @@ export class TaskStore {
       this.db.prepare(`SELECT ${TASK_COLUMNS} FROM task_items ORDER BY source, id`).all(),
     ) as TaskItemRow[];
     return rows.map(rowToTask);
+  }
+
+  // ── 目录任务 ──
+
+  getFeatureTaskById(id: number): TaskItem | null {
+    const row = this.guard('按 id 查目录任务', () =>
+      this.db.prepare(`SELECT ${FEATURE_TASK_COLUMNS} FROM task_feature_tasks WHERE id = ?`).get(id),
+    ) as FeatureTaskRow | undefined;
+    return row ? rowToFeatureTask(row) : null;
+  }
+
+  findFeatureTaskByFeatureId(featureId: string): TaskItem | null {
+    const row = this.guard('按 feature-id 查目录任务', () =>
+      this.db
+        .prepare(`SELECT ${FEATURE_TASK_COLUMNS} FROM task_feature_tasks WHERE feature_id = ?`)
+        .get(featureId),
+    ) as FeatureTaskRow | undefined;
+    return row ? rowToFeatureTask(row) : null;
+  }
+
+  /** 全部目录任务,按 id 升序。 */
+  listFeatureTasks(): TaskItem[] {
+    const rows = this.guard('列出目录任务', () =>
+      this.db.prepare(`SELECT ${FEATURE_TASK_COLUMNS} FROM task_feature_tasks ORDER BY id`).all(),
+    ) as FeatureTaskRow[];
+    return rows.map(rowToFeatureTask);
+  }
+
+  /**
+   * 目录任务按 feature-id upsert(已存在则原样返回,不覆盖平台编号 / 时间)。
+   * id 取 max(FEATURE_TASK_ID_BASE, MAX(id) + 1);并发撞 id 时重试一次。
+   */
+  ensureFeatureTask(featureId: string, now: string): TaskItem {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const existing = this.findFeatureTaskByFeatureId(featureId);
+      if (existing) return existing;
+      const id = this.nextFeatureTaskId();
+      this.guard('写入目录任务', () =>
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO task_feature_tasks
+               (id, feature_id, platform_task_id, created_at, updated_at)
+             VALUES (?, ?, NULL, ?, ?)`,
+          )
+          .run(id, featureId, now, now),
+      );
+    }
+    const task = this.findFeatureTaskByFeatureId(featureId);
+    if (!task) throw new TaskStoreError(`目录任务「${featureId}」写入后未能读回`);
+    return task;
+  }
+
+  /** 平台回执写回;未知 feature-id 更新 0 行,忽略。 */
+  setFeatureTaskPlatformId(featureId: string, platformTaskId: string, now: string): void {
+    this.guard('更新目录任务平台编号', () =>
+      this.db
+        .prepare(
+          `UPDATE task_feature_tasks SET platform_task_id = ?, updated_at = ? WHERE feature_id = ?`,
+        )
+        .run(platformTaskId, now, featureId),
+    );
+  }
+
+  private nextFeatureTaskId(): number {
+    const row = this.guard('取目录任务编号', () =>
+      this.db.prepare('SELECT MAX(id) AS max_id FROM task_feature_tasks').get(),
+    ) as { max_id: number | null } | undefined;
+    const maxId = Number(row?.max_id ?? 0);
+    return Math.max(FEATURE_TASK_ID_BASE, maxId + 1);
   }
 
   /**
@@ -282,6 +417,100 @@ export class TaskStore {
         .all(taskId),
     ) as TaskSessionRow[];
     return rows.map(rowToBinding);
+  }
+
+  // ── 自动绑定派生 ──
+
+  getAutoSession(sessionId: string): AutoSession | null {
+    const row = this.guard('查会话派生结果', () =>
+      this.db
+        .prepare(`SELECT ${AUTO_SESSION_COLUMNS} FROM task_auto_sessions WHERE session_id = ?`)
+        .get(sessionId),
+    ) as AutoSessionRow | undefined;
+    return row ? rowToAutoSession(row) : null;
+  }
+
+  /** 全部会话派生结果,按 session_id 升序。 */
+  listAutoSessions(): AutoSession[] {
+    const rows = this.guard('列出会话派生结果', () =>
+      this.db
+        .prepare(`SELECT ${AUTO_SESSION_COLUMNS} FROM task_auto_sessions ORDER BY session_id`)
+        .all(),
+    ) as AutoSessionRow[];
+    return rows.map(rowToAutoSession);
+  }
+
+  /**
+   * 写入派生结果(session_id 冲突时覆盖结果与水位)。
+   * stopped_at 只在首次插入时生效,后续刷新保留已有值(R6 手动之后自动规则永久停止)。
+   */
+  upsertAutoSession(session: AutoSession): void {
+    this.guard('写入会话派生结果', () =>
+      this.db
+        .prepare(
+          `INSERT INTO task_auto_sessions
+             (session_id, derived_max_event_id, feature_id, strength, bound_at, stopped_at, derived_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(session_id) DO UPDATE SET
+             derived_max_event_id = excluded.derived_max_event_id,
+             feature_id = excluded.feature_id,
+             strength = excluded.strength,
+             bound_at = excluded.bound_at,
+             derived_at = excluded.derived_at`,
+        )
+        .run(
+          session.sessionId,
+          session.derivedMaxEventId,
+          session.featureId,
+          session.strength,
+          session.boundAt,
+          session.stoppedAt,
+          session.derivedAt,
+        ),
+    );
+  }
+
+  /** 记录自动规则停止点(手动 task use / clear);没有派生行时忽略。 */
+  setAutoStop(sessionId: string, stoppedAt: string): void {
+    this.guard('记录自动绑定停止点', () =>
+      this.db
+        .prepare('UPDATE task_auto_sessions SET stopped_at = ? WHERE session_id = ?')
+        .run(stoppedAt, sessionId),
+    );
+  }
+
+  /** 标记一条旧绑定被派生结果取代;重复标记保持首次时间(幂等)。 */
+  supersedeBinding(bindingId: number, now: string): void {
+    this.guard('标记被取代绑定', () =>
+      this.db
+        .prepare(
+          'INSERT OR IGNORE INTO task_superseded_bindings (binding_id, superseded_at) VALUES (?, ?)',
+        )
+        .run(bindingId, now),
+    );
+  }
+
+  /** 已取代绑定的 task_sessions id 集合。 */
+  listSupersededBindingIds(): Set<number> {
+    const rows = this.guard('列出被取代绑定', () =>
+      this.db.prepare('SELECT binding_id FROM task_superseded_bindings').all(),
+    ) as Array<{ binding_id: number }>;
+    return new Set(rows.map((r) => Number(r.binding_id)));
+  }
+
+  getMeta(key: string): string | null {
+    const row = this.guard('读派生元信息', () =>
+      this.db.prepare('SELECT value FROM task_auto_meta WHERE key = ?').get(key),
+    ) as AutoMetaRow | undefined;
+    return row?.value ?? null;
+  }
+
+  setMeta(key: string, value: string): void {
+    this.guard('写派生元信息', () =>
+      this.db
+        .prepare('INSERT OR REPLACE INTO task_auto_meta (key, value) VALUES (?, ?)')
+        .run(key, value),
+    );
   }
 
   // ── 提醒去重 ──

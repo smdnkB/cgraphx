@@ -139,7 +139,7 @@ export const CODE_MAP_GIT_TIMEOUT_MS = 3000;
 export const TASK_SEGMENT_EVENT_LIMIT = 500;
 
 /** 任务来源显示名。 */
-export const TASK_SOURCE_LABELS: Record<TaskSource, string> = { api: '接口', manual: '手动' };
+export const TASK_SOURCE_LABELS: Record<TaskSource, string> = { api: '接口', manual: '手动', feature: '目录' };
 
 /** 绑定来源显示名。 */
 export const BIND_SOURCE_LABELS: Record<BindSource, string> = { cli: '显式绑定', feature_dir: '需求目录自动绑定' };

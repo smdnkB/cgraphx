@@ -79,7 +79,7 @@ function writeJson(value: unknown): void {
 
 // ─── 人读输出 ───────────────────────────────────────────────────────────────
 
-const SOURCE_LABELS: Record<TaskSource, string> = { api: '接口', manual: '手动' };
+const SOURCE_LABELS: Record<TaskSource, string> = { api: '接口', manual: '手动', feature: '目录' };
 const BIND_SOURCE_LABELS: Record<BindSource, string> = { cli: '显式绑定', feature_dir: '需求目录' };
 
 /** 终端显示宽度:CJK / 全角字符按 2 列计,其余 1 列(表格对齐用)。 */

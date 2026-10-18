@@ -5,12 +5,13 @@
  */
 
 import type { TimelineEvent } from '../timeline';
-import type { ARTIFACT_CATEGORIES, BIND_SOURCES, TASK_SOURCES } from './constants';
+import type { ARTIFACT_CATEGORIES, AUTO_STRENGTHS, BIND_SOURCES, TASK_SOURCES } from './constants';
 
 export type TaskSource = (typeof TASK_SOURCES)[number];
 export type BindSource = (typeof BIND_SOURCES)[number];
+export type AutoStrength = (typeof AUTO_STRENGTHS)[number];
 
-/** 任务(接口任务或手动任务)。 */
+/** 任务(接口任务 / 手动任务 / 目录任务)。 */
 export interface TaskItem {
   id: number;
   source: TaskSource;
@@ -18,6 +19,8 @@ export interface TaskItem {
   name: string;
   url: string | null;
   status: string | null;
+  /** 目录任务的 feature-id;api / manual 为 null。 */
+  featureId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +33,20 @@ export interface TaskBinding {
   boundAt: string;
   unboundAt: string | null;
   bindSource: BindSource;
+}
+
+/** 会话自动绑定派生结果(featureId 为 null 表示整个会话没碰过合格产出目录)。 */
+export interface AutoSession {
+  sessionId: string;
+  /** 派生时该会话的最大事件 id;用于下次增量刷新。 */
+  derivedMaxEventId: number;
+  featureId: string | null;
+  strength: AutoStrength | null;
+  /** 绑定区间起点(会话最早事件 ts);无结果为 null。 */
+  boundAt: string | null;
+  /** 手动操作(R6)后的截止点;null 表示自动规则仍然有效。 */
+  stoppedAt: string | null;
+  derivedAt: string;
 }
 
 /** `.cgraphx/task-source.json` 的内容(headers 缺省为空对象)。 */
