@@ -122,7 +122,8 @@ export type InsightTag = (typeof INSIGHT_TAGS)[number];
 /**
  * 代码地图根目录(相对 projectRoot)。
  *
- * code-map-write skill 的产物目录:根目录放系统交互视图(`系统交互.md` /
+ * 代码地图目录(原由 code-map-write skill 生成,该 skill 已于 2026-10-19 废弃):
+ * 根目录放系统交互视图(`系统交互.md` /
  * `系统交互-<域>.md`),`flows/` 放流程视图。web 仅只读消费(2026-10-14-cgraphx-web系统地图)。
  */
 export const CODE_MAP_DIR = 'docs/code-map';

@@ -21,10 +21,10 @@
 
 cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是一个单纯的 CLI 工具。skill(markdown 指引)是主体,定义研发流程;程序(cgraphx CLI)为流程提供不可替代的能力支撑(知识库检索、数据库查询、时间线)。**agent 读 skill → 按流程调程序能力**,改任何一侧前先理解这个分工(spec §1.2)。
 
-**skill 主线**(`assets/claude-template/skills/` 下共 20+ 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
+**skill 主线**(`assets/claude-template/skills/` 下共 27 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
 
-- 需求主线:`/clarify-requirements`(必经,澄清意图/业务边界/技术边界)→ `/write-spec`(核心,技术规格契约)→ `/write-plan`(可选,大需求)→ `/implementation`(小规模)或 `/subagent-implement`(大规模;判据是需求规模——≥10 文件且 ≥3 独立模块,不是任务量)。日常默认两步:澄清 + 实现。
-- 平行支线:接口测试(`/write-api` → `/run-api-test`,写接口必须查 DB 验数据)、单元测试(`/write-unit-test-spec` → `/write-unit-test-code`)、知识沉淀(`/knowledge-write` 触发,`knowledge-recall` / `knowledge-api` 由 agent 自动召回)、DB schema 知识(`/export-table-ddl` 导出 + `db-query` 探索回写)。
+- 需求主线:`/clarify-requirements`(必经,澄清意图/业务边界/技术边界)→ `/write-spec`(核心,技术规格契约)→ `/write-plan`(大需求必走:index 加一个任务一个文件)→ `/implementation`(小需求)或 `/subagent-implement`(大需求:一个会话按任务派子 agent,全部做完统一验证,最后 `/code-review`;判据是需求规模——≥10 文件且 ≥3 独立模块,不是任务量)。日常默认两步:澄清 + 实现;哪里没看懂,`/visual-explain` 出一页图解。
+- 平行支线:接口测试(`/write-api` → `/run-api-test`,写接口必须查 DB 验数据)、单元测试(`/write-unit-test-spec` → `/write-unit-test-code`)、知识沉淀(`/knowledge-write` 触发,`knowledge-recall` 由 agent 自动召回)、DB schema 知识(`/export-table-ddl` 导出 + `db-query` 探索回写)。
 
 **`docs/` 目录约定(skill 与程序的契约,目标项目内):**
 
@@ -67,7 +67,7 @@ cgraphx 的 skill 流程针对 AI 辅助研发中反复出现的几类浪费,逐
 **1. 文档漂移导致返工。** 传统链路 PRD → Spec → Plan → Code,改一条业务规则要回归所有上游文档——三份文档的一致性靠人维护,实际项目中必然漂移,最终「三份都在,没一份能信」。核心取舍:**前期文档越少,变更时的回归成本越低。**
 
 - Spec 是唯一契约——「没有任何业务义务存在于 spec 之外」。clarify 是对话(锁定决策但不产生需要维护的文档),spec 是唯一的权威源;变更时只改 spec 一处,plan / implementation 从这一处重新派生。
-- PRD(`/write-prd`)、设计文档(`/write-design-doc`)、接口文档(`/write-api-doc`)都不在开发主链上,推荐发布后按需执行——发布后写的是实际交付的行为,不存在文档与系统漂移的问题。流程全景和时机标注见 `assets/claude-template/FLOW-MAP.md`。
+- 需求文档、设计文档、接口文档(`/write-docs`)都不在开发主链上,推荐发布后按需执行——发布后写的是实际交付的行为,不存在文档与系统漂移的问题。流程全景和时机标注见 `assets/claude-template/FLOW-MAP.md`。
 - 这也匹配 agent 的能力结构:维持 N 份文档互相一致很差(上下文有限、顾此失彼),从单一权威源派生很强。
 
 **2. 业务知识随会话消失。** 和 agent 聊出来的业务理解(概念定义、决策理由、踩过的坑、隐式约束)随会话结束就丢了;下次开发同一模块,agent 从零开始,人再解释一遍。解法是**沉淀 → 召回的闭环**:开发收尾由交付提示触发 `/knowledge-write` 把有价值的知识写入 `docs/knowledge/`(双层结构:实体主条目 + 流程条目);下次开发前 `/knowledge-recall` 先召回相关概念再动手——用得越多,agent 的项目上下文越厚,重复解释和重复踩坑越少。
@@ -76,7 +76,7 @@ cgraphx 的 skill 流程针对 AI 辅助研发中反复出现的几类浪费,逐
 
 **4. 需求理解偏差。** 拿到模糊需求直接开写,做完发现理解错了,是另一种返工。`/clarify-requirements` 在写任何文档和代码之前先锁业务边界和技术约束——像员工接领导任务:先确认意图、识别任务类型、针对性提问,必要时挑战假设,而不是拿到一句话就开始干。
 
-**5. 规范靠人记。** 编码规范、接口规范、数据规范、提交规范,写了没人看、看了记不住。解法是**规范在执行期自动送达**:`/init-project-guides` 生成 `docs/guides/` → `/write-plan` 按任务类型打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试规范不进 plan,由 write-unit-test-code 执行前自读)→ implementation / subagent-implement 执行时只读标注的规范,不需要人主动想起来;commit 门禁(precommit-check hook)在 `git commit` 前拦截,指向 `git-standards.md` 自查。
+**5. 规范靠人记。** 编码规范、接口规范、数据规范、提交规范,写了没人看、看了记不住。解法是**规范在执行期自动送达**:`/init-project-guides` 生成 `docs/guides/` → `/write-plan` 按任务类型打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md;测试规范不进 plan,由 write-unit-test-code 执行前自读)→ implementation 执行时只读标注的规范,不需要人主动想起来;commit 门禁(precommit-check hook)在 `git commit` 前拦截,指向 `git-standards.md` 自查。
 
 **6. 开发流程到「写完代码」就断了。** 市面上的 AI 辅助研发工具(包括开源的)基本只覆盖到代码生成为止——接口写完、代码提交,流程就结束了;测试是人的事,手动录接口、手动跑、手动验。cgraphx 把接口测试织进了 skill 流程:`/write-api` 从 spec 的接口章节自动生成 bruno 测试用例(.bru + 内嵌断言 + 真实参数),`/run-api-test` 跑测试并强制核实写接口的 DB 副作用(HTTP 200 ≠ 通过,不查数据等于没测)。从 spec → 代码 → 测试用例生成 → 执行 → DB 验证 → 出报告,是闭环而不是断链。
 

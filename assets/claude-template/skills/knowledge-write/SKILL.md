@@ -28,7 +28,7 @@ description: 维护可供 cgraphx docs 索引的 Markdown 知识文件(docs/know
 - **反查 = 派生的"参与业务"视图**:`find --concept=<实体>` 返回所有引用该实体的文档。**任何条目里都不手动维护全量清单**——手动维护必陈旧,反查永远最新。
 - **同名严格性**:流程条目里的实体名与实体条目的规范 concept 名逐字一致;建条目前先 `docs concepts` 查名,错一个名反查就断。
 - **不是所有概念都配主条目**:机制概念(Scene 分发机制、准三层)、动作概念(礼包续订)留作 tag;只有业务实体升级。
-- **沉淀时机**:功能交付完成时最佳(理解最新鲜);implementation/subagent-implement 收尾会提示识别实体;只从一两个流程抽出的条目用 `status: draft` + Open Questions 标记未补全。
+- **沉淀时机**:功能交付完成时最佳(理解最新鲜);implementation 和 subagent-implement 收尾会提示识别实体;只从一两个流程抽出的条目用 `status: draft` + Open Questions 标记未补全。
 
 ## Frontmatter 规范
 
@@ -90,14 +90,13 @@ updated: 2026-04-28
 ## CLI
 
 - **查已有词汇**:`cgraphx docs concepts`(concept + 关联文档数 + domain)/ `docs domains` / `docs tags`;查特定:`find --q=<词>`(整串 LIKE,title+Summary)/ `find --concept=<名>`(精确过滤,也是实体反查入口)。索引未建 → `grep -rl "concepts:" docs/knowledge/ --include="*.md"`。
-- **校验**:`docs validate <file>`(exit 0 合法 / 2 非法;`--json` 出 {valid, skipReason, detail})。规则与 index 扫描一致(单一事实源 `src/core/markdown/validator.ts`):title 非空 · document_type 属 7 枚举 · domains/concepts/owners ≥1 项 · status 属 4 枚举 · source_type 属 5 枚举 · updated 为 YYYY-MM-DD。
+- **校验**:`docs validate <file>`(exit 0 合法 / 2 非法;`--json` 出 {valid, skipReason, detail})。
 - **扫描**:`docs index`——全量覆盖式重建,事务性(任一步失败回滚,旧索引不坏)。
 
 ## 质量规则
 
 - **应记录**(满足任一):非显而易见的业务逻辑 · 决策原因(尤其有替代方案时)· 跨系统的执行流程与运维操作 · 陷阱与隐式约束 · 跨系统依赖 · 历史背景(事故/变通/遗留约束)。
 - **不记录**:代码/配置已记录的 · 通用编程知识 · 已应用的一次性修复 · 逐字对话记录(提取结论,不提取过程)· 工具使用说明 · 可从文件结构推导的 · **行号与符号偏移**(只写文件级路径)· **步骤时序与代码逻辑复述**(条目给代码入口,写步骤就种下腐烂)。
-- **通用**:持久知识优于对话日志;保留证据(文件级路径/符号名/命令输出)使他 AI 可信任;不确定性用 Open Questions 或 `status: draft`;约束类陷阱用 `rule`,复盘类用 `lesson`;被替代用 `superseded` + `related_documents` 链替代者;教程/指南尽量含 Validation / Troubleshooting。
 
 ## 维护
 

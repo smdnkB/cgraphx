@@ -48,11 +48,20 @@ export class CheckTargetNotFoundError extends FeaturesError {
   }
 }
 
+/** check 同时传了 --staged 和目标参数。 */
+export class CheckStagedWithTargetsError extends FeaturesError {
+  constructor() {
+    super('--staged 不能和目标参数一起用;要查指定文件或需求目录就去掉 --staged');
+    this.name = 'CheckStagedWithTargetsError';
+  }
+}
+
 /** 错误类型 → CLI 退出码(show / check 的「目标不存在」类为 2)。 */
 export function exitCodeForError(err: unknown): number {
   if (err instanceof FeatureNotFoundError) return 2;
   if (err instanceof FeatureAmbiguousError) return 2;
   if (err instanceof CheckTargetNotFoundError) return 2;
+  if (err instanceof CheckStagedWithTargetsError) return 2;
   return 1;
 }
 

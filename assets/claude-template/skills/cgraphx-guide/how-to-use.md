@@ -65,24 +65,25 @@ npm uninstall -g cgraphx  # 卸载 CLI
 knowledge-recall(自动召回)
         │
         ▼
-/clarify-requirements ──→ /write-spec ──→ /write-plan(可选)
-     澄清                  唯一契约          执行计划
+/clarify-requirements ──→ /write-spec ──→ /write-plan(大需求必走)
+  澄清 + 决策表             唯一契约          一个任务一个文件
         │                                        │
         │            ┌───────────────────────────┘
         ▼            ▼
-  /implementation(小规模) 或 /subagent-implement(大规模)
+  /implementation(小需求)· /subagent-implement(大需求,一个会话跑完,做完 /code-review)
         │
    ┌────┴─────────────────────────────┐
    ▼              ▼                   ▼
 /write-api    /write-unit-test-spec  交付收尾:
 → /run-api-test → /write-unit-test-code  /knowledge-write 沉淀
-  接口测试       单元测试              /write-delivery-guide 讲解 + commit 门禁
+  接口测试       单元测试              /end 收口 + 发布记录
+                                      commit 门禁(含产物检查)
 
-── 发布后 · 按需(不在主链,不参与门禁)──────────────────
-/write-prd(业务方审阅)  /write-design-doc(设计文档)  /write-api-doc(接口文档)
+── 发布后 · 按需(不在主链)──────────────
+/write-docs(需求文档、设计文档、接口文档)
 ```
 
-日常默认两步:**澄清 + 实现**。复杂需求按需补规格/计划/测试。timeline 自动记录开发事件,你不需要主动跑命令。
+日常默认两步:**澄清 + 实现**。大需求先 `/write-plan`,再 `/subagent-implement` 一个会话跑完;复杂需求按需补规格和测试;哪里没看懂,说「画个图讲讲」出一页图解。timeline 自动记录开发事件,你不需要主动跑命令。
 
 ---
 
@@ -92,14 +93,15 @@ knowledge-recall(自动召回)
 
 做需求的主线。
 
-- **必经** `/clarify-requirements` 澄清意图、业务边界、技术约束(不拍板实现手段)
+- **必经** `/clarify-requirements` 澄清意图、业务边界、技术约束(不拍板实现手段);结束时在对话里给流程图和决策表
 - **核心** `/write-spec` 写技术规格——唯一契约,归档业务行为/规则/接口/数据/权限/异常/验收
-- **可选** `/write-plan` 拆执行计划(大需求/跨模块;手段选型在这一步结合代码定——纯工程手段 plan 自主,有业务可观察后果的回跳 spec 业务拍板;index 出「执行方式建议」为实现方式终判)
-- **必经** `/implementation`(小规模:单点/1-3 文件/单模块)或 `/subagent-implement`(大规模:预估变更文件 ≥10 且跨 ≥3 独立模块,派子 agent 隔离上下文);判据是需求规模,不是任务量
+- **大需求必走** `/write-plan`(小需求可跳过):拆执行计划,手段选型在这一步结合代码定;index 加一个任务一个文件,先按任务类型拆,一个任务预估超过 15 个文件再按并行度拆;大需求给一句 `/subagent-implement` 启动语
+- **必经** `/implementation`(小需求)或 `/subagent-implement`(大需求):大需求在一个会话里按任务派子 agent,主会话按提交点提交,全部做完统一验证、修复,最后提示跑 `/code-review`;判据是需求规模(预估变更文件 ≥10,且跨 ≥3 个相互独立的模块),不是任务量
+- **随时** `/visual-explain`:哪里没看懂,说「画个图讲讲」,出一页图解;clarify 结尾和 write-plan 请你确认设计预览时会提醒
 
 > 日常默认 2 步:澄清 + 实现。spec 是唯一契约——「没有任何业务义务存在于 spec 之外」,变更时只改 spec 一处,下游重新派生。
 
-> **交付收尾**:实现收尾会提示两件事——沉淀(`/knowledge-write`,沉淀业务决策/实体到 `docs/knowledge/`)和讲解(`/write-delivery-guide`,有实质代码改动时提示生成本次交付的故事线讲解,归档进需求目录、可重生成)。
+> **交付收尾**:实现收尾会提示沉淀知识(`/knowledge-write`)和平台环节缺口;需求做完跑 `/end` 写收口档案,已上线时写发布记录。
 
 ---
 
@@ -132,8 +134,7 @@ knowledge-recall(自动召回)
 **业务知识(沉淀 → 召回)**:
 
 - `/knowledge-write` 把有价值的知识沉淀到 `docs/knowledge/`(开发收尾自动提示,也可随时手动触发)
-- `knowledge-recall` 做需求前自动召回相关概念、对齐术语——agent 自动触发,你不用管
-- `knowledge-api` 已知概念名时精确查知识库——agent 自动触发
+- `knowledge-recall` 做需求前自动召回相关概念、对齐术语,精确查询也走它——agent 自动触发,你不用管
 - `/knowledge-init` 接手陌生项目时批量探索建档——可选,只跑一次
 
 > 产物落在 `docs/knowledge/*.md`。写文件前必须过 `cgraphx docs validate` 校验,非法文件会被索引跳过。闭环:沉淀 → 召回 → 新概念再沉淀,知识库越厚,agent 越懂你的项目。
@@ -153,9 +154,7 @@ knowledge-recall(自动召回)
 
 | skill | 产物 | 推荐时机 |
 |---|---|---|
-| `/write-prd` | 业务需求文档(给领导/客户/业务方) | 发布后按需 |
-| `/write-design-doc` | 设计文档(面向研发/技术负责人/维护者) | 自测通过后 |
-| `/write-api-doc` | 接口文档(仅本次新增接口) | 接口开发完毕后 |
+| `/write-docs` | 需求文档、设计文档、接口文档(运行时选,可多选) | 发布后按需 |
 
 ---
 
@@ -174,16 +173,19 @@ knowledge-recall(自动召回)
 docs/
 ├── features/   需求目录(单次需求工作目录,spec 必有)
 │   └── <日期>-<编号>-<前缀>/
-│       ├── <前缀>-spec.md            /write-spec           必有  唯一契约
-│       ├── plan/                     /write-plan           可选  大需求
-│       ├── <前缀>-需求文档.md         /write-prd            可选  发布后按需
+│       ├── <前缀>-spec.md             /write-spec           必有  唯一契约
+│       ├── plan/                      /write-plan           可选  大需求
+│       ├── <前缀>-<主题>-v<N>.html    /visual-explain       可选  要图解时
+│       ├── <前缀>-需求文档.md         /write-docs           可选  发布后按需
+│       ├── <前缀>-设计文档.md         /write-docs           可选  发布后按需
+│       ├── <前缀>-接口文档.html       /write-docs           可选  发布后按需
 │       ├── <前缀>-接口测试-spec.md    /write-api            可选  开发完成后
 │       ├── <前缀>-接口测试报告.md     /run-api-test         可选  write-api 后
 │       ├── <前缀>-接口测试验证.jsonl  /run-api-test         可选  自动产出
 │       ├── <前缀>-单元测试-spec.md    /write-unit-test-spec 可选  开发完成后
 │       ├── <前缀>-单元测试报告.md     /write-unit-test-code 可选  开发完成后
-│       ├── <前缀>-交付讲解.md         /write-delivery-guide 可选  交付时
-│       └── <前缀>-设计文档.md         /write-design-doc     可选  发布后按需
+│       ├── <前缀>-收口档案.md         /end                  可选  需求做完
+│       └── <前缀>-发布记录.md         /end                  可选  已上线时
 │
 ├── knowledge/   业务知识库(跨需求共享)
 │   └── *.md                          /knowledge-write 沉淀  /knowledge-init 批量建档
@@ -211,4 +213,4 @@ docs/
 
 ---
 
-cgraphx 使用说明 · 2026-07-30
+cgraphx 使用说明 · 2026-10-19

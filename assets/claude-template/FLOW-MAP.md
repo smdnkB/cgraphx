@@ -10,58 +10,58 @@
                 knowledge-recall(先聊概念,实体条目优先)
                         │
                         ▼
-  clarify-requirements(必经;只锁业务决策 + 技术约束,手段归 plan)
+  clarify-requirements(必经;只锁业务决策和技术约束,手段归 plan)
+    结束时在对话里给流程图和决策表;没看懂可以用 visual-explain 出图解
                         │       ▲
-                        │       ▼ 涉及 UI 时,可在 clarify 前/后/spec 后,来回迭代
-                        │   write-wireframe(低保真 HTML 线框 v1/v2/…)
+                        │       ▼ 涉及 UI 时,可在 clarify 前后、spec 后来回迭代
+                        │   write-wireframe(低保真 HTML 线框 v1、v2…)
                         │
-                        ├── 探索结束要开新会话 → handoff-session
-                        │   (确认产出目录 + 交接文件,可拆 1~N 个;新会话从 write-spec 继续)
+                        ├── 要开新会话 → handoff-session
+                        │   (确认产出目录 + 交接文件,可拆 1 到 N 个)
                         ▼
-                  write-spec ◄── 唯一契约(声明负责人,进个人需求索引;引用已确认的线框版本)
+                  write-spec ◄── 唯一契约(声明负责人;引用已确认的线框版本)
                         │
-                        ▼ 可选
+                        ▼ 小需求可跳过;大需求必走
                     write-plan
-                (手段:无业务可观察→plan 自主;有→回跳 spec)
+            (手段:无业务可观察后果 plan 自主;有则回跳 spec)
+            (一个任务一个文件;大需求给一句 /subagent-implement 启动语)
                         │
                         ▼
-    implementation(小规模)│ subagent-implement(大规模,需 plan)
+  implementation(小需求)或 subagent-implement(大需求:一个会话按任务派子 agent,统一验证后 /code-review)
                         │
         ┌───────────────┼────────────────────────┐
         ▼               ▼                        ▼
   write-api        write-unit-test-spec     交付收尾:
   → run-api-test   → write-unit-test-code   沉淀提示 → knowledge-write
-  (接口测试)     (单元测试,代码完成后)     交付讲解提示 → write-delivery-guide
-                                           代码地图提示 → code-map-write
-  ↓ 推荐(非硬前置)                          commit 门禁 → git-standards.md
+  (接口测试)     (单元测试,代码完成后)     平台环节缺口提醒
+                                           需求做完 → /end(收口档案;已上线时写发布记录)
+  ↓ 推荐(非硬前置)                          commit 门禁 → features check + git-standards.md
   write-ui-test
   → run-ui-test
   (UI 功能测试)
 
-  ── 推荐发布后 · 按需(不在主链,不参与门禁); 原因: 发布前写 PRD:写的是预期,实现过程中一定会漂移,发布后 PRD 就过期了,给业务方看反而误导 ──────────────────
-  write-prd(业务方/客户审阅,任意时刻可执行,推荐发布后)
-  write-design-doc(设计文档,自测通过后)
-  write-api-doc(接口文档,接口开发完毕后)
+  ── 发布后 · 按需(不在主链,不参与门禁)──────────────────
+  write-docs(需求文档、设计文档、接口文档,运行时选)
 
-guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementation / subagent-implement 执行标注,仅无 plan 时自识别)· write-api 独立读接口规范 · write-unit-test-code 独立读测试规范 · commit 门禁 → git-standards;缺失 → init-project-guides 先补(中断)
+guides:write-plan 读取并结晶,任务打「强制引用」标注(implementation 执行标注,没有 plan 时自己识别)· write-api 独立读接口规范 · write-unit-test-code 独立读测试规范 · commit 门禁指向 git-standards;缺失时先 init-project-guides 补齐(中断)
 ```
 
 ## 设计流程
 
-- **链**:`/clarify-requirements` → `/write-spec` →(`/write-plan` 可选);涉及 UI → `/write-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框);探索结束要开新会话 → `/handoff-session`
+- **链**:`/clarify-requirements` → `/write-spec` →(小需求可跳过 `/write-plan`,大需求必走);涉及 UI → `/write-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框);探索结束要开新会话 → `/handoff-session`
 - **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示)
 - **分工**:clarify 只锁业务边界 + 技术约束(读无界、决策有界);spec 是唯一契约,澄清总结只是输入;手段选型在 plan 结合代码定,按业务可观察性分档——无业务可观察后果的 plan 自主并记录,有的回跳 spec 业务拍板
-- **人工确认点(写给人看,图表优先)**:clarify 总结上半部分(流程图 + 业务决策表)→ 人拍板业务口径;线框(涉及 UI 时)→ 人看着界面确认布局与交互;spec「一图看懂」→ 人确认做完是什么样;plan index「设计预览」(架构 / 主流程 / 数据结构 / 关键取舍)→ 人确认后才进实现
-- **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`<前缀>-交接提示词.md`、`plan/<前缀>-index.md` 等;spec / 交接文件头部声明 `> 负责人:`(也是任务负责人判定依据),会话按读写的产出目录自动关联任务;收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
-- **PRD 不在主链上**:`/write-prd` 是补充文档,任意时刻可执行,推荐功能发布后按需执行——发布后写的是实际交付的行为,不存在文档与系统漂移的问题
+- **人工确认点**:澄清结果(对话里的流程图和决策表,没看懂可以出图解页),人说对了才写 spec;线框(涉及 UI 时),人看着界面确认布局和交互;plan index「设计预览」的重点决策表,人确认后才进实现。
+- **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`<前缀>-交接提示词.md`、图解页 `<前缀>-<主题>-v<N>.html`(visual-explain 出,讨论稿,不登记)、`plan/<前缀>-index.md` 加一个任务一个文件;spec / 交接文件头部声明 `> 负责人:`(也是任务负责人判定依据),会话按读写的产出目录自动关联任务;收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
+- **事后文档不在主链上**:`/write-docs` 发布后按需执行,写的是实际交付的行为。
 
 ## 开发流程
 
-- **链**:`/implementation`(小规模:单点 / 1-3 文件 / 单模块)| `/subagent-implement`(大规模:预估变更文件 ≥10 且跨 ≥3 独立模块,需 plan,主 agent 只协调、派子 agent 实现);判据是需求规模,不是任务量;拿不准 → implementation,write-plan 的 index「执行方式建议」是终判
-- **前置**:spec 必有;subagent-implement 需 plan
-- **强制读**:规范由 plan 打「强制引用」标注(write-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation / subagent-implement 只读标注,无 plan 时 implementation 自行识别;**缺失 → 中断,先 `/init-project-guides` 补齐**
-- **小步提交**:plan 把可独立提交的任务(完成后仓库可工作)标「独立提交」并把 `git-standards.md` 提交规范结晶进 index「提交规范」节;implementation / subagent-implement 每完成一个标注任务并按规范自查后提交(原子历史,好 review / revert / bisect),precommit 门禁退化为兜底。未标注的任务不擅自提交,push 永远归用户。
-- **收尾**:沉淀提示(新增/变更实体、坑、隐式约束 → `/knowledge-write`);代码地图提示(触及已有视图或新增流程/跨服务调用 → `/code-map-write` 刷新,并列出与设计预览的偏离);交付讲解提示(有实质代码改动 → `/write-delivery-guide` 生成本次交付的故事线讲解,也可单独触发重生成);commit 门禁由 precommit-check hook 指向 `docs/guides/git-standards.md`,被拦 → 按 plan 已结晶的「提交前检查点」自查 staged diff(plan 无结晶时才 Read 原文件)
+- **链**:小需求一个会话跑 `/implementation`;大需求先 `/write-plan`,再 `/subagent-implement` 在一个会话里按任务派子 agent 跑完,全部做完统一验证,最后提示跑 `/code-review`。判断看需求规模(预估变更文件 ≥10,且跨 ≥3 个相互独立的模块),不看任务量;拿不准先 `/write-plan`。
+- **前置**:spec 必有;大需求要有 plan。
+- **强制读**:规范由 plan 打「强制引用」标注(write-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation 只读标注,无 plan 时 implementation 自行识别;**缺失 → 中断,先 `/init-project-guides` 补齐**
+- **提交**:任务文件写提交点。大需求由 subagent-implement 的主会话按提交点提交,不构建、不测试,全部做完统一验证;小需求由 implementation 按 plan 的提交点提交。`git-standards.md` 的提交规范结晶进 index「提交规范」节,precommit 门禁兜底;push 永远归用户。
+- **收尾**:沉淀提示(新增或变更的实体、坑、隐式约束,走 `/knowledge-write`);平台环节缺口提醒(按 `cgraphx features show`,只提醒不拦);需求做完跑 `/end` 写收口档案,已上线时写发布记录;commit 门禁由 precommit-check hook 先跑 `cgraphx features check --staged`(产物不合格必须改对),再指向 `docs/guides/git-standards.md` 自查。
 
 ## 接口测试流程
 
@@ -87,15 +87,8 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 ## 知识库
 
 - **写**:`/knowledge-write`(双层结构:实体 `concept` 主条目 + 流程条目,正向引用 + 反查派生参与业务;写入前必过 `cgraphx docs validate`)| `/knowledge-init`(陌生项目批量探索建档)
-- **读**:knowledge-recall(子 agent 语义召回,实体条目优先)| knowledge-api(已知概念名精确查)
+- **读**:knowledge-recall(子 agent 语义召回,实体条目优先;精确查询用它列出的 `cgraphx docs` 命令)
 - **目录**:`docs/knowledge/*.md`;沉淀时机由开发流程交付收尾提示触发
-
-## 代码地图
-
-- **定位**:从代码派生、给人看懂系统全貌的视图(`docs/code-map/`)——`系统交互.md`(系统/服务间调用)+ `flows/<流程名>.md`(一个业务流程的代码链路 + 数据流转);与知识库互补:知识库存"为什么"(稳定),代码地图存"怎么走"(随代码变,过期整体重生成)
-- **召回**:`code-map-recall`(write-plan 画设计预览前必用,新鲜视图作底图;只读)
-- **沉淀**:`/code-map-write`(实现收尾提示触发 / 用户点名 / 陌生项目批量初建);只从已写出的代码生成,每节点带代码指针,记录 `source_commit`
-- **图谱工具**:项目 `CLAUDE.md`「项目约定」的 `代码图谱:` 行(gitnexus / codegraph / 无);无工具时 AI 读代码
 
 ## 数据库与 Schema
 
@@ -114,8 +107,8 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 | `interface-standards.md` | 接口任务 |
 | `coding-standards.md` | 所有任务(契约部分) |
 | `testing-standards.md` | plan 不读;`write-unit-test-code` 执行前自读(内容全是单测向);接口测试规范由 `write-api` 读 `interface-standards.md` 送达 |
-| `git-standards.md` | 有「独立提交」任务时结晶进 index「提交规范」节(plan 级,一次)+ precommit-check 门禁兜底(deny → 按已结晶的检查点自查) |
-- **执行期送达**:任务按映射打「强制引用」标注(schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 implementation / subagent-implement 只读标注、不自行识别,无 plan 时 implementation 自行识别;write-api 不依赖 plan,执行前独立读 interface-standards.md(自有门禁)。**git-standards.md 例外**:不是每任务强制引用,而是 plan 级结晶进 index「提交规范」节,实施期提交时直接用、门禁仅兜底——消除多次小步提交的重复读取成本。**testing-standards.md 也不走 plan 标注**:测试不进 plan,内容全是单测向(框架/目录命名/单测集成边界/Mock/fixture/覆盖),由 `write-unit-test-code` 执行前自读(缺失 → 提示 `/init-project-guides` 补齐);接口测试规范走 `write-api` 读 `interface-standards.md`,`run-api-test` 不另读规范。
+| `git-standards.md` | 结晶进 index「提交规范」节(plan 级,一次)+ precommit-check 门禁兜底(deny → 按已结晶的检查点自查) |
+- **执行期**:有 plan 时 implementation 只读任务的「强制引用」标注,没有 plan 时自己识别;write-api 执行前自读 `interface-standards.md`;write-unit-test-code 执行前自读 `testing-standards.md`;`git-standards.md` 由 plan 结晶进 index「提交规范」节,门禁兜底。
 
 ## 事后文档(发布后 · 按需,不在开发主链)
 
@@ -123,11 +116,11 @@ guides:write-plan 读取并结晶 + 任务打「强制引用」标注(implementa
 
 | skill | 产物 | 推荐时机 | 说明 |
 |---|---|---|---|
-| `/write-prd` | 业务需求文档 | 发布后按需 | 给领导/客户/业务方审阅;发布后写 = 记录实际交付的行为,不是事前审批件 |
-| `/write-design-doc` | 设计文档 | 自测通过后 | 从 knowledge + spec/plan 合成,面向研发/技术负责人/维护者 |
-| `/write-api-doc` | 接口文档 | 接口开发完毕后 | 仅覆盖本次新增接口,从 spec + 代码反向提取 |
+| `/write-docs` | 需求文档、设计文档、接口文档(运行时选,可多选) | 发布后按需 | 写实际交付的行为,不重新定义 spec。 |
 
 ## 其他能力
 
+- `/visual-explain` 图解:没看懂就说「画个图讲讲」,出一页图解;和需求有关的放需求目录,无关的放 `.cgraphx/visual/`
 - `/developer-timeline` 开发事件流与日报/周报/月报 | `/write-workload` 交付工作量汇报
+- `/iboc-check` 老需求补头部、补单测产物和收口档案
 - 可视化:handdrawn-sketch-engine / handdrawn-deck(手绘信息图与翻页演示)

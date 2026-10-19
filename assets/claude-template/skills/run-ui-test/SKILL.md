@@ -40,7 +40,7 @@ description: 在 write-ui-test 生成用例规格后,通过 Playwright MCP 驱�
 |---|---|---|
 | `write-ui-test` | 上游 | 产用例规格;本 skill 消费它跑测试,不调它也不改用例 |
 | `run-api-test` | 平行(推荐先跑) | 接口层验证 + 查库;本流程不重复验库;先接口后 UI 仅推荐顺序,非硬前置 |
-| `implementation` / `subagent-implement` | 下游 | 测试失败后由用户决定是否调起修 bug |
+| `implementation`、`subagent-implement` | 下游 | 测试失败后由用户决定是否调起修 bug |
 
 ## 依赖
 
@@ -51,11 +51,7 @@ description: 在 write-ui-test 生成用例规格后,通过 Playwright MCP 驱�
 
 ## feature-id 与文件前缀规则
 
-复用既有规则(同 `/write-api` / `/run-api-test` 的算法):
-
-- feature-id 格式:`YYYY-MM-DD-[业务ID-]<标题>`
-- 文件前缀:有业务ID = `<业务ID>-<标题>`,无业务ID = `<标题>`
-- 文件名不得包含 `/`、`:`、`*`、`?`、`"`、`<`、`>`、`|`
+文件前缀 = feature-id 去掉开头的日期 `YYYY-MM-DD-`。
 
 产物文件名(归用户指定的 feature 目录):
 

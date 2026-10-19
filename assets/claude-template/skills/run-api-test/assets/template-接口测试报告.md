@@ -20,12 +20,16 @@
 ```markdown
 # 接口测试报告:<feature 标题>
 
+> 产物: api_test_report
+> 依据: spec@<主 spec 指纹前 7 位,用 cgraphx features show <feature-id> 查;没有主 spec 就删掉这一行>
 > feature-id: <feature-id>
 > 生成时间: <YYYY-MM-DD HH:MM>
 > 关联接口测试规格: <文件前缀>-接口测试-spec.md
 > 关联 .bru 集合: docs/bruno/<服务>/<需求前缀>/
 
-## 1. 汇总
+## 结论
+
+原来没有用户管理接口;这次新增 5 个接口,跑了 13 个场景:通过 10、失败 3、跳过 0。暂时不能交付:创建用户没写库、删除用户断言失败、订单查询返回 404,详见「失败汇总」。
 
 | 指标 | 值 |
 |---|---|
@@ -37,9 +41,9 @@
 
 通过率:<通过/总> %
 
-## 2. 逐接口结果
+## 逐接口结果
 
-### 2.1 GET /api/v1/users/:id
+### GET /api/v1/users/:id
 
 | 维度 | 内容 |
 |---|---|
@@ -104,7 +108,7 @@ Content-Type: application/json
 
 ---
 
-### 2.2 POST /api/v1/users
+### POST /api/v1/users
 
 | 维度 | 内容 |
 |---|---|
@@ -185,7 +189,7 @@ Content-Type: application/json
 
 ---
 
-### 2.3 PUT /api/v1/users/:id
+### PUT /api/v1/users/:id
 
 | 维度 | 内容 |
 |---|---|
@@ -258,7 +262,7 @@ Content-Type: application/json
 
 ---
 
-### 2.4 DELETE /api/v1/users/:id
+### DELETE /api/v1/users/:id
 
 | 维度 | 内容 |
 |---|---|
@@ -318,7 +322,7 @@ Content-Type: application/json
 
 ---
 
-### 2.5 GET /api/v1/orders/:id
+### GET /api/v1/orders/:id
 
 | 维度 | 内容 |
 |---|---|
@@ -373,7 +377,7 @@ Content-Type: application/json
 - **可能原因**: 路由未注册 / 路径不对 / id 不存在
 - **建议下一步**: 确认路由注册，或换真实 id
 
-## 3. 失败汇总
+## 失败汇总
 
 | 状态 | 数量 | 接口 |
 |---|---|---|
@@ -382,7 +386,7 @@ Content-Type: application/json
 | 失败-HTTP | 1 | GET /api/v1/orders/:id |
 | **合计** | **3** | |
 
-## 4. DB 核实小结（写接口）
+## DB 核实小结（写接口）
 
 | 接口 | 场景 | 结论 | 查询表 | 预期 | 实际 | 差异 |
 |---|---|---|---|---|---|---|
@@ -390,7 +394,7 @@ Content-Type: application/json
 | PUT /api/v1/users/:id | 更新用户 | ✅ 通过 | users | name 更新为"新名字" | name="新名字" | 无 |
 | DELETE /api/v1/users/:id | 删除用户 | — | — | 断言已失败，未进入 DB 核实 | — | — |
 
-## 5. 下一步建议
+## 下一步建议
 
 - **失败-DB副作用（1 个）**: 疑似代码 bug，建议走 `/implementation` 排查 insert 逻辑
 - **失败-断言（1 个）**: 需确认是代码 bug 还是断言写错，建议先看响应体再决定
@@ -398,7 +402,7 @@ Content-Type: application/json
 
 修完后重跑 `/run-api-test` 验证。
 
-## 6. 产物清单
+## 产物清单
 
 - 接口测试规格: `<文件前缀>-接口测试-spec.md`
 - .bru collection: `docs/bruno/<服务>/<需求前缀>/<接口名>/`

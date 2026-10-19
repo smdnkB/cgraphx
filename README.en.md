@@ -45,24 +45,25 @@ Each project gets its own `.cgraphx/cgraphx.db`: self-contained, no server, no t
 knowledge-recall (auto)
         │
         ▼
-/clarify-requirements ──→ /write-spec ──→ /write-plan (optional)
-     clarify               sole contract      execution plan
+/clarify-requirements ──→ /write-spec ──→ /write-plan (required for large work)
+  clarify + decision table   sole contract    one file per task
         │                                        │
         │            ┌───────────────────────────┘
         ▼            ▼
-  /implementation (simple) or /subagent-implement (complex)
+  /implementation (small) · /subagent-implement (large: one session, then /code-review)
         │
    ┌────┴─────────────────────────────┐
    ▼              ▼                   ▼
 /write-api    /write-unit-test-spec  delivery:
 → /run-api-test → /write-unit-test-code  /knowledge-write capture
-  API testing     unit testing         commit gate
+  API testing     unit testing         /end closure + release record
+                                       commit gate (incl. artifact check)
 
 ── post-release · on demand (off the critical path) ──────
-/write-prd (stakeholder review)  /write-design-doc  /write-api-doc
+/write-docs (requirements, design and API docs)
 ```
 
-Everyday default: **clarify + implement**. Add spec / plan / tests as complexity grows.
+Everyday default: **clarify + implement**. Large work goes through `/write-plan`, then `/subagent-implement` runs every task in one session; add spec and tests as complexity grows. When something is unclear, ask for a picture and `/visual-explain` draws a one-page explainer.
 
 ## Install
 

@@ -24,7 +24,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'design',
     minTier: '1.0',
     requiresBasis: false,
-    firstScreen: { heading: '一图看懂', planIndexOnly: false },
+    firstScreen: null,
   },
   {
     key: 'wireframe',
@@ -40,7 +40,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'design',
     minTier: '1.2',
     requiresBasis: true,
-    firstScreen: null,
+    firstScreen: { heading: '需求概览', planIndexOnly: false },
   },
   {
     key: 'design_doc',
@@ -48,7 +48,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'design',
     minTier: '1.2',
     requiresBasis: true,
-    firstScreen: null,
+    firstScreen: { heading: '架构总览', planIndexOnly: false },
   },
   {
     key: 'plan',
@@ -64,7 +64,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'test',
     minTier: '1.0',
     requiresBasis: true,
-    firstScreen: null,
+    firstScreen: { heading: '覆盖范围', planIndexOnly: false },
   },
   {
     key: 'api_test_report',
@@ -72,7 +72,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'test',
     minTier: '1.0',
     requiresBasis: true,
-    firstScreen: null,
+    firstScreen: { heading: '结论', planIndexOnly: false },
   },
   {
     key: 'unit_test_spec',
@@ -80,7 +80,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'test',
     minTier: '1.0',
     requiresBasis: true,
-    firstScreen: null,
+    firstScreen: { heading: '覆盖范围', planIndexOnly: false },
   },
   {
     key: 'unit_test_report',
@@ -88,7 +88,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'test',
     minTier: '1.0',
     requiresBasis: true,
-    firstScreen: null,
+    firstScreen: { heading: '结论', planIndexOnly: false },
   },
   {
     key: 'ui_test_spec',
@@ -96,7 +96,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'test',
     minTier: '1.0',
     requiresBasis: true,
-    firstScreen: null,
+    firstScreen: { heading: '覆盖范围', planIndexOnly: false },
   },
   {
     key: 'ui_test_report',
@@ -112,7 +112,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'release',
     minTier: '1.3',
     requiresBasis: false,
-    firstScreen: null,
+    firstScreen: { heading: '版本与上线时间', planIndexOnly: false },
   },
   {
     key: 'knowledge',
@@ -160,7 +160,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'delivery',
     minTier: '1.2',
     requiresBasis: true,
-    firstScreen: null,
+    firstScreen: { heading: '历时', planIndexOnly: false },
   },
   {
     key: 'api_doc',
@@ -176,7 +176,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: null,
     minTier: null,
     requiresBasis: false,
-    firstScreen: null,
+    firstScreen: { heading: '本任务范围', planIndexOnly: false },
   },
 ];
 
@@ -382,11 +382,18 @@ export function stageMilestoneOf(
   return null;
 }
 
-/** 首屏结论标题;该类型不要求首屏、或 plan 非 index 文件返回 null。 */
+/**
+ * 首屏结论标题;该类型不要求首屏、或 plan 非 index 文件返回 null。
+ *
+ * 开头结论只对 md 生效;HTML 读不出二级标题,不查。
+ */
 export function firstScreenHeadingOf(
   identity: ArtifactIdentity,
   projectRelPath: string,
 ): string | null {
+  if (extname(projectRelPath).toLowerCase() !== '.md') {
+    return null;
+  }
   const firstScreen = getBuiltinArtifactType(identity.type)?.firstScreen ?? null;
   if (firstScreen === null) {
     return null;

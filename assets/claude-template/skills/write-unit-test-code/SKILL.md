@@ -9,10 +9,6 @@ description: 基于 write-unit-test-spec 产出的测试规格文档 + 已有实
 
 **测试填实 + 验证 skill**:消费 `write-unit-test-spec` 产出的测试规格文档,基于已有实现代码填实测试代码,跑测试验证,出测试报告。
 
-**和 write-unit-test-spec 的分工**:
-- write-unit-test-spec:产**测试规格文档**(该测哪些场景,基于 spec,零代码依赖)
-- 本 skill(write-unit-test-code):基于测试规格 + 已有实现,填实测试代码 + 跑 + 出报告
-
 两个 skill 顺序依赖:本 skill 找不到测试规格文档时报错退出。
 
 **和 implementation 的关系**:平行线路。implementation 写业务实现代码,本 skill 写测试代码。本 skill 假设被测代码已存在(典型场景:用户跑完 implementation 后回来补测试);代码缺失的场景用 `it.skip` + TODO 占位。
@@ -89,6 +85,8 @@ description: 基于 write-unit-test-spec 产出的测试规格文档 + 已有实
 ```markdown
 # 单元测试报告: <需求名称>
 
+> 产物: unit_test_report
+> 依据: spec@<主 spec 指纹前 7 位,用 cgraphx features show <feature-id> 查;没有主 spec 就删掉这一行>
 > feature-id: <feature-id>
 > 测试人: <git config user.name>
 > 测试时间: <YYYY-MM-DD>
@@ -99,7 +97,16 @@ description: 基于 write-unit-test-spec 产出的测试规格文档 + 已有实
 > 运行时: <如 JDK 17.0.19(homebrew openjdk@17)/ Node v22.x>
 ```
 
-- 测试概况:总数 / 通过 / 失败 / 跳过(it.skip 占位)/ 时长
+- `## 结论`(第一个二级标题):第一句先讲原来的情况,再写通过、失败、跳过各几条,最后说能否交付;下面放计数:总数、通过、失败、跳过(it.skip 占位)、时长。
+
+**结论示例**:
+
+```markdown
+## 结论
+
+原来用户资料处理没有任何校验;这次补上空值校验和权限检查。3 个场景:通过 1、失败 1、跳过 1,暂时不能交付:空值输入没有校验(见「空值输入应抛错」);权限检查还没实现,对应场景先跳过。
+```
+
 - 逐场景详细结果:每个 `it` 的通过/失败/跳过 + 入参 + 执行过程 + 断言判定 + 失败原因(如有)
 - 实现与 spec 偏差小结
 - 待确认项汇总(实现缺失 / spec 不够细等)

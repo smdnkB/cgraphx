@@ -8,8 +8,8 @@
  * - 每次调用现读文件、现跑 git,不缓存(spec §3.5 新鲜度)。
  *
  * 文件定位(契约 2):system = 根目录全部 `*.md`(不递归);flow = `flows/*.md`。
- * 过期口径(契约 3)与 code-map-recall skill 的 `git diff` 一致,不含其 `git status`
- * 一项:只看已提交改动。
+ * 过期口径(契约 3):`git diff --name-only <source_commit> HEAD -- <related_code...>`
+ * 有输出即过期;只看已提交的改动,不看工作区里没提交的改动。
  */
 
 import { execFileSync } from 'node:child_process';

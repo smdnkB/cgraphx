@@ -6,6 +6,18 @@
     "skills/code-impact-init",
     "skills/code-impact-markdown",
     "skills/precommit-review",
-    "skills/knowledge-write/template-runbook.md"
+    "skills/knowledge-write/template-runbook.md",
+    "skills/knowledge-api",
+    "skills/code-map-write",
+    "skills/code-map-recall",
+    "skills/write-prd",
+    "skills/write-design-doc",
+    "skills/write-api-doc",
+    "skills/knowledge-migrate",
+    "skills/write-delivery-guide",
+    "skills/subagent-implement/implementer-prompt.md",
+    "skills/subagent-implement/spec-reviewer-prompt.md",
+    "skills/subagent-implement/quality-reviewer-prompt.md",
+    "skills/clarify-requirements/references/澄清结果页.md"
   ]
 }

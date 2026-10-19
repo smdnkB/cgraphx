@@ -130,39 +130,8 @@ node <skill-dir>/scripts/export-ddl.mjs \
 
 ## 代价意识
 
-每张表一次 DB 连接(dbquery 子系统无连接池)。100 张表 ≈ 101 次连接(`--mode=tables` 1 次 + DDL 100 次),远程库可能几十秒。表清单越大越慢,所以**先确认表清单再批量拉**,避免拉了一堆没用的。
+每张表一次 DB 连接,100 张表的远程库可能要几十秒,所以先确认表清单再批量拉。
 
 ## 闭环:和 db-query skill 配合
 
-**全量保鲜的分工**:日常开发改模型 → 开发流程**写透**(全量 `ddl/<表名>.sql` 直接改到最终态,增量流水记在需求目录 `sql/`,见项目 `docs/guides/data-standards.md`「Schema 变更约定」节);本 skill 建**基线**并做**周期校准**(初始化、全量重导、漂移复核,DDL + 列注释 + 表注释 + 索引来自 DB);`db-query` 在日常查数据时**补充**探索发现:
-
-```
-export-table-ddl  →  docs/schema-knowledge/<project>/ddl/<table>.sql  (基线 DDL)
-       ↑                          ↑ 重 dump 保留
-       │                          │
-       └── 周期校准 / 漂移重跑 ──┘
-                                  │
-db-query 探索踩坑 → append DISCOVERED 块(隐式关系/字段含义/陷阱/流程)
-```
-
-DISCOVERED 块格式(`ddl/<table>.sql` 末尾):
-
-```sql
--- === DISCOVERED (db-query 探索补充,非 DB 原生) ===
--- [关系] assignee_id → users.staff_code (处理人工号)
--- [字段含义] status: 0=待派单 1=处理中 2=已完成 3=已取消
--- [陷阱] email 不唯一,用 phone 关联更稳
--- [流程] 派单→处理→回单:work_order.status 驱动,见 dispatch_log/receipt
--- === END DISCOVERED ===
-```
-
-重跑本 skill 时,脚本自动保留每张表已有的 DISCOVERED 块(不会覆盖)。所以可以放心重 dump —— DB schema 变了拿新 DDL,探索积累的知识不丢。详见 `db-query` skill 的"陌生 schema 探索流程"。
-
-### 知识落在哪 —— 顺着 agent 的访问路径
-
-agent 进这个目录的访问路径固定是 `INDEX.md → ddl/<table>.sql`,**不会主动读独立笔记文件**。所以知识只能落在两个地方:
-
-- **`INDEX.md`**:工程级 meta(profile 对应哪个服务、架构一句话)。agent 进目录第一件事就是读它。
-- **`ddl/<table>.sql` 的 DISCOVERED 块**:一切表级 + 跨表知识。
-
-跨表知识塞**枢纽表**(流程主表 / 被指向最多的表 / agent 最先点名的表),关系 `A.x → B.y` 双向标注(写进 `A.sql` 和 `B.sql` 各一行)。**绝不建** `NOTES.md` / `跨表知识.md` 这类独立文件 —— 那等于把知识埋了,agent 不会主动读。详见 `db-query` skill 的"枢纽表原则"。
+日常改模型时由开发流程直接改全量 `ddl/<表名>.sql`(见 `docs/guides/data-standards.md`「Schema 变更约定」);本 skill 建基线、做周期校准。重导时脚本保留每张表已有的 DISCOVERED 块;块的格式、跨表知识写在哪,见 db-query skill。

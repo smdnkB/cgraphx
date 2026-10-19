@@ -92,8 +92,6 @@ profiles 文件结构:每个 profile 含 `type`(`mysql`/`postgres`/`http`)、连
    - 落点口诀:**知识进 DDL 文件,action 进 pending-comments.sql**。两者不混 —— DISCOVERED 块只放"agent 现在要知道的",pending-comments.sql 只放"等 DBA 固化进 DB 的暂存区"。
 ```
 
-**长期目标**:DB 注释逐渐健全(DBA 执行了 pending-comments.sql)后,`schema --mode ddl` 直接返回业务含义,DISCOVERED 块里对应的 `[字段含义]` 行可删(已被 DB 固化),pending-comments.sql 也 drain 完。DB 自带注释是单一事实源,任何工具/任何人查 DDL 都受益。
-
 ## DISCOVERED 块格式(append 到 ddl/<table>.sql 末尾)
 
 ```sql
@@ -112,7 +110,7 @@ profiles 文件结构:每个 profile 含 `type`(`mysql`/`postgres`/`http`)、连
 
 ### 跨表知识往哪张表写 —— 枢纽表原则(重要)
 
-agent 的访问路径是 `INDEX.md → ddl/<table>.sql`,**基本不会主动读独立的 NOTES.md / 项目级笔记文件**。所以跨表知识不能单独建文件,必须塞进 agent 必然落地的表的 DISCOVERED 块:
+跨表知识不单独建文件,写进 agent 必然会读的表的 DISCOVERED 块:
 
 - **关系(`[关系]`)双向标注**:`A.x → B.y` 在 `A.sql` 和 `B.sql` 的 DISCOVERED 块各写一行。agent 无论从哪头查表,都能看到这条关联。
 - **跨表业务流程(`[流程]`)**:塞进该流程的**枢纽表** —— 即流程中心、agent 落地概率最高的那张表。例如"派单→处理→回单"流程,枢纽是 `work_order`(流程主表),写进 `work_order.sql`;不要散到 `dispatch_log`/`receipt` 各一份,更不要建 `派单流程.md`。
@@ -126,7 +124,6 @@ agent 的访问路径是 `INDEX.md → ddl/<table>.sql`,**基本不会主动读�
 `<project>/pending-comments.sql` 是上述"绝不建独立文件"规则的**唯一例外**,因为它服务的不是 agent 而是 DBA:
 
 - **内容**:待执行的 `ALTER TABLE ... COMMENT '...'`(MySQL) / `COMMENT ON COLUMN/TABLE ... IS '...'`(PG)语句,补 DB 缺失的字段/表注释。
-- **为什么可以独立**:agent 读路径是 `INDEX.md → ddl/<table>.sql`,**不经过 pending-comments.sql** —— 它不在路径上,放独立文件不会"埋"任何 agent 需要的知识。它只是 DBA 的任务队列。
 - **格式**:纯 SQL,按表分组,每组前一行 `-- <table>` 注释。DBA 跑一条删一条(drain 语义)。
 - **和 DISCOVERED 块的分工**:同一个字段含义,DISCOVERED 块写"agent 现在要知道的"(立即生效),pending-comments.sql 写"等 DBA 固化进 DB 的"(异步执行)。DBA 执行后:删 pending-comments.sql 里那条 + 删 DISCOVERED 里对应的 `[字段含义]` 行(DB 已固化,文件副本冗余)。
 - **重 dump 不动它**:`export-table-ddl` 脚本只写 `INDEX.md` 和 `ddl/*.sql`,不碰 pending-comments.sql。
@@ -173,12 +170,6 @@ COMMENT ON COLUMN users.tenant_id IS '租户隔离字段,所有查询必须带�
 4. 结论不够 → 再派一次(换 prompt 重点,如"重点看 X 表的关联")或回头自己调工具补
 5. 子 agent 在返回里明确说"这些表关系不明,建议问用户"→ 主 agent 决定是否问,**不要让子 agent 自己问用户**(主 agent 才是用户对话入口)
 
-### 代价
-
-- **不派的代价**:大段 DDL / SELECT 输出进主上下文,后续决策可用 budget 变小
-- **派的代价**:子 agent 本身耗 token,简单查询派反而更贵
-- **R4 是平衡点**:只在"模糊意图 + 主 agent 无法精确判断目标"时派
-
 ## schema-knowledge 目录结构(由 export-table-ddl 建基线,db-query 探索补充)
 
 ```
@@ -191,26 +182,6 @@ docs/schema-knowledge/
       work_order.sql
   <工程B>/
     ...
-```
-
-**两类落点,各服务不同对象**:
-- **给 agent 看(知识)** → `ddl/<table>.sql` 的 DISCOVERED 块。agent 读路径必经。
-- **给 DBA 执行(action)** → `pending-comments.sql`。DBA 任务队列,不在 agent 读路径上。
-
-**两张表的 DDL 文件示例**(work_order.sql):
-
-```sql
-CREATE TABLE `work_order` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `assignee_id` varchar(64) NOT NULL COMMENT '处理人工号',
-  `status` tinyint NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
--- === DISCOVERED (db-query 探索补充,非 DB 原生) ===
--- [关系] assignee_id → users.staff_code (处理人工号,关联 users.staff_code)
--- [字段含义] status: 0=待派单 1=处理中 2=已完成 3=已取消
--- [陷阱] 跨 schema 查询时 schema 前缀必须显式
--- === END DISCOVERED ===
 ```
 
 **闭环工作流**:
@@ -230,14 +201,3 @@ CREATE TABLE `work_order` (
 | 5 | 参数错误(缺 --sql / 缺 --table) | 补全必填参数 |
 
 stderr 文本能直接读,无需额外解析。
-
-## 探索结果收口(给 clarify/spec/plan)
-
-只有当本 skill 用于需求澄清、spec 或 plan 前置探索时,才做简短收口。简单精确查询(如"看某表 DDL")可以直接回答,不套模板。
-
-按需使用以下 4 项,无内容可省略:
-
-- **查到的关键事实**:表、字段、注释、索引、外键/隐式关联、样本分布、状态枚举或异常数据。
-- **对决策的影响**:哪些统计口径、过滤条件、兼容策略、迁移/回填策略需要确认或锁定。
-- **应进入 PRD/spec/plan 的内容**:数据口径、状态含义、权限隔离字段、迁移任务、验证 SQL、索引风险等。
-- **仍不确定/需确认**:需要业务方、DBA、代码探索或 schema 注释补充的点。

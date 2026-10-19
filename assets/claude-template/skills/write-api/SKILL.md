@@ -1,6 +1,6 @@
 ---
 name: write-api
-description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + 环境配置)。流程:识别接口范围(用户显式给 / spec 接口章节 / AI 读 spec 理解)→ 生成接口测试规格文档 → 单次 AI 调用生成 .bru(含真实参数 + 内嵌断言)→ 首次接入时生成 bruno.json + environments/*.bru 骨架。产物:接口测试规格随 feature 走;.bru collection 按 <服务>/<需求前缀>/<接口名>/<场景> 组织在 docs/bruno/(按需求隔离,跨需求不覆盖);environments 统一管理。本 skill 不跑 bru run、不核实 DB、不出报告——那是 /run-api-test 的职责。不调 write-api-doc、不自动修代码、不引入程序化配置文件(微服务/通用接口识别由 AI 判断)。Use when 用户要求生成测试接口 / 写接口测试 / 准备 bruno 测试 / 帮需求补接口 / 免去手动录接口。
+description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + 环境配置)。流程:识别接口范围(用户显式给 / spec 接口章节 / AI 读 spec 理解)→ 生成接口测试规格文档 → 单次 AI 调用生成 .bru(含真实参数 + 内嵌断言)→ 首次接入时生成 bruno.json + environments/*.bru 骨架。产物:接口测试规格随 feature 走;.bru collection 按 <服务>/<需求前缀>/<接口名>/<场景> 组织在 docs/bruno/(按需求隔离,跨需求不覆盖);environments 统一管理。本 skill 不跑 bru run、不核实 DB、不出报告——那是 /run-api-test 的职责。不自动修代码、不引入程序化配置文件(微服务/通用接口识别由 AI 判断)。Use when 用户要求生成测试接口 / 写接口测试 / 准备 bruno 测试 / 帮需求补接口 / 免去手动录接口。
 ---
 
 # Write API
@@ -15,30 +15,6 @@ description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + �
 - 不编造未在代码或 spec 中体现的接口、参数、响应字段、断言
 - 编写的请求地址禁止使用 baseUrl,因为一个项目会有很多服务, 必须使用服务名称作为地址变量(如 `so-assist: http://127.0.0.1:8087`)
 
-## Trigger
-
-**使用此 skill 当**:
-- 用户要求"生成测试接口""写接口测试""准备 bruno 测试""write-api"
-- 用户在 `/implementation` 或 `/subagent-implement` 完成编码后,触发本 skill 准备测试接口
-- 用户想为某个需求生成 / 补接口,免去手动录
-
-**不要使用此 skill 当**:
-- 跑接口测试 → 用 `/run-api-test`
-- 写 PRD / spec / plan → 用 `/write-prd` / `/write-spec` / `/write-plan`
-- 写 HTML 接口文档 → 用 `/write-api-doc`
-- 探索陌生项目 → 用 `/knowledge-init`
-- 查代码调用关系 → 用 grep / Read
-
-## 与既有 skill 边界
-
-| skill | 关系 | 说明 |
-|---|---|---|
-| `run-api-test` | 下游 + 独立 | 消费本 skill 产的 .bru + 接口测试规格跑测试;本 skill 不调它,跑测试由用户显式触发;同一份 .bru 可被多次 run-api-test 复用 |
-| `db-query` | 复用 | S3 查真实测试数据;DB 副作用核实由 `/run-api-test` R4 做 |
-| `write-api-doc` | 独立并列 | 不互相调用;本 skill 产 .bru + 接口测试规格,write-api-doc 产 HTML 接口文档 |
-| `implementation` / `subagent-implement` | 上游 | 编码阶段,跑完触发本 skill |
-| `write-design-doc` | 独立 | 发布后按需产设计文档 |
-
 ## 依赖
 
 - feature 编码已完成(`/implementation` 或 `/subagent-implement` 跑完)
@@ -46,14 +22,9 @@ description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + �
 - `docs/guides/interface-standards.md` 存在(接口约定;缺失 → 提示 `/init-project-guides` 补齐,见工作流前置)
 - 项目已配置 db-query profile(S3 查真实数据)—— 未配置则 S3 降级
 
-## feature-id 与文件前缀规则
+## 产物
 
-复用既有规则(同 `/write-prd` / `/write-spec` / `/write-plan` / `/write-api-doc` 的算法):
-
-- feature-id 格式:`YYYY-MM-DD-[业务ID-]<标题>`
-- 文件前缀:有业务ID = `<业务ID>-<标题>`,无业务ID = `<标题>`
-- 标题段允许中文、英文或混合,**不得**对中文做英文 slug 转换
-- 文件名不得包含 `/`、`:`、`*`、`?`、`"`、`<`、`>`、`|`
+文件前缀 = feature-id 去掉开头的日期 `YYYY-MM-DD-`。
 
 产物文件名:
 - 接口测试规格:`docs/features/<feature-id>/<文件前缀>-接口测试-spec.md`
@@ -79,7 +50,7 @@ description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + �
 ### S2. 生成接口测试规格文档
 
 - **前置**:S1 接口清单已确认
-- **行为**:按 `references/接口测试-spec-format.md` 六节结构生成接口测试规格文档;AI 做微服务识别 + 通用接口判断(prompt 见 `references/ai-prompts.md` §S2),结果写入 §1 接口清单的"服务"和"通用"列
+- **行为**:照 `assets/template-接口测试-spec.md` 生成接口测试规格(开头先写「覆盖范围」,再写六节;各节要点见 `references/接口测试-spec-format.md`);AI 做微服务识别和通用接口判断(prompt 见 `references/ai-prompts.md` §S2),结果写入 §1 接口清单的「服务」和「通用」列
 - **用户校正**:AI 识别结果在 §1 列出后,用户可在 S3 前校正"服务"和"通用"两列,skill 以校正后为准
 - **结果**:落盘 `docs/features/<feature-id>/<文件前缀>-接口测试-spec.md`
 
@@ -103,15 +74,6 @@ description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + �
   - 已存在 → 沿用,**不重写**
 - **结果**:基础设施就绪,用户可调 `/run-api-test` 跑测试
 
-## 工作流结束
-
-S4 完成后 skill 结束。**不跑 bru run、不核实 DB、不出报告**。
-
-产物:
-- `docs/features/<feature-id>/<文件前缀>-接口测试-spec.md`(接口测试规格)
-- `docs/bruno/<服务>/<文件前缀>/<接口名>/<场景>.bru`(测试接口,按需求隔离)
-- `docs/bruno/bruno.json` + `docs/bruno/environments/*.bru`(首次接入生成)
-
 ## 异常速查
 
 | 场景 | 行为 |
@@ -126,20 +88,6 @@ S4 完成后 skill 结束。**不跑 bru run、不核实 DB、不出报告**。
 | env 文件缺失 | S4 生成骨架 + AI 填 non-secret + 暂停提示用户填 secret |
 
 详细异常边界参考对应 reference 文件。
-
-## 质量检查
-
-跑完后自检:
-- 接口测试规格文档落盘 feature 目录,六节齐全
-- .bru 按 `<服务>/<需求前缀>/<接口名>/<场景>.bru` 组织,无 `collection.bru`
-- 根级 `bruno.json` 存在;首次接入时 `environments/` + 三环境 .bru 生成,secret 留空
-- .bru 用旧版 tests 语法(`test("name", function() { res.getStatus()/res.getBody()... })`),无 `assert` 段、无 `function onResponse`
-- .bru 的 docs 段含业务说明(关联需求由目录层级表达,docs 段不写关联需求列表)
-- 入参写真实值,变量化只用于环境级 / 前置动态 / 拿不到时占位
-- header 名 / `{{var}}` 变量名大小写与项目既有 .bru 对齐
-- 接口路径 / 参数形态 / 错误码断言符合 `docs/guides/interface-standards.md`(用户豁免规范的除外)
-- 无程序化配置文件(`.services.yml` / `.config.yml`)
-- **工作流停在 S4,没跑 bru run,没核实 DB,没出报告**
 
 ## 收尾
 

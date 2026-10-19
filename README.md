@@ -43,24 +43,25 @@ cgraphx = **skill 流程(主体)+ CLI 能力(支撑)**。
 knowledge-recall(自动召回)
         │
         ▼
-/clarify-requirements ──→ /write-spec ──→ /write-plan(可选)
-     澄清                  唯一契约          执行计划
+/clarify-requirements ──→ /write-spec ──→ /write-plan(大需求必走)
+  澄清 + 决策表             唯一契约          一个任务一个文件
         │                                        │
         │            ┌───────────────────────────┘
         ▼            ▼
-  /implementation(简单) 或 /subagent-implement(复杂)
+  /implementation(小需求)· /subagent-implement(大需求,一个会话跑完,做完 /code-review)
         │
    ┌────┴─────────────────────────────┐
    ▼              ▼                   ▼
 /write-api    /write-unit-test-spec  交付收尾:
 → /run-api-test → /write-unit-test-code  /knowledge-write 沉淀
-  接口测试       单元测试              commit 门禁
+  接口测试       单元测试              /end 收口 + 发布记录
+                                      commit 门禁(含产物检查)
 
 ── 发布后 · 按需(不在主链)──────────────
-/write-prd(业务方审阅)  /write-design-doc(设计文档)  /write-api-doc(接口文档)
+/write-docs(需求文档、设计文档、接口文档)
 ```
 
-日常默认两步:**澄清 + 实现**。复杂需求按需补规格/计划/测试。
+日常默认两步:**澄清 + 实现**。大需求先 `/write-plan`,再 `/subagent-implement` 一个会话跑完;复杂需求按需补规格和测试;哪里没看懂,说「画个图讲讲」,`/visual-explain` 出一页图解。
 
 ## 安装
 

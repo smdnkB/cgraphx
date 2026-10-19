@@ -28,7 +28,7 @@ related_documents:
   - docs/knowledge/测试流程后置.md
   - docs/knowledge/澄清苏格拉底单问.md
 created: 2026-08-01
-updated: 2026-08-01
+updated: 2026-10-19
 ---
 
 # plan 手段决策三档
@@ -51,7 +51,7 @@ plan 的实现手段决策**按业务可观察性分档**,判别一句:**手段�
 
 - 判别器 leading word:「业务可观察后果」+ 现成的「回跳」「信封」;不造 A/B 标签(自造词不招募预训练先验)。
 - 单一事实源:三档模型完整定义在 write-plan 定位节;write-spec / clarify / FLOW-MAP / reviewer 均为指针 echo。
-- **残余风险**:plan 把业务可观察手段误判为纯工程 → 悄悄替业务拍板。护栏三道:write-plan 定位给 B 类判别示例 + 红线「越信封 → 回跳,不夹带」+ subagent-implement 的 spec-reviewer 实现期再审;并以透明(plan 记录手段决策,事后可见可改)兜底。
+- **残余风险**:plan 把业务可观察手段误判为纯工程 → 悄悄替业务拍板。护栏三道:write-plan 定位给 B 类判别示例 + 红线「越信封 → 回跳,不夹带」+ 全部任务做完、统一验证通过后,由用户跑 `/code-review` 整体审查(2026-10-19 起;subagent-implement 改写后不再逐任务派 spec-reviewer);并以透明(plan 记录手段决策,事后可见可改)兜底。
 
 ## 代码入口
 

@@ -60,13 +60,13 @@ function renderSection(label: string, entries: CodemapViewEntry[], showCommit: b
     </section>`;
 }
 
-/** 地图首页主区。listing=null 或两组都为空 → 空态引导 /code-map-write。 */
+/** 地图首页主区。listing=null 或两组都为空 → 空态提示代码地图已停止维护。 */
 export function renderCodemapHomeContent(listing: CodemapListing | null): string {
   if (listing === null || (listing.systems.length === 0 && listing.flows.length === 0)) {
     return `
     <section class="placeholder">
       <h1>还没有代码地图</h1>
-      <p>在 Claude Code 中运行 <code>/code-map-write</code> 生成,生成后刷新本页即可浏览。</p>
+      <p>代码地图已停止维护,内容可能过时。</p>
     </section>`;
   }
   return `
@@ -103,7 +103,7 @@ function renderStaleBox(e: CodemapViewEntry): string {
       <div class="codemap__stale-box">
         <strong>已过期:生成之后以下文件有改动,图可能和代码不符</strong>
         <ul>${files}</ul>
-        <p>在 Claude Code 中运行 <code>/code-map-write</code> 重新生成</p>
+        <p>代码地图已停止维护,内容可能过时。</p>
       </div>`;
 }
 

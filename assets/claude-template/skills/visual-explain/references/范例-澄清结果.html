@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>大需求实现和图解</title>
+<style>
+/* 配色沿用 skill瘦身 v4 澄清结果页的松绿纸色;只用系统字体,断网也能打开 */
+:root {
+  --bg: #F1F4ED;
+  --surface: #FBFCF8;
+  --surface-2: #F2F5EC;
+  --ink: #15211B;
+  --ink-2: #4C5B52;
+  --ink-3: #75837A;
+  --line: #DCE3D8;
+  --accent: #1D6B4F;
+  --accent-ink: #163B2F;
+  --accent-tint: #E1EFE6;
+  --hard: #B14E22;
+  --hard-tint: #F7E7DC;
+  --human: #2F5D8A;
+  --human-tint: #E3ECF5;
+  --hint: #56625B;
+  --hint-tint: #E9EDE5;
+  --chg: #B4521C;
+  --chg-tint: #FBE9DD;
+  --del: #8A948E;
+  --del-tint: #ECEFEA;
+  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1512; --surface: #161F1A; --surface-2: #1C2721;
+    --ink: #E4ECE6; --ink-2: #A7B5AB; --ink-3: #7F8D84; --line: #2A3730;
+    --accent: #5DBB94; --accent-ink: #9AD9BC; --accent-tint: #173328;
+    --hard: #E8916A; --hard-tint: #3A2117;
+    --human: #8FB8E3; --human-tint: #1A2B3C;
+    --hint: #A3AFA7; --hint-tint: #202A24;
+    --chg: #EFA06F; --chg-tint: #3A2417;
+    --del: #7F8D84; --del-tint: #1E2621;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1512; --surface: #161F1A; --surface-2: #1C2721;
+  --ink: #E4ECE6; --ink-2: #A7B5AB; --ink-3: #7F8D84; --line: #2A3730;
+  --accent: #5DBB94; --accent-ink: #9AD9BC; --accent-tint: #173328;
+  --hard: #E8916A; --hard-tint: #3A2117;
+  --human: #8FB8E3; --human-tint: #1A2B3C;
+  --hint: #A3AFA7; --hint-tint: #202A24;
+  --chg: #EFA06F; --chg-tint: #3A2417;
+  --del: #7F8D84; --del-tint: #1E2621;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 40px 16px 72px;
+  display: grid;
+  gap: 44px;
+}
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+ul, ol { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--ink-3); }
+
+/* 开头 */
+.hero { display: grid; gap: 14px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.06em; color: var(--ink-3); }
+.hero h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.25; font-weight: 700; }
+.lede { font-size: 17px; color: var(--ink-2); max-width: 64ch; }
+.facts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: grid; gap: 2px; min-width: 0; }
+.fact b { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--accent-ink); }
+.fact span { font-size: 13px; color: var(--ink-2); }
+
+/* 目录 */
+.toc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.toc a { text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+.toc .sep { color: var(--ink-3); }
+
+/* 通用区块 */
+.sec { display: grid; gap: 14px; }
+.sec > h2 { font-size: 23px; font-weight: 700; }
+.sec > p { color: var(--ink-2); max-width: 72ch; }
+.sub { display: grid; gap: 14px; }
+.sub > h3 { font-size: 18px; font-weight: 700; }
+.sub > p { color: var(--ink-2); max-width: 72ch; }
+.part { display: grid; gap: 18px; padding-top: 6px; border-top: 2px solid var(--line); }
+.part-h { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); font-weight: 700; padding-top: 10px; }
+
+/* 标记 */
+.badge { display: inline-block; font-size: 12px; line-height: 1; padding: 4px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; vertical-align: 1px; }
+.badge.new { color: var(--accent); background: var(--accent-tint); border-color: transparent; }
+.badge.chg { color: var(--chg); }
+.badge.del { color: var(--del); background: var(--del-tint); border-color: transparent; text-decoration: line-through; }
+.badge.same { color: var(--ink-3); }
+.gt { display: inline-block; font-size: 12px; font-weight: 500; line-height: 1; padding: 4px 7px; border-radius: 4px; white-space: nowrap; }
+.gt.human { background: var(--human-tint); color: var(--human); }
+.gt.stop { background: var(--hard-tint); color: var(--hard); }
+.gt.hard { background: transparent; color: var(--hard); box-shadow: inset 0 0 0 1px var(--hard); }
+.gt.hint { background: var(--hint-tint); color: var(--hint); }
+
+/* 图例 */
+.legend { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+.legend h3 { font-size: 15px; font-weight: 700; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.legend-row > span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* 表格:窄屏时每行变成一张卡片 */
+.table-box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font-weight: 700; color: var(--ink-2); background: var(--surface-2); font-size: 13px; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 700; white-space: nowrap; color: var(--ink); }
+td.ex { color: var(--ink-2); }
+.decisions td:nth-child(2) { min-width: 18em; }
+@media (max-width: 680px) {
+  table, thead, tbody, tr, td { display: block; width: 100%; }
+  thead { display: none; }
+  tr { border-bottom: 1px solid var(--line); padding: 10px 14px; display: grid; gap: 4px; }
+  tr:last-child { border-bottom: 0; }
+  td { border: 0; padding: 0; }
+  td.k { white-space: normal; font-size: 15px; }
+  td[data-label]:not(.k)::before { content: attr(data-label); display: block; font-size: 12px; color: var(--ink-3); }
+  .decisions td:nth-child(2) { min-width: 0; }
+}
+
+/* 全局:现在和以后对照 */
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.col { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.col.after { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.col-h { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.col-h b { font-size: 17px; }
+.col-h span { font-size: 13px; color: var(--ink-3); }
+.flow { list-style: none; padding: 0; display: grid; gap: 0; }
+.flow li { position: relative; padding: 0 0 14px 30px; display: grid; gap: 4px; min-width: 0; }
+.flow li::before { content: ""; position: absolute; left: 9px; top: 22px; bottom: 0; width: 2px; background: var(--line); }
+.flow li:last-child { padding-bottom: 0; }
+.flow li:last-child::before { display: none; }
+.flow .n { position: absolute; left: 0; top: 2px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--surface); font-size: 12px; font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.col.before .flow .n { background: var(--ink-3); }
+.flow .t { font-size: 14px; color: var(--ink); }
+.flow .t .badge { margin-left: 4px; }
+.flow .d { font-size: 13px; color: var(--ink-2); }
+.flow .d.gone { color: var(--ink-3); }
+.flow li.gone .t { color: var(--ink-3); }
+.flow li.wait .n { background: var(--human); }
+.flow li.plain .n { background: var(--ink-3); }
+
+/* 任何时候可用的横条 */
+.band { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; background: var(--accent-tint); color: var(--accent-ink); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.band b { font-weight: 700; }
+
+/* 卡片和清单 */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card h4 { margin: 0; font-size: 15px; font-weight: 700; }
+.card .note { font-size: 13px; color: var(--ink-3); }
+.items { list-style: none; padding: 0; display: grid; gap: 6px; }
+.items li { font-size: 14px; color: var(--ink); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.items li .why { font-size: 13px; color: var(--ink-2); flex-basis: 100%; }
+pre { margin: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.65; color: var(--ink); }
+pre.wrap-text { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-body); font-size: 13.5px; }
+
+/* 拆分规则 */
+.split { display: grid; gap: 10px; justify-items: start; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 14px; max-width: 100%; }
+.box.q { border-color: var(--human); }
+.down { color: var(--ink-3); font-size: 13px; padding-left: 18px; }
+.branches { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; width: 100%; }
+.branch { border-left: 3px solid var(--line); padding: 4px 0 4px 12px; display: grid; gap: 4px; font-size: 14px; }
+.branch.yes { border-left-color: var(--accent); }
+.branch.no { border-left-color: var(--chg); }
+.branch b { font-size: 13px; }
+
+/* 一次运行的步骤 */
+.line { display: grid; }
+.stage { position: relative; padding-left: 44px; padding-bottom: 24px; display: grid; gap: 10px; }
+.stage::before { content: ""; position: absolute; left: 15px; top: 34px; bottom: 0; width: 2px; background: var(--line); }
+.stage:last-child::before { display: none; }
+.stage:last-child { padding-bottom: 0; }
+.stage-h { position: relative; display: grid; gap: 4px; }
+.stage-h .dot { position: absolute; left: -44px; top: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--surface); font-weight: 700; font-size: 15px; display: grid; place-items: center; }
+.stage-h h4 { margin: 0; font-size: 17px; line-height: 32px; font-weight: 700; }
+.stage-h p { color: var(--ink-2); font-size: 14px; max-width: 70ch; }
+.gates { list-style: none; padding: 0; display: grid; gap: 6px; }
+.gates li { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; font-size: 13.5px; color: var(--ink-2); }
+.gates li .gt { margin-top: 2px; }
+.examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.example { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.example p { font-size: 13px; color: var(--ink-2); }
+
+footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
+
+@media (max-width: 560px) {
+  .stage { padding-left: 34px; }
+  .stage::before { left: 11px; }
+  .stage-h .dot { left: -34px; width: 24px; height: 24px; font-size: 12px; top: 4px; }
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">cgraphx · skill瘦身 澄清结果 v2 · 2026-10-19</p>
+  <h1>大需求实现和图解</h1>
+  <p class="lede">原来大需求由 write-plan 分批,每批开一个会话,贴一句启动语跑 <code>/implementation</code>,skill瘦身 分了 8 批,就要开 8 个会话;改动大时,clarify 结束会自动出一页澄清结果。这次调两处。一是恢复 subagent-implement:在一个会话里按顺序给每个任务派一个子 agent,plan 跟着改成一个任务一个文件。二是把画图讲解拆成独立的 visual-explain:不只讲澄清结果,任何对话没看懂都能用;clarify 结尾只提醒一句。</p>
+  <div class="facts">
+    <div class="fact"><b>8 → 1</b><span>要开的会话(以 skill瘦身 为例)</span></div>
+    <div class="fact"><b>23 → 7</b><span>skill瘦身 按新拆法的任务数</span></div>
+    <div class="fact"><b>1 次</b><span>统一测试,全部任务做完后跑</span></div>
+    <div class="fact"><b>25 → 27</b><span>skill 个数:subagent-implement 不废弃,新增 visual-explain</span></div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="目录">
+  <a href="#todo">要做的事情</a><span class="sep">·</span>
+  <a href="#part-impl">会得到的结果:大需求实现</a><span class="sep">·</span>
+  <a href="#part-visual">会得到的结果:图解</a><span class="sep">·</span>
+  <a href="#files">跟着改的地方</a>
+</nav>
+
+<section class="sec" id="todo" aria-labelledby="todo-h">
+  <h2 id="todo-h">要做的事情</h2>
+  <p>这次澄清定下的决策,分两组。每条配一个例子,看例子就知道这条决策会带来什么。</p>
+
+  <div class="sub">
+    <h3>大需求的规划和实现</h3>
+    <div class="table-box">
+      <table class="decisions">
+        <thead><tr><th>决策</th><th>结论</th><th>举个例子</th></tr></thead>
+        <tbody>
+          <tr><td class="k">subagent-implement</td><td data-label="结论">不废弃,改写成按任务派子 agent;从废弃清单里撤掉</td><td class="ex" data-label="举个例子">已部署的项目升级以后照样能用 <code>/subagent-implement</code>。这次的删除还没发布,不会出现先删掉再装回来</td></tr>
+          <tr><td class="k">在哪跑</td><td data-label="结论">在设计会话里直接跑,或者新开一个会话跑。每个子 agent 是一份新的上下文,主会话只收汇报</td><td class="ex" data-label="举个例子">设计完 plan,上下文还够就在原会话里敲一句;不够就新开会话,敲同一句</td></tr>
+          <tr><td class="k">plan 文件</td><td data-label="结论">index 放背景和共用部分,和现在一样;其余一个任务一个文件</td><td class="ex" data-label="举个例子">skill瘦身 会是 index 加 7 个任务文件,不再是 index 加 8 个分文件、23 个任务</td></tr>
+          <tr><td class="k">契约</td><td data-label="结论">只写在 index 里;任务文件按编号引用,不再每个任务各抄一份</td><td class="ex" data-label="举个例子">产物注册表的契约 C-1 只在 index 写一遍,T-2 里写「按 C-1」</td></tr>
+          <tr><td class="k">怎么拆</td><td data-label="结论">先按任务类型拆:数据库、后端、前端、配置、文档等。拆完以后,一个子 agent 还做不完的,再按并行度往下拆,拆到做得完为止,不拆到底。多大算做不完,写 spec 时定一个数</td><td class="ex" data-label="举个例子">后端改动太大,按两个互不依赖的模块拆成两个任务;前端一个子 agent 做得完,就不拆</td></tr>
+          <tr><td class="k">执行顺序</td><td data-label="结论">index 写执行顺序,标出能同时跑的任务。能同时跑的条件:改的文件不重叠,契约已经在 index 里定死</td><td class="ex" data-label="举个例子">先做数据库;后端和前端标了可同时跑,两个子 agent 一起开工</td></tr>
+          <tr><td class="k">子 agent</td><td data-label="结论">只读 implementation、index 和自己的任务文件;只改文件,不构建、不测试、不提交</td><td class="ex" data-label="举个例子">派给 T3 的话就一句:读 implementation、index 和 T3 的文件,只做 T3</td></tr>
+          <tr><td class="k">提交</td><td data-label="结论">主会话提交:每回来一个任务,就按任务里写的提交点提交,不构建、不测试</td><td class="ex" data-label="举个例子">后端任务回来,直接按「一个模块一笔」提交 3 笔。这 3 笔不保证能构建,问题留到统一测试时发现</td></tr>
+          <tr><td class="k">出了问题</td><td data-label="结论">子 agent 报 PLAN_CONFLICT 或者卡住:已经在跑的让它跑完,后面的不再派,停下问你。接着跑时可以指定从哪个任务开始</td><td class="ex" data-label="举个例子">后端报冲突;前端已经在跑,就让它跑完;配置先不派,等你定</td></tr>
+          <tr><td class="k">测试</td><td data-label="结论">全部任务做完后,主会话统一构建、测试一次;要跑的命令集中写在 index 的「统一验证」里</td><td class="ex" data-label="举个例子">skill瘦身 最后一次跑 <code>npm run build</code>、<code>npm test</code> 和 <code>features check</code></td></tr>
+          <tr><td class="k">修复</td><td data-label="结论">主会话负责:小问题直接改;修复量大时派一个子 agent 去修,主会话跑测试确认。修复单独提交,修完再跑一遍</td><td class="ex" data-label="举个例子">统一测试出了 2 处类型错误,主会话直接改;十几个失败分散在 3 个任务里,派子 agent 去修</td></tr>
+          <tr><td class="k">要你验证的</td><td data-label="结论">照常提交,不等你;统一测试之后,把清单一起交给你</td><td class="ex" data-label="举个例子">最后列出:打开订单页,点导出,文件里有备注列</td></tr>
+          <tr><td class="k">最后的审查</td><td data-label="结论">提示你跑 <code>/code-review</code>,不自动跑</td><td class="ex" data-label="举个例子">在设计会话里跑完以后上下文已经不多,可以新开会话跑 <code>/code-review</code></td></tr>
+          <tr><td class="k">不带回来的</td><td data-label="结论">旧版的四件套注入、逐任务审查、质量审查子 agent,以及每批一句的启动语;也不开 git worktree</td><td class="ex" data-label="举个例子">index 只给一句启动语:<code>/subagent-implement docs/features/&lt;feature-id&gt;/plan/&lt;前缀&gt;-index.md</code></td></tr>
+          <tr><td class="k">放在哪个需求</td><td data-label="结论">放进 skill瘦身,改它的 spec;CHANGELOG 不再把 subagent-implement 列为废弃</td><td class="ex" data-label="举个例子">spec 的废弃表去掉 subagent-implement 这一行,大需求怎么执行的那一节重写</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sub">
+    <h3>图解:visual-explain</h3>
+    <div class="table-box">
+      <table class="decisions">
+        <thead><tr><th>决策</th><th>结论</th><th>举个例子</th></tr></thead>
+        <tbody>
+          <tr><td class="k">做什么</td><td data-label="结论">把对话里说过的内容,或者你指定的文件、话题,画成一页图解,降低看懂的成本。澄清结果、plan、实现汇报、代码怎么走、几种方案的对比,都能用。讲法沿用「全局加局部」</td><td class="ex" data-label="举个例子">读完一段代码讲解还是没懂,说一句「画个图讲讲」,得到一页:调用链一张图,三个关键函数各一小节</td></tr>
+          <tr><td class="k">clarify 结尾</td><td data-label="结论">对话里照旧给流程图和决策表,这是你拍板用的;不再自动出页面;最后提醒一句可以图解</td><td class="ex" data-label="举个例子">结尾一句:「有没看懂的地方,可以说『画个图讲讲』,我出一页图解。」</td></tr>
+          <tr><td class="k">怎么触发</td><td data-label="结论">你说「没看懂」「画个图讲讲」「图解一下」时,AI 调用它;也可以直接敲命令。你没要求时,AI 不主动出页面</td><td class="ex" data-label="举个例子">你说「plan 的执行顺序我没看懂」,AI 出一页执行顺序图</td></tr>
+          <tr><td class="k">产出</td><td data-label="结论">一律出一页 HTML:单个文件、断网能打开、深浅色和手机宽度下都看得清;做完在浏览器里打开</td><td class="ex" data-label="举个例子">在 Claude Code 终端里用,做完自动用浏览器打开</td></tr>
+          <tr><td class="k">放在哪</td><td data-label="结论">和某个需求有关的,放进那个需求目录,按版本出;和需求无关的,放 <code>.cgraphx/visual/</code>,只存在本机,不进 git</td><td class="ex" data-label="举个例子">澄清结果:<code>&lt;前缀&gt;-澄清结果-v1.html</code>,和现在一样;临时讲一段代码:<code>.cgraphx/visual/task绑定-v1.html</code></td></tr>
+          <tr><td class="k">其他提醒点</td><td data-label="结论">write-plan 请你确认设计预览时,也提醒一句</td><td class="ex" data-label="举个例子">「设计预览哪里没看懂,可以说『画个图讲讲』。」</td></tr>
+          <tr><td class="k">登记</td><td data-label="结论">不登记产物类型,也不上报;都算讨论稿,看完就不再维护</td><td class="ex" data-label="举个例子"><code>features show</code> 里把它算作「其他文件」</td></tr>
+          <tr><td class="k">名字</td><td data-label="结论"><code>visual-explain</code></td><td class="ex" data-label="举个例子">敲 <code>/visual-explain</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="result" aria-labelledby="result-h">
+  <h2 id="result-h">会得到的结果</h2>
+  <p>两部分各自先看全局,再看关键节点。</p>
+
+  <div class="legend">
+    <h3>怎么读</h3>
+    <div class="legend-row">
+      <span><span class="badge new">新增</span>这次新加的步骤或内容</span>
+      <span><span class="badge chg">改动</span>原来就有,做法变了</span>
+      <span><span class="badge del">去掉</span>以后不再有</span>
+      <span><span class="badge same">不变</span>和现在一样</span>
+    </div>
+    <div class="legend-row">
+      <span><span class="gt human">等你确认</span>停下来等你拍板</span>
+      <span><span class="gt stop">停下问你</span>出了问题,不往下走</span>
+      <span><span class="gt hard">程序拦</span>程序检查挡住,改对才能过</span>
+      <span><span class="gt hint">提示</span>问一句,不拦</span>
+    </div>
+  </div>
+
+  <div class="part" id="part-impl">
+    <p class="part-h">第一部分 · 大需求的规划和实现</p>
+
+    <div class="sub" id="global">
+      <h3>全局:从写 plan 到审查</h3>
+      <div class="compare">
+        <div class="col before">
+          <div class="col-h"><b>现在</b><span>以 skill瘦身 为例</span></div>
+          <ol class="flow">
+            <li><span class="n">1</span><p class="t">write-plan 写出 index 加 8 个分文件,23 个任务</p><p class="d">任务按提交来切;每个分文件开头各抄一份「共用约定」</p></li>
+            <li class="wait"><span class="n">2</span><p class="t">你确认设计预览</p></li>
+            <li class="gone"><span class="n">3</span><p class="t">你开第 1 个会话,贴第 1 句启动语 <span class="badge del">去掉</span></p><p class="d">等它跑完,再开第 2 个会话,一直到第 8 个</p></li>
+            <li class="gone"><span class="n">4</span><p class="t">每个会话自己测试、自己提交 <span class="badge del">去掉</span></p></li>
+            <li><span class="n">5</span><p class="t">回来跑 <code>/code-review</code></p></li>
+          </ol>
+        </div>
+        <div class="col after">
+          <div class="col-h"><b>以后</b><span>同一个需求</span></div>
+          <ol class="flow">
+            <li><span class="n">1</span><p class="t">write-plan 写出 index 加 7 个任务文件 <span class="badge chg">改动</span></p><p class="d">先按任务类型拆,做不完的再按并行度拆;契约只写在 index;index 写执行顺序和统一验证</p></li>
+            <li class="wait"><span class="n">2</span><p class="t">你确认设计预览</p></li>
+            <li><span class="n">3</span><p class="t">敲一句 <code>/subagent-implement</code> <span class="badge new">新增</span></p><p class="d">在设计会话里直接跑,或者新开一个会话跑</p></li>
+            <li><span class="n">4</span><p class="t">按执行顺序派子 agent,能同时跑的一起派 <span class="badge new">新增</span></p><p class="d">子 agent 只改文件;报冲突或卡住时停下问你</p></li>
+            <li><span class="n">5</span><p class="t">每回来一个任务,主会话按提交点提交 <span class="badge chg">改动</span></p><p class="d">不构建、不测试</p></li>
+            <li><span class="n">6</span><p class="t">全部做完,主会话统一构建、测试,有问题就修 <span class="badge new">新增</span></p><p class="d">修复单独提交,修完再跑一遍</p></li>
+            <li class="wait"><span class="n">7</span><p class="t">把要你验证的清单交给你,你跑 <code>/code-review</code></p></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub" id="plan">
+      <h3>局部:plan 长什么样</h3>
+      <p>index 和现在一样放背景和共用部分;不同的是一个任务一个文件,契约只在 index 里写一遍,另外多了执行顺序和统一验证。</p>
+      <div class="grid2">
+        <div class="card">
+          <h4>目录</h4>
+<pre>docs/features/&lt;feature-id&gt;/plan/
+├── &lt;前缀&gt;-index.md
+├── &lt;前缀&gt;-01-数据库.md
+├── &lt;前缀&gt;-02-后端-订单.md
+├── &lt;前缀&gt;-03-后端-支付.md
+├── &lt;前缀&gt;-04-前端.md
+└── &lt;前缀&gt;-05-配置.md</pre>
+          <p class="note">一个典型业务需求的样子:后端一个子 agent 做不完,按两个互不依赖的模块拆成两个任务。文件名写 spec 时定。</p>
+        </div>
+        <div class="card">
+          <h4>index 里写什么</h4>
+          <ul class="items">
+            <li>设计预览:重点决策表,给你看 <span class="badge same">不变</span></li>
+            <li>背景、范围、明确不包含 <span class="badge same">不变</span></li>
+            <li>任务清单:任务和文件一一对应 <span class="badge chg">改动</span></li>
+            <li>执行顺序:分几步,哪几个可以同时跑 <span class="badge new">新增</span><span class="why">替掉原来的「分批」和每批一句的启动语</span></li>
+            <li>必须严格执行的契约 <span class="badge chg">改动</span><span class="why">只写在这里,任务文件按编号引用</span></li>
+            <li>实现手段决策、适用规范、提交规范、风险、待确认项 <span class="badge same">不变</span></li>
+            <li>统一验证:全部做完后跑的命令和要看的结果 <span class="badge new">新增</span></li>
+            <li>启动语:一句 <code>/subagent-implement</code> <span class="badge chg">改动</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>任务文件里写什么</h4>
+          <ul class="items">
+            <li>目标、对应 spec 条款、强制引用的规范 <span class="badge same">不变</span></li>
+            <li>涉及范围:改哪些文件 <span class="badge chg">改动</span><span class="why">要和同时跑的任务不重叠</span></li>
+            <li>必须严格执行、允许局部适配、具体要求、完成条件 <span class="badge same">不变</span></li>
+            <li>契约 <span class="badge chg">改动</span><span class="why">写「按 C-1」,不再抄原文</span></li>
+            <li>提交点 <span class="badge chg">改动</span><span class="why">一个任务可以有好几笔,比如一个 skill 一笔;原来是「独立提交:是或否」</span></li>
+            <li>依赖 <span class="badge del">去掉</span><span class="why">写进 index 的执行顺序</span></li>
+            <li>验证方式 <span class="badge del">去掉</span><span class="why">写进 index 的统一验证,最后一起跑</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>怎么拆</h4>
+        <div class="split">
+          <div class="box">先按任务类型拆:数据库、后端、前端、配置、文档……</div>
+          <p class="down">每个任务都问一遍</p>
+          <div class="box q">一个子 agent 做得完吗?</div>
+          <div class="branches">
+            <div class="branch yes"><b>做得完</b><span>就这样,不再拆。拆得越细,子 agent 之间交接越多</span></div>
+            <div class="branch no"><b>做不完</b><span>按并行度往下拆:拆成改的文件不重叠、只靠 index 契约衔接的几块,每块再问一遍,拆到做得完为止</span></div>
+          </div>
+          <p class="note">多大算做不完(比如预估改多少个文件),写 spec 时定一个数。</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>按新拆法重拆 skill瘦身:7 个任务,分两步</h4>
+        <div class="table-box">
+          <table>
+            <thead><tr><th>步骤</th><th>任务</th><th>为什么这样排</th></tr></thead>
+            <tbody>
+              <tr><td class="k">第 1 步,同时跑</td><td data-label="任务">T1 代码(注册表、features check、web 提示)· T2 合并与废弃 · T3 设计侧 skill · T4 执行侧 skill · T5 其余 skill</td><td data-label="为什么这样排">skill 这一类太大,一个子 agent 做不完,按并行度拆成 T2 到 T5 四块;五个任务改的文件不重叠,模板标题要和注册表一致这条契约已在 index 定死</td></tr>
+              <tr><td class="k">第 2 步,同时跑</td><td data-label="任务">T6 文档(FLOW-MAP、模板 CLAUDE.md、cgraphx-guide、README、CHANGELOG、知识库)· T7 提交门禁</td><td data-label="为什么这样排">文档写的是改完以后的 skill,要等第 1 步做完;门禁必须和 skill 写头部同时上线或者更晚</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub" id="run">
+      <h3>局部:subagent-implement 跑一次</h3>
+      <p>主会话只读 index,不读任务文件正文,也不读代码;它要做的是派任务、提交、最后统一测试和修复。</p>
+      <div class="line">
+        <section class="stage">
+          <div class="stage-h"><span class="dot">1</span><h4>读 index</h4><p>读任务清单、执行顺序、提交规范和统一验证。新开会话接着跑时,可以指定从哪个任务开始。</p></div>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">2</span><h4>派任务</h4><p>按执行顺序一步一步派;同一步里标了可同时跑的,一起派。子 agent 读 implementation、index 和自己的任务文件,只改文件。</p></div>
+          <ul class="gates">
+            <li><span class="gt stop">停下问你</span><span>子 agent 报 PLAN_CONFLICT 或者卡住:已经在跑的让它跑完,后面的不再派</span></li>
+          </ul>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">3</span><h4>提交</h4><p>每回来一个任务,按它报的提交点提交;不构建、不测试。</p></div>
+          <ul class="gates">
+            <li><span class="gt hard">程序拦</span><span>每一笔都照常过提交门禁:先按提交规范自查,再跑 <code>features check</code>,有失败项改对才能提交</span></li>
+          </ul>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">4</span><h4>统一测试</h4><p>全部任务做完后,跑 index「统一验证」里的命令,看要看的结果。</p></div>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">5</span><h4>修复</h4><p>有问题由主会话负责:小问题直接改;修复量大时派一个子 agent 去修,主会话跑测试确认。修复单独提交,修完再跑一遍,直到通过。</p></div>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">6</span><h4>交给你</h4><p>汇报做了哪些任务、测试结果、哪些任务按 plan 做了局部调整,并把要你验证的清单一起给你。</p></div>
+          <ul class="gates">
+            <li><span class="gt human">等你确认</span><span>你按清单验证</span></li>
+            <li><span class="gt hint">提示</span><span>问一句要不要沉淀知识,提醒平台环节还缺什么</span></li>
+            <li><span class="gt hint">提示</span><span>提示你跑 <code>/code-review</code>,不自动跑</span></li>
+          </ul>
+        </section>
+      </div>
+
+      <div class="examples">
+        <div class="example">
+          <p>派给子 agent 的话(示意)</p>
+<pre class="wrap-text">读 .claude/skills/implementation/SKILL.md,按它执行一个任务。
+index:docs/features/2026-10-18-skill瘦身/plan/skill瘦身-index.md
+你的任务:T3 设计侧 skill,任务文件 plan/skill瘦身-03-设计侧skill.md。
+只读 index 和你的任务文件,别的任务文件不读、不改。
+这次只改文件:不构建、不测试、不提交;收尾的沉淀提示和平台环节提醒也不做。
+做完照约定的格式回报。</pre>
+        </div>
+        <div class="example">
+          <p>子 agent 的回报(示意)</p>
+<pre class="wrap-text">结果:完成(另两种是冲突、卡住,要写明卡在哪)
+提交点:
+  1. refactor(skills): clarify-requirements 结尾改成提醒图解
+     skills/clarify-requirements/SKILL.md
+  2. refactor(skills): write-spec 去掉一图看懂
+     skills/write-spec/SKILL.md
+按 plan 执行:PLAN_FOLLOWED
+要人验证的:无
+值得沉淀的:无</pre>
+        </div>
+        <div class="example">
+          <p>最后交给你的汇报(示意)</p>
+<pre class="wrap-text">原来 skill瘦身 要开 8 个会话一批批跑;这次在一个会话里跑完了 7 个任务,都已按提交点提交。
+
+统一验证:npm run build 通过;npm test 有 2 个失败,在 T1 的注册表测试里,主会话改好后单独提交 1 笔,再跑全部通过;features check 通过。
+
+要你验证的:无。
+按 plan 执行:T4 PLAN_ADAPTED(写明改了什么),其余 PLAN_FOLLOWED;没有出现 PLAN_CONFLICT。
+
+下一步:跑 /code-review,审 feat/skill瘦身 相对 main 的改动。</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="part" id="part-visual">
+    <p class="part-h">第二部分 · 图解:visual-explain</p>
+
+    <div class="sub" id="visual-global">
+      <h3>全局:图解在流程里的位置</h3>
+      <p>任何时候都能用;流程里有两处会提醒你一句。</p>
+      <div class="band"><b>任何时候</b><span class="badge new">新增</span><span>你说「没看懂」「画个图讲讲」「图解一下」,AI 用 visual-explain 出一页图解;你没要求时不主动出</span></div>
+      <div class="col after">
+        <ol class="flow">
+          <li><span class="n">1</span><p class="t">理解需求:<code>/clarify-requirements</code> <span class="badge chg">改动</span></p><p class="d">结尾在对话里给流程图和决策表,你拍板;最后提醒一句可以图解</p><p class="d gone">改动大时自动在需求目录出澄清结果页 <span class="badge del">去掉</span></p></li>
+          <li class="plain"><span class="n">2</span><p class="t">写契约:<code>/write-spec</code> <span class="badge same">不变</span></p></li>
+          <li><span class="n">3</span><p class="t">规划:<code>/write-plan</code> <span class="badge chg">改动</span></p><p class="d">请你确认设计预览时,提醒一句可以图解</p></li>
+          <li class="plain"><span class="n">4</span><p class="t">实现:<code>/subagent-implement</code> 或 <code>/implementation</code> <span class="badge same">见第一部分</span></p></li>
+          <li class="plain"><span class="n">5</span><p class="t">测试、收尾 <span class="badge same">不变</span></p></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="sub" id="clarify-end">
+      <h3>局部:clarify 结尾长什么样</h3>
+      <div class="compare">
+        <div class="col before">
+          <div class="col-h"><b>现在</b></div>
+          <ul class="items">
+            <li>小需求:对话里给流程图和决策表</li>
+            <li>改动牵涉多个模块或流程:自动在需求目录出澄清结果页 <span class="badge del">去掉</span></li>
+            <li>讲法写在 clarify 的附属文件里 <span class="badge chg">改动</span><span class="why">挪进 visual-explain,扩成什么内容都能讲</span></li>
+          </ul>
+        </div>
+        <div class="col after">
+          <div class="col-h"><b>以后</b></div>
+<pre class="wrap-text">……(流程图和决策表)
+
+**以上业务决策对吗?要改的直接说哪一行。**
+
+有没看懂的地方,可以说「画个图讲讲」,我出一页图解。</pre>
+          <p class="note">决策表照旧是你拍板用的;要页面时由 visual-explain 出,文件名和现在一样:<code>&lt;前缀&gt;-澄清结果-v&lt;N&gt;.html</code>。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub" id="visual-run">
+      <h3>局部:visual-explain 出一页图解</h3>
+      <div class="line">
+        <section class="stage">
+          <div class="stage-h"><span class="dot">1</span><h4>定要讲什么</h4><p>讲对话里刚说过的内容,或者你指定的文件、话题;先用一句话说清你看完要懂什么。</p></div>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">2</span><h4>选主线</h4><p>沿你熟悉的那条线排:业务需求沿业务流程,流程或工具调整沿使用顺序,代码沿调用顺序,plan 沿执行顺序,方案对比沿对比维度。</p></div>
+          <ul class="gates">
+            <li><span class="gt human">等你确认</span><span>拿不准沿哪条线讲,先问你</span></li>
+          </ul>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">3</span><h4>画全局</h4><p>一张图看清整体,标出新增、改动、去掉的地方和需要你确认的关口。</p></div>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">4</span><h4>展开局部</h4><p>关键节点写细节:业务写口径和逻辑,流程写拦截和产出,代码写输入、判断条件和输出。每个结论配一个例子。</p></div>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">5</span><h4>写成一页</h4><p>单个 HTML 文件。开头一段先给结论,讲改动时先讲原来怎样;图例写清每种颜色和标记的意思;断网能打开,深浅色和手机宽度下都看得清。</p></div>
+        </section>
+        <section class="stage">
+          <div class="stage-h"><span class="dot">6</span><h4>存好、打开</h4><p>和需求有关的放需求目录,按版本出;无关的放 <code>.cgraphx/visual/</code>。做完在浏览器里打开。</p></div>
+          <ul class="gates">
+            <li><span class="gt hint">提示</span><span>讨论稿:不登记、不上报,看完不维护</span></li>
+          </ul>
+        </section>
+      </div>
+    </div>
+
+    <div class="sub" id="visual-ways">
+      <h3>局部:讲法是全局加局部</h3>
+      <p>原来只写了前两种,写在 clarify 的附属文件里;挪进 visual-explain 后,按要讲的内容给出更多例子。</p>
+      <div class="table-box">
+        <table>
+          <thead><tr><th>要讲的内容</th><th>主线沿着</th><th>全局:一张图</th><th>局部:展开关键节点</th></tr></thead>
+          <tbody>
+            <tr><td class="k">一个功能的流程</td><td data-label="主线沿着">业务流程</td><td data-label="全局:一张图">流程图画业务走向,标出新增和改动的步骤</td><td data-label="局部:展开关键节点">「计算优惠」节点写清取数范围和计算规则</td></tr>
+            <tr><td class="k">流程或工具调整</td><td data-label="主线沿着">使用顺序</td><td data-label="全局:一张图">按做需求的顺序串起各步,标出新增、改动、去掉</td><td data-label="局部:展开关键节点">每一步写做什么、在哪会被拦、产出什么;这一页就是例子</td></tr>
+            <tr><td class="k">一段代码</td><td data-label="主线沿着">调用顺序</td><td data-label="全局:一张图">调用链一张图,标出入口和数据最后落在哪</td><td data-label="局部:展开关键节点">关键函数写输入、判断条件和输出</td></tr>
+            <tr><td class="k">一份 plan</td><td data-label="主线沿着">执行顺序</td><td data-label="全局:一张图">任务和执行顺序一张图,标出能同时跑的</td><td data-label="局部:展开关键节点">重点决策写清为什么难回头</td></tr>
+            <tr><td class="k">几种方案对比</td><td data-label="主线沿着">对比维度</td><td data-label="全局:一张图">一张表看清每个方案在各维度上的差别</td><td data-label="局部:展开关键节点">推荐的方案写清理由和代价</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="files" aria-labelledby="files-h">
+  <h2 id="files-h">跟着改的地方</h2>
+  <p>都在 skill瘦身 这个需求里改。</p>
+  <div class="table-box">
+    <table>
+      <thead><tr><th>位置</th><th>改什么</th></tr></thead>
+      <tbody>
+        <tr><td class="k">subagent-implement</td><td data-label="改什么">恢复并改写:读 index,按执行顺序派子 agent,主会话提交,最后统一测试和修复,提示 <code>/code-review</code>。旧版的三份子 agent 提示词不恢复</td></tr>
+        <tr><td class="k">visual-explain</td><td data-label="改什么">新建。讲法从 clarify 的附属文件挪来,扩成什么内容都能讲;写清页面要求和存放位置</td></tr>
+        <tr><td class="k">deprecated-assets.json</td><td data-label="改什么">去掉 <code>skills/subagent-implement</code> 这一条,不然升级时部署完会马上把它删掉</td></tr>
+        <tr><td class="k">clarify-requirements</td><td data-label="改什么">结尾不再自动出页面,只在对话里给流程图和决策表,加一句图解提醒;附属文件挪走;推荐下一步改成大需求先 <code>/write-plan</code>,再 <code>/subagent-implement</code></td></tr>
+        <tr><td class="k">write-plan</td><td data-label="改什么">一个任务一个文件;先按类型拆,做不完再按并行度拆;契约只写在 index;index 加执行顺序和统一验证;启动语改成一句;收尾提示改成 <code>/subagent-implement</code>;请你确认设计预览时加一句图解提醒</td></tr>
+        <tr><td class="k">write-plan 的 plan 审查提示词</td><td data-label="改什么">按新结构审:任务文件不抄契约、同时跑的任务改的文件不重叠、执行顺序和依赖对得上</td></tr>
+        <tr><td class="k">FLOW-MAP、模板 CLAUDE.md、cgraphx-guide</td><td data-label="改什么">开发流程改成一句 <code>/subagent-implement</code> 跑完全部任务;澄清结果页的说法改成 visual-explain;「随时可用」里加上 visual-explain</td></tr>
+        <tr><td class="k">本仓库 CLAUDE.md、README、CHANGELOG</td><td data-label="改什么">skill 个数改成 27;CHANGELOG 不再把 subagent-implement 列为废弃,改写它的新做法;clarify 结尾出页面的说法改成 visual-explain</td></tr>
+        <tr><td class="k">知识库</td><td data-label="改什么">skill-invocation轴、测试流程后置、plan手段决策三档,三个条目按新事实更新</td></tr>
+        <tr><td class="k">skill瘦身 spec</td><td data-label="改什么">改掉 25 个 skill、9 个废弃、大需求分批、clarify 自动出澄清结果页的写法;补上 plan 结构、subagent-implement、visual-explain 三节;验收改成 27 个 skill、8 个废弃</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <p>v2:加上图解 visual-explain,clarify 结尾不再自动出页面。v1:恢复 subagent-implement,plan 一个任务一个文件。两版都补充 skill瘦身 原来的澄清结果(claude.ai 上的 v4 页面),其余各站不变。</p>
+  <p>依据:本次澄清对话(2026-10-19)、skill瘦身 spec 与 plan、产物注册表与头部规范 plan、旧版 subagent-implement、clarify 的附属文件「澄清结果页」。讨论稿,不是契约;你确认后写进 spec,本页不再维护。</p>
+</footer>
+
+</main>
+</body>
+</html>

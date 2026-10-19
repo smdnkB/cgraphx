@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+### Breaking — skills slimmed from 33 to 27
+
+- Removed 8 skills. `cgraphx install` deletes their directories on upgrade;
+  files under `docs/` are left alone.
+  - `knowledge-api`: merged into `knowledge-recall`.
+  - `code-map-write`, `code-map-recall`: code maps are no longer maintained.
+    The web 系统地图 page and existing `docs/code-map/` files stay, marked
+    as no longer maintained.
+  - `write-prd`, `write-design-doc`, `write-api-doc`: merged into
+    `/write-docs`, which asks which documents to write. File names are
+    unchanged.
+  - `knowledge-migrate`: no replacement.
+  - `write-delivery-guide`: no more after-the-fact delivery guides. Use
+    `/visual-explain` when something needs explaining.
+- New `visual-explain`: turns what was just discussed, or a named file or
+  topic, into a one-page HTML explainer: one picture for the whole, then the
+  key points with examples. Pages for a feature go into its directory; others
+  go into `.cgraphx/visual/`, which is never committed.
+  `/clarify-requirements` ends with a flow chart and a decision table in chat
+  and points to it.
+- `subagent-implement` stays, rewritten: one session hands each task of the
+  plan to a subagent in the plan's order; the main session commits each task,
+  runs the plan's verification once at the end, fixes failures, then suggests
+  `/code-review`.
+- Plans are an `index` plus one file per task. Tasks are split by type first;
+  a task that would touch more than 15 files is split further where its parts
+  can run in parallel.
+- Specs drop the 「一图看懂」 section; plan design previews keep only the
+  key-decisions table.
+- Skills write the `> 产物:` header and the registered opening section for
+  every new artifact; `/end` writes a release record once the work is live.
+- New `cgraphx features check --staged` checks only staged files under
+  `docs/features/`. The precommit hook runs it before AI commits and blocks
+  on failures, even with `CGRAPHX_PRECOMMIT_REVIEWED=1`.
+- `features check` no longer requires 「一图看懂」 in specs, checks the
+  opening section of seven more artifact types, and skips that check for
+  HTML files.
+
 ### Added — cgraphx sync: report to the R&D management platform
 
 - New `cgraphx sync connect | now | status | disconnect`. `connect` asks for

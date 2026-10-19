@@ -32,7 +32,7 @@ export interface BuiltinArtifactType {
   minTier: ReportTier | null;
   /** 是否必须带 `> 依据: spec@<指纹>`。 */
   requiresBasis: boolean;
-  /** 首屏结论要求;null 表示不要求。 */
+  /** 开头结论(第一个二级标题)要求;null 表示不要求。只对 md 生效。 */
   firstScreen: { heading: string; planIndexOnly: boolean } | null;
 }
 

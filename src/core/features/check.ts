@@ -24,7 +24,7 @@ import {
   readFirstH2Heading,
   specFingerprint,
 } from '../artifact-registry';
-import { CheckTargetNotFoundError } from './errors';
+import { CheckStagedWithTargetsError, CheckTargetNotFoundError } from './errors';
 import { FEATURES_DIR, findMainSpecRel, isPlainFeatureId } from './scanner';
 import { gitUserName } from './sync';
 import type { CheckFinding, CheckReport } from './types';
@@ -33,6 +33,8 @@ import type { CheckFinding, CheckReport } from './types';
 export interface CheckOptions {
   /** 本项目类型表(平台缓存);null / 未提供时只按内置类型判未知类型。 */
   projectTypes?: readonly string[] | null;
+  /** 只检查暂存区里 docs/features/ 下新增和修改的文件(提交门禁用)。 */
+  staged?: boolean;
 }
 
 interface FeatureMeta {
@@ -164,6 +166,48 @@ function collectFiles(projectRoot: string, targets: string[]): string[] {
 }
 
 /**
+ * 暂存区里 docs/features/ 下新增和修改的文件(项目相对 POSIX 路径)。
+ *
+ * 供提交门禁使用。git 不可用、不在仓库里或命令失败(超时等)时,
+ * 按「没有暂存文件」处理,返回空列表,不抛错。
+ */
+function collectStagedFiles(projectRoot: string): string[] {
+  let output: string;
+  try {
+    // -z 防止中文路径被转义;--relative 让输出是项目相对路径。
+    output = execFileSync(
+      'git',
+      [
+        'diff',
+        '--cached',
+        '--name-only',
+        '-z',
+        '--diff-filter=ACMR',
+        '--relative',
+        '--',
+        `${FEATURES_DIR_POSIX}/`,
+      ],
+      {
+        cwd: projectRoot,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 5000,
+      },
+    );
+  } catch {
+    return [];
+  }
+
+  const files = new Set<string>();
+  for (const rel of output.split('\0')) {
+    if (rel !== '' && featureIdOf(rel) !== null) {
+      files.add(rel);
+    }
+  }
+  return Array.from(files).sort();
+}
+
+/**
  * HEAD 里 docs/features/ 下的文件集。
  * 不在 git 仓库 → null;仓库里还没有任何提交 → 空集。
  */
@@ -220,6 +264,7 @@ function featureMeta(
  * 校验新产物的头部与首屏(spec §9)。
  *
  * 目标为空时校验全部产出目录;目标可以是 feature-id 或路径。
+ * `staged` 为真时只查暂存区里 docs/features/ 下的新增和修改文件,不能与目标同用。
  * 结果按路径升序,同一路径失败在警告之前。
  */
 export function checkFeatures(
@@ -227,7 +272,13 @@ export function checkFeatures(
   targets: string[],
   opts: CheckOptions = {},
 ): CheckReport {
-  const files = collectFiles(projectRoot, targets);
+  if (opts.staged === true && targets.length > 0) {
+    throw new CheckStagedWithTargetsError();
+  }
+  const files =
+    opts.staged === true
+      ? collectStagedFiles(projectRoot)
+      : collectFiles(projectRoot, targets);
   const headSet = readHeadFiles(projectRoot);
   const projectTypes = opts.projectTypes ?? null;
   const metaCache = new Map<string, FeatureMeta>();

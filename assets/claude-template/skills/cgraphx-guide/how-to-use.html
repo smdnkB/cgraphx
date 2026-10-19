@@ -429,24 +429,25 @@ footer p { margin: 0; }
   <div class="flow-diagram">knowledge-recall(自动召回)
         │
         ▼
-/clarify-requirements ──→ /write-spec ──→ /write-plan(可选)
-     澄清                  唯一契约          执行计划
+/clarify-requirements ──→ /write-spec ──→ /write-plan(大需求必走)
+  澄清 + 决策表             唯一契约          一个任务一个文件
         │                                        │
         │            ┌───────────────────────────┘
         ▼            ▼
-  /implementation(小规模) 或 /subagent-implement(大规模)
+  /implementation(小需求)· /subagent-implement(大需求,一个会话跑完,做完 /code-review)
         │
    ┌────┴─────────────────────────────┐
    ▼              ▼                   ▼
 /write-api    /write-unit-test-spec  交付收尾:
 → /run-api-test → /write-unit-test-code  /knowledge-write 沉淀
-  接口测试       单元测试              /write-delivery-guide 讲解 + commit 门禁
+  接口测试       单元测试              /end 收口 + 发布记录
+                                      commit 门禁(含产物检查)
 
-── 发布后 · 按需(不在主链,不参与门禁)──────────────────
-/write-prd(业务方审阅)  /write-design-doc(设计文档)  /write-api-doc(接口文档)</div>
+── 发布后 · 按需(不在主链)──────────────
+/write-docs(需求文档、设计文档、接口文档)</div>
 
   <div class="highlight">
-    <p>日常默认两步:<strong>澄清 + 实现</strong>。复杂需求按需补规格/计划/测试。timeline 自动记录开发事件,你不需要主动跑命令。</p>
+    <p>日常默认两步:<strong>澄清 + 实现</strong>。大需求先 <code>/write-plan</code>,再 <code>/subagent-implement</code> 一个会话跑完;复杂需求按需补规格和测试;哪里没看懂,说「画个图讲讲」出一页图解。timeline 自动记录开发事件,你不需要主动跑命令。</p>
   </div>
 </section>
 
@@ -465,11 +466,12 @@ footer p { margin: 0; }
   <div id="tab-dev" class="tab-panel active">
     <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">做需求的主线。</p>
     <ul class="phase-list">
-      <li><strong style="color:var(--color-primary);">必经</strong> <code>/clarify-requirements</code> 澄清意图、业务边界、技术约束<em>(不拍板实现手段)</em></li>
+      <li><strong style="color:var(--color-primary);">必经</strong> <code>/clarify-requirements</code> 澄清意图、业务边界、技术约束<em>(不拍板实现手段);结束时在对话里给流程图和决策表</em></li>
       <li><strong style="color:var(--color-primary);">核心</strong> <code>/write-spec</code> 写技术规格——唯一契约<em>(归档业务行为/规则/接口/数据/权限/异常/验收)</em></li>
-      <li><span class="opt">可选</span> <code>/write-plan</code> 拆执行计划<em>(大需求/跨模块;手段选型在这一步结合代码定——纯工程手段 plan 自主,有业务可观察后果的回跳 spec 业务拍板;index 出「执行方式建议」为实现方式终判)</em></li>
-      <li><strong style="color:var(--color-primary);">必经</strong> <code>/implementation</code><em>(小规模:单点/1-3 文件/单模块)</em>或 <code>/subagent-implement</code><em>(大规模:预估变更文件 ≥10 且跨 ≥3 独立模块,派子 agent 隔离上下文)</em>;判据是需求规模,不是任务量</li>
-      <li><span class="opt">收尾</span> 沉淀 → <code>/knowledge-write</code>;交付讲解 → <code>/write-delivery-guide</code> <em>(有实质代码改动时提示确认,故事线讲解、可重生成)</em></li>
+      <li><strong style="color:var(--color-primary);">大需求必走</strong> <code>/write-plan</code><em>(小需求可跳过)</em>:拆执行计划,手段选型在这一步结合代码定;index 加一个任务一个文件,先按任务类型拆,一个任务预估超过 15 个文件再按并行度拆;大需求给一句 <code>/subagent-implement</code> 启动语</li>
+      <li><strong style="color:var(--color-primary);">必经</strong> <code>/implementation</code>(小需求)或 <code>/subagent-implement</code>(大需求):大需求在一个会话里按任务派子 agent,主会话按提交点提交,全部做完统一验证、修复,最后提示跑 <code>/code-review</code>;判据是需求规模(预估变更文件 ≥10,且跨 ≥3 个相互独立的模块),不是任务量</li>
+      <li><span class="opt">随时</span> <code>/visual-explain</code>:哪里没看懂,说「画个图讲讲」,出一页图解;clarify 结尾和 write-plan 请你确认设计预览时会提醒</li>
+      <li><span class="opt">收尾</span> 沉淀知识 → <code>/knowledge-write</code>;平台环节缺口提醒;需求做完 <code>/end</code> 写收口档案,已上线时写发布记录</li>
     </ul>
     <div class="highlight">
       <p>日常默认 2 步:澄清 + 实现。spec 是唯一契约——「没有任何业务义务存在于 spec 之外」,变更时只改 spec 一处,下游重新派生。</p>
@@ -504,8 +506,7 @@ footer p { margin: 0; }
     <p style="font-weight:600;font-size:14.5px;margin:0 0 8px;">业务知识(沉淀 → 召回)</p>
     <ul class="phase-list">
       <li><code>/knowledge-write</code> 把有价值的知识沉淀到 <code>docs/knowledge/</code><em>(开发收尾自动提示,也可随时手动触发)</em></li>
-      <li><code>knowledge-recall</code> 做需求前自动召回相关概念、对齐术语 <em>—— agent 自动触发</em></li>
-      <li><code>knowledge-api</code> 已知概念名时精确查知识库 <em>—— agent 自动触发</em></li>
+      <li><code>knowledge-recall</code> 做需求前自动召回相关概念、对齐术语,精确查询也走它 <em>—— agent 自动触发</em></li>
       <li><code>/knowledge-init</code> 接手陌生项目时批量探索建档 <em>—— 可选,只跑一次</em></li>
     </ul>
 
@@ -522,9 +523,7 @@ footer p { margin: 0; }
   <div id="tab-postdoc" class="tab-panel">
     <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>发布后 · 按需</strong>——不在开发主链上,不参与流程门禁。</p>
     <ul class="phase-list">
-      <li><span class="post">发布后</span> <code>/write-prd</code> 业务需求文档<em>(给领导/客户/业务方审阅)</em></li>
-      <li><span class="post">自测通过后</span> <code>/write-design-doc</code> 设计文档<em>(面向研发/技术负责人/维护者)</em></li>
-      <li><span class="post">接口开发完毕后</span> <code>/write-api-doc</code> 接口文档<em>(仅本次新增接口)</em></li>
+      <li><span class="post">发布后</span> <code>/write-docs</code> 需求文档、设计文档、接口文档<em>(运行时选,可多选)</em></li>
     </ul>
     <div class="highlight">
       <p>设计原则:前期文档越少,变更回归成本越低;发布后写的是<strong>实际交付的行为</strong>,不存在文档与系统漂移的问题。</p>
@@ -564,16 +563,19 @@ footer p { margin: 0; }
   <pre class="docs-tree"><b>docs/</b>
 ├── <b>features/</b>   需求目录(单次需求工作目录,spec 必有)
 │   └── <b>&lt;日期&gt;-&lt;编号&gt;-&lt;前缀&gt;/</b>
-│       ├── &lt;前缀&gt;-spec.md            <span class="skill">/write-spec</span>           <span class="must">必有</span>  <span class="ann">唯一契约</span>
-│       ├── <b>plan/</b>                     <span class="skill">/write-plan</span>           <span class="opt">可选</span>  <span class="ann">大需求</span>
-│       ├── &lt;前缀&gt;-需求文档.md         <span class="skill">/write-prd</span>            <span class="post">发布后</span>  <span class="ann">按需</span>
+│       ├── &lt;前缀&gt;-spec.md             <span class="skill">/write-spec</span>           <span class="must">必有</span>  <span class="ann">唯一契约</span>
+│       ├── <b>plan/</b>                      <span class="skill">/write-plan</span>           <span class="opt">可选</span>  <span class="ann">大需求</span>
+│       ├── &lt;前缀&gt;-&lt;主题&gt;-v&lt;N&gt;.html    <span class="skill">/visual-explain</span>       <span class="opt">可选</span>  <span class="ann">要图解时</span>
+│       ├── &lt;前缀&gt;-需求文档.md         <span class="skill">/write-docs</span>           <span class="post">发布后</span>  <span class="ann">按需</span>
+│       ├── &lt;前缀&gt;-设计文档.md         <span class="skill">/write-docs</span>           <span class="post">发布后</span>  <span class="ann">按需</span>
+│       ├── &lt;前缀&gt;-接口文档.html       <span class="skill">/write-docs</span>           <span class="opt">可选</span>  <span class="ann">发布后按需</span>
 │       ├── &lt;前缀&gt;-接口测试-spec.md    <span class="skill">/write-api</span>            <span class="opt">可选</span>  <span class="ann">开发完成后</span>
 │       ├── &lt;前缀&gt;-接口测试报告.md     <span class="skill">/run-api-test</span>         <span class="opt">可选</span>  <span class="ann">write-api 后</span>
 │       ├── &lt;前缀&gt;-接口测试验证.jsonl  <span class="skill">/run-api-test</span>         <span class="opt">可选</span>  <span class="ann">自动产出</span>
 │       ├── &lt;前缀&gt;-单元测试-spec.md    <span class="skill">/write-unit-test-spec</span> <span class="opt">可选</span>  <span class="ann">开发完成后</span>
 │       ├── &lt;前缀&gt;-单元测试报告.md     <span class="skill">/write-unit-test-code</span> <span class="opt">可选</span>  <span class="ann">开发完成后</span>
-│       ├── &lt;前缀&gt;-交付讲解.md         <span class="skill">/write-delivery-guide</span> <span class="opt">可选</span>  <span class="ann">交付时</span>
-│       └── &lt;前缀&gt;-设计文档.md         <span class="skill">/write-design-doc</span>     <span class="post">发布后</span>  <span class="ann">按需</span>
+│       ├── &lt;前缀&gt;-收口档案.md         <span class="skill">/end</span>                  <span class="opt">可选</span>  <span class="ann">需求做完</span>
+│       └── &lt;前缀&gt;-发布记录.md         <span class="skill">/end</span>                  <span class="opt">可选</span>  <span class="ann">已上线时</span>
 │
 ├── <b>knowledge/</b>   业务知识库(跨需求共享)
 │   └── *.md                          <span class="skill">/knowledge-write</span> <span class="ann">沉淀</span>  <span class="skill">/knowledge-init</span> <span class="ann">批量建档</span>

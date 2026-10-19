@@ -1,6 +1,6 @@
 ---
 name: run-api-test
-description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 副作用 + 出报告。触发时由用户指定需求或接口:指定需求→跑该需求所有接口所有场景,报告归该需求目录;只指定接口→主动问测哪个需求(AI 扫 docs/bruno/ 下哪些需求测过该接口,让用户选);都没指定→主动问。服务未就绪暂停等待;写接口必须查 DB 验数据(HTTP 200 ≠ 通过);失败只报告不修代码不重跑,交用户决定。不调 write-api / write-api-doc,不改 .bru。Use when 用户要求跑接口测试 / 验证接口 / 测一下需求 X 的接口 / 跑下这个接口;write-api 跑完后用户要求执行测试;代码改完后用户想验证修复。
+description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 副作用 + 出报告。触发时由用户指定需求或接口:指定需求→跑该需求所有接口所有场景,报告归该需求目录;只指定接口→主动问测哪个需求(AI 扫 docs/bruno/ 下哪些需求测过该接口,让用户选);都没指定→主动问。服务未就绪暂停等待;写接口必须查 DB 验数据(HTTP 200 ≠ 通过);失败只报告不修代码不重跑,交用户决定。不调 write-api / write-docs,不改 .bru。Use when 用户要求跑接口测试 / 验证接口 / 测一下需求 X 的接口 / 跑下这个接口;write-api 跑完后用户要求执行测试;代码改完后用户想验证修复。
 ---
 
 # Run API Test
@@ -27,7 +27,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 
 **不要使用此 skill 当**:
 - 生成测试接口 → 用 `/write-api`(本 skill 假设 .bru 已存在)
-- 写 HTML 接口文档 → 用 `/write-api-doc`
+- 写接口文档 → 发布后用 `/write-docs`
 - 修代码 / 改 .bru → 用户手动或走 `/implementation`(本 skill 只测不修)
 - 探索陌生项目 → 用 `/knowledge-init`
 - 查代码调用关系 → 用 grep / Read
@@ -37,10 +37,9 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 | skill | 关系 | 说明 |
 |---|---|---|
 | `write-api` | 上游 | 产 .bru + 接口测试规格 + environments;本 skill 消费这些产物跑测试,不调它也不改 .bru |
-| `write-api-doc` | 独立并列 | 不互相调用;本 skill 产接口测试报告 + JSONL,write-api-doc 产 HTML 接口文档 |
+| `write-docs` | 独立并列 | 不互相调用;本 skill 产接口测试报告和 JSONL,write-docs 发布后产事后文档 |
 | `db-query` | 复用 | R4 核实写接口 DB 副作用;受 db-query 既有只读约束 |
-| `implementation` / `subagent-implement` | 下游 | 测试失败后由用户决定是否调起修 bug |
-| `write-design-doc` | 独立 | 发布后按需产设计文档 |
+| `implementation`、`subagent-implement` | 下游 | 测试失败后由用户决定是否调起修 bug |
 
 ## 依赖
 
@@ -51,11 +50,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 
 ## feature-id 与文件前缀规则
 
-复用既有规则(同 `/write-prd` / `/write-spec` / `/write-plan` / `/write-api-doc` / `/write-api` 的算法):
-
-- feature-id 格式:`YYYY-MM-DD-[业务ID-]<标题>`
-- 文件前缀:有业务ID = `<业务ID>-<标题>`,无业务ID = `<标题>`
-- 文件名不得包含 `/`、`:`、`*`、`?`、`"`、`<`、`>`、`|`
+文件前缀 = feature-id 去掉开头的日期 `YYYY-MM-DD-`。
 
 产物文件名(归用户指定的 feature 目录):
 - Markdown 报告:`docs/features/<feature-id>/<文件前缀>-接口测试报告.md`
@@ -135,7 +130,7 @@ description: 在 write-api 生成 .bru 后,跑接口测试 + 核实写接口 DB 
 
 - **前置**:R3 + R4 完成
 - **行为**:按 `references/report-format.md` 汇总产出
-  - Markdown 报告 `<文件前缀>-接口测试报告.md`(汇总 + 逐接口结果 + 失败分类 + DB 核实小结 + 下一步建议)
+  - Markdown 报告 `<文件前缀>-接口测试报告.md`(结论 + 逐接口结果 + 失败汇总 + DB 核实小结 + 下一步建议 + 产物清单;照 `assets/template-接口测试报告.md` 写)
     - **按接口聚合**:同接口的场景先展示摘要，再展示详情
     - **展示级别**:主场景/涉及业务规则的异常=详细展示；简单边界=简单展示；失败场景=必须详细展示
     - **约束**:一个接口最多 2 个详细展示的场景

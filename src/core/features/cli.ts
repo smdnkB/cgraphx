@@ -93,6 +93,10 @@ interface JsonOptions {
   json?: boolean;
 }
 
+interface CheckCliOptions extends JsonOptions {
+  staged?: boolean;
+}
+
 /** 内置类型显示「显示名 + 标识」;自定义类型只显示标识。 */
 function artifactTypeLabel(row: FeatureArtifactRow): string {
   return row.typeName === null ? row.type : `${row.typeName} ${row.type}`;
@@ -325,11 +329,13 @@ export function registerFeaturesCommands(
     .command('check [targets...]')
     .description('校验新产物的头部与首屏(实时计算,不写文件)')
     .option('--json', '输出机器可读 JSON')
-    .action((targets: string[] | undefined, options: JsonOptions) => {
+    .option('--staged', '只检查暂存区里 docs/features/ 下新增和修改的文件')
+    .action((targets: string[] | undefined, options: CheckCliOptions) => {
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const report = checkFeatures(projectRoot, targets ?? [], {
           projectTypes: deps.readProjectArtifactTypes?.(projectRoot) ?? null,
+          staged: options.staged === true,
         });
         process.stdout.write(
           options.json
