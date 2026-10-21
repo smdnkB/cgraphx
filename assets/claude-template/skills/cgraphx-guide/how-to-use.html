@@ -470,7 +470,7 @@ footer p { margin: 0; }
       <li><strong style="color:var(--color-primary);">核心</strong> <code>/write-spec</code> 环节二:细节方案设计 + 唯一契约<em>(消费功能方案,每个功能点出设计决策表:机制选型/数据模型/接口契约,连同业务规则一起归档)</em></li>
       <li><strong style="color:var(--color-primary);">大需求必走</strong> <code>/write-plan</code><em>(小需求可跳过)</em>:拆执行计划,不重新选型(以 spec 设计决策表为准,缺口回 spec);index 加一个任务一个文件,先按任务类型拆,一个任务预估超过 15 个文件再按并行度拆;大需求给一句 <code>/subagent-implement</code> 启动语</li>
       <li><strong style="color:var(--color-primary);">必经</strong> <code>/implementation</code>(小需求)或 <code>/subagent-implement</code>(大需求):大需求在一个会话里按任务派子 agent,主会话按提交点提交,全部做完统一验证、修复,最后提示跑 <code>/code-review</code>;判据是需求规模(预估变更文件 ≥10,且跨 ≥3 个相互独立的模块),不是任务量</li>
-      <li><span class="opt">随时</span> <code>/visual-explain</code>:哪里没看懂,说「画个图讲讲」,出一页图解;clarify 结尾和 write-plan 请你确认设计预览时会提醒</li>
+      <li><span class="opt">随时</span> <code>/visual-explain</code>:哪里没看懂,说「画个图讲讲」,出一页图解;clarify 结尾、write-spec 请你确认难回头决策、write-plan 请你确认设计预览时会提醒</li>
       <li><span class="opt">收尾</span> 沉淀知识 → <code>/knowledge-write</code>;平台环节缺口提醒;需求做完 <code>/end</code> 写收口档案,已上线时写发布记录</li>
     </ul>
     <div class="highlight">
