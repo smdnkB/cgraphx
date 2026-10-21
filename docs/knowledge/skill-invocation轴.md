@@ -24,20 +24,19 @@ related_code:
   - assets/claude-template/skills/write-workload/SKILL.md
   - assets/claude-template/skills/export-table-ddl/SKILL.md
   - assets/claude-template/skills/init-project-guides/SKILL.md
-  - assets/claude-template/skills/handdrawn-deck/SKILL.md
   - assets/claude-template/skills/developer-timeline/SKILL.md
   - assets/claude-template/skills/knowledge-init/SKILL.md
   - assets/claude-template/skills/subagent-implement/SKILL.md
   - assets/claude-template/skills/visual-explain/SKILL.md
 created: 2026-08-01
-updated: 2026-10-19
+updated: 2026-10-20
 ---
 
 # skill invocation 轴
 
 ## Summary
 
-一个 skill 该 model-invoked 还是 user-invoked,判据是 writing-great-skills 的 invocation 轴:**agent 需要在自己判断下触发它、或别的 skill 需要调用它 → model-invoked**(保留 description,付每轮 context load);**只有人手敲名字才跑 → user-invoked**(`disable-model-invocation: true`,零 context load,付 cognitive load)。两个硬信号强制 model-invoked:① 设计上由 agent 自动触发;② 被另一个 skill 在正文里**调用**(文字推荐不算)。2026-08-01 据此把 10 个"用户决定才跑"的工具型 skill 转 user-invoked,常驻 description 25→15。user-invoked skill 多了靠 **router**(cgraphx-guide / FLOW-MAP)治 cognitive load——它们仍被列在索引里,agent 仍能文字推荐,用户敲名字即可,推荐链不断。2026-10-19 skill瘦身后为 27 个:19 个 model-invoked、8 个 user-invoked,见文末更新。
+一个 skill 该 model-invoked 还是 user-invoked,判据是 writing-great-skills 的 invocation 轴:**agent 需要在自己判断下触发它、或别的 skill 需要调用它 → model-invoked**(保留 description,付每轮 context load);**只有人手敲名字才跑 → user-invoked**(`disable-model-invocation: true`,零 context load,付 cognitive load)。两个硬信号强制 model-invoked:① 设计上由 agent 自动触发;② 被另一个 skill 在正文里**调用**(文字推荐不算)。2026-08-01 据此把 10 个"用户决定才跑"的工具型 skill 转 user-invoked,常驻 description 25→15。user-invoked skill 多了靠 **router**(cgraphx-guide / FLOW-MAP)治 cognitive load——它们仍被列在索引里,agent 仍能文字推荐,用户敲名字即可,推荐链不断。2026-10-20 删掉手绘两个 skill 后为 25 个:18 个 model-invoked、7 个 user-invoked,见文末更新。
 
 ## 决策与背景
 
@@ -72,3 +71,12 @@ updated: 2026-10-19
 - user-invoked 8 个:developer-timeline、export-table-ddl、handdrawn-deck、iboc-check、init-project-guides、knowledge-init、write-docs、write-workload。
 
 write-docs 沿用 write-prd、write-design-doc、write-api-doc 三个旧 skill 的 user-invoked;knowledge-api 并入 knowledge-recall 后,knowledge-recall 仍是 model-invoked。subagent-implement 保留并改写,仍是 model-invoked,用户说「跑 plan」「按 plan 实现」时由 AI 调用。新增的 visual-explain 也是 model-invoked:用户说「没看懂」「画个图讲讲」时由 AI 调用,用户没要求时不主动出页面。
+
+## 2026-10-20 更新(删掉手绘两个 skill)
+
+2026-10-20 删掉 handdrawn-deck、handdrawn-sketch-engine,它们不属于开发流程;skill 剩 25 个。
+
+- model-invoked 18 个:cgraphx-guide、clarify-requirements、db-query、handoff-session、implementation、knowledge-recall、knowledge-write、run-api-test、run-ui-test、subagent-implement、visual-explain、write-api、write-plan、write-spec、write-ui-test、write-unit-test-code、write-unit-test-spec、write-wireframe。
+- user-invoked 7 个:developer-timeline、export-table-ddl、iboc-check、init-project-guides、knowledge-init、write-docs、write-workload。
+
+这两个 skill 已登记进 `deprecated-assets.json`,`cgraphx install` 升级时清掉。

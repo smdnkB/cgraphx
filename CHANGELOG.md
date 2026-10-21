@@ -1,10 +1,40 @@
 # Changelog
 
-## Unreleased
+## 2.0.9 - 2026-10-21
 
-### Breaking — skills slimmed from 33 to 27
+### Changed — clarification realignment: proposal-and-review instead of Q&A
 
-- Removed 8 skills. `cgraphx install` deletes their directories on upgrade;
+Alignment failures in the clarify stage (questions people cannot read,
+consequences people cannot foresee, errors surfacing only after
+implementation) are now addressed across the main line:
+
+- `clarify-requirements` rewritten as stage one, 定业务. It explores project
+  reality first (code, local DDL knowledge, knowledge base — also reused by
+  spec later), then walks ⓪–⑥: explore → identify functional points with
+  classes (核心 / 支撑 / 建议新增 default-dropped / 边界外) → align the
+  list → per-point proposal cards (end-to-end behavior chain with concrete
+  values, ⚓ grounding in existing tables/impl, 🔗 dependencies, 🎭
+  experience variants) → collect a 需求功能方案 draft → adversarial review
+  by an independent subagent (矛盾/遗漏/过度/分类失真) → user sign-off.
+  People review and edit proposals instead of answering abstract questions;
+  business-value edits are accepted instantly, chain-structure edits get an
+  impact echo first.
+- `write-spec` is now stage two, 细节方案设计 + the sole contract. It
+  consumes the 功能方案 (point list, variant choices, reality constraints)
+  and decides, per functional point, mechanism, data model
+  (tables/key fields/constraints — indexes and full DDL stay in plan),
+  interface contracts and failure strategy via design decision tables
+  (option / choice / reason / blast radius) reviewed in batch. Detail
+  choices that change observable behavior bounce back to clarify.
+- `write-plan` no longer picks mechanisms. It decomposes and orders only;
+  missing decisions go back to spec instead of being decided in plan. The
+  index drops the 实现手段决策 section for a 细节方案核对 checklist.
+- Flow descriptions updated everywhere they are retold: template CLAUDE.md,
+  FLOW-MAP.md, cgraphx-guide (SKILL.md, how-to-use.md/html).
+
+### Breaking — skills slimmed from 33 to 25
+
+- Removed 10 skills. `cgraphx install` deletes their directories on upgrade;
   files under `docs/` are left alone.
   - `knowledge-api`: merged into `knowledge-recall`.
   - `code-map-write`, `code-map-recall`: code maps are no longer maintained.
@@ -16,6 +46,8 @@
   - `knowledge-migrate`: no replacement.
   - `write-delivery-guide`: no more after-the-fact delivery guides. Use
     `/visual-explain` when something needs explaining.
+  - `handdrawn-deck`, `handdrawn-sketch-engine`: dropped; they are not part of
+    the development workflow.
 - New `visual-explain`: turns what was just discussed, or a named file or
   topic, into a one-page HTML explainer: one picture for the whole, then the
   key points with examples. Pages for a feature go into its directory; others

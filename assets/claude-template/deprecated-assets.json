@@ -18,6 +18,8 @@
     "skills/subagent-implement/implementer-prompt.md",
     "skills/subagent-implement/spec-reviewer-prompt.md",
     "skills/subagent-implement/quality-reviewer-prompt.md",
-    "skills/clarify-requirements/references/澄清结果页.md"
+    "skills/clarify-requirements/references/澄清结果页.md",
+    "skills/handdrawn-deck",
+    "skills/handdrawn-sketch-engine"
   ]
 }

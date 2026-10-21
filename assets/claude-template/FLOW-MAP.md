@@ -10,8 +10,8 @@
                 knowledge-recall(先聊概念,实体条目优先)
                         │
                         ▼
-  clarify-requirements(必经;只锁业务决策和技术约束,手段归 plan)
-    结束时在对话里给流程图和决策表;没看懂可以用 visual-explain 出图解
+  clarify-requirements(必经;探索现实 → 功能点提案-改稿,只锁业务)
+    结束时在对话里给《需求功能方案》(流程图+功能点表);没看懂可以用 visual-explain 出图解
                         │       ▲
                         │       ▼ 涉及 UI 时,可在 clarify 前后、spec 后来回迭代
                         │   write-wireframe(低保真 HTML 线框 v1、v2…)
@@ -19,7 +19,7 @@
                         ├── 要开新会话 → handoff-session
                         │   (确认产出目录 + 交接文件,可拆 1 到 N 个)
                         ▼
-                  write-spec ◄── 唯一契约(声明负责人;引用已确认的线框版本)
+                  write-spec ◄── 唯一契约(声明负责人;环节二细节方案设计——设计决策表供人评审;引用已确认的线框版本)
                         │
                         ▼ 小需求可跳过;大需求必走
                     write-plan
@@ -50,8 +50,8 @@ guides:write-plan 读取并结晶,任务打「强制引用」标注(implementati
 
 - **链**:`/clarify-requirements` → `/write-spec` →(小需求可跳过 `/write-plan`,大需求必走);涉及 UI → `/write-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框);探索结束要开新会话 → `/handoff-session`
 - **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示)
-- **分工**:clarify 只锁业务边界 + 技术约束(读无界、决策有界);spec 是唯一契约,澄清总结只是输入;手段选型在 plan 结合代码定,按业务可观察性分档——无业务可观察后果的 plan 自主并记录,有的回跳 spec 业务拍板
-- **人工确认点**:澄清结果(对话里的流程图和决策表,没看懂可以出图解页),人说对了才写 spec;线框(涉及 UI 时),人看着界面确认布局和交互;plan index「设计预览」的重点决策表,人确认后才进实现。
+- **分工**:clarify 锁业务(探索现实 → 功能点提案-改稿,体验变体上浮);spec 是唯一契约,同时是**环节二细节方案设计**(设计决策表:机制选型/数据模型/接口契约,人挑错式评审;改变业务可观察行为 → 回跳 clarify);plan 只拆解编排,不重新选型,选型缺口回 spec 补决策
+- **人工确认点**:《需求功能方案》(对话里的流程图+功能点表,经对抗审核后人说对了才写 spec),没看懂可以出图解页;线框(涉及 UI 时),人看着界面确认布局和交互;plan index「设计预览」的重点决策表,人确认后才进实现。
 - **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`<前缀>-交接提示词.md`、图解页 `<前缀>-<主题>-v<N>.html`(visual-explain 出,讨论稿,不登记)、`plan/<前缀>-index.md` 加一个任务一个文件;spec / 交接文件头部声明 `> 负责人:`(也是任务负责人判定依据),会话按读写的产出目录自动关联任务;收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
 - **事后文档不在主链上**:`/write-docs` 发布后按需执行,写的是实际交付的行为。
 
@@ -123,4 +123,3 @@ guides:write-plan 读取并结晶,任务打「强制引用」标注(implementati
 - `/visual-explain` 图解:没看懂就说「画个图讲讲」,出一页图解;和需求有关的放需求目录,无关的放 `.cgraphx/visual/`
 - `/developer-timeline` 开发事件流与日报/周报/月报 | `/write-workload` 交付工作量汇报
 - `/iboc-check` 老需求补头部、补单测产物和收口档案
-- 可视化:handdrawn-sketch-engine / handdrawn-deck(手绘信息图与翻页演示)

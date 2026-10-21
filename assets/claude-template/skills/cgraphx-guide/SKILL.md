@@ -33,7 +33,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 |---|---|
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
 | **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/init-project-guides`(立项目规范)、`/knowledge-init`(接手陌生项目时建业务知识库) |
-| **日常做需求 · 必经两步** | `/clarify-requirements` 澄清,结束时在对话里给决策表,然后 `/implementation`;大需求先 `/write-plan`,再 `/subagent-implement` 一个会话跑完,最后 `/code-review`;哪里没看懂,说「画个图讲讲」出一页图解 |
+| **日常做需求 · 必经两步** | `/clarify-requirements` 澄清(功能点提案,人审稿式改稿,结束时给《需求功能方案》),然后 `/implementation`;大需求先 `/write-plan`,再 `/subagent-implement` 一个会话跑完,最后 `/code-review`;哪里没看懂,说「画个图讲讲」出一页图解 |
 | **日常做需求 · 复杂按需** | `/write-wireframe`(涉及界面时画线框)、`/handoff-session`(探索或澄清结束、要开新会话继续时)、`/write-spec`(写技术规格)、`/write-plan`(大需求拆执行计划)、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
 | **测试按需 · 三条线** | 接口:`/write-api` → `/run-api-test`;单元:`/write-unit-test-spec` → `/write-unit-test-code`;UI:`/write-ui-test` → `/run-ui-test` |
 | **收尾按需** | `/end`(写收口档案,已上线时写发布记录)、`/iboc-check`(老需求补头部、补单测产物和收口档案) |
@@ -47,10 +47,10 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 
 | skill | 何时建议用户调 |
 |---|---|
-| `/clarify-requirements` | 接到模糊需求,先澄清意图、业务边界、技术约束,结束时在对话里给流程图和决策表 |
+| `/clarify-requirements` | 接到模糊需求,先探索项目现实,再以功能点为单位给行为链提案、人审稿式改稿,结束时在对话里给《需求功能方案》(经对抗审核) |
 | `/write-wireframe` | 需求涉及界面时画低保真 HTML 线框,看着界面确认布局交互或发现业务问题 |
 | `/handoff-session` | 探索或澄清结束、要开新会话继续时,确认产出目录、写交接文件、给出启动语 |
-| `/write-spec` | 写技术规格(归档业务行为、规则、接口、数据,作为唯一契约) |
+| `/write-spec` | 环节二:细节方案设计 + 唯一契约——消费功能方案,每个功能点出设计决策表(机制选型/数据模型/接口契约)供人评审,连同业务规则一起归档 |
 | `/write-plan` | 大需求拆执行计划:index 加一个任务一个文件,给一句 `/subagent-implement` 启动语 |
 | `/implementation` | 小需求按 plan 或当前上下文实现代码 |
 | `/subagent-implement` | 大需求按 plan 执行:一个会话按任务派子 agent,主会话提交、统一验证和修复,最后提示 `/code-review` |
@@ -68,7 +68,6 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/iboc-check` | 老需求补头部、补单测产物和收口档案 |
 | `/developer-timeline` | 生成日报、周报、月报、阶段总结、使用习惯分析 |
 | `/write-workload` | 产出需求工作量汇报(内部对账、甲方结款依据) |
-| `/handdrawn-deck` | 做多页手绘演示(类 PPT),讲稿先行、逐页委托引擎绘制 |
 | `/visual-explain` | 哪里没看懂,把对话内容或指定的文件、话题画成一页图解 |
 
 ### 命令
@@ -84,7 +83,6 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 |---|---|
 | `knowledge-recall` | 任务开始时召回 `docs/knowledge/` 业务概念、对齐术语 |
 | `db-query` | 验证数据假设、查表结构、找测试数据(查 MySQL / PostgreSQL,沉淀 schema 到 `docs/schema-knowledge/`) |
-| `handdrawn-sketch-engine` | 画单页手绘图;也被 handdrawn-deck 逐页委托调用 |
 
 ## 安装与接入(两步)
 

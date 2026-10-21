@@ -19,4 +19,5 @@ dist/
 .claude/
 .mcp.json
 /docs/handdrawn-deck*/
-/images/
+/other_docs/images/
+/other_docs/
