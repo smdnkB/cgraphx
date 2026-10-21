@@ -1,5 +1,46 @@
 # Changelog
 
+## 2.0.10 - 2026-10-21
+
+### Changed — clarification realignment, second pass: review gates follow the decisions
+
+2.0.9 moved mechanism choices from plan into spec, but the human review
+point and the code reading stayed in plan, and some wording of the old split
+was left behind. This release closes those gaps:
+
+- `write-spec` reads the code a design depends on before deciding (existing
+  mechanisms, reuse, callers) instead of relying only on the clarify
+  exploration. Decision tables gain a 没选的(为什么) column and reasons cite
+  the files or tables they rest on. Hard-to-reverse decisions (persisted data
+  structures, external interfaces and URLs, module boundaries, security
+  boundaries) are marked 🔒 and listed in the closing reply for explicit
+  confirmation; the rest are adopted unless changed. D numbers run through
+  the whole spec so plan can cite them.
+- `write-plan`'s design preview becomes a placement table: where each 🔒
+  decision lands (tasks, files) and which contract guards it. A new
+  hard-to-reverse decision found while planning goes back to spec.
+  `plan-document-reviewer-prompt` now blocks plans that pick mechanisms the
+  spec did not decide.
+- `implementation` without a spec or plan lists hard-to-reverse changes (new
+  tables or fields, external interfaces, module or security boundaries)
+  before touching code and waits for confirmation.
+- `clarify-requirements` cards show what the user actually gets (exported
+  columns, page content, message text) and add a ⚠️ 边界 line for empty
+  data, oversize, missing permission and repeats, carried into the 功能方案
+  table. A table of common technical forks (sync/async, live/cached,
+  hard/soft delete, full/paged, all-or-nothing/partial) shows how to phrase
+  each as an experience variant. The wireframe prompt moves from ⓪ to ③,
+  when a card touches the interface. The flow opens with a trimming table for
+  single-point requirements, bug fixes, refactors and data tasks; only
+  multi-point requirements run the ⑤ review.
+- New `clarify-requirements/function-plan-reviewer-prompt.md` for the ⑤
+  adversarial review: inputs, four dimensions with examples, output format.
+- Leftover wording of the old split (plan decides mechanisms) removed from
+  FLOW-MAP.md, `clarify-requirements`, `write-spec`, `write-plan` and the plan
+  reviewer prompt; red lines that only restated the body dropped from
+  `clarify-requirements` and `write-spec`. FLOW-MAP.md's 人工确认点 and
+  cgraphx-guide (how-to-use.md/html) updated.
+
 ## 2.0.9 - 2026-10-21
 
 ### Changed — clarification realignment: proposal-and-review instead of Q&A
