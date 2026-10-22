@@ -11,7 +11,7 @@
                         │
                         ▼
   clarify-requirements(必经;探索现实 → 功能点提案-改稿,只锁业务)
-    结束时在对话里给《需求功能方案》(流程图+功能点表);没看懂可以用 visual-explain 出图解
+    结束时在对话里给《需求功能方案》(流程图+功能点表,write-spec 原样收录为 spec 第一节);没看懂可以用 visual-explain 出图解
                         │       ▲
                         │       ▼ 涉及 UI 时,可在 clarify 前后、spec 后来回迭代
                         │   write-wireframe(低保真 HTML 线框 v1、v2…)
@@ -19,7 +19,7 @@
                         ├── 要开新会话 → handoff-session
                         │   (确认产出目录 + 交接文件,可拆 1 到 N 个)
                         ▼
-                  write-spec ◄── 唯一契约(声明负责人;环节二细节方案设计——设计决策表,🔒 难回头的人确认;引用已确认的线框版本)
+                  write-spec ◄── 唯一契约(声明负责人;第一节收录功能方案,主体写怎么实现——设计决策表,🔒 难回头的人确认;引用已确认的线框版本)
                         │
                         ▼ 小需求可跳过;大需求必走
                     write-plan
@@ -50,7 +50,7 @@ guides:write-plan 读取并结晶,任务打「强制引用」标注(implementati
 
 - **链**:`/clarify-requirements` → `/write-spec` →(小需求可跳过 `/write-plan`,大需求必走);涉及 UI → `/write-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框);探索结束要开新会话 → `/handoff-session`
 - **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示)
-- **分工**:clarify 锁业务(探索现实 → 功能点提案-改稿,体验变体上浮);spec 是唯一契约,同时是**环节二细节方案设计**(设计决策表:机制选型/数据模型/接口契约,人挑错式评审;改变业务可观察行为 → 回跳 clarify);plan 只拆解编排,不重新选型,选型缺口回 spec 补决策
+- **分工**:clarify 锁业务(探索现实 → 功能点提案-改稿,体验变体上浮);spec 是唯一契约:第一节原样收录功能方案,其余是**环节二细节方案设计**(设计决策表:机制选型/数据模型/接口契约,人挑错式评审;改变业务可观察行为 → 回跳 clarify);plan 只拆解编排,不重新选型,选型缺口回 spec 补决策
 - **人工确认点**:《需求功能方案》(对话里的流程图+功能点表,经对抗审核后人说对了才写 spec),没看懂可以出图解页;线框(涉及 UI 时),人看着界面确认布局和交互;spec 标 🔒 的难回头决策,人确认后才往下走;plan index「设计预览」的落点表,人确认后才进实现;没有 spec 和 plan 的小需求,implementation 动代码前确认难回头的改动。
 - **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`<前缀>-交接提示词.md`、图解页 `<前缀>-<主题>-v<N>.html`(visual-explain 出,讨论稿,不登记)、`plan/<前缀>-index.md` 加一个任务一个文件;spec / 交接文件头部声明 `> 负责人:`(也是任务负责人判定依据),会话按读写的产出目录自动关联任务;收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
 - **事后文档不在主链上**:`/write-docs` 发布后按需执行,写的是实际交付的行为。

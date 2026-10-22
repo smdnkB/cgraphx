@@ -1,6 +1,6 @@
 ---
 name: write-api
-description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + 环境配置)。流程:识别接口范围(用户显式给 / spec 接口章节 / AI 读 spec 理解)→ 生成接口测试规格文档 → 单次 AI 调用生成 .bru(含真实参数 + 内嵌断言)→ 首次接入时生成 bruno.json + environments/*.bru 骨架。产物:接口测试规格随 feature 走;.bru collection 按 <服务>/<需求前缀>/<接口名>/<场景> 组织在 docs/bruno/(按需求隔离,跨需求不覆盖);environments 统一管理。本 skill 不跑 bru run、不核实 DB、不出报告——那是 /run-api-test 的职责。不自动修代码、不引入程序化配置文件(微服务/通用接口识别由 AI 判断)。Use when 用户要求生成测试接口 / 写接口测试 / 准备 bruno 测试 / 帮需求补接口 / 免去手动录接口。
+description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + 环境配置)。流程:识别接口范围(用户显式给 / spec 接口契约 / AI 读 spec 理解)→ 生成接口测试规格文档 → 单次 AI 调用生成 .bru(含真实参数 + 内嵌断言)→ 首次接入时生成 bruno.json + environments/*.bru 骨架。产物:接口测试规格随 feature 走;.bru collection 按 <服务>/<需求前缀>/<接口名>/<场景> 组织在 docs/bruno/(按需求隔离,跨需求不覆盖);environments 统一管理。本 skill 不跑 bru run、不核实 DB、不出报告——那是 /run-api-test 的职责。不自动修代码、不引入程序化配置文件(微服务/通用接口识别由 AI 判断)。Use when 用户要求生成测试接口 / 写接口测试 / 准备 bruno 测试 / 帮需求补接口 / 免去手动录接口。
 ---
 
 # Write API
@@ -42,10 +42,10 @@ description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + �
 ### S1. 确认接口范围
 
 - **前置**:用户调用 `/write-api`,提供需求(feature-id / spec / 需求名)
-- **行为**:按 `references/interface-scope.md` 识别接口范围(用户显式给 > spec 接口章节 > git diff)
+- **行为**:按 `references/interface-scope.md` 识别接口范围(用户显式给 > spec 接口契约 > git diff)
 - **无论哪种来源,接口清单必须显示给用户确认**——避免 AI 理解偏差测错接口;用户确认后才进 S2
 - **拿到接口并用户确认** → 进 S2
-- **拿不到** → 报错"未检测到接口范围,请显式给接口清单或确认 spec 接口章节完整"并退出,不生成任何产物
+- **拿不到** → 报错"未检测到接口范围,请显式给接口清单或确认 spec 接口契约完整"并退出,不生成任何产物
 
 ### S2. 生成接口测试规格文档
 

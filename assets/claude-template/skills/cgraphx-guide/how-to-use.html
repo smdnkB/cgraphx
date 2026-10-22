@@ -467,7 +467,7 @@ footer p { margin: 0; }
     <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">做需求的主线。</p>
     <ul class="phase-list">
       <li><strong style="color:var(--color-primary);">必经</strong> <code>/clarify-requirements</code> 澄清<em>(先探索项目现实,再以功能点为单位给行为链提案、人审稿式改稿,体验变体让人选);结束时在对话里给《需求功能方案》</em></li>
-      <li><strong style="color:var(--color-primary);">核心</strong> <code>/write-spec</code> 环节二:细节方案设计 + 唯一契约<em>(消费功能方案,每个功能点出设计决策表:机制选型/数据模型/接口契约,连同业务规则一起归档)</em></li>
+      <li><strong style="color:var(--color-primary);">核心</strong> <code>/write-spec</code> 环节二:唯一契约<em>(第一节原样收录功能方案,主体写怎么实现:每个功能点出设计决策表——机制选型/数据模型/接口契约,🔒 难回头的等你确认)</em></li>
       <li><strong style="color:var(--color-primary);">大需求必走</strong> <code>/write-plan</code><em>(小需求可跳过)</em>:拆执行计划,不重新选型(以 spec 设计决策表为准,缺口回 spec);index 加一个任务一个文件,先按任务类型拆,一个任务预估超过 15 个文件再按并行度拆;大需求给一句 <code>/subagent-implement</code> 启动语</li>
       <li><strong style="color:var(--color-primary);">必经</strong> <code>/implementation</code>(小需求)或 <code>/subagent-implement</code>(大需求):大需求在一个会话里按任务派子 agent,主会话按提交点提交,全部做完统一验证、修复,最后提示跑 <code>/code-review</code>;判据是需求规模(预估变更文件 ≥10,且跨 ≥3 个相互独立的模块),不是任务量</li>
       <li><span class="opt">随时</span> <code>/visual-explain</code>:哪里没看懂,说「画个图讲讲」,出一页图解;clarify 结尾、write-spec 请你确认难回头决策、write-plan 请你确认设计预览时会提醒</li>
@@ -481,7 +481,7 @@ footer p { margin: 0; }
   <div id="tab-api-test" class="tab-panel">
     <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>需求开发完成后</strong>,从 spec 到测试报告的全自动闭环。测试产物基于开源工具 <strong>bruno</strong>:<code>docs/bruno/</code> collection 可用 bruno app(GUI)直接打开,可视化浏览、手工调试接口;自动化执行依赖其 CLI(<code>@usebruno/cli</code>),需 <code>npm install -g @usebruno/cli</code>(每机器一次,也可项目本地装;未装时 <code>/run-api-test</code> 报错退出并指向该命令)。</p>
     <ul class="phase-list">
-      <li><code>/write-api</code> 基于 spec 接口章节自动生成 bruno 测试接口<em>(.bru + 内嵌断言 + 真实参数 + 多环境配置)</em></li>
+      <li><code>/write-api</code> 基于 spec 接口契约自动生成 bruno 测试接口<em>(.bru + 内嵌断言 + 真实参数 + 多环境配置)</em></li>
       <li><code>/run-api-test</code> 跑测试 + 核实写接口 DB 副作用 + 出报告 <em>—— <strong>写接口必须查 DB 验数据,HTTP 200 ≠ 通过</strong></em></li>
     </ul>
     <div class="highlight">
