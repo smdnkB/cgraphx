@@ -17,7 +17,8 @@ import { sanitizeToolArgs } from './tool-args';
 import { COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
 import { readCurrentTurnId, writeCurrentTurn, removeTurnState } from './turn-state';
 import type { TimelineEventInput } from './types';
-import { DEFAULT_AGENT_ID, resolveSessionIdFromEnv, type AgentId } from '../agents';
+import { DEFAULT_AGENT_ID, requireAgentProfile, resolveSessionIdFromEnv, type AgentId } from '../agents';
+import { hasTaskSessionStartHook, skillVersionNotice } from '../skill-version';
 import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
@@ -236,16 +237,45 @@ export async function stopHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void>
 /**
  * 会话开始(SessionStart):记录 session_start 事件,turn_id 恒为 null。
  * 宿主给出字符串 `source`(startup / resume / clear / compact 等)时写入 metadata.source。
+ *
+ * 该 agent 的 settings 里没接 task 会话开始 hook(只接了 timeline hook 的早期项目)时,
+ * 项目 skill 版本落后的提示由这里单独输出一段(skill版本落后提示 spec D6);接了 task hook 时
+ * 提示跟会话 id 走 task hook,这里 stdout 仍为空。
  */
 export async function sessionStartHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
-  await runHook((payload) => ({
-    event_type: 'session_start',
-    session_id: payload.session_id ?? null,
-    turn_id: null,
-    cwd: payload.cwd,
-    agent,
-    metadata: payload.source !== undefined ? { source: payload.source } : undefined,
-  } satisfies TimelineEventInput));
+  // runHook 不提供写库后回调;buildEvent 被调用时记下 cwd 与 source,runHook 返回后再检查版本。
+  let started = null as { cwd: string | undefined; source: string | undefined } | null;
+  await runHook((payload) => {
+    started = { cwd: payload.cwd, source: payload.source };
+    return {
+      event_type: 'session_start',
+      session_id: payload.session_id ?? null,
+      turn_id: null,
+      cwd: payload.cwd,
+      agent,
+      metadata: payload.source !== undefined ? { source: payload.source } : undefined,
+    } satisfies TimelineEventInput;
+  });
+  if (started) {
+    const { cwd, source } = started;
+    writeSkillVersionNoticeWithoutTaskHook(agent, cwd, source);
+  }
+}
+
+/** 没接 task 会话开始 hook 时输出版本落后提示;settings 读不出、无需提示或任何异常都不输出。 */
+function writeSkillVersionNoticeWithoutTaskHook(agent: AgentId, cwd: string | undefined, source: string | undefined): void {
+  try {
+    const profile = requireAgentProfile(agent);
+    const projectRoot = resolveProjectRoot(cwd ?? process.cwd());
+    if (hasTaskSessionStartHook(projectRoot, profile) !== false) return;
+    const notice = skillVersionNotice(projectRoot, profile, source);
+    if (notice === null) return;
+    process.stdout.write(
+      JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: notice } }) + '\n',
+    );
+  } catch (err) {
+    process.stderr.write(`[timeline] skill version notice failed: ${err instanceof Error ? err.message : String(err)}\n`);
+  }
 }
 
 /**

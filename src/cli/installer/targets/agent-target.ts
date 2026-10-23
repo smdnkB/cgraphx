@@ -8,6 +8,7 @@
  *   - 死 hook 清理:pre-0.8 的 `codegraph mark-dirty` / `sync-if-dirty` 与 2.0 移除的
  *     `cgraphx prompt-hook`(install 自愈,uninstall 一并清扫)。
  *   - 配置目录下的模板资产(skills / agents / commands / hooks / plugins),按 agent 替换与能力过滤。
+ *   - 资产部署成功后,配置目录下的版本记录 `cgraphx-version.json`(会话开始据此提示 skill 落后)。
  *   - 指引文件中的 cgraphx 标记块(内容取模板根 CLAUDE.md 并按 agent 替换)。
  *
  * 卸载只移除 cgraphx 条目:用户自己的 hook、settings 其他配置、标记块外内容、
@@ -40,6 +41,7 @@ import {
   replaceOrAppendMarkedSection,
 } from './shared';
 import { deployClaudeAssets, readTemplateClaudeMd, removeClaudeAssets } from '../claude-assets';
+import { SKILL_VERSION_FILE, getCliVersion, removeSkillVersion, writeSkillVersion } from '../../../core/skill-version';
 
 /** 2.0 已移除的前置 hook 命令:install 不再写,只用于识别残留。 */
 const PROMPT_HOOK_COMMAND = 'cgraphx prompt-hook';
@@ -128,9 +130,19 @@ class GenericAgentTarget implements AgentTarget {
     // 5. 部署模板资产到该 agent 的配置目录(同名无条件覆盖,用户自加文件保留)
     if (loc === 'local') {
       const assetChanges = deployClaudeAssets(agentConfigDir(this.root(), this.profile), this.profile);
+      let deployed = false;
       for (const change of assetChanges) {
         if (change.action === 'not-found') continue; // 未内置模板
+        deployed = true;
         files.push(change);
+      }
+
+      // 6. 资产部署成功后写版本记录;没有内置模板或读不到本机版本时不写。
+      //    记录文件不进文件变更列表,只多一行 note,安装输出只多这一行(skill版本落后提示 spec D2)
+      const version = deployed ? getCliVersion() : null;
+      if (version !== null) {
+        writeSkillVersion(this.root(), this.profile, version);
+        notes.push(`项目 skill 已对齐到 ${version}`);
       }
     }
 
@@ -156,6 +168,11 @@ class GenericAgentTarget implements AgentTarget {
     for (const change of assetChanges) {
       if (change.action === 'not-found') continue;
       files.push(change);
+    }
+
+    // 5. 版本记录随自带资产一并删除(skill版本落后提示 spec D3)
+    if (removeSkillVersion(this.root(), this.profile)) {
+      files.push({ path: `${this.profile.configDirName}/${SKILL_VERSION_FILE}`, action: 'removed' });
     }
 
     return { files };

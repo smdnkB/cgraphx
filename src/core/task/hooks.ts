@@ -9,11 +9,13 @@
  *
  * 只有 SessionStart 向 stdout 输出一行
  * `{"hookSpecificOutput":{…,"additionalContext":…}}`,把会话 id 回传给 agent;
+ * 项目 skill 版本落后时,同一段里在会话 id 后另起一行接上提示(skill-version)。
  * Stop 与兼容用的 PostToolUse 入口 stdout 恒空。因此不复用 timeline 的 runHook。
  */
 
 import type { AgentProfile } from '../agents';
 import { resolveProjectRoot } from '../directory';
+import { skillVersionNotice } from '../skill-version';
 import { isKillSwitchOn } from '../timeline';
 import { isHistoryPassDone, refreshAutoBindings } from './auto-binding';
 
@@ -27,12 +29,17 @@ interface TaskHookPayload {
 }
 
 /**
- * SessionStart:只注入当前会话 id(供拿不到会话时用 --session 传入),
+ * SessionStart:注入当前会话 id(供拿不到会话时用 --session 传入),
  * 不再查询绑定、不注入任何任务内容,未绑定时也不提示。
+ * 项目 skill 版本落后时,在会话 id 那行后接一行提示,合成同一段输出(skill版本落后提示 spec D5)。
  */
-export async function taskSessionStartHook(_profile: AgentProfile): Promise<void> {
+export async function taskSessionStartHook(profile: AgentProfile): Promise<void> {
   await runTaskHook(async (payload) => {
-    writeAdditionalContext('SessionStart', sessionStartContext(payload.sessionId));
+    const lines = [sessionStartContext(payload.sessionId)];
+    const source = typeof payload.raw.source === 'string' ? payload.raw.source : undefined;
+    const notice = skillVersionNotice(resolveProjectRoot(payload.cwd ?? process.cwd()), profile, source);
+    if (notice !== null) lines.push(notice);
+    writeAdditionalContext('SessionStart', lines.join('\n'));
   });
 }
 

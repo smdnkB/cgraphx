@@ -3,6 +3,8 @@
  *
  * Spec §3.1 / §4.5: ALWAYS exit 0, ALWAYS empty stdout. Failures go to stderr
  * only. This is the "never block Claude" contract.
+ * 唯一例外:会话开始 hook 在项目没接 task hook 时,runHook 返回后可能输出一段 skill 版本落后提示
+ * (见 hooks.ts 的 sessionStartHook);runHook 本身仍不写 stdout。
  */
 
 import { NO_TIMELINE_ENV, PERF_WARN_MS } from './constants';

@@ -26,6 +26,11 @@
 import * as path from 'path';
 import { spawnSync } from 'child_process';
 
+import { compareVersions } from '../../core/skill-version';
+
+// 版本号解析与比较迁入 core(会话开始检查与 upgrade 共用),这里原样转出,对外导出不变
+export { compareVersions, parseSemver, type Semver } from '../../core/skill-version';
+
 export const NPM_PACKAGE = 'cgraphx';
 
 // ---------------------------------------------------------------------------
@@ -71,39 +76,6 @@ export function detectInstallMethod(input: DetectInput): InstallMethod {
 // ---------------------------------------------------------------------------
 // Version helpers (pure)
 // ---------------------------------------------------------------------------
-
-export interface Semver {
-  major: number;
-  minor: number;
-  patch: number;
-  pre: string | null;
-}
-
-export function parseSemver(version: string): Semver | null {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(version.trim());
-  if (!m) return null;
-  return {
-    major: parseInt(m[1]!, 10),
-    minor: parseInt(m[2]!, 10),
-    patch: parseInt(m[3]!, 10),
-    pre: m[4] ?? null,
-  };
-}
-
-/** Returns >0 if a>b, <0 if a<b, 0 if equal. Throws on unparseable input. */
-export function compareVersions(a: string, b: string): number {
-  const sa = parseSemver(a);
-  const sb = parseSemver(b);
-  if (!sa || !sb) throw new Error(`cannot compare versions: "${a}" vs "${b}"`);
-  if (sa.major !== sb.major) return sa.major - sb.major;
-  if (sa.minor !== sb.minor) return sa.minor - sb.minor;
-  if (sa.patch !== sb.patch) return sa.patch - sb.patch;
-  // A prerelease is "less than" its release (1.0.0-rc < 1.0.0).
-  if (sa.pre && !sb.pre) return -1;
-  if (!sa.pre && sb.pre) return 1;
-  if (sa.pre && sb.pre) return sa.pre < sb.pre ? -1 : sa.pre > sb.pre ? 1 : 0;
-  return 0;
-}
 
 export function isUpdateAvailable(current: string, latest: string): boolean {
   try {
