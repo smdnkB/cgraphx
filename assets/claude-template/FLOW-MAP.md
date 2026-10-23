@@ -121,5 +121,5 @@ guides:write-plan 读取并结晶,任务打「强制引用」标注(implementati
 ## 其他能力
 
 - `/visual-explain` 图解:没看懂就说「画个图讲讲」,出一页图解;和需求有关的放需求目录,无关的放 `.cgraphx/visual/`
-- `/developer-timeline` 开发事件流与日报/周报/月报 | `/write-workload` 交付工作量汇报
+- `/developer-timeline` 开发事件流与日报/周报/月报 | `/write-workload` 交付工作量汇报(按 spec 功能点 × 工作内容拆工时)
 - `/iboc-check` 老需求补头部、补单测产物和收口档案
