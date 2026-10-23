@@ -35,7 +35,7 @@ git_range: "<首SHA>..<末SHA>"
 ## 产物清单
 - 文档:<路径> · 代码:<SHA> <一句> · 决策锚点:<锚>
 ## 测试汇总
-- 结果:<pass/fail> · 覆盖:<AC/比> · review:<pass/fail/cannot_verify>
+- 结果:<pass/fail> · 覆盖:<测到的功能点数/功能点总数,未测的写 F 编号> · review:<pass/fail/cannot_verify>
 ## 知识引用归纳(命中)
 - [hit] <知识 id/path> — <这次怎么用上的一句>  [来源: AI会话 | 事后补录]
 - 确认无: <非占位理由>

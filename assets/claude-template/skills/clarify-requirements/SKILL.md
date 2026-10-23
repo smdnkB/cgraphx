@@ -177,7 +177,7 @@ AI 识别需求包含哪些功能点,每个点打类别。分类决定人审的�
 - **⓪ 的现实约束清单**(表结构、既有实现等事实,环节二直接复用)
 - **必须在 spec 前解决的问题** / **后续阶段的决策**
 - **下游就绪判断**:Spec 可写否 / Plan 可写否 / 是否需先探索
-- **用户控制的下一步**:`/write-spec` · `/write-wireframe`(涉及 UI 且还没线框,或决策改变了界面) · `/write-plan`(大需求,写完用 `/subagent-implement` 跑) · `/implementation`(小需求) · `/write-docs`(发布后按需)
+- **用户控制的下一步**:`/write-spec` · `/handoff-session`(换新会话继续,或按功能点拆成几个会话) · `/write-wireframe`(涉及 UI 且还没线框,或决策改变了界面) · `/write-plan`(大需求,写完用 `/subagent-implement` 跑) · `/implementation`(小需求) · `/write-docs`(发布后按需)
 
 不要把 agent 提案但用户未采纳的写进"已锁定"。
 
