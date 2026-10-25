@@ -2,7 +2,7 @@
  * report 子系统的 CLI 接线。
  *
  * 导出 `registerReportCommands(program)`,由主 CLI(src/cli/index.ts)调用一次。
- * 命令面:`cgraphx report ui-test <结构化结果.json> [--json]` —— 校验 run-ui-test
+ * 命令面:`cgraphx report ui-test <结构化结果.json> [--json]` —— 校验 ui-run
  * 的结构化结果并生成同目录 xlsx 报告。
  *
  * 退出码(exitCodeForError):0 成功 / 1 其它 / 2 ReportValidationError / 3 ReportArgError。
@@ -35,7 +35,7 @@ export function registerReportCommands(program: Command): void {
 
   report
     .command('ui-test <resultJson>')
-    .description('校验 run-ui-test 的结构化结果(*-ui功能测试结果.json)并在同目录生成 xlsx 报告')
+    .description('校验 ui-run 的结构化结果(*-ui功能测试结果.json)并在同目录生成 xlsx 报告')
     .option('--json', '以 JSON 输出结果')
     .action((resultJson: string, opts: UiTestOptions) => {
       try {

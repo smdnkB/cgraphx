@@ -50,7 +50,7 @@ function renderMarkdownIndex(owner: string, rows: FeatureEntry[]): string {
     );
   }
   if (rows.length === 0) {
-    lines.push('', '_(还没有以你为负责人的需求目录;write-spec/write-plan 创建时会声明负责人。)_');
+    lines.push('', '_(还没有以你为负责人的需求目录;dev-spec/dev-plan 创建时会声明负责人。)_');
   }
   return lines.join('\n') + '\n';
 }

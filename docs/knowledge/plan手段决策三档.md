@@ -12,30 +12,30 @@ aliases:
   - 手段回跳 spec
 tags:
   - skill 流程
-  - write-plan
-  - write-spec
+  - dev-plan
+  - dev-spec
   - 手段决策
 status: active
 source_type: work_context
 owners:
   - liulongfei
 related_code:
-  - assets/claude-template/skills/write-plan/SKILL.md
-  - assets/claude-template/skills/write-spec/SKILL.md
-  - assets/claude-template/skills/clarify-requirements/SKILL.md
+  - assets/claude-template/skills/dev-plan/SKILL.md
+  - assets/claude-template/skills/dev-spec/SKILL.md
+  - assets/claude-template/skills/dev-clarify/SKILL.md
   - assets/claude-template/FLOW-MAP.md
 related_documents:
   - docs/knowledge/测试流程后置.md
   - docs/knowledge/澄清苏格拉底单问.md
 created: 2026-08-01
-updated: 2026-10-19
+updated: 2026-10-25
 ---
 
 # plan 手段决策三档
 
 ## Summary
 
-plan 的实现手段决策**按业务可观察性分档**,判别一句:**手段有没有 spec 信封外的业务可观察后果?** 无(纯工程手段:内部结构 / 复用哪个既有模块 / 规范内命名 / 同步内实现细节)→ **plan 自主决定**并记入 index(选项 + 推荐 + 理由,透明可复审,不必用户拍板);有(选异步 ⇒ 用户看到"处理中"、软删 ⇒ 审计口径、选三方 ⇒ 成本/能力)→ 这是伪装成技术决策的业务决策,**回跳 write-spec 让业务拍板补契约**再定手段。**回跳是例外阀门,不是常规流程**。本条记录该决策:取代原先"所有手段都选项 + 推荐 + 用户拍板"的保守做法(把用户不在乎的纯工程问题也抛给用户,换来"随便你"式回答),放权纯工程、保留业务升级通道。
+plan 的实现手段决策**按业务可观察性分档**,判别一句:**手段有没有 spec 信封外的业务可观察后果?** 无(纯工程手段:内部结构 / 复用哪个既有模块 / 规范内命名 / 同步内实现细节)→ **plan 自主决定**并记入 index(选项 + 推荐 + 理由,透明可复审,不必用户拍板);有(选异步 ⇒ 用户看到"处理中"、软删 ⇒ 审计口径、选三方 ⇒ 成本/能力)→ 这是伪装成技术决策的业务决策,**回跳 dev-spec 让业务拍板补契约**再定手段。**回跳是例外阀门,不是常规流程**。本条记录该决策:取代原先"所有手段都选项 + 推荐 + 用户拍板"的保守做法(把用户不在乎的纯工程问题也抛给用户,换来"随便你"式回答),放权纯工程、保留业务升级通道。
 
 ## 决策与背景
 
@@ -50,13 +50,13 @@ plan 的实现手段决策**按业务可观察性分档**,判别一句:**手段�
 ## 关键设计与风险
 
 - 判别器 leading word:「业务可观察后果」+ 现成的「回跳」「信封」;不造 A/B 标签(自造词不招募预训练先验)。
-- 单一事实源:三档模型完整定义在 write-plan 定位节;write-spec / clarify / FLOW-MAP / reviewer 均为指针 echo。
-- **残余风险**:plan 把业务可观察手段误判为纯工程 → 悄悄替业务拍板。护栏三道:write-plan 定位给 B 类判别示例 + 红线「越信封 → 回跳,不夹带」+ 全部任务做完、统一验证通过后,由用户跑 `/code-review` 整体审查(2026-10-19 起;subagent-implement 改写后不再逐任务派 spec-reviewer);并以透明(plan 记录手段决策,事后可见可改)兜底。
+- 单一事实源:三档模型完整定义在 dev-plan 定位节;dev-spec / clarify / FLOW-MAP / reviewer 均为指针 echo。
+- **残余风险**:plan 把业务可观察手段误判为纯工程 → 悄悄替业务拍板。护栏三道:dev-plan 定位给 B 类判别示例 + 红线「越信封 → 回跳,不夹带」+ 全部任务做完、统一验证通过后,由用户跑 `/code-review` 整体审查(2026-10-19 起;dev-impl-subagent 改写后不再逐任务派 spec-reviewer);并以透明(plan 记录手段决策,事后可见可改)兜底。
 
 ## 代码入口
 
-- `assets/claude-template/skills/write-plan/SKILL.md` — 定位节"手段按业务可观察性分档"(判别器 + 自主支 + 回跳支);工作流程 step3;index「实现手段决策」节。
-- `assets/claude-template/skills/write-spec/SKILL.md` — 边界节:手段选型在 plan,纯工程自主 / 业务可观察回跳。
+- `assets/claude-template/skills/dev-plan/SKILL.md` — 定位节"手段按业务可观察性分档"(判别器 + 自主支 + 回跳支);工作流程 step3;index「实现手段决策」节。
+- `assets/claude-template/skills/dev-spec/SKILL.md` — 边界节:手段选型在 plan,纯工程自主 / 业务可观察回跳。
 - `assets/claude-template/FLOW-MAP.md` — 依赖图与"设计流程·分工":手段按业务可观察性分档。
 
 ## Open Questions

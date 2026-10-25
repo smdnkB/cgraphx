@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased
+
+### Changed — skills renamed by stage prefix
+
+Skill names now start with the stage they belong to, so typing `/dev-`,
+`/api-` and so on lists one stage's skills together. 20 skills and the `/end`
+command are renamed; what they do is unchanged. `cgraphx install` (and
+upgrade) removes the old directories through `deprecated-assets.json`, so old
+and new names never trigger side by side.
+
+| Stage | New name | Old name |
+|---|---|---|
+| project setup | `init-guides` | `init-project-guides` |
+| | `init-knowledge` | `knowledge-init` |
+| | `init-ddl` | `export-table-ddl` |
+| requirement main line | `dev-clarify` | `clarify-requirements` |
+| | `dev-wireframe` | `write-wireframe` |
+| | `dev-handoff` | `handoff-session` |
+| | `dev-spec` | `write-spec` |
+| | `dev-plan` | `write-plan` |
+| | `dev-impl` | `implementation` |
+| | `dev-impl-subagent` | `subagent-implement` |
+| | `/dev-end` (command) | `/end` |
+| API testing | `api-case` | `write-api` |
+| | `api-run` | `run-api-test` |
+| UI testing | `ui-case` | `write-ui-test` |
+| | `ui-run` | `run-ui-test` |
+| unit testing | `unit-spec` | `write-unit-test-spec` |
+| | `unit-code` | `write-unit-test-code` |
+| docs and reports | `doc-delivery` | `write-docs` |
+| | `doc-workload` | `write-workload` |
+| | `doc-report` | `developer-timeline` |
+| | `doc-backfill` | `iboc-check` |
+
+Unchanged: `knowledge-recall`, `knowledge-write`, `db-query`,
+`visual-explain`, `audit-login-security`, `cgraphx-guide`.
+
+Platform reporting sends the new names in `skillName` from now on, so
+per-skill statistics on the platform break at the rename unless the platform
+maps old names to new ones.
+
 ## 2.0.10 - 2026-10-21
 
 ### Changed — clarification realignment, second pass: review gates follow the decisions

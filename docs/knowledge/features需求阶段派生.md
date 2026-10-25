@@ -24,13 +24,13 @@ related_code:
   - src/core/features/types.ts
   - src/core/features/cli.ts
   - src/core/features/sync.ts
-  - assets/claude-template/skills/write-spec/SKILL.md
-  - assets/claude-template/skills/write-plan/SKILL.md
+  - assets/claude-template/skills/dev-spec/SKILL.md
+  - assets/claude-template/skills/dev-plan/SKILL.md
 related_documents:
   - docs/features/2026-07-31-features阶段派生取代状态字段/features阶段派生取代状态字段-spec.md
   - docs/features/2026-10-15-UI测试报告改xlsx/UI测试报告改xlsx-spec.md
 created: 2026-08-01
-updated: 2026-10-15
+updated: 2026-10-25
 ---
 
 # features 需求阶段派生
@@ -64,7 +64,7 @@ cgraphx features 子系统(`cgraphx features list`)展示的「需求阶段」�
 - 「测试报告」识别分两处,**任何一个后缀漏匹配都会漏派生「已验证」**:
   - 需求目录顶层,**三个后缀都匹配**:单元测试报告(`*-单元测试报告.md`)、接口测试报告(`*-接口测试报告.md`,2026-08 由 `-测试报告.md` 改名)、旧名(`*-测试报告.md`,存量产物兼容不回退)——新名里「接口」两字隔断旧后缀的连字符(`X-接口测试报告.md` 不以 `-测试报告.md` 结尾),少匹配一个就漏派生「已验证」。
   - `ui功能测试/` 子目录(UI 测试产物不在顶层),**两个后缀都匹配**:`*-ui功能测试报告.xlsx`(2026-10 起现行,由 `cgraphx report ui-test` 生成)与 `*-ui功能测试报告.md`(存量兼容;重跑生成 xlsx 成功后旧 md 被删除,阶段不受影响)。同目录的 `*-ui功能测试结果.json` 是生成 xlsx 的输入,**不算报告**——只有 JSON、xlsx 未生成(如生成命令校验失败)时仍是已规格/已规划。
-- 存量文档的旧 `> 状态:` 行**忽略、不主动改写**(无害死文本);新文档(write-spec/write-plan)头部不再产出状态。
+- 存量文档的旧 `> 状态:` 行**忽略、不主动改写**(无害死文本);新文档(dev-spec/dev-plan)头部不再产出状态。
 - `负责人`/`日期`/`--mine` 行为**不变**——派生只取代状态,不动归属。
 
 ## 代码入口
@@ -72,7 +72,7 @@ cgraphx features 子系统(`cgraphx features list`)展示的「需求阶段」�
 - `src/core/features/scanner.ts` — `deriveStage`(产物探测派生阶段)、`hasUiTestReport`(`ui功能测试/` 子目录 UI 报告识别)、`findMetaFile`(找头部元数据文件,读 负责人/日期)、`readHeaderMeta`(不再读状态)。
 - `src/core/features/types.ts` — `FEATURE_STAGES` / `FeatureStage`、`FeatureEntry.stage`(无 status/source)、`FeatureFilter.stage`。
 - `src/core/features/cli.ts` — `list` 阶段列与 `--stage` 过滤;`src/core/features/sync.ts` — my-features.md 阶段列。
-- `assets/claude-template/skills/write-spec/SKILL.md`、`write-plan/SKILL.md` — 头部约定去 `> 状态:`。
+- `assets/claude-template/skills/dev-spec/SKILL.md`、`dev-plan/SKILL.md` — 头部约定去 `> 状态:`。
 
 ## Open Questions
 

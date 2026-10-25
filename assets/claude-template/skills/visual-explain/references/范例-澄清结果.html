@@ -225,12 +225,12 @@ footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
 <header class="hero">
   <p class="eyebrow">cgraphx · skill瘦身 澄清结果 v2 · 2026-10-19</p>
   <h1>大需求实现和图解</h1>
-  <p class="lede">原来大需求由 write-plan 分批,每批开一个会话,贴一句启动语跑 <code>/implementation</code>,skill瘦身 分了 8 批,就要开 8 个会话;改动大时,clarify 结束会自动出一页澄清结果。这次调两处。一是恢复 subagent-implement:在一个会话里按顺序给每个任务派一个子 agent,plan 跟着改成一个任务一个文件。二是把画图讲解拆成独立的 visual-explain:不只讲澄清结果,任何对话没看懂都能用;clarify 结尾只提醒一句。</p>
+  <p class="lede">原来大需求由 dev-plan 分批,每批开一个会话,贴一句启动语跑 <code>/dev-impl</code>,skill瘦身 分了 8 批,就要开 8 个会话;改动大时,clarify 结束会自动出一页澄清结果。这次调两处。一是恢复 dev-impl-subagent:在一个会话里按顺序给每个任务派一个子 agent,plan 跟着改成一个任务一个文件。二是把画图讲解拆成独立的 visual-explain:不只讲澄清结果,任何对话没看懂都能用;clarify 结尾只提醒一句。</p>
   <div class="facts">
     <div class="fact"><b>8 → 1</b><span>要开的会话(以 skill瘦身 为例)</span></div>
     <div class="fact"><b>23 → 7</b><span>skill瘦身 按新拆法的任务数</span></div>
     <div class="fact"><b>1 次</b><span>统一测试,全部任务做完后跑</span></div>
-    <div class="fact"><b>25 → 27</b><span>skill 个数:subagent-implement 不废弃,新增 visual-explain</span></div>
+    <div class="fact"><b>25 → 27</b><span>skill 个数:dev-impl-subagent 不废弃,新增 visual-explain</span></div>
   </div>
 </header>
 
@@ -251,21 +251,21 @@ footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
       <table class="decisions">
         <thead><tr><th>决策</th><th>结论</th><th>举个例子</th></tr></thead>
         <tbody>
-          <tr><td class="k">subagent-implement</td><td data-label="结论">不废弃,改写成按任务派子 agent;从废弃清单里撤掉</td><td class="ex" data-label="举个例子">已部署的项目升级以后照样能用 <code>/subagent-implement</code>。这次的删除还没发布,不会出现先删掉再装回来</td></tr>
+          <tr><td class="k">dev-impl-subagent</td><td data-label="结论">不废弃,改写成按任务派子 agent;从废弃清单里撤掉</td><td class="ex" data-label="举个例子">已部署的项目升级以后照样能用 <code>/dev-impl-subagent</code>。这次的删除还没发布,不会出现先删掉再装回来</td></tr>
           <tr><td class="k">在哪跑</td><td data-label="结论">在设计会话里直接跑,或者新开一个会话跑。每个子 agent 是一份新的上下文,主会话只收汇报</td><td class="ex" data-label="举个例子">设计完 plan,上下文还够就在原会话里敲一句;不够就新开会话,敲同一句</td></tr>
           <tr><td class="k">plan 文件</td><td data-label="结论">index 放背景和共用部分,和现在一样;其余一个任务一个文件</td><td class="ex" data-label="举个例子">skill瘦身 会是 index 加 7 个任务文件,不再是 index 加 8 个分文件、23 个任务</td></tr>
           <tr><td class="k">契约</td><td data-label="结论">只写在 index 里;任务文件按编号引用,不再每个任务各抄一份</td><td class="ex" data-label="举个例子">产物注册表的契约 C-1 只在 index 写一遍,T-2 里写「按 C-1」</td></tr>
           <tr><td class="k">怎么拆</td><td data-label="结论">先按任务类型拆:数据库、后端、前端、配置、文档等。拆完以后,一个子 agent 还做不完的,再按并行度往下拆,拆到做得完为止,不拆到底。多大算做不完,写 spec 时定一个数</td><td class="ex" data-label="举个例子">后端改动太大,按两个互不依赖的模块拆成两个任务;前端一个子 agent 做得完,就不拆</td></tr>
           <tr><td class="k">执行顺序</td><td data-label="结论">index 写执行顺序,标出能同时跑的任务。能同时跑的条件:改的文件不重叠,契约已经在 index 里定死</td><td class="ex" data-label="举个例子">先做数据库;后端和前端标了可同时跑,两个子 agent 一起开工</td></tr>
-          <tr><td class="k">子 agent</td><td data-label="结论">只读 implementation、index 和自己的任务文件;只改文件,不构建、不测试、不提交</td><td class="ex" data-label="举个例子">派给 T3 的话就一句:读 implementation、index 和 T3 的文件,只做 T3</td></tr>
+          <tr><td class="k">子 agent</td><td data-label="结论">只读 dev-impl、index 和自己的任务文件;只改文件,不构建、不测试、不提交</td><td class="ex" data-label="举个例子">派给 T3 的话就一句:读 dev-impl、index 和 T3 的文件,只做 T3</td></tr>
           <tr><td class="k">提交</td><td data-label="结论">主会话提交:每回来一个任务,就按任务里写的提交点提交,不构建、不测试</td><td class="ex" data-label="举个例子">后端任务回来,直接按「一个模块一笔」提交 3 笔。这 3 笔不保证能构建,问题留到统一测试时发现</td></tr>
           <tr><td class="k">出了问题</td><td data-label="结论">子 agent 报 PLAN_CONFLICT 或者卡住:已经在跑的让它跑完,后面的不再派,停下问你。接着跑时可以指定从哪个任务开始</td><td class="ex" data-label="举个例子">后端报冲突;前端已经在跑,就让它跑完;配置先不派,等你定</td></tr>
           <tr><td class="k">测试</td><td data-label="结论">全部任务做完后,主会话统一构建、测试一次;要跑的命令集中写在 index 的「统一验证」里</td><td class="ex" data-label="举个例子">skill瘦身 最后一次跑 <code>npm run build</code>、<code>npm test</code> 和 <code>features check</code></td></tr>
           <tr><td class="k">修复</td><td data-label="结论">主会话负责:小问题直接改;修复量大时派一个子 agent 去修,主会话跑测试确认。修复单独提交,修完再跑一遍</td><td class="ex" data-label="举个例子">统一测试出了 2 处类型错误,主会话直接改;十几个失败分散在 3 个任务里,派子 agent 去修</td></tr>
           <tr><td class="k">要你验证的</td><td data-label="结论">照常提交,不等你;统一测试之后,把清单一起交给你</td><td class="ex" data-label="举个例子">最后列出:打开订单页,点导出,文件里有备注列</td></tr>
           <tr><td class="k">最后的审查</td><td data-label="结论">提示你跑 <code>/code-review</code>,不自动跑</td><td class="ex" data-label="举个例子">在设计会话里跑完以后上下文已经不多,可以新开会话跑 <code>/code-review</code></td></tr>
-          <tr><td class="k">不带回来的</td><td data-label="结论">旧版的四件套注入、逐任务审查、质量审查子 agent,以及每批一句的启动语;也不开 git worktree</td><td class="ex" data-label="举个例子">index 只给一句启动语:<code>/subagent-implement docs/features/&lt;feature-id&gt;/plan/&lt;前缀&gt;-index.md</code></td></tr>
-          <tr><td class="k">放在哪个需求</td><td data-label="结论">放进 skill瘦身,改它的 spec;CHANGELOG 不再把 subagent-implement 列为废弃</td><td class="ex" data-label="举个例子">spec 的废弃表去掉 subagent-implement 这一行,大需求怎么执行的那一节重写</td></tr>
+          <tr><td class="k">不带回来的</td><td data-label="结论">旧版的四件套注入、逐任务审查、质量审查子 agent,以及每批一句的启动语;也不开 git worktree</td><td class="ex" data-label="举个例子">index 只给一句启动语:<code>/dev-impl-subagent docs/features/&lt;feature-id&gt;/plan/&lt;前缀&gt;-index.md</code></td></tr>
+          <tr><td class="k">放在哪个需求</td><td data-label="结论">放进 skill瘦身,改它的 spec;CHANGELOG 不再把 dev-impl-subagent 列为废弃</td><td class="ex" data-label="举个例子">spec 的废弃表去掉 dev-impl-subagent 这一行,大需求怎么执行的那一节重写</td></tr>
         </tbody>
       </table>
     </div>
@@ -282,7 +282,7 @@ footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
           <tr><td class="k">怎么触发</td><td data-label="结论">你说「没看懂」「画个图讲讲」「图解一下」时,AI 调用它;也可以直接敲命令。你没要求时,AI 不主动出页面</td><td class="ex" data-label="举个例子">你说「plan 的执行顺序我没看懂」,AI 出一页执行顺序图</td></tr>
           <tr><td class="k">产出</td><td data-label="结论">一律出一页 HTML:单个文件、断网能打开、深浅色和手机宽度下都看得清;做完在浏览器里打开</td><td class="ex" data-label="举个例子">在 Claude Code 终端里用,做完自动用浏览器打开</td></tr>
           <tr><td class="k">放在哪</td><td data-label="结论">和某个需求有关的,放进那个需求目录,按版本出;和需求无关的,放 <code>.cgraphx/visual/</code>,只存在本机,不进 git</td><td class="ex" data-label="举个例子">澄清结果:<code>&lt;前缀&gt;-澄清结果-v1.html</code>,和现在一样;临时讲一段代码:<code>.cgraphx/visual/task绑定-v1.html</code></td></tr>
-          <tr><td class="k">其他提醒点</td><td data-label="结论">write-plan 请你确认设计预览时,也提醒一句</td><td class="ex" data-label="举个例子">「设计预览哪里没看懂,可以说『画个图讲讲』。」</td></tr>
+          <tr><td class="k">其他提醒点</td><td data-label="结论">dev-plan 请你确认设计预览时,也提醒一句</td><td class="ex" data-label="举个例子">「设计预览哪里没看懂,可以说『画个图讲讲』。」</td></tr>
           <tr><td class="k">登记</td><td data-label="结论">不登记产物类型,也不上报;都算讨论稿,看完就不再维护</td><td class="ex" data-label="举个例子"><code>features show</code> 里把它算作「其他文件」</td></tr>
           <tr><td class="k">名字</td><td data-label="结论"><code>visual-explain</code></td><td class="ex" data-label="举个例子">敲 <code>/visual-explain</code></td></tr>
         </tbody>
@@ -320,7 +320,7 @@ footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
         <div class="col before">
           <div class="col-h"><b>现在</b><span>以 skill瘦身 为例</span></div>
           <ol class="flow">
-            <li><span class="n">1</span><p class="t">write-plan 写出 index 加 8 个分文件,23 个任务</p><p class="d">任务按提交来切;每个分文件开头各抄一份「共用约定」</p></li>
+            <li><span class="n">1</span><p class="t">dev-plan 写出 index 加 8 个分文件,23 个任务</p><p class="d">任务按提交来切;每个分文件开头各抄一份「共用约定」</p></li>
             <li class="wait"><span class="n">2</span><p class="t">你确认设计预览</p></li>
             <li class="gone"><span class="n">3</span><p class="t">你开第 1 个会话,贴第 1 句启动语 <span class="badge del">去掉</span></p><p class="d">等它跑完,再开第 2 个会话,一直到第 8 个</p></li>
             <li class="gone"><span class="n">4</span><p class="t">每个会话自己测试、自己提交 <span class="badge del">去掉</span></p></li>
@@ -330,9 +330,9 @@ footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
         <div class="col after">
           <div class="col-h"><b>以后</b><span>同一个需求</span></div>
           <ol class="flow">
-            <li><span class="n">1</span><p class="t">write-plan 写出 index 加 7 个任务文件 <span class="badge chg">改动</span></p><p class="d">先按任务类型拆,做不完的再按并行度拆;契约只写在 index;index 写执行顺序和统一验证</p></li>
+            <li><span class="n">1</span><p class="t">dev-plan 写出 index 加 7 个任务文件 <span class="badge chg">改动</span></p><p class="d">先按任务类型拆,做不完的再按并行度拆;契约只写在 index;index 写执行顺序和统一验证</p></li>
             <li class="wait"><span class="n">2</span><p class="t">你确认设计预览</p></li>
-            <li><span class="n">3</span><p class="t">敲一句 <code>/subagent-implement</code> <span class="badge new">新增</span></p><p class="d">在设计会话里直接跑,或者新开一个会话跑</p></li>
+            <li><span class="n">3</span><p class="t">敲一句 <code>/dev-impl-subagent</code> <span class="badge new">新增</span></p><p class="d">在设计会话里直接跑,或者新开一个会话跑</p></li>
             <li><span class="n">4</span><p class="t">按执行顺序派子 agent,能同时跑的一起派 <span class="badge new">新增</span></p><p class="d">子 agent 只改文件;报冲突或卡住时停下问你</p></li>
             <li><span class="n">5</span><p class="t">每回来一个任务,主会话按提交点提交 <span class="badge chg">改动</span></p><p class="d">不构建、不测试</p></li>
             <li><span class="n">6</span><p class="t">全部做完,主会话统一构建、测试,有问题就修 <span class="badge new">新增</span></p><p class="d">修复单独提交,修完再跑一遍</p></li>
@@ -367,7 +367,7 @@ footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
             <li>必须严格执行的契约 <span class="badge chg">改动</span><span class="why">只写在这里,任务文件按编号引用</span></li>
             <li>实现手段决策、适用规范、提交规范、风险、待确认项 <span class="badge same">不变</span></li>
             <li>统一验证:全部做完后跑的命令和要看的结果 <span class="badge new">新增</span></li>
-            <li>启动语:一句 <code>/subagent-implement</code> <span class="badge chg">改动</span></li>
+            <li>启动语:一句 <code>/dev-impl-subagent</code> <span class="badge chg">改动</span></li>
           </ul>
         </div>
         <div class="card">
@@ -413,14 +413,14 @@ footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
     </div>
 
     <div class="sub" id="run">
-      <h3>局部:subagent-implement 跑一次</h3>
+      <h3>局部:dev-impl-subagent 跑一次</h3>
       <p>主会话只读 index,不读任务文件正文,也不读代码;它要做的是派任务、提交、最后统一测试和修复。</p>
       <div class="line">
         <section class="stage">
           <div class="stage-h"><span class="dot">1</span><h4>读 index</h4><p>读任务清单、执行顺序、提交规范和统一验证。新开会话接着跑时,可以指定从哪个任务开始。</p></div>
         </section>
         <section class="stage">
-          <div class="stage-h"><span class="dot">2</span><h4>派任务</h4><p>按执行顺序一步一步派;同一步里标了可同时跑的,一起派。子 agent 读 implementation、index 和自己的任务文件,只改文件。</p></div>
+          <div class="stage-h"><span class="dot">2</span><h4>派任务</h4><p>按执行顺序一步一步派;同一步里标了可同时跑的,一起派。子 agent 读 dev-impl、index 和自己的任务文件,只改文件。</p></div>
           <ul class="gates">
             <li><span class="gt stop">停下问你</span><span>子 agent 报 PLAN_CONFLICT 或者卡住:已经在跑的让它跑完,后面的不再派</span></li>
           </ul>
@@ -450,7 +450,7 @@ footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
       <div class="examples">
         <div class="example">
           <p>派给子 agent 的话(示意)</p>
-<pre class="wrap-text">读 .claude/skills/implementation/SKILL.md,按它执行一个任务。
+<pre class="wrap-text">读 .claude/skills/dev-impl/SKILL.md,按它执行一个任务。
 index:docs/features/2026-10-18-skill瘦身/plan/skill瘦身-index.md
 你的任务:T3 设计侧 skill,任务文件 plan/skill瘦身-03-设计侧skill.md。
 只读 index 和你的任务文件,别的任务文件不读、不改。
@@ -461,10 +461,10 @@ index:docs/features/2026-10-18-skill瘦身/plan/skill瘦身-index.md
           <p>子 agent 的回报(示意)</p>
 <pre class="wrap-text">结果:完成(另两种是冲突、卡住,要写明卡在哪)
 提交点:
-  1. refactor(skills): clarify-requirements 结尾改成提醒图解
-     skills/clarify-requirements/SKILL.md
-  2. refactor(skills): write-spec 去掉一图看懂
-     skills/write-spec/SKILL.md
+  1. refactor(skills): dev-clarify 结尾改成提醒图解
+     skills/dev-clarify/SKILL.md
+  2. refactor(skills): dev-spec 去掉一图看懂
+     skills/dev-spec/SKILL.md
 按 plan 执行:PLAN_FOLLOWED
 要人验证的:无
 值得沉淀的:无</pre>
@@ -493,10 +493,10 @@ index:docs/features/2026-10-18-skill瘦身/plan/skill瘦身-index.md
       <div class="band"><b>任何时候</b><span class="badge new">新增</span><span>你说「没看懂」「画个图讲讲」「图解一下」,AI 用 visual-explain 出一页图解;你没要求时不主动出</span></div>
       <div class="col after">
         <ol class="flow">
-          <li><span class="n">1</span><p class="t">理解需求:<code>/clarify-requirements</code> <span class="badge chg">改动</span></p><p class="d">结尾在对话里给流程图和决策表,你拍板;最后提醒一句可以图解</p><p class="d gone">改动大时自动在需求目录出澄清结果页 <span class="badge del">去掉</span></p></li>
-          <li class="plain"><span class="n">2</span><p class="t">写契约:<code>/write-spec</code> <span class="badge same">不变</span></p></li>
-          <li><span class="n">3</span><p class="t">规划:<code>/write-plan</code> <span class="badge chg">改动</span></p><p class="d">请你确认设计预览时,提醒一句可以图解</p></li>
-          <li class="plain"><span class="n">4</span><p class="t">实现:<code>/subagent-implement</code> 或 <code>/implementation</code> <span class="badge same">见第一部分</span></p></li>
+          <li><span class="n">1</span><p class="t">理解需求:<code>/dev-clarify</code> <span class="badge chg">改动</span></p><p class="d">结尾在对话里给流程图和决策表,你拍板;最后提醒一句可以图解</p><p class="d gone">改动大时自动在需求目录出澄清结果页 <span class="badge del">去掉</span></p></li>
+          <li class="plain"><span class="n">2</span><p class="t">写契约:<code>/dev-spec</code> <span class="badge same">不变</span></p></li>
+          <li><span class="n">3</span><p class="t">规划:<code>/dev-plan</code> <span class="badge chg">改动</span></p><p class="d">请你确认设计预览时,提醒一句可以图解</p></li>
+          <li class="plain"><span class="n">4</span><p class="t">实现:<code>/dev-impl-subagent</code> 或 <code>/dev-impl</code> <span class="badge same">见第一部分</span></p></li>
           <li class="plain"><span class="n">5</span><p class="t">测试、收尾 <span class="badge same">不变</span></p></li>
         </ol>
       </div>
@@ -581,24 +581,24 @@ index:docs/features/2026-10-18-skill瘦身/plan/skill瘦身-index.md
     <table>
       <thead><tr><th>位置</th><th>改什么</th></tr></thead>
       <tbody>
-        <tr><td class="k">subagent-implement</td><td data-label="改什么">恢复并改写:读 index,按执行顺序派子 agent,主会话提交,最后统一测试和修复,提示 <code>/code-review</code>。旧版的三份子 agent 提示词不恢复</td></tr>
+        <tr><td class="k">dev-impl-subagent</td><td data-label="改什么">恢复并改写:读 index,按执行顺序派子 agent,主会话提交,最后统一测试和修复,提示 <code>/code-review</code>。旧版的三份子 agent 提示词不恢复</td></tr>
         <tr><td class="k">visual-explain</td><td data-label="改什么">新建。讲法从 clarify 的附属文件挪来,扩成什么内容都能讲;写清页面要求和存放位置</td></tr>
-        <tr><td class="k">deprecated-assets.json</td><td data-label="改什么">去掉 <code>skills/subagent-implement</code> 这一条,不然升级时部署完会马上把它删掉</td></tr>
-        <tr><td class="k">clarify-requirements</td><td data-label="改什么">结尾不再自动出页面,只在对话里给流程图和决策表,加一句图解提醒;附属文件挪走;推荐下一步改成大需求先 <code>/write-plan</code>,再 <code>/subagent-implement</code></td></tr>
-        <tr><td class="k">write-plan</td><td data-label="改什么">一个任务一个文件;先按类型拆,做不完再按并行度拆;契约只写在 index;index 加执行顺序和统一验证;启动语改成一句;收尾提示改成 <code>/subagent-implement</code>;请你确认设计预览时加一句图解提醒</td></tr>
-        <tr><td class="k">write-plan 的 plan 审查提示词</td><td data-label="改什么">按新结构审:任务文件不抄契约、同时跑的任务改的文件不重叠、执行顺序和依赖对得上</td></tr>
-        <tr><td class="k">FLOW-MAP、模板 CLAUDE.md、cgraphx-guide</td><td data-label="改什么">开发流程改成一句 <code>/subagent-implement</code> 跑完全部任务;澄清结果页的说法改成 visual-explain;「随时可用」里加上 visual-explain</td></tr>
-        <tr><td class="k">本仓库 CLAUDE.md、README、CHANGELOG</td><td data-label="改什么">skill 个数改成 27;CHANGELOG 不再把 subagent-implement 列为废弃,改写它的新做法;clarify 结尾出页面的说法改成 visual-explain</td></tr>
+        <tr><td class="k">deprecated-assets.json</td><td data-label="改什么">去掉 <code>skills/dev-impl-subagent</code> 这一条,不然升级时部署完会马上把它删掉</td></tr>
+        <tr><td class="k">dev-clarify</td><td data-label="改什么">结尾不再自动出页面,只在对话里给流程图和决策表,加一句图解提醒;附属文件挪走;推荐下一步改成大需求先 <code>/dev-plan</code>,再 <code>/dev-impl-subagent</code></td></tr>
+        <tr><td class="k">dev-plan</td><td data-label="改什么">一个任务一个文件;先按类型拆,做不完再按并行度拆;契约只写在 index;index 加执行顺序和统一验证;启动语改成一句;收尾提示改成 <code>/dev-impl-subagent</code>;请你确认设计预览时加一句图解提醒</td></tr>
+        <tr><td class="k">dev-plan 的 plan 审查提示词</td><td data-label="改什么">按新结构审:任务文件不抄契约、同时跑的任务改的文件不重叠、执行顺序和依赖对得上</td></tr>
+        <tr><td class="k">FLOW-MAP、模板 CLAUDE.md、cgraphx-guide</td><td data-label="改什么">开发流程改成一句 <code>/dev-impl-subagent</code> 跑完全部任务;澄清结果页的说法改成 visual-explain;「随时可用」里加上 visual-explain</td></tr>
+        <tr><td class="k">本仓库 CLAUDE.md、README、CHANGELOG</td><td data-label="改什么">skill 个数改成 27;CHANGELOG 不再把 dev-impl-subagent 列为废弃,改写它的新做法;clarify 结尾出页面的说法改成 visual-explain</td></tr>
         <tr><td class="k">知识库</td><td data-label="改什么">skill-invocation轴、测试流程后置、plan手段决策三档,三个条目按新事实更新</td></tr>
-        <tr><td class="k">skill瘦身 spec</td><td data-label="改什么">改掉 25 个 skill、9 个废弃、大需求分批、clarify 自动出澄清结果页的写法;补上 plan 结构、subagent-implement、visual-explain 三节;验收改成 27 个 skill、8 个废弃</td></tr>
+        <tr><td class="k">skill瘦身 spec</td><td data-label="改什么">改掉 25 个 skill、9 个废弃、大需求分批、clarify 自动出澄清结果页的写法;补上 plan 结构、dev-impl-subagent、visual-explain 三节;验收改成 27 个 skill、8 个废弃</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
 <footer>
-  <p>v2:加上图解 visual-explain,clarify 结尾不再自动出页面。v1:恢复 subagent-implement,plan 一个任务一个文件。两版都补充 skill瘦身 原来的澄清结果(claude.ai 上的 v4 页面),其余各站不变。</p>
-  <p>依据:本次澄清对话(2026-10-19)、skill瘦身 spec 与 plan、产物注册表与头部规范 plan、旧版 subagent-implement、clarify 的附属文件「澄清结果页」。讨论稿,不是契约;你确认后写进 spec,本页不再维护。</p>
+  <p>v2:加上图解 visual-explain,clarify 结尾不再自动出页面。v1:恢复 dev-impl-subagent,plan 一个任务一个文件。两版都补充 skill瘦身 原来的澄清结果(claude.ai 上的 v4 页面),其余各站不变。</p>
+  <p>依据:本次澄清对话(2026-10-19)、skill瘦身 spec 与 plan、产物注册表与头部规范 plan、旧版 dev-impl-subagent、clarify 的附属文件「澄清结果页」。讨论稿,不是契约;你确认后写进 spec,本页不再维护。</p>
 </footer>
 
 </main>

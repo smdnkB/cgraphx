@@ -14,11 +14,11 @@
 |---|---|---|
 | 1 | **文档漂移返工**——PRD/Spec/Plan 三份文档,改一条规则要回归全部,最终没一份能信 | Spec 是唯一契约,变更只改一处;PRD、设计文档、接口文档**发布后按需生成**,不在开发主链上 |
 | 2 | **业务知识随会话消失**——和 agent 聊出来的理解,关掉窗口就丢了,下次从零开始 | `knowledge-write` 沉淀 → `knowledge-recall` 召回,闭环积累,越用越厚 |
-| 3 | **数据模型每次从零理解**——字段含义、隐式关系,上次踩的坑下次又踩 | `export-table-ddl` 建本地 DDL 基线,`db-query` 探索发现回写 DISCOVERED 块,重 dump 保留积累 |
-| 4 | **需求理解偏差**——拿到一句话就开写,做完发现理解错了 | `/clarify-requirements` 先锁业务边界和技术约束,不急着写代码 |
+| 3 | **数据模型每次从零理解**——字段含义、隐式关系,上次踩的坑下次又踩 | `init-ddl` 建本地 DDL 基线,`db-query` 探索发现回写 DISCOVERED 块,重 dump 保留积累 |
+| 4 | **需求理解偏差**——拿到一句话就开写,做完发现理解错了 | `/dev-clarify` 先锁业务边界和技术约束,不急着写代码 |
 | 5 | **规范靠人记**——编码/接口/数据/提交规范,写了没人看 | 规范在执行期自动送达:plan 打「强制引用」标注 + commit 门禁拦截 |
-| 6 | **流程到写完代码就断了**——测试是人的事,手动录接口、手动跑、手动验 | `/write-api` 从 spec 自动生成测试用例 → `/run-api-test` 执行 + 强制查 DB 验数据,闭环不断链 |
-| 7 | **工作不可追溯**——领导问「这个月做了什么」,翻 git log 拼凑 | timeline 自动记录开发事件(每次 ~5ms),`/developer-timeline` 按需生成日报/周报/月报 |
+| 6 | **流程到写完代码就断了**——测试是人的事,手动录接口、手动跑、手动验 | `/api-case` 从 spec 自动生成测试用例 → `/api-run` 执行 + 强制查 DB 验数据,闭环不断链 |
+| 7 | **工作不可追溯**——领导问「这个月做了什么」,翻 git log 拼凑 | timeline 自动记录开发事件(每次 ~5ms),`/doc-report` 按需生成日报/周报/月报 |
 | 8 | **工具升级留残渣**——skill 改名后旧版本残留,agent 仍能触发过时逻辑 | `deprecated-assets.json` 清单 + install 自动清理 |
 
 ## 它怎么工作
@@ -43,28 +43,28 @@ cgraphx = **skill 流程(主体)+ CLI 能力(支撑)**。
 knowledge-recall(自动召回)
         │
         ▼
-/clarify-requirements ──→ /write-spec ──→ /write-plan(大需求必走)
+/dev-clarify ───────────→ /dev-spec ────→ /dev-plan(大需求必走)
   澄清 + 决策表             唯一契约          一个任务一个文件
         │                                        │
         │            ┌───────────────────────────┘
         ▼            ▼
-  /implementation(小需求)· /subagent-implement(大需求,一个会话跑完,做完 /code-review)
+  /dev-impl(小需求)· /dev-impl-subagent(大需求,一个会话跑完,做完 /code-review)
         │
    ┌────┴─────────────────────────────┐
    ▼              ▼                   ▼
-/write-api    /write-unit-test-spec  交付收尾:
-→ /run-api-test → /write-unit-test-code  /knowledge-write 沉淀
-  接口测试       单元测试              /end 收口 + 发布记录
+/api-case     /unit-spec             交付收尾:
+→ /api-run    → /unit-code             /knowledge-write 沉淀
+  接口测试       单元测试              /dev-end 收口 + 发布记录
                                       commit 门禁(含产物检查)
 
 ── 发布后 · 按需(不在主链)──────────────
-/write-docs(需求文档、设计文档、接口文档)
+/doc-delivery(需求文档、设计文档、接口文档)
 
 ── 安全审计 · 按需(不在主链)────────────
 /audit-login-security(登录/认证安全审计,只报告不修)
 ```
 
-日常默认两步:**澄清 + 实现**。大需求先 `/write-plan`,再 `/subagent-implement` 一个会话跑完;复杂需求按需补规格和测试;哪里没看懂,说「画个图讲讲」,`/visual-explain` 出一页图解。
+日常默认两步:**澄清 + 实现**。大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完;复杂需求按需补规格和测试;哪里没看懂,说「画个图讲讲」,`/visual-explain` 出一页图解。
 
 ## 安装
 
@@ -89,7 +89,7 @@ cgraphx install           # 部署 skills → .claude/ + 接入 hooks + 初始�
 
 接入只是第一步。推荐这个顺序——**先立规范、再聊业务、然后做需求**:
 
-**1. 立规范 · `/init-project-guides`**
+**1. 立规范 · `/init-guides`**
 
 生成 `docs/guides/` 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的**有意偏离**——「SQL 禁止 `ORDER BY`」「金额一律 `decimal(12,2)`」这类最容易偏离又没有工具兜底的约定。这些 guide 是后续任务的强制读点。
 
@@ -97,9 +97,9 @@ cgraphx install           # 部署 skills → .claude/ + 接入 hooks + 初始�
 
 做需求前先聊业务。agent 会自动从知识库召回已沉淀的概念、对齐术语;边聊边用 `/knowledge-write` 把业务实体沉淀下来。知识库越用越厚,重复解释和重复踩坑越少。
 
-**3. 做需求 · `/clarify-requirements` 起步**
+**3. 做需求 · `/dev-clarify` 起步**
 
-进入主工作流:澄清 → 规格(`/write-spec`)→ 实现 → 测试。有了前两步,澄清才有共同语境。
+进入主工作流:澄清 → 规格(`/dev-spec`)→ 实现 → 测试。有了前两步,澄清才有共同语境。
 
 > 先有规范(agent 懂「规矩」),再对齐业务(agent 懂「黑话」),然后做需求才事半功倍。
 
@@ -109,7 +109,7 @@ cgraphx 有两个知识积累闭环,用得越多越值钱:
 
 **业务知识**:`/knowledge-write` 沉淀到 `docs/knowledge/` → `knowledge-recall` 下次开发前自动召回 → 新概念继续沉淀 → 知识库越厚,agent 越懂你的项目。
 
-**数据模型**:`/export-table-ddl` 建 DDL 基线 → `db-query` 查数据时首选读本地(便宜) → 探索发现回写 DISCOVERED 块 → 重 dump 保留积累 → agent 不再重复踩坑。
+**数据模型**:`/init-ddl` 建 DDL 基线 → `db-query` 查数据时首选读本地(便宜) → 探索发现回写 DISCOVERED 块 → 重 dump 保留积累 → agent 不再重复踩坑。
 
 ## 要求
 

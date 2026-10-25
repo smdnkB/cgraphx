@@ -35,7 +35,7 @@ export const DOCUMENT_STATUSES = [
 
 export const SOURCE_TYPES = [
   'work_context', // 工作上下文:需求/任务流中沉淀
-  'batch_exploration', // 批量探索:knowledge-init 式项目探索
+  'batch_exploration', // 批量探索:init-knowledge 式项目探索
   'review', // 评审:代码/架构评审中发现
   'debugging', // 调查排障:问题调查中发现
   'manual', // 手工:人工主动整理

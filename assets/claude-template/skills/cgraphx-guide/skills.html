@@ -202,25 +202,25 @@ footer p { margin: 0 0 6px; }
 <section class="group" data-group="design">
 <div class="group-title">需求设计</div>
 
-<details class="skill" id="clarify-requirements">
-<summary><span class="name">/clarify-requirements</span><span class="oneline">动手前先把需求说清:AI 出功能点提案,你审稿式改</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="dev-clarify">
+<summary><span class="name">/dev-clarify</span><span class="oneline">动手前先把需求说清:AI 出功能点提案,你审稿式改</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>接到需求、想法、bug、重构请求,在写任何文档和代码之前;也能拿现成方案让它拷问。</dd>
 <dt>怎么用</dt><dd>直接说需求,如「想给订单列表加个导出」;要拷问就说「拷问一下这个方案」。</dd>
 <dt>要你拍板</dt><dd>功能点清单增删;每张功能点卡片采纳或改具体值;体验变体二选一;整份《需求功能方案》你说「对了」才算完。</dd>
 <dt>产出</dt><dd>对话里的《需求功能方案》:流程图加功能点表(F1、F2…),不写文件;spec 会原样收录。</dd>
-<dt>前后</dt><dd>之前可以先用 knowledge-recall 对齐概念;之后 <code>/write-spec</code>,要换会话用 <code>/handoff-session</code>,没看懂用 <code>/visual-explain</code>。</dd>
+<dt>前后</dt><dd>之前可以先用 knowledge-recall 对齐概念;之后 <code>/dev-spec</code>,要换会话用 <code>/dev-handoff</code>,没看懂用 <code>/visual-explain</code>。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="write-wireframe">
-<summary><span class="name">/write-wireframe</span><span class="oneline">涉及界面时出低保真线框,看着界面定布局和交互</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="dev-wireframe">
+<summary><span class="name">/dev-wireframe</span><span class="oneline">涉及界面时出低保真线框,看着界面定布局和交互</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>需求涉及页面、表单、展示或交互变化;澄清前、澄清后、spec 写完后都能画。</dd>
 <dt>怎么用</dt><dd>说「画个线框」「页面长什么样」。</dd>
 <dt>要你拍板</dt><dd>先确认要画哪些页面和状态;看着线框定下版本,或发现业务问题回去改澄清。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-线框-v&lt;N&gt;.html</code>,浏览器直接打开,能点击跳转、切换正常/空态/异常;改一次出一版。</dd>
-<dt>前后</dt><dd>和 <code>/clarify-requirements</code> 来回迭代;你确认的版本由 spec 引用后才算数。</dd>
+<dt>前后</dt><dd>和 <code>/dev-clarify</code> 来回迭代;你确认的版本由 spec 引用后才算数。</dd>
 </dl></div>
 </details>
 
@@ -234,36 +234,36 @@ footer p { margin: 0 0 6px; }
 </dl></div>
 </details>
 
-<details class="skill" id="handoff-session">
-<summary><span class="name">/handoff-session</span><span class="oneline">换新会话接着干,或按功能点拆成几个会话</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="dev-handoff">
+<summary><span class="name">/dev-handoff</span><span class="oneline">换新会话接着干,或按功能点拆成几个会话</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>探索或澄清结束、上下文太长要开新会话;一个需求要分给几个会话做。</dd>
 <dt>怎么用</dt><dd>说「交接一下」「拆成两个会话」。</dd>
 <dt>要你拍板</dt><dd>哪几个功能点归哪个会话;每个会话的需求目录名;主任务和负责人。</dd>
 <dt>产出</dt><dd>每个会话一份 <code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-交接提示词.md</code>(澄清已确认时带功能方案原文),外加一句启动语,贴给新会话。</dd>
-<dt>前后</dt><dd>之前 <code>/clarify-requirements</code>;新会话里接着 <code>/write-spec</code>。</dd>
+<dt>前后</dt><dd>之前 <code>/dev-clarify</code>;新会话里接着 <code>/dev-spec</code>。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="write-spec">
-<summary><span class="name">/write-spec</span><span class="oneline">写唯一契约:收录功能方案,再定怎么实现</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="dev-spec">
+<summary><span class="name">/dev-spec</span><span class="oneline">写唯一契约:收录功能方案,再定怎么实现</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>澄清确认之后、动代码之前;没走澄清的小需求,它会先补一份功能方案让你确认。</dd>
 <dt>怎么用</dt><dd>说「写 spec」。</dd>
 <dt>要你拍板</dt><dd>需求目录名(业务 ID、标题语言)和负责人;标 🔒 的难回头决策(表结构、对外接口、模块边界、安全边界)逐条确认。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-spec.md</code>:第一节原样收录功能方案,其余每个功能点一张设计决策表。</dd>
-<dt>前后</dt><dd>之前 <code>/clarify-requirements</code>;之后大需求 <code>/write-plan</code>、小需求 <code>/implementation</code>,测试也都从它派生。</dd>
+<dt>前后</dt><dd>之前 <code>/dev-clarify</code>;之后大需求 <code>/dev-plan</code>、小需求 <code>/dev-impl</code>,测试也都从它派生。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="write-plan">
-<summary><span class="name">/write-plan</span><span class="oneline">大需求拆成子 agent 能照做的任务</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="dev-plan">
+<summary><span class="name">/dev-plan</span><span class="oneline">大需求拆成子 agent 能照做的任务</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>预估改 10 个以上文件、跨 3 个以上独立模块的大需求;拿不准也可以先写。</dd>
 <dt>怎么用</dt><dd>说「写 plan」。</dd>
 <dt>要你拍板</dt><dd>设计预览里 🔒 决策落在哪些任务和文件,你确认后才进实现。</dd>
-<dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/plan/</code> 下一个 index 加每个任务一个文件,index 末尾一句 <code>/subagent-implement</code> 启动语。</dd>
-<dt>前后</dt><dd>之前 <code>/write-spec</code>;之后 <code>/subagent-implement</code>。</dd>
+<dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/plan/</code> 下一个 index 加每个任务一个文件,index 末尾一句 <code>/dev-impl-subagent</code> 启动语。</dd>
+<dt>前后</dt><dd>之前 <code>/dev-spec</code>;之后 <code>/dev-impl-subagent</code>。</dd>
 </dl></div>
 </details>
 </section>
@@ -271,25 +271,25 @@ footer p { margin: 0 0 6px; }
 <section class="group" data-group="dev">
 <div class="group-title">开发</div>
 
-<details class="skill" id="implementation">
-<summary><span class="name">/implementation</span><span class="oneline">按 spec、plan 或当前上下文改代码并验证</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="dev-impl">
+<summary><span class="name">/dev-impl</span><span class="oneline">按 spec、plan 或当前上下文改代码并验证</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>小需求、bug 修复,或任何明确的改代码任务。</dd>
 <dt>怎么用</dt><dd>说「实现一下」「按 spec 改」。</dd>
 <dt>要你拍板</dt><dd>没有 spec 和 plan 时,加表改字段、对外接口这类难回头的改动先问你;要人验证的(页面效果、真机)等你回复结果再提交。</dd>
 <dt>产出</dt><dd>代码改动和一份汇报:原来怎样、现在怎样、改了什么、验证了什么;SQL 写错改对后记进 <code>docs/schema-knowledge/SQL避坑.md</code>。</dd>
-<dt>前后</dt><dd>之前 <code>/write-spec</code> 或 <code>/write-plan</code>;之后补测试(<code>/write-api</code>、<code>/write-unit-test-spec</code>),需求做完 <code>/end</code>。</dd>
+<dt>前后</dt><dd>之前 <code>/dev-spec</code> 或 <code>/dev-plan</code>;之后补测试(<code>/api-case</code>、<code>/unit-spec</code>),需求做完 <code>/dev-end</code>。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="subagent-implement">
-<summary><span class="name">/subagent-implement</span><span class="oneline">大需求一个会话跑完:按任务派子 agent</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="dev-impl-subagent">
+<summary><span class="name">/dev-impl-subagent</span><span class="oneline">大需求一个会话跑完:按任务派子 agent</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>plan 已经写好的大需求。</dd>
-<dt>怎么用</dt><dd>贴 plan index 末尾那一句,如 <code>/subagent-implement docs/features/&lt;需求目录&gt;/plan/&lt;前缀&gt;-index.md</code>。</dd>
+<dt>怎么用</dt><dd>贴 plan index 末尾那一句,如 <code>/dev-impl-subagent docs/features/&lt;需求目录&gt;/plan/&lt;前缀&gt;-index.md</code>。</dd>
 <dt>要你拍板</dt><dd>在 main 或 master 上会先问要不要建分支;子 agent 报冲突或卡住时停下问你。</dd>
 <dt>产出</dt><dd>按提交点逐笔提交的代码、统一验证结果和收尾汇报;不 push。</dd>
-<dt>前后</dt><dd>之前 <code>/write-plan</code>;之后 <code>/code-review</code>。</dd>
+<dt>前后</dt><dd>之前 <code>/dev-plan</code>;之后 <code>/code-review</code>。</dd>
 </dl></div>
 </details>
 </section>
@@ -297,68 +297,68 @@ footer p { margin: 0 0 6px; }
 <section class="group" data-group="test">
 <div class="group-title">测试</div>
 
-<details class="skill" id="write-api">
-<summary><span class="name">/write-api</span><span class="oneline">从 spec 的接口契约生成 bruno 接口测试</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="api-case">
+<summary><span class="name">/api-case</span><span class="oneline">从 spec 的接口契约生成 bruno 接口测试</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>接口写完要测,不想手工录接口。</dd>
 <dt>怎么用</dt><dd>说「写接口测试」「准备 bruno 测试」。</dd>
 <dt>要你拍板</dt><dd>接口清单确认后才生成。</dd>
 <dt>产出</dt><dd>需求目录下的 <code>&lt;前缀&gt;-接口测试-spec.md</code>;用例在 <code>docs/bruno/&lt;服务&gt;/&lt;需求前缀&gt;/</code>,带真实参数和断言,bruno 能直接打开。</dd>
-<dt>前后</dt><dd>之前 spec 和实现都已完成;之后 <code>/run-api-test</code>。</dd>
+<dt>前后</dt><dd>之前 spec 和实现都已完成;之后 <code>/api-run</code>。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="run-api-test">
-<summary><span class="name">/run-api-test</span><span class="oneline">跑 bruno 接口测试,写接口一律查库验数据</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="api-run">
+<summary><span class="name">/api-run</span><span class="oneline">跑 bruno 接口测试,写接口一律查库验数据</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
-<dt>什么时候用</dt><dd><code>/write-api</code> 生成用例之后,或改完代码想验证修复。</dd>
+<dt>什么时候用</dt><dd><code>/api-case</code> 生成用例之后,或改完代码想验证修复。</dd>
 <dt>怎么用</dt><dd>说「跑一下订单导出的接口测试」。</dd>
 <dt>要你拍板</dt><dd>只给接口时让你选测哪个需求;服务没就绪会停下等你;失败只报告,修不修你定。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-接口测试报告.md</code>;HTTP 200 不算通过,写接口要查库核对数据。</dd>
-<dt>前后</dt><dd>之前 <code>/write-api</code>;失败交 <code>/implementation</code> 修,通过后推荐 <code>/write-ui-test</code>。</dd>
+<dt>前后</dt><dd>之前 <code>/api-case</code>;失败交 <code>/dev-impl</code> 修,通过后推荐 <code>/ui-case</code>。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="write-unit-test-spec">
-<summary><span class="name">/write-unit-test-spec</span><span class="oneline">从 spec 列出该测的单元测试场景</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="unit-spec">
+<summary><span class="name">/unit-spec</span><span class="oneline">从 spec 列出该测的单元测试场景</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>spec 写好就能跑,代码还没写也行。</dd>
 <dt>怎么用</dt><dd>说「写单元测试规格」。</dd>
 <dt>要你拍板</dt><dd>spec 没写清的标【待确认】交给你;已有同名规格会先问是否覆盖。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-单元测试-spec.md</code>,按主路径、边界、异常分组,每条标 spec 编号(如 F1②、D3)。</dd>
-<dt>前后</dt><dd>之前 <code>/write-spec</code>;之后 <code>/write-unit-test-code</code>。</dd>
+<dt>前后</dt><dd>之前 <code>/dev-spec</code>;之后 <code>/unit-code</code>。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="write-unit-test-code">
-<summary><span class="name">/write-unit-test-code</span><span class="oneline">按测试规格写测试代码、跑测试、出报告</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="unit-code">
+<summary><span class="name">/unit-code</span><span class="oneline">按测试规格写测试代码、跑测试、出报告</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>测试规格审过、实现代码已经有了。</dd>
 <dt>怎么用</dt><dd>说「写单元测试」「跑单元测试」。</dd>
 <dt>产出</dt><dd>项目测试目录下的测试文件,加 <code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-单元测试报告.md</code>;被测代码缺的场景先跳过占位,不假装通过。</dd>
-<dt>前后</dt><dd>之前 <code>/write-unit-test-spec</code>,没有测试规格会直接退出;失败交 <code>/implementation</code> 修。</dd>
+<dt>前后</dt><dd>之前 <code>/unit-spec</code>,没有测试规格会直接退出;失败交 <code>/dev-impl</code> 修。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="write-ui-test">
-<summary><span class="name">/write-ui-test</span><span class="oneline">从 spec 派生 UI 测试用例,一个功能点一个用例</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="ui-case">
+<summary><span class="name">/ui-case</span><span class="oneline">从 spec 派生 UI 测试用例,一个功能点一个用例</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>需求要在界面上验一遍。</dd>
 <dt>怎么用</dt><dd>说「写 UI 测试用例」。</dd>
 <dt>要你拍板</dt><dd>功能点清单和用例清单各确认一次才落盘。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/ui功能测试/&lt;前缀&gt;-ui功能测试-spec.md</code>:操作步骤、预期表现、数据前提、登录账号。</dd>
-<dt>前后</dt><dd>之前 spec 和实现已完成,推荐在接口测试之后;之后 <code>/run-ui-test</code>。</dd>
+<dt>前后</dt><dd>之前 spec 和实现已完成,推荐在接口测试之后;之后 <code>/ui-run</code>。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="run-ui-test">
-<summary><span class="name">/run-ui-test</span><span class="oneline">用 Playwright 在浏览器里跑 UI 用例并截图</span><span class="how how-say">说话就行</span></summary>
+<details class="skill" id="ui-run">
+<summary><span class="name">/ui-run</span><span class="oneline">用 Playwright 在浏览器里跑 UI 用例并截图</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
-<dt>什么时候用</dt><dd><code>/write-ui-test</code> 写好用例之后;项目要先装 Playwright MCP。</dd>
+<dt>什么时候用</dt><dd><code>/ui-case</code> 写好用例之后;项目要先装 Playwright MCP。</dd>
 <dt>怎么用</dt><dd>说「跑一下 UI 测试」。</dd>
 <dt>要你拍板</dt><dd>执行模式和入口 URL 由你给,服务就绪、测试数据由你确认;遇到验证码或 SSO 会停下找你。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/ui功能测试/</code> 下的 xlsx 报告、结构化结果和按功能点命名的截图;只看界面表现,不查库。</dd>
-<dt>前后</dt><dd>之前 <code>/write-ui-test</code>;失败交 <code>/implementation</code> 修。</dd>
+<dt>前后</dt><dd>之前 <code>/ui-case</code>;失败交 <code>/dev-impl</code> 修。</dd>
 </dl></div>
 </details>
 </section>
@@ -373,7 +373,7 @@ footer p { margin: 0 0 6px; }
 <dt>怎么用</dt><dd>说「帮我做一次登录安全审计」「登录有没有漏洞」,可选告诉它审哪个模块、能不能起本地服务。</dd>
 <dt>要你拍板</dt><dd>审计范围(哪个系统/模块);要不要做本地动态验证;有没有 A/B 两个角色的测试账号——没有就先只做白盒。</dd>
 <dt>产出</dt><dd>对话里一份按严重度排序的清单:认证入口表、认证链路、每条发现的 <code>输入 → 代码路径(file:line) → 结果</code> 证据链,以及待验证项;默认不落盘。</dd>
-<dt>前后</dt><dd>独立可跑;设计缺陷交 <code>/write-spec</code>,实现 bug 交 <code>/implementation</code>;它自己不改代码。</dd>
+<dt>前后</dt><dd>独立可跑;设计缺陷交 <code>/dev-spec</code>,实现 bug 交 <code>/dev-impl</code>;它自己不改代码。</dd>
 </dl></div>
 </details>
 </section>
@@ -387,7 +387,7 @@ footer p { margin: 0 0 6px; }
 <dt>什么时候用</dt><dd>提到业务名词、项目黑话,或任务开始要查历史决策。</dd>
 <dt>怎么用</dt><dd>agent 自己调;你也可以问「X 是什么」「之前有没有记录过」。</dd>
 <dt>产出</dt><dd>对话里列出命中的概念:名字、文档路径、一行说明。</dd>
-<dt>前后</dt><dd>常在 <code>/clarify-requirements</code> 之前;内容来自 <code>/knowledge-write</code> 写进去的条目。</dd>
+<dt>前后</dt><dd>常在 <code>/dev-clarify</code> 之前;内容来自 <code>/knowledge-write</code> 写进去的条目。</dd>
 </dl></div>
 </details>
 
@@ -402,11 +402,11 @@ footer p { margin: 0 0 6px; }
 </dl></div>
 </details>
 
-<details class="skill" id="knowledge-init">
-<summary><span class="name">/knowledge-init</span><span class="oneline">接手陌生项目,批量探索、建知识库</span><span class="how how-cmd">敲命令</span></summary>
+<details class="skill" id="init-knowledge">
+<summary><span class="name">/init-knowledge</span><span class="oneline">接手陌生项目,批量探索、建知识库</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>新接手一个不熟的项目,知识库还是空的。</dd>
-<dt>怎么用</dt><dd>敲 <code>/knowledge-init</code>;中途断了再敲一次,接着上次的进度跑。</dd>
+<dt>怎么用</dt><dd>敲 <code>/init-knowledge</code>;中途断了再敲一次,接着上次的进度跑。</dd>
 <dt>要你拍板</dt><dd>开跑前选要探索的语言和排除的目录。</dd>
 <dt>产出</dt><dd>一批 <code>docs/knowledge/*.md</code> 条目,最后合并跨模块的概念。</dd>
 <dt>前后</dt><dd>之后日常靠 knowledge-recall 召回、<code>/knowledge-write</code> 补充。</dd>
@@ -420,15 +420,15 @@ footer p { margin: 0 0 6px; }
 <dt>怎么用</dt><dd>agent 自己调;连库配置在 <code>.cgraphx/db-profiles.json</code>,支持 MySQL、PostgreSQL 直连,或经 HTTP 只读接口。</dd>
 <dt>要你拍板</dt><dd>连哪个库不确定时问你;表关系弄不清先问你,不瞎试。</dd>
 <dt>产出</dt><dd>只读查询结果;探索出的字段含义、隐式关系写回 <code>docs/schema-knowledge/&lt;工程&gt;/ddl/&lt;表&gt;.sql</code> 的 DISCOVERED 块。</dd>
-<dt>前后</dt><dd>先跑 <code>/export-table-ddl</code> 建好本地 DDL,大部分查结构不用连库。</dd>
+<dt>前后</dt><dd>先跑 <code>/init-ddl</code> 建好本地 DDL,大部分查结构不用连库。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="export-table-ddl">
-<summary><span class="name">/export-table-ddl</span><span class="oneline">把项目用到的表结构导到本地</span><span class="how how-cmd">敲命令</span></summary>
+<details class="skill" id="init-ddl">
+<summary><span class="name">/init-ddl</span><span class="oneline">把项目用到的表结构导到本地</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>项目接入时跑一次,表结构变了再跑。</dd>
-<dt>怎么用</dt><dd>敲 <code>/export-table-ddl</code>。</dd>
+<dt>怎么用</dt><dd>敲 <code>/init-ddl</code>。</dd>
 <dt>要你拍板</dt><dd>连哪个库;要导的表清单(默认从代码里找)确认后才批量拉。</dd>
 <dt>产出</dt><dd><code>docs/schema-knowledge/&lt;工程&gt;/</code> 下的 <code>INDEX.md</code> 和 <code>ddl/&lt;表&gt;.sql</code>,一表一文件;重导时保留 DISCOVERED 块。</dd>
 <dt>前后</dt><dd>之后 db-query 优先读这些本地文件。</dd>
@@ -439,44 +439,44 @@ footer p { margin: 0 0 6px; }
 <section class="group" data-group="wrap">
 <div class="group-title">规范与收尾</div>
 
-<details class="skill" id="init-project-guides">
-<summary><span class="name">/init-project-guides</span><span class="oneline">生成项目规范,开发时按任务自动送达</span><span class="how how-cmd">敲命令</span></summary>
+<details class="skill" id="init-guides">
+<summary><span class="name">/init-guides</span><span class="oneline">生成项目规范,开发时按任务自动送达</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>项目刚接入,或写 plan 时提示规范缺失。</dd>
-<dt>怎么用</dt><dd>敲 <code>/init-project-guides</code>。</dd>
+<dt>怎么用</dt><dd>敲 <code>/init-guides</code>。</dd>
 <dt>要你拍板</dt><dd>五份文件逐个看草案,你拍板后才写入。</dd>
 <dt>产出</dt><dd><code>docs/guides/</code> 下编码、接口、数据、测试、git 五份规范,只写本项目和默认做法不一样的。</dd>
-<dt>前后</dt><dd>之后 <code>/write-plan</code> 按任务类型标「强制引用」,implementation 执行时读;git 规范用于提交门禁。</dd>
+<dt>前后</dt><dd>之后 <code>/dev-plan</code> 按任务类型标「强制引用」,dev-impl 执行时读;git 规范用于提交门禁。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="end">
-<summary><span class="name">/end</span><span class="oneline">需求做完写收口档案,上线后补发布记录</span><span class="how how-cmd">敲命令</span></summary>
+<details class="skill" id="dev-end">
+<summary><span class="name">/dev-end</span><span class="oneline">需求做完写收口档案,上线后补发布记录</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>需求做完收口;上线以后再跑一次,补发布记录。</dd>
-<dt>怎么用</dt><dd>敲 <code>/end</code>,给出 git 仓、提交范围(或时间窗)和测试报告。</dd>
+<dt>怎么用</dt><dd>敲 <code>/dev-end</code>,给出 git 仓、提交范围(或时间窗)和测试报告。</dd>
 <dt>要你拍板</dt><dd>上线没有;上线了的话,版本号或 tag、上线时间由你给。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-收口档案.md</code>,实际投入时长取自开发时间线;已上线时加 <code>&lt;前缀&gt;-发布记录.md</code>。</dd>
 <dt>前后</dt><dd>之前实现和测试都已完成。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="iboc-check">
-<summary><span class="name">/iboc-check</span><span class="oneline">老需求补头部、补单测产物和收口档案</span><span class="how how-cmd">敲命令</span></summary>
+<details class="skill" id="doc-backfill">
+<summary><span class="name">/doc-backfill</span><span class="oneline">老需求补头部、补单测产物和收口档案</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>规范建立前做完的老需求,文档参差不齐时。</dd>
-<dt>怎么用</dt><dd>敲 <code>/iboc-check</code>。</dd>
+<dt>怎么用</dt><dd>敲 <code>/doc-backfill</code>。</dd>
 <dt>要你拍板</dt><dd>这次补哪些产物(单元测试规格、单元测试报告、收口档案);不齐全的需求清单由你确认。</dd>
 <dt>产出</dt><dd>补好头部的主 spec,加上勾选范围内缺的产物;已经齐全的需求直接跳过。</dd>
 <dt>前后</dt><dd>一次性补账,之后的需求照常走流程。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="write-docs">
-<summary><span class="name">/write-docs</span><span class="oneline">上线后按实际交付补需求、设计、接口文档</span><span class="how how-cmd">敲命令</span></summary>
+<details class="skill" id="doc-delivery">
+<summary><span class="name">/doc-delivery</span><span class="oneline">上线后按实际交付补需求、设计、接口文档</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>发布以后,要给客户或团队交文档。</dd>
-<dt>怎么用</dt><dd>敲 <code>/write-docs</code>。</dd>
+<dt>怎么用</dt><dd>敲 <code>/doc-delivery</code>。</dd>
 <dt>要你拍板</dt><dd>要哪几种文档,可以多选。</dd>
 <dt>产出</dt><dd>需求目录下的 <code>&lt;前缀&gt;-需求文档.md</code>、<code>&lt;前缀&gt;-设计文档.md</code>(或 .html)、<code>&lt;前缀&gt;-接口文档.html</code>。</dd>
 <dt>前后</dt><dd>不在开发主线上;写的是实际交付的行为,不重新定义 spec。</dd>
@@ -487,22 +487,22 @@ footer p { margin: 0 0 6px; }
 <section class="group" data-group="review">
 <div class="group-title">回顾与工具</div>
 
-<details class="skill" id="developer-timeline">
-<summary><span class="name">/developer-timeline</span><span class="oneline">从开发记录生成日报、周报、月报</span><span class="how how-cmd">敲命令</span></summary>
+<details class="skill" id="doc-report">
+<summary><span class="name">/doc-report</span><span class="oneline">从开发记录生成日报、周报、月报</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>要汇报最近做了什么、做阶段复盘,或看自己的使用习惯。</dd>
-<dt>怎么用</dt><dd>敲 <code>/developer-timeline 出一份上周的周报</code>。</dd>
+<dt>怎么用</dt><dd>敲 <code>/doc-report 出一份上周的周报</code>。</dd>
 <dt>要你拍板</dt><dd>时间范围、输出格式、给谁看,没说清的一次问完。</dd>
 <dt>产出</dt><dd>对话里的摘要,或 <code>docs/reports/timeline/</code> 下的 Markdown、HTML 报告。</dd>
 <dt>前后</dt><dd>数据来自 cgraphx 自动记录的开发时间线,不用手动记。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="write-workload">
-<summary><span class="name">/write-workload</span><span class="oneline">按功能点 × 工作内容出工作量汇报</span><span class="how how-cmd">敲命令</span></summary>
+<details class="skill" id="doc-workload">
+<summary><span class="name">/doc-workload</span><span class="oneline">按功能点 × 工作内容出工作量汇报</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>需求交付后给甲方结款、内部对账;开发前报价也能用(汇报标「预估」)。</dd>
-<dt>怎么用</dt><dd>敲 <code>/write-workload 2026-10-18-REQ-1024-订单导出</code>,只给需求编号也行。</dd>
+<dt>怎么用</dt><dd>敲 <code>/doc-workload 2026-10-18-REQ-1024-订单导出</code>,只给需求编号也行。</dd>
 <dt>要你拍板</dt><dd>工时从哪来(给记录、让它估、留空你填);汇报给谁;对不上功能点的工作算不算需求变更。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-需求工作量.md</code>:工时汇总加拆解表(人天、理由、交付物);没数字的行写 <code>[__]</code> 等你填。</dd>
 <dt>前后</dt><dd>功能点取自 spec 第一节;没有 spec 时先整理一份功能点让你确认。</dd>

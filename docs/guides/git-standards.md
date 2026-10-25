@@ -6,7 +6,7 @@
 
 - type:feat / refactor / fix / docs;scope 常用:skills / installer,仓库级改动省 scope
 - 补充说明用"——",并列用"+",数值对比用"→"(`159→60`)
-- 正例:`feat(skills): init-project-guides 双模式——新项目立起步规范` / `refactor(skills): 体式提炼——implementation 159→60`
+- 正例:`feat(skills): init-guides 双模式——新项目立起步规范` / `refactor(skills): 体式提炼——dev-impl 159→60`
 - 反例:`update skill`(无 type、英文、零信息)/ `feat: 修复bug并优化性能`(空话)
 - **无票据关联**:需求追踪走 `docs/features/` 目录,不进标题
 - body:非琐碎提交写 body——背景一行(问题/动机)+"-" 列要点;琐碎可只留 subject

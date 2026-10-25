@@ -8,7 +8,7 @@
 /** 结构化结果 JSON 当前契约版本;不兼容变更必须升版本。 */
 export const UI_TEST_SCHEMA_VERSION = 1;
 
-/** 用例结果六状态(与 run-ui-test skill 状态枚举一致)。 */
+/** 用例结果六状态(与 ui-run skill 状态枚举一致)。 */
 export const UI_TEST_RESULTS = ['通过', '失败-预期不符', '失败-元素缺失', '失败-环境', '失败-登录', '跳过'] as const;
 
 /** 四种失败状态(汇总「失败」= 其和)。 */

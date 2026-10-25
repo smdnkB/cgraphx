@@ -7,14 +7,14 @@
  *      fail 项就 deny,改对才能提交;这项不能跳过(带 ENV_BYPASS 也拦)。
  *      跑不起来(旧版 CLI / 超时 / 输出不可解析)则当没查,放行到第二道。
  *   2. 提交说明自查:指向项目的 `docs/guides/git-standards.md` ——
- *      该文件由 /init-project-guides 生成,定义两件事:
+ *      该文件由 /init-guides 生成,定义两件事:
  *      - 提交消息规范(标题格式 / 票据关联 / 语言 / 正文)
  *      - 提交前检查点(项目自定义:该项目的历史事故点与团队红线)
  *
  * agent 的处理:两道都通过后再提交。第二道按 guide 自查 staged 变更
  * (自己跑 `git diff --cached` 逐项判断,命中报告用户)→ 按消息规范写
  * message → 带 CGRAPHX_PRECOMMIT_REVIEWED=1 前缀重试。
- * guide 缺失 → 提示先跑 /init-project-guides 生成,或用户明确表示不需要。
+ * guide 缺失 → 提示先跑 /init-guides 生成,或用户明确表示不需要。
  *
  * 本脚本只做事实判定(是否 git commit / 是否已暂存 / 产物是否合格 / guide 是否存在);
  * 检查点的判断本身由 agent 按 guide 执行 —— 什么该查是项目自己的事。
@@ -137,7 +137,7 @@ function main() {
       `3. 按其中「提交消息规范」写 commit message(规范要求票据/需求号而未知 → 问用户,不得编造或省略)。\n\n` +
       `处理完后,用以下形式重试以跳过本检查:\n  ${ENV_BYPASS} git commit ...`
     : `【提交门禁】项目没有 \`${GUIDE_RELPATH}\`(提交消息规范 + 提交前检查点):\n` +
-      `建议先跑 \`/init-project-guides\` 生成(挖掘项目 git 历史的消息风格 + 按技术栈定制检查点);用户明确表示不需要规范时可继续。\n\n` +
+      `建议先跑 \`/init-guides\` 生成(挖掘项目 git 历史的消息风格 + 按技术栈定制检查点);用户明确表示不需要规范时可继续。\n\n` +
       `确认后,用以下形式重试以跳过本检查:\n  ${ENV_BYPASS} git commit ...`;
 
   deny(reason);

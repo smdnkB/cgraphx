@@ -20,6 +20,27 @@
     "skills/subagent-implement/quality-reviewer-prompt.md",
     "skills/clarify-requirements/references/澄清结果页.md",
     "skills/handdrawn-deck",
-    "skills/handdrawn-sketch-engine"
+    "skills/handdrawn-sketch-engine",
+    "skills/init-project-guides",
+    "skills/knowledge-init",
+    "skills/export-table-ddl",
+    "skills/clarify-requirements",
+    "skills/write-wireframe",
+    "skills/handoff-session",
+    "skills/write-spec",
+    "skills/write-plan",
+    "skills/implementation",
+    "skills/subagent-implement",
+    "skills/write-api",
+    "skills/run-api-test",
+    "skills/write-ui-test",
+    "skills/run-ui-test",
+    "skills/write-unit-test-spec",
+    "skills/write-unit-test-code",
+    "skills/write-docs",
+    "skills/write-workload",
+    "skills/developer-timeline",
+    "skills/iboc-check",
+    "commands/end.md"
   ]
 }

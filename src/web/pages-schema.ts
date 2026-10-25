@@ -107,7 +107,7 @@ function buildNavChildren(
   return renderNavChildren({ items });
 }
 
-/** 工程列表页。projects=null(目录不存在)或空 → 空态(引导 export-table-ddl)。 */
+/** 工程列表页。projects=null(目录不存在)或空 → 空态(引导 init-ddl)。 */
 export function renderSchemaProjectsPage(projectRoot: string, ctx: SchemaPageCtx): string {
   const projects = listProjects(projectRoot);
   let model: ProjectsPageModel;

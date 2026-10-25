@@ -101,7 +101,7 @@ export const EVENT_TYPE_CHIP_TONE: Record<EventType, EventTone> = {
 /**
  * schema-knowledge 根目录(相对 projectRoot)。
  *
- * export-table-ddl skill 建基线的产物目录:每工程一个子目录,内含 INDEX.md +
+ * init-ddl skill 建基线的产物目录:每工程一个子目录,内含 INDEX.md +
  * ddl/*.sql(DDL 本体 + 末尾 DISCOVERED 块)。web 仅只读消费,不连库、不进
  * `.cgraphx/cgraphx.db`(spec §4.1:纯目录树实时派生,形态同 features 子系统)。
  */

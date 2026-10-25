@@ -251,7 +251,7 @@ function handleSchema(
         return;
       }
     }
-    // 零工程 / 目录不存在 → 空态页(引导 export-table-ddl)。
+    // 零工程 / 目录不存在 → 空态页(引导 init-ddl)。
     const html = renderSchemaProjectsPage(ctx.projectRoot, ctxSchema);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(html);

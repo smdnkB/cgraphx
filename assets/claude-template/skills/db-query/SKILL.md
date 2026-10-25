@@ -73,7 +73,7 @@ profiles 文件结构:每个 profile 含 `type`(`mysql`/`postgres`/`http`)、连
 
 ```
 1. Read docs/schema-knowledge/<project>/ddl/<table>.sql
-   → export-table-ddl skill 导出的 DDL + 团队补充的 DISCOVERED 块(隐式关系/字段含义/陷阱/流程)
+   → init-ddl skill 导出的 DDL + 团队补充的 DISCOVERED 块(隐式关系/字段含义/陷阱/流程)
    → 找 <project> 目录:在 docs/schema-knowledge/*/ddl/ 下找 <table>.sql;唯一命中直接读,多个问用户
    → 这是首选:比 DB 多 DISCOVERED 块,且不连库
 
@@ -104,7 +104,7 @@ profiles 文件结构:每个 profile 含 `type`(`mysql`/`postgres`/`http`)、连
 ```
 
 - 每行 `-- [类别] 内容`,类别:`关系` / `字段含义` / `陷阱` / `流程`(跨表业务流程)。
-- 块在 `-- === DISCOVERED` 和 `-- === END DISCOVERED ===` 之间 —— `export-table-ddl` 重 dump 时会保留这个块(不会覆盖)。
+- 块在 `-- === DISCOVERED` 和 `-- === END DISCOVERED ===` 之间 —— `init-ddl` 重 dump 时会保留这个块(不会覆盖)。
 - 一张表可多次 append;重复的行不重复加。
 - 这是 SQL 注释,不影响 DDL 可执行性。
 
@@ -126,7 +126,7 @@ profiles 文件结构:每个 profile 含 `type`(`mysql`/`postgres`/`http`)、连
 - **内容**:待执行的 `ALTER TABLE ... COMMENT '...'`(MySQL) / `COMMENT ON COLUMN/TABLE ... IS '...'`(PG)语句,补 DB 缺失的字段/表注释。
 - **格式**:纯 SQL,按表分组,每组前一行 `-- <table>` 注释。DBA 跑一条删一条(drain 语义)。
 - **和 DISCOVERED 块的分工**:同一个字段含义,DISCOVERED 块写"agent 现在要知道的"(立即生效),pending-comments.sql 写"等 DBA 固化进 DB 的"(异步执行)。DBA 执行后:删 pending-comments.sql 里那条 + 删 DISCOVERED 里对应的 `[字段含义]` 行(DB 已固化,文件副本冗余)。
-- **重 dump 不动它**:`export-table-ddl` 脚本只写 `INDEX.md` 和 `ddl/*.sql`,不碰 pending-comments.sql。
+- **重 dump 不动它**:`init-ddl` 脚本只写 `INDEX.md` 和 `ddl/*.sql`,不碰 pending-comments.sql。
 
 ```sql
 -- pending-comments.sql for order-svc
@@ -170,7 +170,7 @@ COMMENT ON COLUMN users.tenant_id IS '租户隔离字段,所有查询必须带�
 4. 结论不够 → 再派一次(换 prompt 重点,如"重点看 X 表的关联")或回头自己调工具补
 5. 子 agent 在返回里明确说"这些表关系不明,建议问用户"→ 主 agent 决定是否问,**不要让子 agent 自己问用户**(主 agent 才是用户对话入口)
 
-## schema-knowledge 目录结构(由 export-table-ddl 建基线,db-query 探索补充)
+## schema-knowledge 目录结构(由 init-ddl 建基线,db-query 探索补充)
 
 ```
 docs/schema-knowledge/
@@ -185,9 +185,9 @@ docs/schema-knowledge/
 ```
 
 **闭环工作流**:
-1. `export-table-ddl` 跑一次 → 建基线(DDL + 注释 + 索引,无 DISCOVERED 块,无 pending-comments.sql)
+1. `init-ddl` 跑一次 → 建基线(DDL + 注释 + 索引,无 DISCOVERED 块,无 pending-comments.sql)
 2. 日常 `db-query` 查数据踩坑 → 发现隐式关系/含义/陷阱 → 知识进 `ddl/<table>.sql` 的 DISCOVERED 块;DB 注释缺失则 action 进 `pending-comments.sql`
-3. 重跑 `export-table-ddl`(schema 变了)→ DISCOVERED 块保留,新 DDL 接上;pending-comments.sql 不动
+3. 重跑 `init-ddl`(schema 变了)→ DISCOVERED 块保留,新 DDL 接上;pending-comments.sql 不动
 4. DBA 执行 pending-comments.sql 里的语句 → DB 注释固化 → 删 pending-comments.sql 里那条 + 删 DISCOVERED 里对应的 `[字段含义]` 行(DB 已是单一事实源,文件副本冗余)
 
 ## 期望错误(CLI 退出码语义)

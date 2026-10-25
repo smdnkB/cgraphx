@@ -151,10 +151,10 @@ export function renderProjectsContent(m: ProjectsPageModel): string {
     if (m.empty === 'kb-missing') {
       return renderEmpty(
         '未导出 schema-knowledge',
-        '运行 export-table-ddl skill 建立基线,导出 DDL 快照到 docs/schema-knowledge/ 后即可在此浏览。',
+        '运行 init-ddl skill 建立基线,导出 DDL 快照到 docs/schema-knowledge/ 后即可在此浏览。',
       );
     }
-    return renderEmpty('暂无工程', 'docs/schema-knowledge/ 目录下尚无工程子目录,运行 export-table-ddl skill 建基线。');
+    return renderEmpty('暂无工程', 'docs/schema-knowledge/ 目录下尚无工程子目录,运行 init-ddl skill 建基线。');
   }
   const cards = m.projects
     .map((p) => {

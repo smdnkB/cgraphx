@@ -5,7 +5,7 @@
  * 调用一次。命令面:`cgraphx features [list|sync|show|check]` —— 实时扫描
  * docs/features/,按负责人/关键词/阶段定位需求目录。团队里每个人跑
  * `--mine` 拿自己的清单(负责人 = git config user.name,在
- * write-spec/write-plan 创建时声明)。
+ * dev-spec/dev-plan 创建时声明)。
  */
 
 import * as path from 'node:path';

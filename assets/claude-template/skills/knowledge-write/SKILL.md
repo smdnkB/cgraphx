@@ -28,7 +28,7 @@ description: 维护可供 cgraphx docs 索引的 Markdown 知识文件(docs/know
 - **反查 = 派生的"参与业务"视图**:`find --concept=<实体>` 返回所有引用该实体的文档。**任何条目里都不手动维护全量清单**——手动维护必陈旧,反查永远最新。
 - **同名严格性**:流程条目里的实体名与实体条目的规范 concept 名逐字一致;建条目前先 `docs concepts` 查名,错一个名反查就断。
 - **不是所有概念都配主条目**:机制概念(Scene 分发机制、准三层)、动作概念(礼包续订)留作 tag;只有业务实体升级。
-- **沉淀时机**:功能交付完成时最佳(理解最新鲜);implementation 和 subagent-implement 收尾会提示识别实体;只从一两个流程抽出的条目用 `status: draft` + Open Questions 标记未补全。
+- **沉淀时机**:功能交付完成时最佳(理解最新鲜);dev-impl 和 dev-impl-subagent 收尾会提示识别实体;只从一两个流程抽出的条目用 `status: draft` + Open Questions 标记未补全。
 
 ## Frontmatter 规范
 
@@ -64,7 +64,7 @@ updated: 2026-04-28
 - **时间**:`YYYY-MM-DD`;`created` 可选推荐。
 - **`related_code`**:仅作元数据保存(不建反向链接,不校验路径存在);用文件级路径或全限定类名,不写行号。
 - **`document_type` 枚举(7)**:business-entity 业务实体(业务对象主条目)· business-flow 业务流程 · mechanism 技术机制(含架构)· decision 决策 · rule 规则 · lesson 教训 · guide 指南(含运维手册/教程/安装/FAQ/API 文档)。
-- **`source_type` 枚举(5)**:work_context 工作上下文(需求/任务流中沉淀)· batch_exploration 批量探索(knowledge-init 式项目探索)· review 评审(代码/架构评审中发现)· debugging 调查排障(问题调查中发现)· manual 手工(人工主动整理)。
+- **`source_type` 枚举(5)**:work_context 工作上下文(需求/任务流中沉淀)· batch_exploration 批量探索(init-knowledge 式项目探索)· review 评审(代码/架构评审中发现)· debugging 调查排障(问题调查中发现)· manual 手工(人工主动整理)。
 - **`status` 枚举(4)**:draft · active · superseded · deprecated。
 
 ## Summary 章节(唯一进索引)
