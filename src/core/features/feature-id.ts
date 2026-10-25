@@ -20,35 +20,28 @@ export interface ParsedFeatureId {
 }
 
 /**
- * 日期段候选:4-2-2 位数字。
+ * 日期段:4-2-2 位数字,前面是名字开头或连字符,后面是名字结尾或连字符。
  *
- * 用 matchAll 迭代(它按原正则克隆一份再匹配),模块级常量不会被
- * lastIndex 状态污染。
+ * 两侧的边界写进正则本身:不合格的候选(如 `PRJ-2024-11-2026-10-25` 里的
+ * `2024-11-20`)整体匹配失败,不会吞掉后面真正日期段的字符;先找到的就是
+ * 第一个日期段。非全局正则,exec 不带 lastIndex 状态。
  */
-const DATE_SEGMENT_PATTERN = /\d{4}-\d{2}-\d{2}/g;
-
-/** 候选两侧是否都紧挨连字符或名字首尾(只有这样的才算日期段)。 */
-function isSegmentBoundary(featureId: string, start: number, end: number): boolean {
-  const before = start === 0 || featureId[start - 1] === '-';
-  const after = end === featureId.length || featureId[end] === '-';
-  return before && after;
-}
+const DATE_SEGMENT_PATTERN = /(?:^|-)(\d{4}-\d{2}-\d{2})(?=-|$)/;
 
 /** 解析 feature-id:取目录名里第一段日期与去掉它之后的标题。 */
 export function parseFeatureId(featureId: string): ParsedFeatureId {
-  for (const match of featureId.matchAll(DATE_SEGMENT_PATTERN)) {
-    const segment = match[0];
-    const start = match.index;
-    const end = start + segment.length;
-    if (!isSegmentBoundary(featureId, start, end)) continue;
-    // 在开头:去掉日期段与它后面的那个连字符;
-    // 否则:去掉日期段与它前面的那个连字符(末尾时等价于整段去掉)。
-    const title =
-      start === 0
-        ? featureId.slice(end + 1)
-        : featureId.slice(0, start - 1) + featureId.slice(end);
-    if (title === '') return { date: null, title: featureId };
-    return { date: segment, title };
-  }
-  return { date: null, title: featureId };
+  const match = DATE_SEGMENT_PATTERN.exec(featureId);
+  const date = match?.[1];
+  if (match === null || date === undefined) return { date: null, title: featureId };
+  // 匹配可能带着前导连字符,日期段本身从去掉它之后算起。
+  const start = match.index + match[0].length - date.length;
+  const end = start + date.length;
+  // 在开头:去掉日期段与它后面的那个连字符;
+  // 否则:去掉日期段与它前面的那个连字符(末尾时等价于整段去掉)。
+  const title =
+    start === 0
+      ? featureId.slice(end + 1)
+      : featureId.slice(0, start - 1) + featureId.slice(end);
+  if (title === '') return { date: null, title: featureId };
+  return { date, title };
 }
