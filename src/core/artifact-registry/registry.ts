@@ -48,7 +48,7 @@ export const BUILTIN_ARTIFACT_TYPES: readonly BuiltinArtifactType[] = [
     defaultPhase: 'design',
     minTier: '1.2',
     requiresBasis: true,
-    firstScreen: { heading: '架构总览', planIndexOnly: false },
+    firstScreen: { heading: '30 秒看懂', planIndexOnly: false },
   },
   {
     key: 'plan',

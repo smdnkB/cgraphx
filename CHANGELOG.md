@@ -52,6 +52,23 @@ requirement without a spec yet links to its directory and is marked
 「（还没有 spec）」. The old 目录 column is gone. `features list --mine`
 output, including `--json`, is unchanged.
 
+### Changed — `doc-delivery` design docs explain the change with diagrams
+
+The design doc was a long technical write-up that leaders could not take in
+at a glance. It now explains the change in two layers of diagrams, in
+business language. A process panorama marks which steps changed, with 原来
+and 现在 side by side when the flow itself changed (steps added, removed,
+reordered or triggered at a different time). Then each step whose internal
+logic changed gets its own section: a swimlane diagram of caller and service
+drawn from the code, changed steps in yellow and the normal path in green.
+It still opens with 30 秒看懂 and closes with data changes, key decisions and
+risk. Diagrams are mermaid styled after PlantUML activity diagrams
+(right-angle edges, grey boxes, white lanes), so they render in GitLab and in
+IntelliJ's markdown preview. The design doc is markdown only: the HTML
+option is dropped, since its template never loaded mermaid and diagrams did
+not render. The first-screen heading that `features check` requires for new
+design docs changes from 架构总览 to 30 秒看懂.
+
 ## 2.0.10 - 2026-10-21
 
 ### Changed — clarification realignment, second pass: review gates follow the decisions
