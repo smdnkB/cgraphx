@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Changed — requirement directories can follow the project's naming rule
+
+Projects can now write their own requirement directory naming rule in
+`docs/guides/feature-standards.md`, in the 「需求目录命名」 section — for
+example a module prefix in front of the date
+(`order-2026-10-25-REQ-1024-订单导出`). The skills that create a requirement
+directory read that section and name the directory after it; a project without
+the section keeps the default `YYYY-MM-DD-[业务ID-]<标题>` format.
+
+The date segment no longer has to sit at the start of the directory name. The
+program takes the first `YYYY-MM-DD` in the name, wherever it appears, and the
+file prefix is the feature-id with that date segment removed
+(`order-REQ-1024-订单导出-spec.md`).
+
+Directories that start with a date are untouched: the date, title, directory
+task name and file prefix are identical to before. Only hand-made old
+directories whose date is not at the start show a different local title and
+task name (`活动-2026-11-11` now appears as `活动`); the platform keeps the name
+declared the first time.
+
 ### Changed — skills renamed by stage prefix
 
 Skill names now start with the stage they belong to, so typing `/dev-`,
