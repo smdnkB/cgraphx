@@ -80,7 +80,7 @@ export function findTaskByValue(projectRoot: string, value: string): TaskItem | 
     if (!tableExists(db, 'task_feature_tasks')) return null;
     const v = value.trim();
     if (!v) return null;
-    // 目录任务:先按 feature-id 精确匹配,再按去掉日期前缀的任务名称精确匹配。
+    // 目录任务:先按 feature-id 精确匹配,再按去掉日期段的任务名称精确匹配。
     const byFeatureId = store.findFeatureTaskByFeatureId(v);
     if (byFeatureId !== null) return byFeatureId;
     return (

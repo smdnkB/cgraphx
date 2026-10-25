@@ -29,6 +29,8 @@ export {
   scanFeatureTasks,
   FEATURES_DIR,
 } from './scanner';
+export { parseFeatureId } from './feature-id';
+export type { ParsedFeatureId } from './feature-id';
 export { showFeature, resolveFeatureId } from './show';
 export { checkFeatures } from './check';
 export type { CheckOptions } from './check';

@@ -13,11 +13,11 @@ export type FeatureStage = (typeof FEATURE_STAGES)[number];
 
 /** 一个需求目录的索引条目。 */
 export interface FeatureEntry {
-  /** 目录名,即 feature-id(格式 YYYY-MM-DD-[业务ID-]<标题>)。 */
+  /** 目录名,即 feature-id(默认格式 YYYY-MM-DD-[业务ID-]<标题>,项目可在 docs/guides/feature-standards.md 自定义)。 */
   featureId: string;
   /** 从目录名或文档头部解析的日期;解析不到为 null。 */
   date: string | null;
-  /** 需求标题(目录名去掉日期前缀)。 */
+  /** 需求标题(目录名去掉日期段)。 */
   title: string;
   /** 负责人(`> 负责人:` 行,取主 spec → 交接文件;都未声明为 null)。 */
   owner: string | null;
