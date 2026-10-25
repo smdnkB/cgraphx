@@ -45,7 +45,7 @@ UI 先行:   线框 v1 ──→ clarify(锁定界面暴露出的业务决策)�
 ## 产物位置与命名
 
 - 路径:`docs/features/<feature-id>/<文件前缀>-线框-v<N>.html`,N 从 1 递增;每轮修改出新版本,旧版保留。
-- 文件前缀 = feature-id 去掉开头的日期。
+- 文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`。
 
 ## 红线(绝对不能做)
 

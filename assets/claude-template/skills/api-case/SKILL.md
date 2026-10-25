@@ -24,7 +24,7 @@ description: 基于需求生成 bruno 测试接口(.bru + 接口测试规格 + �
 
 ## 产物
 
-文件前缀 = feature-id 去掉开头的日期 `YYYY-MM-DD-`。
+文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`。
 
 产物文件名:
 - 接口测试规格:`docs/features/<feature-id>/<文件前缀>-接口测试-spec.md`

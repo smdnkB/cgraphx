@@ -15,7 +15,7 @@ spec 是唯一契约,本 skill 不重新定义 spec 已锁定的规则、接口�
 ## 流程
 
 1. 问要哪几种(多选):需求文档、设计文档、接口文档。
-2. 定需求目录:用户给了 feature-id 就用;没给就从当前目录往上找最近的 `docs/features/<feature-id>/`;找不到就问。文件前缀 = feature-id 去掉开头的日期。
+2. 定需求目录:用户给了 feature-id 就用;没给就从当前目录往上找最近的 `docs/features/<feature-id>/`;找不到就问。文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`。
 3. 按选中的种类逐份生成:读对应参考文件,照它的章节和模板写(需求文档读 `references/需求文档.md`,设计文档读 `references/设计文档.md`,接口文档读 `references/接口文档.md`)。
 4. 交付:告诉用户每份文件的位置,列出标了「待补充」或【待确认】的地方。
 

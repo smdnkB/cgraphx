@@ -76,7 +76,7 @@ description: 产出「需求工作量汇报」,作为内部对账 / 甲方结款
 
 ## 产物位置与命名
 
-- `docs/features/<feature-id>/<文件前缀>-需求工作量.md`,文件前缀 = feature-id 去掉开头的日期;放需求目录根下。
+- `docs/features/<feature-id>/<文件前缀>-需求工作量.md`,文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`;放需求目录根下。
 - 头部不写 `> 产物:`——需求工作量不是平台登记的产物类型。
 
 ## 收尾

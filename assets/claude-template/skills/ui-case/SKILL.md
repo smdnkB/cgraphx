@@ -26,7 +26,7 @@ description: 从需求 spec 派生 UI 功能测试用例规格(一功能点一�
 
 ## 产物
 
-文件前缀 = feature-id 去掉开头的日期 `YYYY-MM-DD-`。
+文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`。
 
 产物文件名:
 

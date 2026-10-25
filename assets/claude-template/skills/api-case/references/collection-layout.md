@@ -30,7 +30,7 @@ docs/bruno/
 ### 取名规则
 
 - **`<服务>`** — 由 AI 在 S2 识别(见 `ai-prompts.md`),参考 `docs/bruno/` 既有目录名保持一致
-- **`<需求前缀>`** — 取 S1 锁定的 feature-id 的"文件前缀"段(即 `<业务ID>-<标题>` 或 `<标题>`,如 `CRM-req19230-号百商品详情查询接口`),与 `docs/features/<feature-id>/` 下文件的命名前缀一致
+- **`<需求前缀>`** — 取 S1 锁定的 feature-id 的文件前缀;文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`(如 `order-2026-10-25-REQ-1024-订单导出` → `order-REQ-1024-订单导出`),与 `docs/features/<feature-id>/` 下文件的命名前缀一致
 - **`<接口名>`** — 取接口的方法名或路径最后一段,参考项目既有 .bru 的命名习惯
 - **`<场景>`** — 取测试规格 §2 的场景名(如 `正常` / `缺prodInstId` / `产品不存在`)
 
