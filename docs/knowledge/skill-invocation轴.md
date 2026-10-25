@@ -80,3 +80,13 @@ write-docs 沿用 write-prd、write-design-doc、write-api-doc 三个旧 skill �
 - user-invoked 7 个:developer-timeline、export-table-ddl、iboc-check、init-project-guides、knowledge-init、write-docs、write-workload。
 
 这两个 skill 已登记进 `deprecated-assets.json`,`cgraphx install` 升级时清掉。
+
+## 2026-10-24 更新(新增 audit-login-security)
+
+2026-10-24 新增 audit-login-security(登录/认证安全审计),skill 共 26 个。
+
+- model-invoked 19 个:上一版 18 个 + audit-login-security。
+- user-invoked 7 个:不变。
+
+判据:它要能被「帮我看看登录有没有漏洞」「登录接口会不会被绕过」这类自然语言顺手触发,不是只靠人敲命令名;且它不调用别的 skill、也不被别的 skill 调用,没有出站/入站约束。
+

@@ -367,7 +367,8 @@ footer p { margin: 0; }
   <div class="eyebrow">cgraphx 安装与使用</div>
   <h1>cgraphx 怎么用</h1>
   <p class="subtitle">本地优先的 AI agent 研发系统 · skill 流程 + 知识库 / 数据库 / 时间线</p>
-  <p class="meta">最后更新:2026-07-30</p>
+  <p class="meta">最后更新:2026-10-24</p>
+  <p class="meta">每个 skill 怎么用:<a href="skills.html">skill 一览</a>(一个 skill 一行,默认折叠,可搜索)</p>
 </header>
 
 <section>
@@ -460,6 +461,7 @@ footer p { margin: 0; }
     <button class="tab-btn" onclick="switchTab(this, 'tab-unit-test')">单元测试</button>
     <button class="tab-btn" onclick="switchTab(this, 'tab-knowledge')">知识管理</button>
     <button class="tab-btn" onclick="switchTab(this, 'tab-postdoc')">事后文档</button>
+    <button class="tab-btn" onclick="switchTab(this, 'tab-security')">安全审计</button>
     <button class="tab-btn" onclick="switchTab(this, 'tab-review')">工作回顾</button>
   </div>
 
@@ -530,6 +532,18 @@ footer p { margin: 0; }
     </div>
   </div>
 
+  <div id="tab-security" class="tab-panel">
+    <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>按需 · 不在开发主链</strong>——上线前、等保或甲方测评前自查。</p>
+    <ul class="phase-list">
+      <li><span class="post">按需</span> <code>/audit-login-security</code> 枚举<strong>全部</strong>认证入口(密码、短信、扫码、SSO、token 刷新、后台登录),沿认证链路五段逐条查绕过、越权、凭据、会话、爆破</li>
+      <li>每条发现给三段式证据链:<code>攻击者输入 → 代码路径(file:line) → 结果</code>,按致命/高/中/低 + 置信度排序</li>
+      <li>白盒为主;<strong>本地或测试环境</strong>才做最小动态验证,不碰生产、不爆破、不扫描;<strong>只报告不修代码</strong>,默认不落盘</li>
+    </ul>
+    <div class="highlight">
+      <p>设计缺陷交 <code>/write-spec</code>,实现 bug 交 <code>/implementation</code>。已怀疑被入侵(要查谁怎么进来的)不是这个 skill,是日志取证。</p>
+    </div>
+  </div>
+
   <div id="tab-review" class="tab-panel">
     <ul class="phase-list">
       <li><code>/developer-timeline</code> 从自动记录的开发事件流生成日报/周报/月报/阶段总结/使用习惯分析</li>
@@ -591,6 +605,9 @@ footer p { margin: 0; }
 │       ├── pending-comments.sql      <span class="ann">DBA 待执行 COMMENT(action 队列)</span>
 │       └── ddl/&lt;table&gt;.sql           <span class="ann">DDL + DISCOVERED 块(探索积累)</span>
 │
+├── <b>security/</b>   安全审计报告(<span class="skill">/audit-login-security</span> <span class="ann">默认不落盘,要归档才写</span>)
+│   └── &lt;日期&gt;-登录安全审计.md
+│
 └── <b>guides/</b>   项目规范(<span class="skill">/init-project-guides</span> <span class="ann">生成</span>)
     ├── coding-standards.md
     ├── interface-standards.md
@@ -600,12 +617,12 @@ footer p { margin: 0; }
   </pre>
 
   <div class="highlight">
-    <p><strong>两个核心目录</strong>——<code>docs/features/</code> 是单次需求工作目录(必须有 spec),<code>docs/knowledge/</code> 是跨需求共享的业务知识库。bruno/、schema-knowledge/、guides/ 按需出现。</p>
+    <p><strong>两个核心目录</strong>——<code>docs/features/</code> 是单次需求工作目录(必须有 spec),<code>docs/knowledge/</code> 是跨需求共享的业务知识库。bruno/、schema-knowledge/、security/、guides/ 按需出现。</p>
   </div>
 </section>
 
 <footer>
-  <p>cgraphx 使用说明 · 2026-07-30</p>
+  <p>cgraphx 使用说明 · 2026-10-24</p>
 </footer>
 
 </div>

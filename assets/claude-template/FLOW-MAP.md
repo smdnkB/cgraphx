@@ -84,6 +84,15 @@ guides:write-plan 读取并结晶,任务打「强制引用」标注(implementati
 - **强制读**:write-unit-test-code 执行前读 `docs/guides/testing-standards.md`(缺失 → `/init-project-guides` 中断)
 - **产物**:feature 目录下测试规格与报告 + 项目测试目录的测试代码
 
+## 安全审计流程(按需,不在开发主链)
+
+- **链**:`/audit-login-security`(枚举全部认证入口 → 画认证链路五段 → 按攻击面清单逐条核查 → 可选本地/测试环境受控验证 → 对话内出报告)
+- **前置**:无;上线前、等保/甲方测评前自查、改过登录或鉴权代码后都可跑
+- **强制读**:`references/attack-checklist.md`(认证攻击面);要做动态验证再读 `references/dynamic-probes.md`
+- **产物**:默认只在对话里给报告,不落盘;用户要归档才写 `docs/security/<日期>-登录安全审计.md`
+- **后续**:设计缺陷走 `/write-spec`,实现 bug 走 `/implementation`;本 skill 不改代码
+- **边界**:认证与会话、登录后越权;已怀疑被入侵走日志取证,全站渗透不在范围内
+
 ## 知识库
 
 - **写**:`/knowledge-write`(双层结构:实体 `concept` 主条目 + 流程条目,正向引用 + 反查派生参与业务;写入前必过 `cgraphx docs validate`)| `/knowledge-init`(陌生项目批量探索建档)

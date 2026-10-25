@@ -61,6 +61,9 @@ knowledge-recall (auto)
 
 ── post-release · on demand (off the critical path) ──────
 /write-docs (requirements, design and API docs)
+
+── security audit · on demand (off the critical path) ────
+/audit-login-security (login/auth audit, report only)
 ```
 
 Everyday default: **clarify + implement**. Large work goes through `/write-plan`, then `/subagent-implement` runs every task in one session; add spec and tests as complexity grows. When something is unclear, ask for a picture and `/visual-explain` draws a one-page explainer.

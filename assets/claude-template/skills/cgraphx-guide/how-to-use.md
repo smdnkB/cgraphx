@@ -4,6 +4,8 @@
 
 最后更新:2026-07-30
 
+每个 skill 怎么用,见同目录的 [skill 一览](skills.html):一个 skill 一行,默认折叠,可搜索。
+
 ---
 
 ## 安装
@@ -165,6 +167,19 @@ knowledge-recall(自动召回)
 
 ---
 
+### 安全审计(按需)
+
+上线前、等保或甲方测评前自查用的独立审计,不在开发主链上。
+
+- `/audit-login-security` 审登录/认证:先枚举**全部**认证入口(密码、短信验证码、扫码、第三方 SSO、token 刷新、后台登录),再沿认证链路五段(入口 → 凭据校验 → 会话签发 → 鉴权执行 → 终结与找回)逐条查绕过、越权、凭据、会话、爆破
+- 每条发现给三段式证据链:`攻击者输入 → 代码路径(file:line) → 结果`,按致命/高/中/低 + 置信度排序
+- 白盒为主;用户许可时在**本地或测试环境**用测试账号做最小动态验证,不碰生产、不爆破、不扫描
+- **只报告不修代码**,默认只在对话里给结论;设计缺陷走 `/write-spec`,实现 bug 走 `/implementation`
+
+> 产物默认不落盘;用户要归档时才写 `docs/security/<日期>-登录安全审计.md`。已怀疑被入侵(要查谁怎么进来的)不是这个 skill,是日志取证。
+
+---
+
 ## docs/ 目录速查
 
 翻文档时知道去哪儿找——哪个目录由哪个 skill 维护。
@@ -201,6 +216,9 @@ docs/
 │       ├── pending-comments.sql      DBA 待执行 COMMENT(action 队列)
 │       └── ddl/<table>.sql           DDL + DISCOVERED 块(探索积累)
 │
+├── security/   安全审计报告(/audit-login-security,默认不落盘,要归档才写)
+│   └── <日期>-登录安全审计.md
+│
 └── guides/   项目规范(/init-project-guides 生成)
     ├── coding-standards.md
     ├── interface-standards.md
@@ -209,8 +227,8 @@ docs/
     └── git-standards.md              commit 门禁指向此文件
 ```
 
-> **两个核心目录**——`docs/features/` 是单次需求工作目录(必须有 spec),`docs/knowledge/` 是跨需求共享的业务知识库。bruno/、schema-knowledge/、guides/ 按需出现。
+> **两个核心目录**——`docs/features/` 是单次需求工作目录(必须有 spec),`docs/knowledge/` 是跨需求共享的业务知识库。bruno/、schema-knowledge/、security/、guides/ 按需出现。
 
 ---
 
-cgraphx 使用说明 · 2026-10-19
+cgraphx 使用说明 · 2026-10-24

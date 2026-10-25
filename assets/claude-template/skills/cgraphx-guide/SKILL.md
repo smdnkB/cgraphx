@@ -36,6 +36,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | **日常做需求 · 必经两步** | `/clarify-requirements` 澄清(功能点提案,人审稿式改稿,结束时给《需求功能方案》),然后 `/implementation`;大需求先 `/write-plan`,再 `/subagent-implement` 一个会话跑完,最后 `/code-review`;哪里没看懂,说「画个图讲讲」出一页图解 |
 | **日常做需求 · 复杂按需** | `/write-wireframe`(涉及界面时画线框)、`/handoff-session`(探索或澄清结束、要开新会话继续时)、`/write-spec`(写技术规格)、`/write-plan`(大需求拆执行计划)、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
 | **测试按需 · 三条线** | 接口:`/write-api` → `/run-api-test`;单元:`/write-unit-test-spec` → `/write-unit-test-code`;UI:`/write-ui-test` → `/run-ui-test` |
+| **安全审计按需** | `/audit-login-security`(登录/认证安全审计:枚举全部认证入口 + 画认证链路,查绕过、越权、凭据、会话、爆破;只报告不修代码,默认不落盘) |
 | **收尾按需** | `/end`(写收口档案,已上线时写发布记录)、`/iboc-check`(老需求补头部、补单测产物和收口档案) |
 | **发布后按需** | `/write-docs`(需求文档、设计文档、接口文档,运行时选) |
 | **工作回顾按需** | `/developer-timeline`(日/周/月报)、`/write-workload`(工作量汇报) |
@@ -60,6 +61,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/write-unit-test-code` | 填实单元测试代码、跑测试、出报告 |
 | `/write-ui-test` | 从 spec 派生 UI 功能测试用例 |
 | `/run-ui-test` | 用 Playwright MCP 跑 UI 功能测试,截图并出报告 |
+| `/audit-login-security` | 登录/认证安全审计:枚举全部认证入口,再沿认证链路五段查绕过、越权、凭据、会话、爆破,给 file:line 证据链的 bug/风险清单;只报告不修、默认不落盘 |
 | `/knowledge-write` | 把业务决策、概念、坑沉淀到 `docs/knowledge/` |
 | `/knowledge-init` | 接手陌生项目,派子 agent 批量探索、建业务知识库 |
 | `/export-table-ddl` | 按工程批量导出 DDL 基线(一表一文件) |
@@ -114,3 +116,5 @@ npm uninstall -g cgraphx  # 卸载 CLI
 ## 视觉版
 
 给人类用户看介绍页时,指向 `how-to-use.html`(本 skill 目录内,部署后在 `.claude/skills/cgraphx-guide/how-to-use.html`)——分阶段卡片布局,一眼看清完整使用流程。
+
+用户想查某个 skill 怎么用、有哪些 skill 时,指向同目录 `skills.html`——一个 skill 一行,默认折叠,能搜名字、用途和产物;`skills.html#<skill 名>` 直接展开那一行(如 `skills.html#write-workload`)。

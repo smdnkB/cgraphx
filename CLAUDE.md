@@ -21,10 +21,10 @@
 
 cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是一个单纯的 CLI 工具。skill(markdown 指引)是主体,定义研发流程;程序(cgraphx CLI)为流程提供不可替代的能力支撑(知识库检索、数据库查询、时间线)。**agent 读 skill → 按流程调程序能力**,改任何一侧前先理解这个分工(spec §1.2)。
 
-**skill 主线**(`assets/claude-template/skills/` 下共 25 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
+**skill 主线**(`assets/claude-template/skills/` 下共 26 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
 
 - 需求主线:`/clarify-requirements`(必经,澄清意图/业务边界/技术边界)→ `/write-spec`(核心,技术规格契约)→ `/write-plan`(大需求必走:index 加一个任务一个文件)→ `/implementation`(小需求)或 `/subagent-implement`(大需求:一个会话按任务派子 agent,全部做完统一验证,最后 `/code-review`;判据是需求规模——≥10 文件且 ≥3 独立模块,不是任务量)。日常默认两步:澄清 + 实现;哪里没看懂,`/visual-explain` 出一页图解。
-- 平行支线:接口测试(`/write-api` → `/run-api-test`,写接口必须查 DB 验数据)、单元测试(`/write-unit-test-spec` → `/write-unit-test-code`)、知识沉淀(`/knowledge-write` 触发,`knowledge-recall` 由 agent 自动召回)、DB schema 知识(`/export-table-ddl` 导出 + `db-query` 探索回写)。
+- 平行支线:接口测试(`/write-api` → `/run-api-test`,写接口必须查 DB 验数据)、单元测试(`/write-unit-test-spec` → `/write-unit-test-code`)、知识沉淀(`/knowledge-write` 触发,`knowledge-recall` 由 agent 自动召回)、DB schema 知识(`/export-table-ddl` 导出 + `db-query` 探索回写)、认证安全审计(`/audit-login-security`,白盒为主、只报告不修)。
 
 **`docs/` 目录约定(skill 与程序的契约,目标项目内):**
 
