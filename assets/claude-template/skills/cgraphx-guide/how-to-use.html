@@ -408,6 +408,23 @@ footer p { margin: 0; }
     <div class="step">
       <h4>立规范 · <code>/init-guides</code></h4>
       <p>生成 <code>docs/guides/</code> 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的<strong>有意偏离</strong>——「SQL 禁止 ORDER BY」「金额一律 decimal(12,2)」这类最容易偏离又没有工具兜底的约定。这些 guide 是后续任务的<strong>强制读点</strong>:编码/接口/数据三份会被 <code>/dev-plan</code> 结晶成契约(测试规范不走 plan,由 <code>unit-code</code> 执行前自读,内容全是单测向,接口测试规范由 <code>api-case</code> 读 <code>interface-standards.md</code> 送达;Git 结晶进 plan 提交规范节)。</p>
+      <p><strong>聚合项目 · 需求目录带上模块名</strong></p>
+      <p>想让需求目录名带上模块名(如 <code>order-2026-10-25-REQ-1024-订单导出</code>),在 <code>docs/guides/feature-standards.md</code> 的「需求目录命名」一节写清格式、模块取值表与跨模块取法,之后建需求目录都按它命名;没写这一节的项目照旧按默认的 <code>YYYY-MM-DD-[业务ID-]&lt;标题&gt;</code>。</p>
+      <pre class="docs-tree"># 需求目录规范
+
+## 需求目录命名
+
+格式:`&lt;模块&gt;-YYYY-MM-DD-[业务ID-]&lt;标题&gt;`
+
+| 模块 | 代码目录 |
+|---|---|
+| order | order-service/ |
+| user | user-center/ |
+
+- 跨模块需求:取主改动模块
+- 表外的改动:公共代码记 `common`
+- 例子:`order-2026-10-25-REQ-1024-订单导出`</pre>
+      <p>汇集发版 SQL 时按目录名里的日期排,别按目录名排序。</p>
     </div>
     <div class="step">
       <h4>聊业务 · 和 Claude Code 聊项目</h4>
@@ -576,7 +593,7 @@ footer p { margin: 0; }
 
   <pre class="docs-tree"><b>docs/</b>
 ├── <b>features/</b>   需求目录(单次需求工作目录,spec 必有)
-│   └── <b>&lt;日期&gt;-&lt;编号&gt;-&lt;前缀&gt;/</b>
+│   └── <b>&lt;feature-id&gt;/</b>
 │       ├── &lt;前缀&gt;-spec.md             <span class="skill">/dev-spec</span>             <span class="must">必有</span>  <span class="ann">唯一契约</span>
 │       ├── <b>plan/</b>                      <span class="skill">/dev-plan</span>             <span class="opt">可选</span>  <span class="ann">大需求</span>
 │       ├── &lt;前缀&gt;-&lt;主题&gt;-v&lt;N&gt;.html    <span class="skill">/visual-explain</span>       <span class="opt">可选</span>  <span class="ann">要图解时</span>

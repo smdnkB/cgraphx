@@ -49,6 +49,29 @@ npm uninstall -g cgraphx  # 卸载 CLI
 
 生成 `docs/guides/` 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的**有意偏离**——「SQL 禁止 `ORDER BY`」「金额一律 `decimal(12,2)`」这类最容易偏离又没有工具兜底的约定。新项目立起步默认(注明「待演进」);已有项目从代码/git 历史挖既有约定固化成文。这些 guide 是后续任务的**强制读点**:编码/接口/数据三份会被 `/dev-plan` 结晶成契约(测试规范不走 plan,由 `unit-code` 执行前自读,内容全是单测向,接口测试规范由 `api-case` 读 `interface-standards.md` 送达;Git 结晶进 plan 提交规范节)。
 
+**聚合项目 · 需求目录带上模块名**
+
+想让需求目录名带上模块名(如 `order-2026-10-25-REQ-1024-订单导出`),在 `docs/guides/feature-standards.md` 的「需求目录命名」一节写清格式、模块取值表与跨模块取法,之后建需求目录都按它命名;没写这一节的项目照旧按默认的 `YYYY-MM-DD-[业务ID-]<标题>`。
+
+```markdown
+# 需求目录规范
+
+## 需求目录命名
+
+格式:`<模块>-YYYY-MM-DD-[业务ID-]<标题>`
+
+| 模块 | 代码目录 |
+|---|---|
+| order | order-service/ |
+| user | user-center/ |
+
+- 跨模块需求:取主改动模块
+- 表外的改动:公共代码记 `common`
+- 例子:`order-2026-10-25-REQ-1024-订单导出`
+```
+
+汇集发版 SQL 时按目录名里的日期排,别按目录名排序。
+
 **2. 聊业务 · 和 Claude Code 聊项目**
 
 做需求前先聊业务。agent 会自动从知识库召回已沉淀的概念、对齐术语;边聊边用 `/knowledge-write` 把业务实体沉淀下来。知识库越用越厚,重复解释和重复踩坑越少。接手陌生项目可以跑 `/init-knowledge` 批量探索建档。
@@ -187,7 +210,7 @@ knowledge-recall(自动召回)
 ```
 docs/
 ├── features/   需求目录(单次需求工作目录,spec 必有)
-│   └── <日期>-<编号>-<前缀>/
+│   └── <feature-id>/
 │       ├── <前缀>-spec.md             /dev-spec             必有  唯一契约
 │       ├── plan/                      /dev-plan             可选  大需求
 │       ├── <前缀>-<主题>-v<N>.html    /visual-explain       可选  要图解时
