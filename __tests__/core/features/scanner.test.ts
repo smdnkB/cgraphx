@@ -302,7 +302,7 @@ describe('syncMyFeatures', () => {
 
     const content = fs.readFileSync(result.file, 'utf-8');
     expect(content).toContain('自动生成,勿手改');
-    expect(content).toContain('| 日期 | 阶段 | 标题 | 目录 |');
+    expect(content).toContain('| 日期 | 阶段 | 需求 |');
     expect(content).not.toContain('| 日期 | 状态 |');
     expect(content).toContain('张三的需求');
     expect(content).toContain('已规格');

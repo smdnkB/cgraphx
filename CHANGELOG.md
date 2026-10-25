@@ -41,6 +41,17 @@ Platform reporting sends the new names in `skillName` from now on, so
 per-skill statistics on the platform break at the rename unless the platform
 maps old names to new ones.
 
+### Changed — `my-features.md` links each requirement to its spec
+
+`.cgraphx/my-features.md`, written by `cgraphx features sync`, now has three
+columns: 日期 / 阶段 / 需求. Each requirement name links to its main spec
+(the file `cgraphx features show` treats as the main spec), so it opens with
+one click in the editor. Links are relative to the index file and wrapped in
+angle brackets, so directory names with spaces or parentheses still open. A
+requirement without a spec yet links to its directory and is marked
+「（还没有 spec）」. The old 目录 column is gone. `features list --mine`
+output, including `--json`, is unchanged.
+
 ## 2.0.10 - 2026-10-21
 
 ### Changed — clarification realignment, second pass: review gates follow the decisions
