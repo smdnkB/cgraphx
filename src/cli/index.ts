@@ -36,13 +36,20 @@ import { readCachedProjectArtifactTypes } from '../core/sync';
 import { registerTaskCommands } from '../core/task/cli';
 import { registerSyncCommands } from '../core/sync/cli';
 import { registerReportCommands } from '../core/report/cli';
+import { registerReplicaCommands } from '../core/replica/cli';
+import { registerReleaseCommands } from '../core/release/cli';
 // 组合根例外(仅此一处):cli/index.ts 作为组装入口可经 web 门面接入
 // `cgraphx web`;src/web/ 自身只依赖 src/core/,不反向依赖 cli。
 import { registerWebCommand } from '../web';
 
 import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
-import { getCodeGraphDir, unsafeIndexRootReason } from '../core/directory';
+import {
+  getCodeGraphDir,
+  resolveDataDir,
+  resolveProjectRoot,
+  unsafeIndexRootReason,
+} from '../core/directory';
 
 // -----------------------------------------------------------------------------
 // Node.js version floor.
@@ -109,6 +116,20 @@ async function confirmProjectInstall(message: string): Promise<boolean> {
   }
 }
 
+/**
+ * 副本关联的主目录不在了(spec D31):stderr 提示一句,命令照常执行。只看带子命令的调用;
+ * hook(`*-hook`)和后台的 `sync-worker` 输出没人看,只带选项的(`--help`、`--version`)
+ * 不碰数据,都不提示。
+ */
+function warnIfMainRootMissing(subcommand: string | undefined): void {
+  if (subcommand === undefined || subcommand.startsWith('-')) return;
+  if (subcommand.endsWith('-hook') || subcommand === 'sync-worker') return;
+  const dataDir = resolveDataDir(resolveProjectRoot(process.cwd()));
+  if (dataDir.state === 'main-missing') {
+    process.stderr.write(`[cgraphx] 副本关联的主项目不在 ${dataDir.mainRoot} 了\n`);
+  }
+}
+
 function main(): void {
   const program = new Command();
 
@@ -170,6 +191,8 @@ function main(): void {
   registerTaskCommands(program);
   registerSyncCommands(program);
   registerReportCommands(program);
+  registerReplicaCommands(program);
+  registerReleaseCommands(program);
 
   // web — 本地只读浏览服务(顶层命令,经 web 门面注册;组合根例外见上方 import)。
   registerWebCommand(program);
@@ -304,6 +327,9 @@ function main(): void {
         }
       },
     );
+
+  // 解析命令前:副本的主目录不在了先提示(不带参数的交互安装器入口不走 main,不做这个判断)
+  warnIfMainRootMissing(firstArg);
 
   program.parse();
 }
