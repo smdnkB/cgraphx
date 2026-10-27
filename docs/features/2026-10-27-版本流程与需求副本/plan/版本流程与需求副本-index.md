@@ -213,7 +213,7 @@
 
     ```sh
     # cgraphx-release-guard — 版本分支只收合并提交和 chore(release): 开头的提交
-    __cgx_rb=$(git symbolic-ref --short -q HEAD 2>/dev/null) # cgraphx-release-guard
+    __cgx_rb=$(git symbolic-ref --short -q HEAD 2>/dev/null || true) # cgraphx-release-guard
     if printf '%s' "$__cgx_rb" | grep -Eq '^dev/[0-9]+\.[0-9]+\.[0-9]+$' && ! git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && ! head -n 1 "$1" | grep -q '^chore(release):'; then echo "[cgraphx] $__cgx_rb 是版本分支:需求改动到副本里做(/dev-start <需求>);整个版本的改动以 chore(release): 开头提交" >&2; exit 1; fi # cgraphx-release-guard
     ```
 
@@ -222,10 +222,18 @@
 
     ```sh
     # cgraphx-timeline-hook — record merge commits to .cgraphx/cgraphx.db
-    if [ "$1" != "1" ]; then __cgx_sha=$(git rev-parse HEAD 2>/dev/null); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null); CGRAPHX_GIT_HOOK=post-merge CGRAPHX_COMMIT_SHA="$__cgx_sha" CGRAPHX_COMMIT_BRANCH="$__cgx_branch" cgraphx timeline-git-commit-hook >/dev/null 2>&1 & fi # cgraphx-timeline-hook
+    if [ "$1" != "1" ]; then __cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true); CGRAPHX_GIT_HOOK=post-merge CGRAPHX_COMMIT_SHA="$__cgx_sha" CGRAPHX_COMMIT_BRANCH="$__cgx_branch" cgraphx timeline-git-commit-hook >/dev/null 2>&1 & fi # cgraphx-timeline-hook
     ```
 
-  - post-commit 片段:内容沿用 `buildGitPostCommitSnippet()` 现有三行,改经 C-2 写入(位置移到 shebang 之后),`legacyMatch` = `timeline-git-commit-hook`
+  - post-commit 片段:在 `buildGitPostCommitSnippet()` 现有三行上,第二行两处命令替换加 `|| true`,改经 C-2 写入(位置移到 shebang 之后),`legacyMatch` = `timeline-git-commit-hook`;三行逐字:
+
+    ```sh
+    # cgraphx-timeline-hook — record commit events to .cgraphx/cgraphx.db
+    __cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true) # cgraphx-timeline-hook
+    CGRAPHX_COMMIT_SHA="$__cgx_sha" CGRAPHX_COMMIT_BRANCH="$__cgx_branch" cgraphx timeline-git-commit-hook >/dev/null 2>&1 & # cgraphx-timeline-hook
+    ```
+
+  - 三个片段(C-6 的 commit-msg、这里的 post-merge 和 post-commit)里会失败的命令替换一律写成 `$(… || true)`:片段紧跟 shebang,钩子用 `#!/bin/sh -e` 这类写法时,赋值里一条命令失败(如 detached HEAD 上的 `git symbolic-ref`)就让整个钩子提前退出——commit-msg 会挡下提交,post-commit、post-merge 会跳过原钩子后面的内容
   - 环境变量常量 `COMMIT_HOOK_ENV = 'CGRAPHX_GIT_HOOK'`:post-merge 片段传 `post-merge`;没有即视为 post-commit
   - 记录规则:`git rev-list --parents -n 1 <hash>` 取父提交;
     - 父提交 ≥ 2 → 记 git_commit:`commit_files: []`、`commit_insertions: 0`、`commit_deletions: 0`、`metadata: { branch?: <分支>, merge: { parents: string[], files: number, insertions: number, deletions: number } }`;files、insertions、deletions 取 `git diff --numstat <第一父提交> <hash>`(二进制文件计入 files,不计行数)

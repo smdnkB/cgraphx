@@ -14,7 +14,7 @@
   - `src/core/timeline/cli.ts`
 - 必须严格执行:
   - 按 C-2(写钩子只经 `installHookSnippet` / `removeHookSnippet`)
-  - 按 C-7(post-merge 两行逐字、post-commit 沿用现有三行、`COMMIT_HOOK_ENV`、三条记录规则、metadata 形态、`InstallReport.gitHooks` 与 `UninstallReport.mergeHookRemoved`、安装提示原文)
+  - 按 C-7(post-merge 两行逐字、post-commit 三行逐字、命令替换带 `|| true`、`COMMIT_HOOK_ENV`、三条记录规则、metadata 形态、`InstallReport.gitHooks` 与 `UninstallReport.mergeHookRemoved`、安装提示原文)
   - 按 C-1(副本判断用 `resolveDataDir(...).state`)、C-12(拒绝清数据的提示原文)
   - 不新增隐藏子命令:post-merge 复用 `timeline-git-commit-hook`
 - 允许局部适配:
@@ -23,7 +23,7 @@
 - 具体要求:
   1. `constants.ts`:新增 `COMMIT_HOOK_ENV = 'CGRAPHX_GIT_HOOK'`,注释说明取值 `post-merge`、缺省即 post-commit。
   2. `installer.ts`:
-     - 安装:post-commit 片段改为 `installHookSnippet(gitRoot, 'post-commit', GIT_HOOK_MARKER, <现有三行>, { legacyMatch: GIT_COMMIT_SUBCOMMAND })`;再写 post-merge:`installHookSnippet(gitRoot, 'post-merge', GIT_HOOK_MARKER, <C-7 两行>)`;两个结果按顺序放进 C-7 的 `gitHooks`;`gitHookPath` 取 post-commit 结果的 hookPath,`gitHookWritten` 为它的 status 是 `installed` 或 `updated`
+     - 安装:post-commit 片段改为 `installHookSnippet(gitRoot, 'post-commit', GIT_HOOK_MARKER, <C-7 的 post-commit 三行>, { legacyMatch: GIT_COMMIT_SUBCOMMAND })`;再写 post-merge:`installHookSnippet(gitRoot, 'post-merge', GIT_HOOK_MARKER, <C-7 两行>)`;两个结果按顺序放进 C-7 的 `gitHooks`;`gitHookPath` 取 post-commit 结果的 hookPath,`gitHookWritten` 为它的 status 是 `installed` 或 `updated`
      - 卸载(`keepGitHook` 为 false 时):对 post-commit(带 legacyMatch)、post-merge 各调一次 `removeHookSnippet`;`gitHookRemoved` 照旧指 post-commit,`mergeHookRemoved` 指 post-merge
      - `--purge`:`resolveDataDir(resolvedRoot).state` 不是 `own` → 不删表,stderr 输出 C-12 的拒绝原文(主目录路径取 `mainRoot`),`dataDropped` 为 false;是 `own` → 照旧删表,库路径改用 `getDatabasePath(resolvedRoot)`(不再手拼 `.cgraphx/cgraphx.db`)
      - 删掉不再使用的本地函数(`findGitRoot` 若只剩取仓库根的用途可保留;`buildGitPostCommitSnippet` 保留,改为返回三行数组)
@@ -42,6 +42,6 @@
 - 提交点:
   1. `feat(timeline): 记下合并提交——post-merge 片段 + 钩子跟随 core.hooksPath`:`src/core/timeline/installer.ts`、`hooks.ts`、`constants.ts`、`recorder.ts`、`cli.ts`
 - 风险/注意事项:
-  - 不改测试文件(超出涉及范围):既有测试里断言 post-commit 片段在文件末尾、或断言钩子路径是 `.git/hooks/post-commit` 的,属于 spec D33 有意改掉的行为,统一验证时由主会话改用例期望;回报的「要人验证的」里写一句「timeline installer 的既有测试可能要按 D33 改期望」
+  - 不改测试文件(超出涉及范围):既有测试里断言 post-commit 片段在文件末尾、断言片段原文、或断言钩子路径是 `.git/hooks/post-commit` 的,属于 spec D33 有意改掉的行为(片段位置与目录,以及 C-7 为此加的 `|| true`),统一验证时由主会话改用例期望;回报的「要人验证的」里写一句「timeline installer 的既有测试可能要按 D33 改期望」
   - 合并提交上 `git diff-tree --no-commit-id --name-only -r` 输出为空(实测),不要用它取合并的文件
   - 快进合并不产生新提交,提交本身在当时已记过,不要重复记
