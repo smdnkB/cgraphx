@@ -5,7 +5,8 @@
  * 这个文件只是随手的快照——每次 `cgraphx features sync` 全量重写,
  * 永不手维护,所以不会陈旧。放在 .cgraphx/ 下天然是 gitignore 的
  * 运行时数据(没有 .gitignore 时补一个 `*` 兜底),每人每机一份。
- * 需求名链到主 spec(与 features show 同一认定),在编辑器里点开即读。
+ * 需求名链到主 spec(与 features show 同一认定),在编辑器里点开即读;
+ * 主目录里列出的副本需求链到副本里的文件,并标出在哪个副本(spec D30)。
  */
 
 import { execFileSync } from 'node:child_process';
@@ -46,9 +47,14 @@ interface IndexRow {
 /**
  * 链接目标:相对 .cgraphx/ 下的索引文件写 `../<项目相对路径>`,包进尖括号,
  * 目录名带空格、括号也能点开;`< > \` 加反斜杠兜底(spec D1)。
+ * 副本里的需求:副本在主目录旁边,写 `../../<副本目录名>/<项目相对路径>`(spec D30)。
  */
-function linkTarget(projectRelPath: string): string {
-  return `<../${projectRelPath.replace(/[<>\\]/g, '\\$&')}>`;
+function linkTarget(projectRelPath: string, replicaName?: string): string {
+  const target =
+    replicaName === undefined
+      ? `../${projectRelPath}`
+      : `../../${replicaName}/${projectRelPath}`;
+  return `<${target.replace(/[<>\\]/g, '\\$&')}>`;
 }
 
 /** 链接文字:只转义会截断链接文字的 `\ [ ]`(spec D3)。 */
@@ -56,10 +62,15 @@ function linkText(s: string): string {
   return s.replace(/[\\[\]]/g, '\\$&');
 }
 
-/** 需求单元格:需求名链到主 spec;没有主 spec 时链到目录,后面标「（还没有 spec）」。 */
+/**
+ * 需求单元格:需求名链到主 spec;没有主 spec 时链到目录,后面标「（还没有 spec）」。
+ * 副本里的需求链到副本里的文件,链接后标「(在副本 <副本目录名>)」(spec D30)。
+ */
 function requirementCell({ entry, mainSpec }: IndexRow): string {
-  const link = `[${linkText(entry.title)}](${linkTarget(mainSpec ?? `${entry.path}/`)})`;
-  return mainSpec === null ? `${link}（还没有 spec）` : link;
+  const replicaName = entry.replica?.name;
+  const link = `[${linkText(entry.title)}](${linkTarget(mainSpec ?? `${entry.path}/`, replicaName)})`;
+  const where = replicaName === undefined ? '' : `(在副本 ${replicaName})`;
+  return mainSpec === null ? `${link}${where}（还没有 spec）` : `${link}${where}`;
 }
 
 function renderMarkdownIndex(owner: string, rows: IndexRow[]): string {
@@ -107,7 +118,8 @@ export function syncMyFeatures(
   }
   const rows = listFeatures(projectRoot, { owner: who }).map((entry) => ({
     entry,
-    mainSpec: findMainSpecRel(projectRoot, entry.featureId),
+    // 副本里的需求在副本的目录树里认主 spec
+    mainSpec: findMainSpecRel(entry.replica?.path ?? projectRoot, entry.featureId),
   }));
 
   const cgraphxDir = path.join(projectRoot, '.cgraphx');

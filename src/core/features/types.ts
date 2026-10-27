@@ -25,6 +25,11 @@ export interface FeatureEntry {
   stage: FeatureStage | null;
   /** 仓库相对 POSIX 路径,如 docs/features/2026-07-26-X。 */
   path: string;
+  /**
+   * 需求所在的副本(spec D30):只在主目录列出的、来自副本的需求上有;
+   * 主目录自己的条目不带这个字段。name 为副本目录名,path 为副本目录的绝对路径。
+   */
+  replica?: { name: string; path: string };
 }
 
 /** list 的过滤条件;全部可选,多条件取交集。 */

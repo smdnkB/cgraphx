@@ -3,10 +3,13 @@
  *
  * 外部调用方(CLI)必须用它 —— 不得直接伸手进 scanner 内部。
  * 与其他子系统的差别:无 DB、无 schema,索引是 docs/features/
- * 目录树的实时派生视图。
+ * 目录树的实时派生视图。主目录的 listFeatures 另外列出在用副本里
+ * 登记的需求(spec D30,副本登记只经 replica 门面读)。
  */
 
-import { scanFeatures } from './scanner';
+import { resolveDataDir } from '../directory';
+import { listReplicas } from '../replica';
+import { compareFeatureEntries, scanFeature, scanFeatures } from './scanner';
 import type { FeatureEntry, FeatureFilter } from './types';
 
 export type {
@@ -68,10 +71,44 @@ export function filterFeatures(
   });
 }
 
-/** 扫描 + 过滤一步到位。 */
+/**
+ * 主目录的条目加上在用副本里登记的需求(spec D30):每个副本只解析它登记的那个需求目录,
+ * 阶段、负责人取副本的目录树,条目带上 replica。副本目录或其中的需求目录已不在时
+ * scanFeature 返回 null,跳过。主目录里有同一 featureId 的条目就换成副本那份,
+ * 同一 featureId 只出一行。没有可列的副本 → 原样返回 own。
+ */
+function withReplicaFeatures(
+  projectRoot: string,
+  own: FeatureEntry[],
+): FeatureEntry[] {
+  const byId = new Map(
+    own.map((e): [string, FeatureEntry] => [e.featureId, e]),
+  );
+  let added = false;
+  for (const replica of listReplicas(projectRoot)) {
+    const entry = scanFeature(replica.path, replica.featureId);
+    if (entry === null) continue;
+    byId.set(entry.featureId, {
+      ...entry,
+      replica: { name: replica.name, path: replica.path },
+    });
+    added = true;
+  }
+  return added ? [...byId.values()].sort(compareFeatureEntries) : own;
+}
+
+/**
+ * 扫描 + 过滤一步到位。在主目录(数据目录是项目自己的)另外列出在用副本里登记的需求;
+ * 在副本里只列副本自己的目录树,条目都不带 replica(spec D30)。
+ */
 export function listFeatures(
   projectRoot: string,
   filter: FeatureFilter = {},
 ): FeatureEntry[] {
-  return filterFeatures(scanFeatures(projectRoot), filter);
+  const own = scanFeatures(projectRoot);
+  const entries =
+    resolveDataDir(projectRoot).state === 'own'
+      ? withReplicaFeatures(projectRoot, own)
+      : own;
+  return filterFeatures(entries, filter);
 }
