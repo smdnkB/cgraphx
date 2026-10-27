@@ -2,7 +2,7 @@
  * task 子系统公共门面。
  *
  * 外部调用方(cli、hooks、installer)只通过本模块调用,不得直接伸手进内部模块。
- * task 只经 timeline / features 的门面取数据;timeline 与 features 不依赖 task。
+ * task 只经 timeline / features / replica 的门面取数据;它们都不依赖 task。
  */
 
 export { ensureTaskSchema, openTaskDb } from './schema-bootstrap';
@@ -19,6 +19,7 @@ export { getTaskDetail } from './feature-link';
 export {
   recordFeatureTaskMappings,
   listMyFeatureTaskDeclarations,
+  featureBindingTarget,
 } from './feature-task';
 export { refreshAutoBindings } from './auto-binding';
 export {
