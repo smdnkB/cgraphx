@@ -188,6 +188,7 @@ footer p { margin: 0 0 6px; }
     <button class="chip" type="button" data-group="" aria-pressed="true">全部</button>
     <button class="chip" type="button" data-group="design" aria-pressed="false">需求设计</button>
     <button class="chip" type="button" data-group="dev" aria-pressed="false">开发</button>
+    <button class="chip" type="button" data-group="release" aria-pressed="false">版本流程</button>
     <button class="chip" type="button" data-group="test" aria-pressed="false">测试</button>
     <button class="chip" type="button" data-group="security" aria-pressed="false">安全审计</button>
     <button class="chip" type="button" data-group="knowledge" aria-pressed="false">知识与数据库</button>
@@ -276,7 +277,7 @@ footer p { margin: 0 0 6px; }
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>小需求、bug 修复,或任何明确的改代码任务。</dd>
 <dt>怎么用</dt><dd>说「实现一下」「按 spec 改」。</dd>
-<dt>要你拍板</dt><dd>没有 spec 和 plan 时,加表改字段、对外接口这类难回头的改动先问你;要人验证的(页面效果、真机)等你回复结果再提交。</dd>
+<dt>要你拍板</dt><dd>没有 spec 和 plan 时,加表改字段、对外接口这类难回头的改动先问你;要人验证的(页面效果、真机)等你回复结果再提交;在版本分支上会先停下,提示先 <code>/dev-start</code> 开副本。</dd>
 <dt>产出</dt><dd>代码改动和一份汇报:原来怎样、现在怎样、改了什么、验证了什么;SQL 写错改对后记进 <code>docs/schema-knowledge/SQL避坑.md</code>。</dd>
 <dt>前后</dt><dd>之前 <code>/dev-spec</code> 或 <code>/dev-plan</code>;之后补测试(<code>/api-case</code>、<code>/unit-spec</code>),需求做完 <code>/dev-end</code>。</dd>
 </dl></div>
@@ -287,9 +288,57 @@ footer p { margin: 0 0 6px; }
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>plan 已经写好的大需求。</dd>
 <dt>怎么用</dt><dd>贴 plan index 末尾那一句,如 <code>/dev-impl-subagent docs/features/&lt;需求目录&gt;/plan/&lt;前缀&gt;-index.md</code>。</dd>
-<dt>要你拍板</dt><dd>在 main 或 master 上会先问要不要建分支;子 agent 报冲突或卡住时停下问你。</dd>
+<dt>要你拍板</dt><dd>在版本分支(<code>dev/&lt;版本号&gt;</code>)上会先停下,提示先 <code>/dev-start</code> 开副本;子 agent 报冲突或卡住时停下问你。</dd>
 <dt>产出</dt><dd>按提交点逐笔提交的代码、统一验证结果和收尾汇报;不 push。</dd>
 <dt>前后</dt><dd>之前 <code>/dev-plan</code>;之后 <code>/code-review</code>。</dd>
+</dl></div>
+</details>
+</section>
+
+<section class="group" data-group="release">
+<div class="group-title">版本流程(可选)</div>
+
+<details class="skill" id="release-start">
+<summary><span class="name">/release-start</span><span class="oneline">发完一版开下一版:打 tag、拉版本分支、装提交拦截</span><span class="how how-cmd">敲命令</span></summary>
+<div class="body"><dl>
+<dt>什么时候用</dt><dd>刚发完一个版本、要按版本开发下一个;在主干(<code>main</code>,没有 main 时是 <code>master</code>)上跑。不跑就不按版本走。</dd>
+<dt>怎么用</dt><dd>敲 <code>/release-start</code>;下个版本号不是末位加一时说「下个版本是 2.1.0」。</dd>
+<dt>要你拍板</dt><dd>仓库一个 tag 都没有时,tag 打在哪个提交先给你确认;读不到版本号时问你刚发的版本号;tag 和分支只建在本地,推不推远程你定。</dd>
+<dt>产出</dt><dd>主干上的 tag <code>v&lt;版本号&gt;</code>(说明「发布 &lt;版本号&gt;」),切过去的版本分支 <code>dev/&lt;下个版本号&gt;</code>;版本分支上的直接提交从此被拦下,只放行合并提交和 <code>chore(release):</code> 开头的整版改动。</dd>
+<dt>前后</dt><dd>上个版本分支还没合进主干时会停下,先 <code>/release-review</code>;之后每个需求 <code>/dev-start</code> 开副本。</dd>
+</dl></div>
+</details>
+
+<details class="skill" id="dev-start">
+<summary><span class="name">/dev-start</span><span class="oneline">给需求开一个写时复制副本,在副本里单独做</span><span class="how how-cmd">敲命令</span></summary>
+<div class="body"><dl>
+<dt>什么时候用</dt><dd>开始做一个需求,不想和别的需求挤在同一个分支上;开了版本时每个需求都先开副本,没开版本也能单独用。</dd>
+<dt>怎么用</dt><dd>在主目录的会话里敲 <code>/dev-start 订单导出</code>,再照给出的启动语到副本目录开新会话。</dd>
+<dt>要你拍板</dt><dd>需求目录名(业务 ID、标题);这块盘不能写时复制时,要不要整份复制;主目录有改了没提交的文件时会停下,先提交或收好。</dd>
+<dt>产出</dt><dd>主目录旁边的副本 <code>&lt;主目录名&gt;@&lt;文件前缀&gt;</code>:从主目录当前分支拉好 <code>feat/&lt;文件前缀&gt;</code>(bug 修复用 <code>fix/</code>)、建好需求目录,这个需求还没提交的讨论稿移进去;外加一句启动语「在 &lt;副本路径&gt; 开新会话，输入 /dev-clarify」(已经澄清过的输入 /dev-spec)。副本里的会话和提交记进主目录。</dd>
+<dt>前后</dt><dd>开了版本时在 <code>/release-start</code> 之后;副本里照常 <code>/dev-clarify</code> 到 <code>/code-review</code>,做完 <code>/dev-merge</code>。</dd>
+</dl></div>
+</details>
+
+<details class="skill" id="dev-merge">
+<summary><span class="name">/dev-merge</span><span class="oneline">需求做完合回主目录当前分支,合之前在副本里先同步</span><span class="how how-cmd">敲命令</span></summary>
+<div class="body"><dl>
+<dt>什么时候用</dt><dd>副本里的需求做完、<code>/code-review</code> 过了;合之前想先同步别的需求已经合入的改动;合入后又修了 bug,再合一次。</dd>
+<dt>怎么用</dt><dd>副本的会话里敲 <code>/dev-merge</code>:取主目录当前分支合进需求分支,有冲突就地解决;主目录的会话里敲 <code>/dev-merge 订单导出</code>:先预演,没冲突再合入。</dd>
+<dt>要你拍板</dt><dd>预演有冲突时不合,列出冲突文件和撞上的需求,你到副本里同步解决后再合;副本或主目录有没提交的改动时停下,先提交;合入带进知识文件时,要不要重建知识库索引;没开版本时合完要不要删这个副本。</dd>
+<dt>产出</dt><dd>主目录当前分支上一笔合并提交,说明「合入需求：订单导出」(第 2 次起「合入需求：订单导出(第 2 次)」);回报合了几个提交、改了几个文件。</dd>
+<dt>前后</dt><dd>之前 <code>/dev-start</code>;开了版本时之后 <code>/release-review</code>,副本留到发版后清理。</dd>
+</dl></div>
+</details>
+
+<details class="skill" id="release-review">
+<summary><span class="name">/release-review</span><span class="oneline">发版前出审核报告,你说「发」再合入主干</span><span class="how how-cmd">敲命令</span></summary>
+<div class="body"><dl>
+<dt>什么时候用</dt><dd>发版那天,这一版的需求都合入版本分支之后。</dd>
+<dt>怎么用</dt><dd>先在版本分支上以 <code>chore(release): 版本号 2.0.10→2.0.11</code> 提交改好的版本号,再敲 <code>/release-review</code>;看完结论说「发」或「先不发」。</dd>
+<dt>要你拍板</dt><dd>发不发;合入主干后列出已合入的副本,删不删你定。</dd>
+<dt>产出</dt><dd><code>docs/releases/v&lt;版本号&gt;-发版审核.md</code>,以 <code>chore(release): &lt;版本号&gt; 发版审核报告</code> 提交到版本分支:结论(可以发 / 有风险 / 不能直接合),按需求列出的提交、文件和测试情况,疑似夹带、敏感改动、和主干合并的预演、缺陷,还在副本里没合入的需求;说「发」后主干上多一笔合并提交「发布 2.0.11:合入 订单导出、退款」。</dd>
+<dt>前后</dt><dd>之前各需求 <code>/dev-merge</code>;它不打 tag、不发布、不推送,发布照现有流程走,发完跑 <code>/release-start</code>。审核后又合入了需求,报告就过期,要重跑。</dd>
 </dl></div>
 </details>
 </section>
@@ -545,7 +594,7 @@ footer p { margin: 0 0 6px; }
 
 <footer>
   <p>「敲命令」只能自己敲 <code>/名字</code> 触发;「说话就行」用自然语言说就会触发,也可以敲命令;「自动」由 agent 按需调用。按 <code>/</code> 跳到搜索框,<code>Esc</code> 清空。</p>
-  <p>cgraphx skill 一览 · 2026-10-23</p>
+  <p>cgraphx skill 一览 · 2026-10-27</p>
 </footer>
 
 </div>
