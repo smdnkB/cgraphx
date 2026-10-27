@@ -28,15 +28,16 @@ related_code:
   - assets/claude-template/skills/init-knowledge/SKILL.md
   - assets/claude-template/skills/dev-impl-subagent/SKILL.md
   - assets/claude-template/skills/visual-explain/SKILL.md
+  - assets/claude-template/skills/knowledge-migrate/SKILL.md
 created: 2026-08-01
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 # skill invocation 轴
 
 ## Summary
 
-一个 skill 该 model-invoked 还是 user-invoked,判据是 writing-great-skills 的 invocation 轴:**agent 需要在自己判断下触发它、或别的 skill 需要调用它 → model-invoked**(保留 description,付每轮 context load);**只有人手敲名字才跑 → user-invoked**(`disable-model-invocation: true`,零 context load,付 cognitive load)。两个硬信号强制 model-invoked:① 设计上由 agent 自动触发;② 被另一个 skill 在正文里**调用**(文字推荐不算)。2026-08-01 据此把 10 个"用户决定才跑"的工具型 skill 转 user-invoked,常驻 description 25→15。user-invoked skill 多了靠 **router**(cgraphx-guide / FLOW-MAP)治 cognitive load——它们仍被列在索引里,agent 仍能文字推荐,用户敲名字即可,推荐链不断。2026-10-20 删掉手绘两个 skill 后为 25 个:18 个 model-invoked、7 个 user-invoked,见文末更新。
+一个 skill 该 model-invoked 还是 user-invoked,判据是 writing-great-skills 的 invocation 轴:**agent 需要在自己判断下触发它、或别的 skill 需要调用它 → model-invoked**(保留 description,付每轮 context load);**只有人手敲名字才跑 → user-invoked**(`disable-model-invocation: true`,零 context load,付 cognitive load)。两个硬信号强制 model-invoked:① 设计上由 agent 自动触发;② 被另一个 skill 在正文里**调用**(文字推荐不算)。2026-08-01 据此把 10 个"用户决定才跑"的工具型 skill 转 user-invoked,常驻 description 25→15。user-invoked skill 多了靠 **router**(cgraphx-guide / FLOW-MAP)治 cognitive load——它们仍被列在索引里,agent 仍能文字推荐,用户敲名字即可,推荐链不断。2026-10-27 新增 knowledge-migrate 后为 27 个:19 个 model-invoked、8 个 user-invoked,见文末更新。
 
 ## 决策与背景
 
@@ -96,3 +97,12 @@ doc-delivery 沿用 write-prd、write-design-doc、write-api-doc 三个旧 skill
 2026-10-25 按使用阶段给 skill 加前缀,改名 20 个,invocation 类型都不变;上文各版名单已换成新名。前缀:`init-` 项目接入、`dev-` 做需求主线、`api-` / `ui-` / `unit-` 三条测试线、`doc-` 事后文档与汇报。knowledge-recall、knowledge-write、db-query、visual-explain、audit-login-security、cgraphx-guide 不改名。`/end` 命令同步改为 `/dev-end`。
 
 新旧名对照见 CHANGELOG;旧目录已登记进 `deprecated-assets.json`,`cgraphx install` 升级时清掉,不会新旧两套同时触发。
+
+## 2026-10-27 更新(新增 knowledge-migrate,沿用旧名)
+
+2026-10-27 新增 knowledge-migrate:把 Claude Code 自动记忆迁进知识库、项目 CLAUDE.md 或个人 CLAUDE.md,再关掉本人的自动记忆。名字沿用 2026-10-19 废弃的知识库分类迁移 skill,两者无关;skill 共 27 个。
+
+- model-invoked 19 个:不变。
+- user-invoked 8 个:上一版 7 个 + knowledge-migrate。
+
+判据:只有人敲 `/knowledge-migrate` 才跑,每人每个项目一次;它按 knowledge-write 的规则写知识库是文字引用、不是调用,也没有别的 skill 调它。关掉记忆后「以后都这样做」的去向提问由 task 的 SessionStart 注入,不靠它的 description 触发。旧名已从 `deprecated-assets.json` 撤下:清理在部署之后跑,留着会把新 skill 一装上就删掉。

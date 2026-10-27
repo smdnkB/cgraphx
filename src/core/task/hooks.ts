@@ -9,11 +9,15 @@
  *
  * 只有 SessionStart 向 stdout 输出一行
  * `{"hookSpecificOutput":{…,"additionalContext":…}}`,把会话 id 回传给 agent;
- * 项目 skill 版本落后时,同一段里在会话 id 后另起一行接上提示(skill-version)。
+ * 项目 skill 版本落后时,同一段里在会话 id 后另起一行接上提示(skill-version);
+ * 本项目关了 Claude Code 自动记忆时,再接一行记忆去向提示(记忆迁进知识库 spec D9)。
  * Stop 与兼容用的 PostToolUse 入口 stdout 恒空。因此不复用 timeline 的 runHook。
  */
 
-import type { AgentProfile } from '../agents';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { agentConfigDir, DEFAULT_AGENT_ID, type AgentProfile } from '../agents';
 import { resolveProjectRoot } from '../directory';
 import { skillVersionNotice } from '../skill-version';
 import { isKillSwitchOn } from '../timeline';
@@ -21,6 +25,9 @@ import { isHistoryPassDone, refreshAutoBindings } from './auto-binding';
 
 /** 单次 hook 耗时预算(与 timeline 一致),超出写 stderr 告警。 */
 const HOOK_PERF_WARN_MS = 50;
+
+/** Claude Code 本人的本地设置文件(不签入),`autoMemoryEnabled` 写在这里。 */
+const CLAUDE_LOCAL_SETTINGS_FILE = 'settings.local.json';
 
 interface TaskHookPayload {
   sessionId: string;
@@ -31,14 +38,17 @@ interface TaskHookPayload {
 /**
  * SessionStart:注入当前会话 id(供拿不到会话时用 --session 传入),
  * 不再查询绑定、不注入任何任务内容,未绑定时也不提示。
- * 项目 skill 版本落后时,在会话 id 那行后接一行提示,合成同一段输出(skill版本落后提示 spec D5)。
+ * 项目 skill 版本落后时,在会话 id 那行后接一行提示,合成同一段输出(skill版本落后提示 spec D5);
+ * 本项目关了 Claude Code 自动记忆时,再接一行记忆去向提示(记忆迁进知识库 spec D9),没关时输出不变。
  */
 export async function taskSessionStartHook(profile: AgentProfile): Promise<void> {
   await runTaskHook(async (payload) => {
     const lines = [sessionStartContext(payload.sessionId)];
     const source = typeof payload.raw.source === 'string' ? payload.raw.source : undefined;
-    const notice = skillVersionNotice(resolveProjectRoot(payload.cwd ?? process.cwd()), profile, source);
+    const projectRoot = resolveProjectRoot(payload.cwd ?? process.cwd());
+    const notice = skillVersionNotice(projectRoot, profile, source);
     if (notice !== null) lines.push(notice);
+    if (isAutoMemoryOff(projectRoot, profile)) lines.push(autoMemoryOffContext());
     writeAdditionalContext('SessionStart', lines.join('\n'));
   });
 }
@@ -114,6 +124,22 @@ async function readStdinJson(): Promise<Record<string, unknown> | null> {
   }
 }
 
+/**
+ * 本项目是否关了 Claude Code 自动记忆:只看本人本地设置里 `autoMemoryEnabled` 是否为 false;
+ * 其他 agent、文件不存在、读不出或不是 JSON 对象一律按没关处理。
+ */
+function isAutoMemoryOff(projectRoot: string, profile: AgentProfile): boolean {
+  if (profile.id !== DEFAULT_AGENT_ID) return false;
+  try {
+    const file = path.join(agentConfigDir(projectRoot, profile), CLAUDE_LOCAL_SETTINGS_FILE);
+    const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    return (parsed as { autoMemoryEnabled?: unknown }).autoMemoryEnabled === false;
+  } catch {
+    return false;
+  }
+}
+
 function writeAdditionalContext(hookEventName: 'SessionStart', additionalContext: string): void {
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext } }) + '\n');
 }
@@ -122,4 +148,13 @@ function writeAdditionalContext(hookEventName: 'SessionStart', additionalContext
 
 function sessionStartContext(sessionId: string): string {
   return `当前会话 id:${sessionId}(执行 cgraphx task 命令拿不到会话时用 --session 传入)。`;
+}
+
+/** 关了自动记忆以后,用户说「以后都这样做」时先问去向;只讲去向,不提还有没迁的记忆。 */
+function autoMemoryOffContext(): string {
+  return (
+    '本项目已关 Claude Code 自动记忆:用户要你以后都照某个做法来时,先问记到哪——' +
+    '知识库(项目里的决策、规则、教训,走 /knowledge-write)/ 项目约定(每轮都要守的,写进项目根目录 CLAUDE.md)/ ' +
+    '你个人的设置(只关于本人的偏好,写进 ~/.claude/CLAUDE.md)。'
+  );
 }

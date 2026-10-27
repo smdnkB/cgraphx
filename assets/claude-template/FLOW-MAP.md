@@ -97,6 +97,7 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 
 - **写**:`/knowledge-write`(双层结构:实体 `concept` 主条目 + 流程条目,正向引用 + 反查派生参与业务;写入前必过 `cgraphx docs validate`)| `/init-knowledge`(陌生项目批量探索建档)
 - **读**:knowledge-recall(子 agent 语义召回,实体条目优先;精确查询用它列出的 `cgraphx docs` 命令)
+- **迁入**:`/knowledge-migrate`(把 Claude Code 自动记忆按去向迁进知识库 / 项目根目录 `CLAUDE.md` / 本人 `~/.claude/CLAUDE.md`,再关掉本人在这个项目里的自动记忆;每人每个项目跑一次)
 - **目录**:`docs/knowledge/*.md`;沉淀时机由开发流程交付收尾提示触发
 
 ## 数据库与 Schema

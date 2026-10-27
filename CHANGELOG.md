@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Added — `/knowledge-migrate` moves Claude Code auto memory into the project
+
+Claude Code keeps its auto memory outside the project, under
+`~/.claude/projects/<encoded path>/memory/`, where only you and only that
+directory can read it. `/knowledge-migrate` reads the memories of the main
+directory — and of every copy, when the project uses copies — and lists where
+each one goes: decisions, rules and lessons to the knowledge base, written the
+`/knowledge-write` way; conventions every turn must follow to the project's root
+`CLAUDE.md`; personal preferences to your `~/.claude/CLAUDE.md`. Change a
+destination or drop a line, then say 「迁」. Memories that were already migrated,
+or that mention branches and files that no longer exist, are left out by
+default.
+
+After writing, it turns off your Claude Code auto memory for this project:
+`"autoMemoryEnabled": false` in your own `.claude/settings.local.json`, in the
+main directory and every existing copy; copies opened later inherit it. The
+memory files stay where they are. From then on, the session-start context tells
+the agent to ask where to record anything you want it to keep doing — the
+knowledge base, the project's conventions, or your personal settings. Projects
+that keep auto memory on see no change.
+
+The skill reuses the name of the knowledge-base migration skill retired on
+2026-10-19. `skills/knowledge-migrate` is off the `deprecated-assets.json` list,
+so upgrades deploy the new skill instead of removing it.
+
 ### Changed — clarification locks business definitions before drawing the plan
 
 `/dev-clarify` has a new step before the feature cards: business definitions
