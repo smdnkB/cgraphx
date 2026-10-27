@@ -11,7 +11,7 @@
  *
  * 隐藏 hook 入口(spec §3.3):Claude Code hook 子命令按 HOOK_EVENTS_TO_COMMANDS
  * 逐项注册(user-prompt / pre-tool-use / post-tool-use / stop / session-start /
- * session-end),另加 git post-commit 用的 timeline-git-commit-hook。
+ * session-end),另加 git post-commit、post-merge 共用的 timeline-git-commit-hook。
  *
  * Exit codes (spec §5.5):
  *   0  success (incl. "no matching events")
@@ -25,7 +25,7 @@ import path from 'node:path';
 import type { Command } from 'commander';
 
 import { queryEvents, getEventById, getEventStats } from './indexer';
-import { installTimelineHooks, uninstallTimelineHooks } from './installer';
+import { installTimelineHooks, uninstallTimelineHooks, type InstallReport } from './installer';
 import { resolveProjectRoot } from '../directory';
 import { TimelineSchemaError, StoreQueryError } from './errors';
 import { assertEventType } from './payload';
@@ -331,7 +331,7 @@ export function registerTimelineCommands(program: Command): void {
 
   timeline
     .command('install')
-    .description('Install timeline hooks into this project\'s .claude/settings.json and .git/hooks/')
+    .description('Install timeline hooks into this project\'s .claude/settings.json and git 钩子目录')
     .option('--purge-first', 'Remove existing timeline hooks before installing (clean slate)')
     .option('-t, --target <ids>', `Comma-separated agent ids, or all / none (default: installed agents, else ${DEFAULT_AGENT_ID})`)
     .action(async (opts: { purgeFirst?: boolean; target?: string }) => {
@@ -343,6 +343,7 @@ export function registerTimelineCommands(program: Command): void {
           installTimelineHooks(projectRoot, { purgeFirst: opts.purgeFirst === true, agent: p.id }),
         );
         writeReports(reports);
+        writeGitHookNotices(reports);
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
@@ -410,13 +411,28 @@ function writeReports(reports: readonly unknown[]): void {
   process.stdout.write(JSON.stringify(out, null, 2) + '\n');
 }
 
+/**
+ * git 钩子的安装提示往 stderr 打:钩子文件不是 shell 脚本(没写入)每个文件一行;钩子目录由
+ * git 跟踪的,同一目录只打一行。多个 agent 的报告里是同一批钩子,同一句话只打一次。
+ */
+function writeGitHookNotices(reports: readonly InstallReport[]): void {
+  const printed = new Set<string>();
+  const notice = (line: string): void => {
+    if (printed.has(line)) return;
+    printed.add(line);
+    process.stderr.write(`[timeline] ${line}\n`);
+  };
+  for (const report of reports) {
+    for (const hook of report.gitHooks) {
+      if (hook.status === 'unsupported') notice(`钩子文件 ${hook.hookPath} 不是 shell 脚本,没写入`);
+      if (hook.hooksDirTracked) notice(`钩子目录 ${path.dirname(hook.hookPath)} 由 git 跟踪,改动会出现在 git status 里`);
+    }
+  }
+}
+
 function parseType(s: string | undefined): EventType | undefined {
   if (!s) return undefined;
   const t = assertEventType(s);
   if (!t) throw new ArgError(`Invalid --type: ${s}. Must be one of ${EVENT_TYPES_HELP.split(' | ').join(', ')}`);
   return t;
 }
-
-// `path" is used by installer.ts (project-local paths); kept imported here so
-// the module compiles cleanly without an unused-imports linter firing.
-void path;

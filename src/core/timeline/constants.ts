@@ -94,6 +94,13 @@ export const GIT_COMMIT_SUBCOMMAND = 'timeline-git-commit-hook';
 export const COMMIT_SHA_ENV = 'CGRAPHX_COMMIT_SHA';
 export const COMMIT_BRANCH_ENV = 'CGRAPHX_COMMIT_BRANCH';
 
+/**
+ * 调起记录进程的 git 钩子,经环境变量交给 `timeline-git-commit-hook`:post-merge 片段传
+ * `post-merge`;没有这个变量即视为 post-commit。post-merge 遇到只有一个父提交的提交是快进,
+ * 不产生新提交,不记。
+ */
+export const COMMIT_HOOK_ENV = 'CGRAPHX_GIT_HOOK';
+
 // ─── Tool classification (timeline-data-quality feature) ───────────────────
 // Defined here so the enricher hooks share one source of truth.
 

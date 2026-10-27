@@ -1,12 +1,11 @@
 /**
- * Project-local hook installer for the timeline subsystem.
+ * timeline 子系统的项目级 hook 安装器。
  *
- * Spec §0.2 #4 + §7.3 — writes ONLY to the project's own `.claude/settings.json`
- * and `.git/hooks/post-commit`. NEVER touches the user's global `~/.claude/`.
+ * 只写项目自己的 agent 配置(如 `.claude/settings.json`)和 git 钩子目录里的 post-commit、
+ * post-merge(经 `../git-hooks` 写入:跟随 core.hooksPath,片段紧跟 shebang),绝不碰用户
+ * 全局的 `~/.claude/`(spec §0.2 #4、§7.3、D33)。
  *
- * Idempotent: running twice leaves the same single hook entry per event.
- * Reversible: `uninstall` removes exactly what `install` wrote, leaving any
- * unrelated user hooks intact.
+ * 幂等:重复安装每个事件只留一条 hook。可逆:卸载只删安装写入的内容,用户自己的 hook 原样保留。
  */
 
 import * as fs from 'node:fs';
@@ -15,9 +14,12 @@ import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 
 import { agentSettingsPath, DEFAULT_AGENT_ID, hookCommand, requireAgentProfile, type AgentId } from '../agents';
-import { DatabaseConnection } from '../db';
+import { DatabaseConnection, getDatabasePath } from '../db';
+import { resolveDataDir } from '../directory';
+import { installHookSnippet, removeHookSnippet, resolveHooksDir, type HookSnippetResult } from '../git-hooks';
 import {
   COMMIT_BRANCH_ENV,
+  COMMIT_HOOK_ENV,
   COMMIT_SHA_ENV,
   GIT_COMMIT_SUBCOMMAND,
   HOOK_EVENTS_TO_COMMANDS,
@@ -30,20 +32,28 @@ import { LEGACY_TURN_STATE_FILENAME } from './turn-state';
 export interface InstallReport {
   projectRoot: string;
   settingsPath: string;
+  /** post-commit 钩子文件路径;不在 git 仓库为 null。 */
   gitHookPath: string | null;
   writtenHookEvents: string[];
+  /** post-commit 片段本次写了盘(status 为 installed 或 updated)。 */
   gitHookWritten: boolean;
   skipped: string[];
   /** 本次安装顺手清理掉的碎片 `.cgraphx/` 目录(仅含 turn 文件的空壳)。 */
   debrisRemoved: string[];
+  /** post-commit、post-merge 片段的写入结果,按此顺序;不在 git 仓库为 []。 */
+  gitHooks: HookSnippetResult[];
 }
 
 export interface UninstallReport {
   projectRoot: string;
   settingsPath: string;
+  /** post-commit 钩子文件路径;不在 git 仓库为 null。 */
   gitHookPath: string | null;
   removedHookEvents: string[];
+  /** 本次从 post-commit 钩子删掉了片段。 */
   gitHookRemoved: boolean;
+  /** 本次从 post-merge 钩子删掉了片段。 */
+  mergeHookRemoved: boolean;
   dataDropped: boolean;
 }
 
@@ -101,46 +111,31 @@ function findGitRoot(projectRoot: string): string | null {
   }
 }
 
+/** 片段每行都带的标记:升级与卸载按行精确删除,不碰用户自己的钩子内容。 */
 const GIT_HOOK_MARKER = '# cgraphx-timeline-hook';
 
 /**
  * post-commit 片段:先在前台取得本次提交的 hash 与分支,再把记录进程放到后台。
- * 每行都带 GIT_HOOK_MARKER,升级与卸载按行精确删除,不碰用户自己的钩子内容。
+ * 命令替换带 `|| true`:片段紧跟 shebang,钩子是 `#!/bin/sh -e` 这类写法时,一条命令失败
+ * (如 detached HEAD 上的 symbolic-ref)会让整个钩子提前退出,跳过原钩子后面的内容。
  */
-function buildGitPostCommitSnippet(): string {
+function buildGitPostCommitSnippet(): string[] {
   return [
     `${GIT_HOOK_MARKER} — record commit events to .cgraphx/cgraphx.db`,
-    `__cgx_sha=$(git rev-parse HEAD 2>/dev/null); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null) ${GIT_HOOK_MARKER}`,
+    `__cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true) ${GIT_HOOK_MARKER}`,
     `${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & ${GIT_HOOK_MARKER}`,
-  ].join('\n');
+  ];
 }
 
-/** 删去 cgraphx 写入的行(带标记的行,以及旧版不带标记的调用行),规整空行。 */
-function stripTimelineGitHook(content: string): string {
-  return content
-    .split('\n')
-    .filter(l => !l.includes(GIT_HOOK_MARKER) && !l.includes(GIT_COMMIT_SUBCOMMAND))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/^\n+/, '')
-    .replace(/\n+$/, '');
-}
-
-function readGitHook(gitHookPath: string): string {
-  if (!fs.existsSync(gitHookPath)) return '';
-  try {
-    return fs.readFileSync(gitHookPath, 'utf8');
-  } catch {
-    return '';
-  }
-}
-
-function writeGitHook(gitHookPath: string, content: string, executable: boolean): void {
-  fs.mkdirSync(path.dirname(gitHookPath), { recursive: true });
-  fs.writeFileSync(gitHookPath, content, { mode: executable ? 0o755 : 0o644 });
-  if (executable) {
-    try { fs.chmodSync(gitHookPath, 0o755); } catch { /* non-POSIX */ }
-  }
+/**
+ * post-merge 片段:`$1` 为 1 是 squash 合并(不产生提交),跳过;其余同 post-commit,另传
+ * COMMIT_HOOK_ENV=post-merge,记录进程据此跳过快进(快进不产生新提交)。
+ */
+function buildGitPostMergeSnippet(): string[] {
+  return [
+    `${GIT_HOOK_MARKER} — record merge commits to .cgraphx/cgraphx.db`,
+    `if [ "$1" != "1" ]; then __cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true); ${COMMIT_HOOK_ENV}=post-merge ${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & fi ${GIT_HOOK_MARKER}`,
+  ];
 }
 
 export function installTimelineHooks(
@@ -152,7 +147,6 @@ export function installTimelineHooks(
   const resolvedRoot = path.resolve(projectRoot);
   const settingsPath = agentSettingsPath(resolvedRoot, profile);
   const gitRoot = findGitRoot(resolvedRoot);
-  const gitHookPath = gitRoot ? path.join(gitRoot, '.git', 'hooks', 'post-commit') : null;
 
   if (opts.purgeFirst) {
     uninstallTimelineHooks(resolvedRoot, { purgeData: false, agent });
@@ -201,21 +195,19 @@ export function installTimelineHooks(
     process.stderr.write(`[timeline] legacy turn-state remove failed: ${msg}\n`);
   }
 
-  // Git post-commit hook
-  let gitHookWritten = false;
-  if (gitHookPath) {
-    const existing = readGitHook(gitHookPath);
-    const snippet = buildGitPostCommitSnippet();
-    // 已有旧版片段 → 原地替换为当前版本(升级);内容未变则不写(幂等)。
-    const base = existing.includes(GIT_HOOK_MARKER) ? stripTimelineGitHook(existing) : existing.replace(/\n+$/, '');
-    const newContent = base.length > 0 && base !== '#!/bin/sh'
-      ? `${base}\n\n${snippet}\n`
-      : `#!/bin/sh\n${snippet}\n`;
-    if (newContent !== existing) {
-      writeGitHook(gitHookPath, newContent, true);
-      gitHookWritten = true;
-    }
+  // git 钩子:post-commit 记普通提交和冲突后用 git commit 收尾的合并,post-merge 记 git merge
+  // 直接生成的合并提交。已装的片段(含旧版写在文件末尾的、更早不带标记的调用行)先删掉,
+  // 再插到 shebang 之后;内容未变则不写盘(幂等)。
+  let commitHook: HookSnippetResult | null = null;
+  let mergeHook: HookSnippetResult | null = null;
+  if (gitRoot) {
+    commitHook = installHookSnippet(gitRoot, 'post-commit', GIT_HOOK_MARKER, buildGitPostCommitSnippet(), {
+      legacyMatch: GIT_COMMIT_SUBCOMMAND,
+    });
+    mergeHook = installHookSnippet(gitRoot, 'post-merge', GIT_HOOK_MARKER, buildGitPostMergeSnippet());
   }
+  const gitHooks = [commitHook, mergeHook].filter((r): r is HookSnippetResult => r !== null);
+  const gitHookWritten = commitHook !== null && (commitHook.status === 'installed' || commitHook.status === 'updated');
 
   // 存量碎片清理(spec §3.4):按签名精确匹配删除 cwd 漂移 bug 时代散落的
   // 空壳 `.cgraphx/`。幂等;失败只报 stderr,绝不中断安装。
@@ -230,11 +222,12 @@ export function installTimelineHooks(
   return {
     projectRoot: resolvedRoot,
     settingsPath,
-    gitHookPath,
+    gitHookPath: commitHook?.hookPath ?? null,
     writtenHookEvents: written,
     gitHookWritten,
     skipped,
     debrisRemoved,
+    gitHooks,
   };
 }
 
@@ -246,7 +239,8 @@ export function uninstallTimelineHooks(
   const resolvedRoot = path.resolve(projectRoot);
   const settingsPath = agentSettingsPath(resolvedRoot, profile);
   const gitRoot = findGitRoot(resolvedRoot);
-  const gitHookPath = gitRoot ? path.join(gitRoot, '.git', 'hooks', 'post-commit') : null;
+  const hooksDir = gitRoot ? resolveHooksDir(gitRoot) : null;
+  const gitHookPath = hooksDir ? path.join(hooksDir, 'post-commit') : null;
 
   const settings = readSettings(settingsPath);
   const hooks = settings.hooks ?? {};
@@ -280,37 +274,39 @@ export function uninstallTimelineHooks(
     writeSettings(settingsPath, settings);
   }
 
-  // git 钩子:keepGitHook(只卸指定 agent)时保留
+  // git 钩子:keepGitHook(只卸指定 agent)时保留;post-commit 连同旧版不带标记的调用行一起删
   let gitHookRemoved = false;
-  if (!opts.keepGitHook && gitHookPath && fs.existsSync(gitHookPath)) {
-    const content = readGitHook(gitHookPath);
-    if (content.includes(GIT_HOOK_MARKER)) {
-      const filtered = stripTimelineGitHook(content);
-      if (filtered.length === 0 || filtered === '#!/bin/sh') {
-        fs.rmSync(gitHookPath, { force: true });
-      } else {
-        writeGitHook(gitHookPath, filtered + '\n', true);
-      }
-      gitHookRemoved = true;
-    }
+  let mergeHookRemoved = false;
+  if (!opts.keepGitHook && gitRoot) {
+    gitHookRemoved = removeHookSnippet(gitRoot, 'post-commit', GIT_HOOK_MARKER, {
+      legacyMatch: GIT_COMMIT_SUBCOMMAND,
+    }) !== null;
+    mergeHookRemoved = removeHookSnippet(gitRoot, 'post-merge', GIT_HOOK_MARKER) !== null;
   }
 
-  // Optional: drop timeline data
+  // 可选:删 timeline 数据。副本里共用库在主目录,会删共用数据的操作直接拒绝
   let dataDropped = false;
   if (opts.purgeData) {
-    try {
-      const dbPath = path.join(resolvedRoot, '.cgraphx', 'cgraphx.db');
-      if (fs.existsSync(dbPath)) {
-        const conn = DatabaseConnection.open(dbPath);
-        conn.getDb().exec('DROP TABLE IF EXISTS timeline_events');
-        conn.getDb().exec('DROP TABLE IF EXISTS timeline_schema_versions');
-        conn.close();
-        dataDropped = true;
-      }
-    } catch (err) {
+    const dataDir = resolveDataDir(resolvedRoot);
+    if (dataDir.state !== 'own') {
       process.stderr.write(
-        `[timeline] --purge failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        `[timeline] 这是副本,数据在主目录 ${dataDir.mainRoot};要清数据,到主目录执行 cgraphx timeline uninstall --purge\n`,
       );
+    } else {
+      try {
+        const dbPath = getDatabasePath(resolvedRoot);
+        if (fs.existsSync(dbPath)) {
+          const conn = DatabaseConnection.open(dbPath);
+          conn.getDb().exec('DROP TABLE IF EXISTS timeline_events');
+          conn.getDb().exec('DROP TABLE IF EXISTS timeline_schema_versions');
+          conn.close();
+          dataDropped = true;
+        }
+      } catch (err) {
+        process.stderr.write(
+          `[timeline] --purge failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+      }
     }
   }
 
@@ -320,6 +316,7 @@ export function uninstallTimelineHooks(
     gitHookPath,
     removedHookEvents: removed,
     gitHookRemoved,
+    mergeHookRemoved,
     dataDropped,
   };
 }

@@ -1,6 +1,7 @@
 /**
  * 七个 hook 处理函数:6 个 Claude Code hook(user_prompt / pre_tool_use /
- * post_tool_use / stop / session_start / session_end)+ git post-commit 的 gitCommitHook。
+ * post_tool_use / stop / session_start / session_end)+ git post-commit、post-merge 共用的
+ * gitCommitHook。
  *
  * 每个函数把 Claude Code 的 payload 映射成 TimelineEventInput 并交给 runHook,
  * 由 cli.ts 中的隐藏子命令调起(如 `cgraphx timeline-pre-tool-use-hook`)。
@@ -14,7 +15,7 @@ import { extractHookPayload, type HookPayload } from './payload';
 import { resolveProjectRoot } from '../directory';
 import { summarizeToolResponse } from './post-tool-summary';
 import { sanitizeToolArgs } from './tool-args';
-import { COMMIT_BRANCH_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
+import { COMMIT_BRANCH_ENV, COMMIT_HOOK_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
 import { readCurrentTurnId, writeCurrentTurn, removeTurnState } from './turn-state';
 import type { TimelineEventInput } from './types';
 import { DEFAULT_AGENT_ID, requireAgentProfile, resolveSessionIdFromEnv, type AgentId } from '../agents';
@@ -305,9 +306,13 @@ export async function sessionEndHook(agent: AgentId = DEFAULT_AGENT_ID): Promise
 }
 
 /**
- * git post-commit hook —— 不读 stdin,从 `git` CLI 取提交信息。
+ * git post-commit / post-merge hook —— 不读 stdin,从 `git` CLI 取提交信息(spec D32)。
  *
- * 由 `.git/hooks/post-commit` 片段后台调起(`&`),耗时可以比 Claude Code hook 宽松。
+ * 由钩子目录里 post-commit、post-merge 片段后台调起(`&`),耗时可以比 Claude Code hook 宽松。
+ * - 合并提交(父提交 ≥ 2):文件列表为空、增删行记 0,相对第一父提交的统计记进 `metadata.merge`
+ * - post-merge 调起(COMMIT_HOOK_ENV 为 post-merge)而提交只有一个父提交:快进,不产生新提交,不记
+ * - 同一 commit_hash 已记过的不再记(去重在 recordEvent 里)
+ *
  * 会话 id 与来源 agent 经 agents 门面从会话环境变量解析:agent 在会话内通过 Bash
  * 提交时子进程继承该变量;终端手动提交时没有,两者均记为 null(未归属)。
  */
@@ -320,6 +325,8 @@ export async function gitCommitHook(): Promise<void> {
     branch: process.env[COMMIT_BRANCH_ENV],
   });
   if (!info) return;
+  // post-merge 遇到只有一个父提交的提交 = 快进:不产生新提交,提交本身在当时已记过
+  if (info.parents.length === 1 && process.env[COMMIT_HOOK_ENV] === 'post-merge') return;
 
   // 归属会话与来源 agent 取自会话环境变量;终端手动提交时两者均为 null。
   const fromEnv = resolveSessionIdFromEnv();
@@ -340,7 +347,7 @@ export async function gitCommitHook(): Promise<void> {
       commit_insertions: info.insertions,
       commit_deletions: info.deletions,
       cwd: info.cwd,
-      metadata: info.branch !== null ? { branch: info.branch } : undefined,
+      metadata: commitMetadata(info),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -348,87 +355,131 @@ export async function gitCommitHook(): Promise<void> {
   }
 }
 
+/** git_commit 的 metadata:分支(读得到才带)+ 合并统计(合并提交才带);都没有 → undefined。 */
+function commitMetadata(info: GitCommitInfo): Record<string, unknown> | undefined {
+  const meta: Record<string, unknown> = {};
+  if (info.branch !== null) meta.branch = info.branch;
+  if (info.merge !== null) meta.merge = { parents: info.parents, ...info.merge };
+  return Object.keys(meta).length > 0 ? meta : undefined;
+}
+
+/** numstat 汇总:files 含二进制文件,增删行数不计二进制文件。 */
+export interface GitDiffStats {
+  files: number;
+  insertions: number;
+  deletions: number;
+}
+
 // 导出以便单测直接驱动(否则只能经 gitCommitHook 的副作用路径触达)。
 export interface GitCommitInfo {
   hash: string;
   message: string;
+  /** 改动的文件;合并提交为空数组(统计见 merge)。 */
   files: string[];
   cwd: string;
+  /** 增删行数;合并提交为 0(统计见 merge)。 */
   insertions: number;
   deletions: number;
   /** 当前分支名;detached HEAD(输出为 `HEAD`)或命令失败时为 null。 */
   branch: string | null;
+  /** 父提交 hash,第一父提交在前;根提交为空数组。 */
+  parents: string[];
+  /** 合并提交(父提交 ≥ 2)相对第一父提交的改动统计;其余为 null。 */
+  merge: GitDiffStats | null;
 }
 
 /** 只接受十六进制提交 hash:它会拼进 git 命令行,其它内容一律退回 HEAD。 */
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,64}$/i;
 
+/** 在 cwd 下跑一条 git 命令(不给 cwd 即当前目录),返回 stdout;失败照常抛出。 */
+function runGit(args: string, cwd?: string): string {
+  return execSync(`git ${args}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], cwd });
+}
+
 /**
- * 读取一个提交的信息 + 汇总增删行数 + 分支名。
+ * 读取一个提交的信息 + 父提交 + 汇总增删行数 + 分支名。
  *
  * `pinned.hash` 合法时读该提交,否则读 HEAD;`pinned.branch` 有定义时直接采用
  * (空串 = detached HEAD → null),未定义时读当前分支。钩子在提交当下固定这两项,
  * 避免后台进程启动后 HEAD 已前移(连续提交只记到最后一个)。
  *
- * numstat:`git show --numstat --format= HEAD` 每个文件一行 `<ins>\t<del>\t<path>`,
- * 二进制文件两列为字面量 `-`,跳过不计。numstat 或分支读取失败(浅克隆、仓库损坏、
- * git 过旧)不影响其它字段:行数记 0/0,分支记 null —— 它们是增强项,不是闸门。
+ * 父提交取 `git rev-list --parents -n 1`,读不出整条返回 null(分不清是不是合并提交)。
+ * 合并提交上 `git diff-tree` 输出为空,文件与行数改取 `git diff --numstat <第一父提交> <hash>`,
+ * 记进 merge;files 记空数组、增删行记 0。
+ *
+ * numstat 每个文件一行 `<ins>\t<del>\t<path>`,二进制文件两列为字面量 `-`,不计行数。
+ * numstat 或分支读取失败(浅克隆、仓库损坏、git 过旧)不影响其它字段:行数记 0/0,
+ * 分支记 null —— 它们是增强项,不是闸门。
  */
 export function readGitCommitInfo(pinned: { hash?: string; branch?: string } = {}): GitCommitInfo | null {
   const ref = pinned.hash !== undefined && COMMIT_HASH_PATTERN.test(pinned.hash) ? pinned.hash : 'HEAD';
   try {
-    const cwd = execSync('git rev-parse --show-toplevel', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-    const hash = execSync(`git rev-parse --verify ${ref}^{commit}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-    const message = execSync(`git log -1 --pretty=%B ${ref}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
-    const filesOut = execSync(`git diff-tree --no-commit-id --name-only -r ${ref}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
-    const files = filesOut.split('\n').map(s => s.trim()).filter(Boolean);
+    const cwd = runGit('rev-parse --show-toplevel').trim();
+    const hash = runGit(`rev-parse --verify ${ref}^{commit}`).trim();
+    const message = runGit(`log -1 --pretty=%B ${ref}`).trim();
+    // 以仓库根为 cwd 跑后面的命令,hook 从别处启动也能正确执行。
+    const parents = readParents(hash, cwd);
+    const branch = readBranch(pinned.branch, cwd);
 
-    // 以仓库根为 cwd 跑 numstat,hook 从别处启动也能正确执行。
-    let insertions = 0;
-    let deletions = 0;
-    try {
-      const numstatOut = execSync(`git show --numstat --format= ${ref}`, {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'ignore'],
-        cwd,
-      });
-      for (const line of numstatOut.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        const parts = trimmed.split('\t');
-        if (parts.length < 3) continue;
-        const [ins, del] = parts;
-        // 二进制文件:git 输出字面量 "-",跳过不计。
-        if (ins === '-' || del === '-') continue;
-        const insNum = parseInt(ins!, 10);
-        const delNum = parseInt(del!, 10);
-        if (!Number.isNaN(insNum)) insertions += insNum;
-        if (!Number.isNaN(delNum)) deletions += delNum;
-      }
-    } catch {
-      // numstat 不可用 —— 保持 0/0,不阻塞其余字段。
+    const firstParent = parents[0];
+    if (parents.length >= 2 && firstParent !== undefined) {
+      const merge = readNumstat(`diff --numstat ${firstParent} ${hash}`, cwd);
+      return { hash, message, files: [], cwd, insertions: 0, deletions: 0, branch, parents, merge };
     }
 
-    let branch: string | null = null;
-    if (pinned.branch !== undefined) {
-      branch = pinned.branch !== '' ? pinned.branch : null;
-    } else {
-      try {
-        const out = execSync('git rev-parse --abbrev-ref HEAD', {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'ignore'],
-          cwd,
-        }).trim();
-        branch = out && out !== 'HEAD' ? out : null;
-      } catch {
-        // 分支读取失败 —— 记 null。
-      }
-    }
-
-    return { hash, message, files, cwd, insertions, deletions, branch };
+    const files = runGit(`diff-tree --no-commit-id --name-only -r ${ref}`, cwd)
+      .split('\n').map(s => s.trim()).filter(Boolean);
+    const { insertions, deletions } = readNumstat(`show --numstat --format= ${ref}`, cwd);
+    return { hash, message, files, cwd, insertions, deletions, branch, parents, merge: null };
   } catch {
     return null;
   }
+}
+
+/** `git rev-list --parents -n 1 <hash>` 输出 `<hash> <父1> <父2> …`,取父提交部分;失败照常抛出。 */
+function readParents(hash: string, cwd: string): string[] {
+  return runGit(`rev-list --parents -n 1 ${hash}`, cwd).trim().split(/\s+/).slice(1).filter(Boolean);
+}
+
+/** 当前分支:`pinned` 有定义时直接采用(空串 → null);否则读 HEAD 的分支名,失败或 detached → null。 */
+function readBranch(pinned: string | undefined, cwd: string): string | null {
+  if (pinned !== undefined) return pinned !== '' ? pinned : null;
+  try {
+    const out = runGit('rev-parse --abbrev-ref HEAD', cwd).trim();
+    return out && out !== 'HEAD' ? out : null;
+  } catch {
+    // 分支读取失败 —— 记 null。
+    return null;
+  }
+}
+
+/** 跑一条输出 numstat 的 git 命令并汇总;命令失败 —— 记 0,不阻塞其余字段。 */
+function readNumstat(args: string, cwd: string): GitDiffStats {
+  try {
+    return sumNumstat(runGit(args, cwd));
+  } catch {
+    return { files: 0, insertions: 0, deletions: 0 };
+  }
+}
+
+/** 汇总 numstat 输出:每行一个文件。 */
+function sumNumstat(out: string): GitDiffStats {
+  const stats: GitDiffStats = { files: 0, insertions: 0, deletions: 0 };
+  for (const line of out.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split('\t');
+    if (parts.length < 3) continue;
+    stats.files++;
+    const [ins, del] = parts;
+    // 二进制文件:git 输出字面量 "-",计入文件数、不计行数。
+    if (ins === '-' || del === '-') continue;
+    const insNum = parseInt(ins!, 10);
+    const delNum = parseInt(del!, 10);
+    if (!Number.isNaN(insNum)) stats.insertions += insNum;
+    if (!Number.isNaN(delNum)) stats.deletions += delNum;
+  }
+  return stats;
 }
 
 // Re-export for cli.ts so the dispatcher has a single import surface.
