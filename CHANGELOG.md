@@ -170,8 +170,10 @@ the current branch as before.
   `cp -R --reflink=always` on Linux: about a second for a 4 GB repository,
   almost no extra disk), creates `feat/<prefix>` (`fix/` for bug fixes) from
   the main directory's current branch, and gives the line for starting a new
-  session there. Ignored files such as dependencies and `.env` come along, so
-  nothing needs reinstalling; untracked files stay behind, except the
+  session there; when the disk cannot clone (on macOS: another volume, or a
+  disk that is not APFS), it asks before making a full copy. Ignored files
+  such as dependencies and `.env` come along, so nothing needs reinstalling;
+  untracked files stay behind, except the
   requirement's own drafts, which move into the copy. In the copy,
   `/dev-merge` merges the main directory's current branch in, so conflicts
   are resolved there; in the main directory, `/dev-merge <requirement>`
@@ -198,6 +200,11 @@ the current branch as before.
   「副本关联的主项目不在 <path> 了」. `timeline uninstall --purge` is refused in a
   copy. Copies run on macOS and Linux; the dry-run merges need git 2.38 or
   later.
+- `CGRAPHX_DIR` now applies to all per-project data. The turn state files
+  (`turns/`), `db-profiles.json` and `db-query.log` used to stay in
+  `.cgraphx/` even when `CGRAPHX_DIR` named another directory; they now live
+  next to the database in that directory. If you set `CGRAPHX_DIR`, move an
+  existing `.cgraphx/db-profiles.json` there.
 - Merge commits are recorded. `git merge` does not run the post-commit hook,
   so the timeline never saw merges. A post-merge hook now records merge
   commits as `git_commit` events with an empty file list and the merge's
