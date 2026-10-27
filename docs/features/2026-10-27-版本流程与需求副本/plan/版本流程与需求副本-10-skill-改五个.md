@@ -1,7 +1,7 @@
 # T-10: skill——改五个
 
 > 产物: plan
-> 依据: spec@68ac94e
+> 依据: spec@3eef166
 
 - 目标:dev-impl-subagent 不再在 main / master 上停下问分支、改查版本分支;dev-impl 加同样的检查;dev-handoff 按 D23 开副本;dev-spec 复用 /dev-start 建的目录;doc-report 按需求出报告时路径用项目内路径
 - 对应 spec 编号:F2⑥、F7(交接一句、「之后 /dev-spec 直接复用这个需求目录」)、F8(/doc-report)、F10、D11、D22、D23、D34、D36

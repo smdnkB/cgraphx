@@ -201,8 +201,48 @@ function formatGb(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-/** 以命令失败为准判 no_cow,不自己判断文件系统;失败时先删掉复制了一半的目标目录。 */
+function noCowError(source: string, reason: string, note: string): ReplicaError {
+  const bytes = requiredBytes(source);
+  return new ReplicaError(
+    'no_cow',
+    `这块盘不能写时复制(${reason})${note};整份复制约需 ${formatGb(bytes)},确认后加 --full-copy 重跑`,
+    { requiredBytes: bytes },
+  );
+}
+
+/**
+ * macOS 复制前判断能不能克隆(spec D20):`cp -c` 克隆不了时会悄悄退成整份复制、命令照样成功,
+ * 只看命令失败判不出 no_cow(F7④ 要在整份复制前先问)。目标目录和主目录同卷、且卷是 APFS 才算能克隆;
+ * 取不到设备或挂载信息按不能克隆处理。能克隆返回 null,否则返回原因。
+ */
+export function darwinCloneBlocker(source: string, targetParent: string): string | null {
+  let sameVolume: boolean;
+  try {
+    sameVolume = fs.statSync(source).dev === fs.statSync(targetParent).dev;
+  } catch (err) {
+    return `读不了卷信息:${errorMessage(err)}`;
+  }
+  if (!sameVolume) return '目标目录和主目录不在同一个卷上';
+  const stat = runCommand('/usr/bin/stat', ['-f', '%Sd', source], source);
+  const device = stat.status === 0 ? stat.stdout.trim() : '';
+  const mount = device === '' ? null : runCommand('/sbin/mount', [], source);
+  // 挂载行形如 `/dev/disk3s5 on /System/Volumes/Data (apfs, local, …)`;挂载点可能带空格和括号,取最后一个 ` (`
+  const line =
+    mount !== null && mount.status === 0
+      ? mount.stdout.split('\n').find((l) => l.startsWith(`/dev/${device} on `))
+      : undefined;
+  const open = line === undefined ? -1 : line.lastIndexOf(' (');
+  const fsType = line === undefined || open < 0 ? '' : (line.slice(open + 2).split(/[,)]/)[0] ?? '').trim();
+  if (fsType === '') return '判断不了这块盘是不是 APFS';
+  return fsType === 'apfs' ? null : `这块盘是 ${fsType},不是 APFS`;
+}
+
+/** 写时复制整个主目录(D20);复制命令失败时先删掉复制了一半的目标目录。 */
 function copyTree(source: string, target: string, fullCopy: boolean): void {
+  if (!fullCopy && process.platform === 'darwin') {
+    const blocker = darwinCloneBlocker(source, path.dirname(target));
+    if (blocker !== null) throw noCowError(source, blocker, '');
+  }
   const { cmd, args } = copyCommand(fullCopy);
   const r = runCommand(cmd, [...args, source, target], path.dirname(source));
   if (r.status === 0) return;
@@ -211,12 +251,7 @@ function copyTree(source: string, target: string, fullCopy: boolean): void {
   if (fullCopy) {
     throw new Error(`整份复制失败(${reason}),已删掉复制了一半的 ${target};检查磁盘空间和权限后重跑`);
   }
-  const bytes = requiredBytes(source);
-  throw new ReplicaError(
-    'no_cow',
-    `这块盘不能写时复制(${reason}),已删掉复制了一半的 ${target};整份复制约需 ${formatGb(bytes)},确认后加 --full-copy 重跑`,
-    { requiredBytes: bytes },
-  );
+  throw noCowError(source, reason, `,已删掉复制了一半的 ${target}`);
 }
 
 // ---------- 整理(D21) ----------

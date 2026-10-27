@@ -1,7 +1,7 @@
 # T-2: 程序——replica 子系统
 
 > 产物: plan
-> 依据: spec@68ac94e
+> 依据: spec@3eef166
 
 - 目标:新增 replica 子系统:登记读写、主目录与副本的路径换算、开 / 列 / 删副本,以及 `cgraphx replica` 命令组
 - 对应 spec 编号:F7、F9、D1、D18、D19、D20、D21、D22、D26(换算函数)、D35;K1、K3、K9;spec「细节方案:F7」的登记文件示例、命令契约、K3 / K9 取法
@@ -34,7 +34,7 @@
        - 主目录 `git status --porcelain --untracked-files=no` 有输出 → `dirty_main`,`files` 为这些路径(F7①)
        - 主目录已有同名本地分支(`git show-ref --verify --quiet refs/heads/<branch>` 成功)→ `invalid_args`(提示换分支名)
        - 目标路径 `<主目录的上级>/<主目录名>@<prefix>` 已存在 → `target_exists`
-     - 复制:darwin `cp -cR <主目录> <目标>`,linux `cp -R --reflink=always <主目录> <目标>`;失败 → 删掉已产生的目标目录,抛 `no_cow`,`requiredBytes` = `du -sk <主目录>` × 1024。`fullCopy` 为 true 时用 `cp -R`。
+     - 复制:darwin 先判断目标目录和主目录同卷(`fs.statSync(…).dev` 相同)、且卷是 APFS(`/usr/bin/stat -f %Sd` 取设备名,`/sbin/mount` 里这个设备那一行的文件系统类型),不满足或判断不了 → 抛 `no_cow`,满足才 `/bin/cp -cR <主目录> <目标>`;linux `cp -R --reflink=always <主目录> <目标>`;复制命令失败 → 删掉已产生的目标目录,抛 `no_cow`。`requiredBytes` = `du -sk <主目录>` × 1024。`fullCopy` 为 true 时用 `cp -R`,不做判断。
      - 整理(spec D21 ①~⑥,①~⑤ 任一步失败:`fs.rmSync(目标, { recursive: true, force: true })`,已写的登记文件删掉,抛原错误;主目录不动):
        1. 先把各 agent 配置目录(`listAgentProfiles()` 各项的 `configDirName`,如 `.claude`)和 `codeGraphDirName()` 写成 `/<目录名>/`,逐行追加到副本的 `.git/info/exclude`(`.git/info/` 不在就建;已有同一行不重复加);再在副本里取 `git ls-files --others --exclude-standard -z`(这时已不含上面这些目录):位于 `docs/features/<featureId>/` 下的保留,其余逐个删除,删完顺手删掉因此变空的目录(`docs/features/<featureId>/` 本身不删)
        2. `<副本>/<codeGraphDirName()>/` 下除 `.gitignore` 以外的条目逐个 `fs.rmSync(…, { recursive: true, force: true })`,`.gitignore` 原样保留、不改写;目录不在或没有 `.gitignore` 时才调 `createDirectory(副本)`(它会建目录和 `.gitignore`)→ `DatabaseConnection.open(getLocalDatabasePath(副本)).close()`(空的本地库)→ `fs.symlinkSync(realpath(getCodeGraphDir(主目录)), path.join(getCodeGraphDir(副本), SHARED_LINK_NAME), 'dir')`
@@ -67,6 +67,6 @@
   1. `feat(replica): 副本子系统——登记、路径换算、开 / 列 / 删副本`:`src/core/replica/` 下 10 个文件
 - 风险/注意事项:
   - 复制前主目录工作区必须干净(F7①),否则副本会带走没提交的改动
-  - `cp -cR` 在同一 APFS 卷内才是克隆;跨卷会失败或退化成整份复制——以命令失败为准返回 `no_cow`,不要自己判断文件系统
+  - macOS 的 `cp -c` 克隆不了时会悄悄退成整份复制、命令照样成功,只看命令失败判不出 `no_cow`(spec D20)——复制前先判断同卷且是 APFS;Linux 的 `--reflink=always` 不能克隆就失败,以命令失败为准
   - `.git/info/exclude` 只写副本自己的,主目录的不动
   - 符号链接目标写 realpath 绝对路径,保证主目录、副本里打开的是同一个库文件(WAL 文件跟着走)

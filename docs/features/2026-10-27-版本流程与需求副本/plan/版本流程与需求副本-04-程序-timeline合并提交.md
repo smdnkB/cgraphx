@@ -1,7 +1,7 @@
 # T-4: 程序——timeline 记合并提交
 
 > 产物: plan
-> 依据: spec@68ac94e
+> 依据: spec@3eef166
 
 - 目标:timeline 的 git 钩子改经 git-hooks 写入(跟随 core.hooksPath、紧跟 shebang),新增 post-merge 片段记下合并提交;副本里拒绝 `--purge` 清数据
 - 对应 spec 编号:F8(合并提交记进主目录)、D32、D33;全局约束「副本里会删共用数据的操作直接拒绝」
