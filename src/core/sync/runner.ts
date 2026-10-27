@@ -2,11 +2,12 @@
  * 同步执行器(spec §4.1–§4.6、§9):候选判定 → 构造 → 发送前断言 → 分批上报 → 失败分级 → 进度推进。
  *
  * 进度只按「整批成功响应」推进(spec §4.6),不使用回执里的 `accepted` 计数;`warnings` 不重试,
- * 明细随结果返回并持久化,`sync status` / `sync now` 展示。
- * 一轮同步期间持有 `.cgraphx/sync.lock`;worker 另持 `.cgraphx/sync-worker.pid`(见 lock.ts)。
+ * 明细随结果返回并持久化,`sync status` / `sync now` 展示。不论从哪个目录触发都按主目录跑(spec D25)。
+ * 一轮同步期间持有数据目录下的 `sync.lock`;worker 另持 `sync-worker.pid`(见 lock.ts)。
  */
 
 import type { SqliteDatabase } from '../db';
+import { resolveMainRoot } from '../replica';
 import { recordFeatureTaskMappings, refreshAutoBindings } from '../task';
 import { listCommitEvents, listSessionEventMaxIds } from '../timeline';
 import { chunkSession, envelopeBytes, groupBySession, packBatches, splitChunkEvents, type Chunk } from './batching';
@@ -27,6 +28,7 @@ import { isSafeRelPath } from './paths';
 import {
   basisOf,
   bindingsHashOf,
+  buildReplicaSessionPayloads,
   buildSessionPayload,
   buildTerminalPayload,
   createSyncContext,
@@ -100,7 +102,7 @@ export function isAgentCandidate(
   return row.isolated_reason !== null && row.isolated_client_version !== ctx.clientVersion;
 }
 
-/** 终端会话是否需要发送:有终端 commit、未被同版本隔离、内容哈希变化。 */
+/** 终端会话(仓库终端会话、副本会话)是否需要发送:有 commit、未被同版本隔离、内容哈希变化。 */
 export function terminalNeedsSend(
   built: BuiltSession | null,
   rows: Map<string, SyncSessionRow>,
@@ -309,6 +311,12 @@ async function collectChunks(round: Round): Promise<Chunk[]> {
   if (terminal !== null) replaceUnreported(db, terminal.session.clientSessionId, terminal.unreported);
   if (terminalNeedsSend(terminal, rows, ctx.clientVersion)) builtList.push(terminal);
 
+  // 副本里没对上会话的提交:每个副本一个会话,处理同仓库终端会话(spec D28)
+  for (const replica of buildReplicaSessionPayloads(ctx)) {
+    replaceUnreported(db, replica.session.clientSessionId, replica.unreported);
+    if (terminalNeedsSend(replica, rows, ctx.clientVersion)) builtList.push(replica);
+  }
+
   const chunks: Chunk[] = [];
   for (const built of builtList) {
     const dropped = dropUnsafePaths(built.session);
@@ -345,6 +353,7 @@ function makeResult(
  * @throws SyncBusyError foreground 且等锁超时(后台同步正在进行)。
  */
 export async function runSync(projectRoot: string, mode: SyncMode): Promise<SyncRunResult> {
+  projectRoot = resolveMainRoot(projectRoot);
   const startedAt = new Date().toISOString();
 
   // 1. 接入判定
@@ -521,6 +530,7 @@ function sleep(ms: number): Promise<void> {
 /** 后台 worker:同步一轮后尾随等待,期间有新活动就再跑一轮。任何异常写 stderr,不抛出。 */
 export async function runWorker(projectRoot: string): Promise<void> {
   try {
+    projectRoot = resolveMainRoot(projectRoot);
     if (!claimWorker(projectRoot)) return;
     try {
       for (;;) {

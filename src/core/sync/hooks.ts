@@ -3,6 +3,7 @@
  *
  * 两个隐藏命令共用的规则:
  *   - CGRAPHX_NO_TIMELINE 生效时直接返回:不读 stdin、不输出、不拉起进程;
+ *   - 项目根一律换成主目录(spec D25):副本里的会话也按主目录判断、拉起主目录的 worker;
  *   - stdin 非 JSON 对象、项目未初始化、未接入平台时静默返回;
  *   - 不发网络请求、不等待子进程:拉起 detached worker 后立即返回;
  *   - 任何异常吞掉,只写 stderr `[sync] …`,退出码恒为 0。
@@ -16,7 +17,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { AgentProfile } from '../agents';
-import { getCodeGraphDir, isInitialized, resolveProjectRoot } from '../directory';
+import { getDataDir, isInitialized, resolveProjectRoot } from '../directory';
+import { resolveMainRoot } from '../replica';
 import { isKillSwitchOn } from '../timeline';
 import { readConnection } from './connection';
 import { FAIL_NOTICE_MS, HOOK_PERF_WARN_MS, PAUSE_NOTICES, TRIGGER_FILENAME, TRIGGER_THROTTLE_MS } from './constants';
@@ -48,7 +50,7 @@ export async function syncSessionStartHook(_profile: AgentProfile): Promise<void
 
 // ─── 共用骨架 ───────────────────────────────────────────────────────────────
 
-/** 关闭开关 → stdin → 项目根 → 已初始化 → 已接入;全部满足才交给 handler。 */
+/** 关闭开关 → stdin → 项目根(换成主目录)→ 已初始化 → 已接入;全部满足才交给 handler。 */
 async function runSyncHook(handler: (projectRoot: string) => void): Promise<void> {
   const start = Date.now();
   if (isKillSwitchOn()) return;
@@ -57,7 +59,7 @@ async function runSyncHook(handler: (projectRoot: string) => void): Promise<void
     const raw = await readStdinJson();
     if (raw === null) return;
     const cwd = typeof raw.cwd === 'string' && raw.cwd ? raw.cwd : process.cwd();
-    const projectRoot = resolveProjectRoot(cwd);
+    const projectRoot = resolveMainRoot(resolveProjectRoot(cwd));
     if (!isInitialized(projectRoot)) return;
     if (readConnection(projectRoot) === null) return;
     handler(projectRoot);
@@ -97,7 +99,7 @@ async function readStdinJson(): Promise<Record<string, unknown> | null> {
 
 /** 节流窗口内或已有存活 worker 时不拉起;否则 touch 触发文件并拉起 detached worker。 */
 function triggerWorker(projectRoot: string): void {
-  const triggerPath = path.join(getCodeGraphDir(projectRoot), TRIGGER_FILENAME);
+  const triggerPath = path.join(getDataDir(projectRoot), TRIGGER_FILENAME);
   const now = Date.now();
   try {
     if (now - fs.statSync(triggerPath).mtimeMs < TRIGGER_THROTTLE_MS) return;

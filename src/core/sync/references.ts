@@ -3,6 +3,7 @@
  *
  * 命令原文只在本模块内部用于推断,返回值只含沉淀目录文件路径与概念名,不出本机。
  * 口径与 `src/core/task/artifacts.ts` 的 collectReferences(本地 web)相互独立,不得互相引用。
+ * 路径按「主目录 + 全部登记过的副本」换算(spec D26),文件在不在到路径所在的根里看。
  */
 
 import fs from 'node:fs';
@@ -10,7 +11,7 @@ import path from 'node:path';
 
 import { extractCommandPathCandidates, type TimelineEvent } from '../timeline';
 import { SEDIMENT_DIRS } from './constants';
-import { createPathResolver, isSafeRelPath, type PathResolver } from './paths';
+import { createPathResolver, isSafeRelPath, rootOrMain, type PathResolver } from './paths';
 import type { SyncContext } from './payload';
 import type { IngestReference } from './types';
 
@@ -43,7 +44,7 @@ function isExistingFile(abs: string): boolean {
  * @returns 项目相对路径 → 首见 ts。
  */
 export function inferSedimentReads(ctx: SyncContext, events: TimelineEvent[]): Map<string, string> {
-  return inferWithResolver(ctx, events, createPathResolver(ctx.projectRoot, ctx.repoRoot));
+  return inferWithResolver(ctx, events, createPathResolver(ctx.projectRoot, ctx.repoRoot, ctx.roots));
 }
 
 function inferWithResolver(ctx: SyncContext, events: TimelineEvent[], resolver: PathResolver): Map<string, string> {
@@ -53,7 +54,8 @@ function inferWithResolver(ctx: SyncContext, events: TimelineEvent[], resolver: 
     const rel = resolver.fromAbs(raw, base);
     if (rel === null || !isSedimentPath(rel.projectRel)) return false;
     if (reads.has(rel.projectRel)) return true;
-    if (!isExistingFile(path.join(ctx.projectRoot, rel.projectRel))) return false;
+    // 在路径所在的根里看文件在不在;那个副本已不在就退回主目录
+    if (!isExistingFile(path.join(rootOrMain(rel.root, ctx.projectRoot), rel.projectRel))) return false;
     reads.set(rel.projectRel, ts);
     return true;
   };
@@ -92,7 +94,7 @@ export function collectSessionReferences(
   events: TimelineEvent[],
   outputPaths: Set<string>,
 ): IngestReference[] {
-  const resolver = createPathResolver(ctx.projectRoot, ctx.repoRoot);
+  const resolver = createPathResolver(ctx.projectRoot, ctx.repoRoot, ctx.roots);
   const merged = new Map<string, IngestReference>();
   const add = (ref: IngestReference): void => {
     if (ref.kind === 'file' && !isSafeRelPath(ref.value)) return;

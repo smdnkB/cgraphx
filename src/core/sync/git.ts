@@ -34,6 +34,8 @@ export interface GitCache {
   fileAddedIn(hash: string, repoRel: string): boolean;
   /** `repoRel` 当前是否被 git 跟踪。 */
   isTracked(repoRel: string): boolean;
+  /** 本仓库里有没有这个 commit(`git cat-file -e <hash>^{commit}`);副本里做、还没合入的提交主目录查不到。 */
+  hasCommit(hash: string): boolean;
 }
 
 /** 原样取 stdout(不 trim);失败返回 null。`core.quotePath=false` 保证非 ASCII 路径不被转义。 */
@@ -53,6 +55,7 @@ function runGitRaw(cwd: string, args: string[]): string | null {
 export function createGitCache(repoRoot: string): GitCache {
   const onRemote = new Map<string, boolean>();
   const addedFiles = new Map<string, Set<string>>();
+  const known = new Map<string, boolean>();
   let tracked: Set<string> | null = null;
 
   return {
@@ -79,6 +82,14 @@ export function createGitCache(repoRoot: string): GitCache {
         tracked = new Set((out ?? '').split('\0').filter((p) => p !== ''));
       }
       return tracked.has(repoRel);
+    },
+    hasCommit(hash: string): boolean {
+      const hit = known.get(hash);
+      if (hit !== undefined) return hit;
+      // cat-file -e 不输出内容,只看退出码:成功得到空串,失败得到 null
+      const result = runGitRaw(repoRoot, ['cat-file', '-e', `${hash}^{commit}`]) !== null;
+      known.set(hash, result);
+      return result;
     },
   };
 }

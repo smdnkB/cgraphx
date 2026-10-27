@@ -2,6 +2,8 @@
  * 上报产出(spec §11.1–§11.3、§11.5):类型识别经产物注册表 + 本会话产出收集。
  *
  * 口径只服务平台上报;类型标识与路径规则唯一定义在 `src/core/artifact-registry/`。
+ * 路径按「主目录 + 全部登记过的副本」换算(spec D26):读文件头、判断文件在不在、查跟踪状态
+ * 都在路径所在的根里做;提交相关的 git 查询先用主目录,主目录还没有的副本提交改到副本仓库查(D29)。
  */
 
 import fs from 'node:fs';
@@ -14,7 +16,8 @@ import {
   type ReportTier,
 } from '../artifact-registry';
 import type { TimelineEvent } from '../timeline';
-import { createPathResolver } from './paths';
+import type { GitCache } from './git';
+import { createPathResolver, rootOrMain, type RelPaths } from './paths';
 import type { SyncContext } from './payload';
 import type { IngestArtifact, IngestCommit, UnreportedArtifact } from './types';
 import type { ServerTier } from './version';
@@ -63,6 +66,37 @@ function laterTs(a: string, b: string): string {
 }
 
 /**
+ * 提交 hash → 提交所在副本的根(绝对路径);在主目录里做的提交不放。同一 hash 以第一条提交事件为准
+ * (与 payload 里 commit 去重保留首条一致)。没有副本里的提交时为空表。
+ */
+function commitRootsOf(ctx: SyncContext): Map<string, string> {
+  const roots = new Map<string, string>();
+  if (ctx.commitReplicas.size === 0) return roots;
+  const seen = new Set<string>();
+  for (const e of ctx.commitEvents) {
+    if (e.commit_hash === null || seen.has(e.commit_hash)) continue;
+    seen.add(e.commit_hash);
+    const replica = ctx.commitReplicas.get(e.id);
+    if (replica !== undefined) roots.set(e.commit_hash, path.resolve(replica.path));
+  }
+  return roots;
+}
+
+/**
+ * 提交相关的查询用哪个仓库:先用主目录;提交在副本里做、主目录里还没有(没合入),
+ * 且副本目录还在 → 用副本仓库。
+ */
+function gitForCommit(ctx: SyncContext, hash: string, commitRoot: string | undefined): GitCache {
+  if (commitRoot === undefined || ctx.git.hasCommit(hash)) return ctx.git;
+  return ctx.gitFor(rootOrMain(commitRoot, ctx.projectRoot));
+}
+
+/** 文件在不在:主目录照原来按仓库根拼仓库相对路径;副本按副本根拼项目内路径。 */
+function fileExistsIn(ctx: SyncContext, base: string, repoRel: string, projectRel: string): boolean {
+  return fs.existsSync(base === ctx.projectRoot ? path.join(ctx.repoRoot, repoRel) : path.join(base, projectRel));
+}
+
+/**
  * 收集本会话产出。
  *
  * @param events 本会话全部事件(终端会话传空数组)。
@@ -76,14 +110,16 @@ export function collectSessionArtifacts(
   events: TimelineEvent[],
   sessionCommits: IngestCommit[],
 ): { artifacts: IngestArtifact[]; outputPaths: Set<string>; unreported: UnreportedArtifact[] } {
-  const resolver = createPathResolver(ctx.projectRoot, ctx.repoRoot);
-  // repoRel → { projectRel, lastChangeTs }
-  const candidates = new Map<string, { projectRel: string; lastChangeTs: string }>();
-  const addCandidate = (rel: { repoRel: string; projectRel: string } | null, ts: string): void => {
+  const resolver = createPathResolver(ctx.projectRoot, ctx.repoRoot, ctx.roots);
+  const commitRoots = commitRootsOf(ctx);
+  // repoRel → { projectRel, root, lastChangeTs }
+  const candidates = new Map<string, { projectRel: string; root: string; lastChangeTs: string }>();
+  const addCandidate = (rel: RelPaths | null, ts: string): void => {
     if (rel === null) return;
     const prev = candidates.get(rel.repoRel);
     candidates.set(rel.repoRel, {
       projectRel: rel.projectRel,
+      root: rel.root,
       lastChangeTs: prev === undefined ? ts : laterTs(prev.lastChangeTs, ts),
     });
   };
@@ -96,7 +132,9 @@ export function collectSessionArtifacts(
     addCandidate(resolver.fromAbs(p, e.cwd), e.ts);
   }
   for (const c of sessionCommits) {
-    for (const f of c.files) addCandidate(resolver.fromRepoRel(f), c.ts);
+    // 提交里的文件落在提交所在的根(副本里做的提交 → 副本)
+    const root = commitRoots.get(c.hash);
+    for (const f of c.files) addCandidate(resolver.fromRepoRel(f, root), c.ts);
   }
 
   const outputPaths = new Set<string>();
@@ -104,8 +142,10 @@ export function collectSessionArtifacts(
 
   const artifacts: IngestArtifact[] = [];
   const unreported: UnreportedArtifact[] = [];
-  for (const [repoRel, { projectRel, lastChangeTs }] of candidates) {
-    const identity = identifyArtifact(ctx.projectRoot, projectRel);
+  for (const [repoRel, { projectRel, root, lastChangeTs }] of candidates) {
+    // 读文件头、判断文件在不在都在路径所在的根里做;那个副本已不在就退回主目录
+    const base = rootOrMain(root, ctx.projectRoot);
+    const identity = identifyArtifact(base, projectRel);
     if (identity === null || identity.localOnly) continue;
 
     const changeMs = Date.parse(lastChangeTs);
@@ -115,7 +155,7 @@ export function collectSessionArtifacts(
     const hasCommit = commit !== undefined && commit.commit_hash !== null;
 
     // 无 commit:改过又删掉、从未进入 commit 的文件不上报
-    if (!hasCommit && !fs.existsSync(path.join(ctx.repoRoot, repoRel))) continue;
+    if (!hasCommit && !fileExistsIn(ctx, base, repoRel, projectRel)) continue;
 
     // 档位可上报集合之外:不发送,记为未上报产出
     if (!ctx.allowedTypes.has(identity.type)) {
@@ -126,11 +166,12 @@ export function collectSessionArtifacts(
     let artifact: IngestArtifact;
     if (commit !== undefined && commit.commit_hash !== null) {
       const hash = commit.commit_hash;
+      const git = gitForCommit(ctx, hash, commitRoots.get(hash));
       artifact = {
         type: identity.type,
         path: repoRel,
-        action: ctx.git.fileAddedIn(hash, repoRel) ? 'create' : 'modify',
-        commitHash: ctx.git.isOnRemote(hash) ? hash : null,
+        action: git.fileAddedIn(hash, repoRel) ? 'create' : 'modify',
+        commitHash: git.isOnRemote(hash) ? hash : null,
         branch: typeof commit.metadata.branch === 'string' ? commit.metadata.branch : null,
         ts: lastChangeTs,
       };
@@ -138,7 +179,7 @@ export function collectSessionArtifacts(
       artifact = {
         type: identity.type,
         path: repoRel,
-        action: ctx.git.isTracked(repoRel) ? 'modify' : 'create',
+        action: ctx.gitFor(base).isTracked(repoRel) ? 'modify' : 'create',
         commitHash: null,
         branch: null,
         ts: lastChangeTs,

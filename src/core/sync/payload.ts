@@ -2,7 +2,11 @@
  * 上报内容构造(spec §5.1–§5.4、§6):从本地数据正向构造白名单内的 `IngestSession`。
  *
  * 每个协议字段只取自 plan T-3「字段来源表」,逐字段赋值,不展开 / 透传任何本地对象。
- * 从不读取 prompt 原文(仅 parseSlashSkill 内部取命令名)、命令原文、工具结果摘要(仅判断 success)、cwd(仅推断路径解析)。
+ * 从不读取 prompt 原文(仅 parseSlashSkill 内部取命令名)、命令原文、工具结果摘要(仅判断 success)、
+ * cwd(仅推断路径解析与提交在哪个副本里做)。
+ *
+ * 一轮上报以主目录为准(spec D25):上下文带「主目录 + 全部登记过的副本」,路径按它换算(D26);
+ * 副本里没对上会话的提交不进仓库终端会话,每个副本单独成一个带绑定的会话(D28)。
  */
 
 import { createHash } from 'node:crypto';
@@ -12,10 +16,16 @@ import path from 'node:path';
 
 import { agentConfigDir, listAgentProfiles } from '../agents';
 import { ARTIFACT_MAPPING_VERSION } from '../artifact-registry';
-import { listEffectiveBindings, listMyFeatureTaskDeclarations, type EffectiveBinding } from '../task';
+import { listProjectRoots, replicaOfCwd, type ProjectRoot, type ReplicaEntry } from '../replica';
+import {
+  featureBindingTarget,
+  listEffectiveBindings,
+  listMyFeatureTaskDeclarations,
+  type EffectiveBinding,
+} from '../task';
 import { listCommitEvents, listSessionEventsAfter, type TimelineEvent } from '../timeline';
 import { collectSessionArtifacts, reportableTypesFor } from './artifacts';
-import { TERMINAL_SESSION_PREFIX } from './constants';
+import { REPLICA_SESSION_PREFIX, TERMINAL_SESSION_PREFIX } from './constants';
 import { SyncArgError } from './errors';
 import { createGitCache, getOriginUrl, getRepoToplevel, type GitCache } from './git';
 import { isSafeRelPath } from './paths';
@@ -49,7 +59,14 @@ export interface SyncContext {
   commitEvents: TimelineEvent[];
   /** 有效绑定(含被取代段),按会话分组。 */
   bindingsBySession: Map<string, EffectiveBinding[]>;
+  /** 主目录仓库的 git 查询缓存。 */
   git: GitCache;
+  /** 按根取 git 查询缓存:主目录返回 `git`,副本按根懒建、一轮内复用(spec D29)。 */
+  gitFor(root: string): GitCache;
+  /** 主目录 + 全部登记过的副本(含已删除),按根路径长度降序;没有登记副本时只有主目录(spec D26)。 */
+  roots: ProjectRoot[];
+  /** 提交事件 id → cwd 所在的副本;只放在副本里做的提交,没有登记副本时为空。一轮开始时算一次。 */
+  commitReplicas: Map<number, ReplicaEntry>;
   /** 各已登记 agent 的项目级与用户级 `<configDir>/skills`。 */
   skillDirs: string[];
   /** 参考精确记录按会话分组(各组内 id 升序);一轮同步开始时一次性预载。 */
@@ -101,6 +118,20 @@ export async function createSyncContext(
   }
 
   const tier = opts?.tier ?? '1.0';
+  const commitEvents = await listCommitEvents(root);
+  const roots = listProjectRoots(root);
+
+  const git = createGitCache(repoRoot);
+  const replicaGits = new Map<string, GitCache>();
+  const gitFor = (gitRoot: string): GitCache => {
+    if (gitRoot === root) return git;
+    let cache = replicaGits.get(gitRoot);
+    if (cache === undefined) {
+      cache = createGitCache(getRepoToplevel(gitRoot) ?? gitRoot);
+      replicaGits.set(gitRoot, cache);
+    }
+    return cache;
+  };
 
   return {
     projectRoot: root,
@@ -111,12 +142,33 @@ export async function createSyncContext(
     supportsTaskKey: tier !== '1.0',
     allowedTypes: reportableTypesFor(tier, opts?.projectTypes ?? null),
     reevaluateAll: false,
-    commitEvents: await listCommitEvents(root),
+    commitEvents,
     bindingsBySession,
-    git: createGitCache(repoRoot),
+    git,
+    gitFor,
+    roots,
+    commitReplicas: mapCommitReplicas(roots, commitEvents),
     skillDirs,
     referenceRecords: loadReferenceRecords(root),
   };
+}
+
+/**
+ * 提交事件 id → cwd 所在的副本(replica 门面 replicaOfCwd)。没有登记副本时直接返回空表;
+ * cwd 为空的事件不知道在哪做的,按主目录算。
+ */
+function mapCommitReplicas(
+  roots: readonly ProjectRoot[],
+  commitEvents: readonly TimelineEvent[],
+): Map<number, ReplicaEntry> {
+  const map = new Map<number, ReplicaEntry>();
+  if (!roots.some((r) => r.replica !== null)) return map;
+  for (const e of commitEvents) {
+    if (e.cwd === '') continue;
+    const replica = replicaOfCwd(roots, e.cwd);
+    if (replica !== null) map.set(e.id, replica);
+  }
+  return map;
 }
 
 /** 一次开库预载全部参考精确记录并按会话分组;库未初始化等异常 → 空 Map,不抛。 */
@@ -261,16 +313,19 @@ function sortedBindings(bindings: IngestBinding[]): IngestBinding[] {
   return byKey(bindings, (b) => b.bindingId);
 }
 
+/** 协议绑定段的哈希(有效绑定的会话与副本会话共用一个口径)。 */
+function ingestBindingsHash(bindings: IngestBinding[], supportsTaskKey: boolean): string {
+  return sha256(stableStringify({ supportsTaskKey, bindings: sortedBindings(bindings) }));
+}
+
 /**
  * 绑定段哈希:先映射成 IngestBinding 再求(任务名 / 状态变化不触发重发)。
  * 输入包含「服务端是否支持任务键」:支持与否变化时(如服务端升级到 1.1 及以上)各会话哈希变化,自动重报一次。
  */
 export function bindingsHashOf(entries: EffectiveBinding[], supportsTaskKey: boolean): string {
-  return sha256(
-    stableStringify({
-      supportsTaskKey,
-      bindings: sortedBindings(entries.map((entry) => toIngestBinding(entry, supportsTaskKey))),
-    }),
+  return ingestBindingsHash(
+    entries.map((entry) => toIngestBinding(entry, supportsTaskKey)),
+    supportsTaskKey,
   );
 }
 
@@ -363,9 +418,12 @@ export function terminalSessionId(remoteUrl: string): string {
   return TERMINAL_SESSION_PREFIX + sha256(remoteUrl).slice(0, 16);
 }
 
-/** 构造终端会话(session_id 为空的 commit);没有终端 commit 返回 null。 */
+/**
+ * 构造仓库终端会话(session_id 为空、不在副本里做的 commit);没有这样的 commit 返回 null。
+ * 副本里做的归各自的副本会话(buildReplicaSessionPayloads)。
+ */
 export function buildTerminalPayload(ctx: SyncContext): BuiltSession | null {
-  const terminalEvents = ctx.commitEvents.filter((e) => e.session_id === null);
+  const terminalEvents = ctx.commitEvents.filter((e) => e.session_id === null && !ctx.commitReplicas.has(e.id));
   const commits = toIngestCommits(terminalEvents);
   if (commits.length === 0) return null;
   const { artifacts, unreported } = collectSessionArtifacts(ctx, [], commits);
@@ -382,4 +440,75 @@ export function buildTerminalPayload(ctx: SyncContext): BuiltSession | null {
     references: [],
   };
   return finish(session, maxEventId, bindingsHashOf([], ctx.supportsTaskKey), unreported);
+}
+
+/** 副本会话 id:前缀 + sha256(origin 远程地址) 前 16 位 + `-` + sha256(副本目录名) 前 8 位(十六进制)。 */
+export function replicaSessionId(remoteUrl: string, replicaName: string): string {
+  return `${REPLICA_SESSION_PREFIX}${sha256(remoteUrl).slice(0, 16)}-${sha256(replicaName).slice(0, 8)}`;
+}
+
+/** 这些 commit 里最早的 ts(调用方保证非空)。 */
+function earliestCommitTs(commits: IngestCommit[]): string {
+  let earliest: string | null = null;
+  for (const c of commits) {
+    if (earliest === null || Date.parse(c.ts) < Date.parse(earliest)) earliest = c.ts;
+  }
+  return earliest ?? '';
+}
+
+/**
+ * 副本会话的那一条绑定:指向副本需求对应的平台任务(只经 task 门面 featureBindingTarget 取),
+ * 从这些提交里最早的一条起、不设结束;任务键只在有、且服务端支持任务键时带(同 toIngestBinding)。
+ */
+function replicaBinding(ctx: SyncContext, sessionId: string, featureId: string, commits: IngestCommit[]): IngestBinding {
+  const target = featureBindingTarget(ctx.projectRoot, featureId);
+  const binding: IngestBinding = {
+    bindingId: `${sessionId}:replica`,
+    taskId: target.taskId,
+    start: earliestCommitTs(commits),
+    end: null,
+  };
+  if (ctx.supportsTaskKey && target.taskKey !== null) binding.taskKey = target.taskKey;
+  return binding;
+}
+
+/**
+ * 构造副本会话(spec D28):session_id 为空、在副本里做的 commit 按副本分组,每个副本一个会话。
+ * events / references 为空;commits、artifacts 照仓库终端会话构造(产出只看提交里的文件,路径按提交
+ * 所在的根换算);绑定一条(replicaBinding)。没有登记副本、或副本里没有这样的 commit 时返回空数组。
+ */
+export function buildReplicaSessionPayloads(ctx: SyncContext): BuiltSession[] {
+  // 副本目录名 → 该副本里没对上会话的提交事件(保持 commitEvents 的 ts、id 升序)
+  const groups = new Map<string, { replica: ReplicaEntry; events: TimelineEvent[] }>();
+  for (const e of ctx.commitEvents) {
+    if (e.session_id !== null) continue;
+    const replica = ctx.commitReplicas.get(e.id);
+    if (replica === undefined) continue;
+    const group = groups.get(replica.name);
+    if (group === undefined) groups.set(replica.name, { replica, events: [e] });
+    else group.events.push(e);
+  }
+
+  const built: BuiltSession[] = [];
+  for (const { replica, events } of groups.values()) {
+    const commits = toIngestCommits(events);
+    if (commits.length === 0) continue;
+    const { artifacts, unreported } = collectSessionArtifacts(ctx, [], commits);
+
+    let maxEventId = 0;
+    for (const e of events) if (e.id > maxEventId) maxEventId = e.id;
+
+    const clientSessionId = replicaSessionId(ctx.remoteUrl, replica.name);
+    const bindings = [replicaBinding(ctx, clientSessionId, replica.featureId, commits)];
+    const session: IngestSession = {
+      clientSessionId,
+      events: [],
+      bindings,
+      commits,
+      artifacts,
+      references: [],
+    };
+    built.push(finish(session, maxEventId, ingestBindingsHash(bindings, ctx.supportsTaskKey), unreported));
+  }
+  return built;
 }

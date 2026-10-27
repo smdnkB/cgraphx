@@ -23,19 +23,25 @@ export const CLIENT_TIMEOUT_MS = 30_000;
 /** 终端会话 id 前缀(后接 16 位十六进制)。 */
 export const TERMINAL_SESSION_PREFIX = 'cgraphx-terminal-';
 
+/**
+ * 副本会话 id 前缀(spec D28):后接 sha256(远程地址) 的十六进制前 16 位 + `-` + sha256(副本目录名)
+ * 的十六进制前 8 位。副本里没对上会话的提交,每个副本单独成一个会话。
+ */
+export const REPLICA_SESSION_PREFIX = 'cgraphx-replica-';
+
 /** 沉淀目录(项目根相对 POSIX 路径前缀;唯一定义处是产物注册表)。 */
 export const SEDIMENT_DIRS = SEDIMENT_DIR_PREFIXES;
 
-/** 一次 runSync 期间持有的互斥锁文件名(位于 `.cgraphx/`)。 */
+/** 一次 runSync 期间持有的互斥锁文件名(位于数据目录,即主目录的 `.cgraphx/`)。 */
 export const LOCK_FILENAME = 'sync.lock';
 
-/** 拉起节流用的触发文件名(位于 `.cgraphx/`)。 */
+/** 拉起节流用的触发文件名(位于数据目录)。 */
 export const TRIGGER_FILENAME = 'sync-trigger';
 
 /** 锁超过此时长视为陈旧,可接管。 */
 export const LOCK_STALE_MS = 2 * 3600_000;
 
-/** worker 存活标记文件名(位于 `.cgraphx/`;worker 整个生命周期持有)。 */
+/** worker 存活标记文件名(位于数据目录;worker 整个生命周期持有)。 */
 export const WORKER_PID_FILENAME = 'sync-worker.pid';
 
 /** 非凭据类暂停时,后台探测平台恢复的最小间隔。 */

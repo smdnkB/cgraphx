@@ -9,6 +9,7 @@
  *   - cgraphx sync-worker     [--project <path>]   (隐藏顶层命令,由 hook / connect 拉起)
  *   - cgraphx sync-session-start-hook [--agent <id>] / sync-stop-hook [--agent <id>](隐藏 hook 入口)
  *
+ * 项目根一律换成主目录(spec D25):在副本里执行,接入、上报、状态都是主目录的。
  * 密码不进命令行参数:终端交互关回显输入,或 `--password-stdin` 从 stdin 读第一行。
  * 退出码经 exitCodeForError / exitCodeForRunResult。stderr 错误带 `[sync]` 前缀;错误输出不含 token / 密码。
  */
@@ -20,6 +21,7 @@ import type { Command } from 'commander';
 
 import { AGENT_OPTION_FLAG, resolveHookAgent } from '../agents';
 import { resolveProjectRoot } from '../directory';
+import { resolveMainRoot } from '../replica';
 import { PLATFORM_HINTS } from './constants';
 import {
   SyncArgError,
@@ -222,7 +224,7 @@ export function registerSyncCommands(program: Command): void {
     .option('--json', '输出机器可读 JSON')
     .action(
       async (opts: { server?: string; user?: string; force?: boolean; passwordStdin?: boolean; json?: boolean }) => {
-        const projectRoot = resolveProjectRoot(process.cwd());
+        const projectRoot = resolveMainRoot(resolveProjectRoot(process.cwd()));
         try {
           const outcome = await connectPlatform(projectRoot, {
             serverUrl: opts.server,
@@ -258,7 +260,7 @@ export function registerSyncCommands(program: Command): void {
     .option('--json', '输出机器可读 JSON')
     .action((opts: { json?: boolean }) => {
       try {
-        const projectRoot = resolveProjectRoot(process.cwd());
+        const projectRoot = resolveMainRoot(resolveProjectRoot(process.cwd()));
         const removed = disconnectPlatform(projectRoot);
         if (opts.json) writeJson({ removed });
         else
@@ -276,7 +278,7 @@ export function registerSyncCommands(program: Command): void {
     .option('--json', '输出机器可读 JSON')
     .action(async (opts: { json?: boolean }) => {
       try {
-        const projectRoot = resolveProjectRoot(process.cwd());
+        const projectRoot = resolveMainRoot(resolveProjectRoot(process.cwd()));
         const result = await runSync(projectRoot, 'foreground');
         if (opts.json) writeJson(result);
         else {
@@ -296,7 +298,7 @@ export function registerSyncCommands(program: Command): void {
     .option('--json', '输出机器可读 JSON')
     .action(async (opts: { json?: boolean }) => {
       try {
-        const projectRoot = resolveProjectRoot(process.cwd());
+        const projectRoot = resolveMainRoot(resolveProjectRoot(process.cwd()));
         const report = await getSyncStatus(projectRoot);
         if (!report.connected) throw new SyncNotConnectedError('未接入平台(cgraphx sync connect 接入)');
         if (opts.json) writeJson(report);
@@ -312,7 +314,7 @@ export function registerSyncCommands(program: Command): void {
     .option('--project <path>', '项目根目录')
     .action(async (opts: { project?: string }) => {
       try {
-        await runWorker(opts.project ?? resolveProjectRoot(process.cwd()));
+        await runWorker(resolveMainRoot(opts.project ?? resolveProjectRoot(process.cwd())));
       } catch {
         // runWorker 自行写 stderr;此处兜底保证退出码 0
       }

@@ -1,21 +1,22 @@
 /**
  * 两个标记文件(语义分开):
- *   - 同步互斥锁 `.cgraphx/sync.lock`:只在一次 runSync 期间持有,让前台 `sync now` 与后台互斥;
- *   - worker 存活标记 `.cgraphx/sync-worker.pid`:worker 整个生命周期(含尾随睡眠)持有,保证同仓库最多 1 个 worker。
+ *   - 同步互斥锁 `sync.lock`:只在一次 runSync 期间持有,让前台 `sync now` 与后台互斥;
+ *   - worker 存活标记 `sync-worker.pid`:worker 整个生命周期(含尾随睡眠)持有,保证同仓库最多 1 个 worker。
  *
- * 两者都用 `wx` 独占创建,内容 `{"pid":…,"startedAt":…}`;pid 不存活或 mtime 超过 LOCK_STALE_MS 视为陈旧,删除后接管。
+ * 两者都放在数据目录(spec D24:副本里经 `.cgraphx/shared` 落在主目录,主目录与副本共用一把锁),
+ * 都用 `wx` 独占创建,内容 `{"pid":…,"startedAt":…}`;pid 不存活或 mtime 超过 LOCK_STALE_MS 视为陈旧,删除后接管。
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { getCodeGraphDir } from '../directory';
+import { getDataDir } from '../directory';
 import { LOCK_FILENAME, LOCK_STALE_MS, WORKER_PID_FILENAME } from './constants';
 
 const RETRY_INTERVAL_MS = 1000;
 
 function markerPath(projectRoot: string, filename: string): string {
-  return path.join(getCodeGraphDir(projectRoot), filename);
+  return path.join(getDataDir(projectRoot), filename);
 }
 
 /** 读标记文件里的 pid;读不到 / 内容非法返回 null。 */
