@@ -11,6 +11,7 @@ import path from 'node:path';
 
 import { DatabaseConnection, getDatabasePath, type SqliteDatabase } from '../db';
 import { SYNC_SCHEMA_VERSION } from './constants';
+import { resolveDataDir } from '../directory';
 import { SyncError, SyncNotInitializedError, SyncSchemaError } from './errors';
 
 /** schema.sql 与编译后的模块同目录(dist 镜像 src)。 */
@@ -68,7 +69,15 @@ export function openSyncDb(projectRoot: string): DatabaseConnection {
   const dbPath = getDatabasePath(resolved);
 
   if (!fs.existsSync(dbPath)) {
-    throw new SyncNotInitializedError(`cgraphx 未在 ${resolved} 初始化,请先运行 \`cgraphx install\``);
+    // 副本关联的主目录已不在(或调用方已换成那个不在的主目录):说不在了,不说「未初始化」(spec D31)
+    const data = resolveDataDir(resolved);
+    throw new SyncNotInitializedError(
+      data.state === 'main-missing'
+        ? `副本关联的主项目不在 ${data.mainRoot} 了`
+        : !fs.existsSync(resolved)
+          ? `项目目录 ${resolved} 不在了`
+          : `cgraphx 未在 ${resolved} 初始化,请先运行 \`cgraphx install\``,
+    );
   }
 
   const connection = DatabaseConnection.open(dbPath);
