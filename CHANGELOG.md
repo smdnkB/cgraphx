@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Changed — clarification locks business definitions before drawing the plan
+
+`/dev-clarify` has a new step before the feature cards: business definitions
+(口径). Every word the feature reads data by — which orders count, which date
+"the last 90 days" uses, whether amounts subtract refunds — gets a definition
+with in/out examples, numbered K1, K2… The AI reuses definitions from the
+knowledge base and existing reports first and flags any conflict; the person
+corrects the values. Cards, diagrams and the spec refer to definitions by
+number, and new ones are offered to `/knowledge-write` when implementation
+wraps up. `/unit-spec` and `/ui-case` turn every in/out example into a
+boundary case: what counts must appear, what doesn't must not.
+
+For requirements with several feature points, clarification also writes the
+feature plan to a draft, `<prefix>-功能方案-v<N>.md`, with a mermaid swimlane
+diagram of how users go through it. The diagrams follow the design document's
+style, and the drawing rules now live in one shared file. The conversation
+still shows the tables, plus the draft's path. `/dev-spec` copies the confirmed
+version as the spec's first section, and `/dev-handoff` points new sessions at
+the draft instead of copying it. The draft is not a registered artifact, so
+`features check` skips it.
+
 ### Changed — requirement directories can follow the project's naming rule
 
 Projects can now write their own requirement directory naming rule in
