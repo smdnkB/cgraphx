@@ -3,8 +3,9 @@
  * pre / post / stop hook。
  *
  * 每个 Claude Code hook 都是独立的短生命周期进程,没有共享内存,所以借文件传递。
- * 文件按会话隔离:`<projectRoot>/.cgraphx/turns/<安全会话名>.json`,并行会话
- * 各写各的,互不覆盖。内容格式为 `{turn_id, session_id, ts}`。
+ * 文件按会话隔离:`<数据目录>/turns/<安全会话名>.json`,并行会话各写各的,互不
+ * 覆盖。数据目录见 `directory.ts` 的 `getDataDir`:一般就是 `<projectRoot>/.cgraphx/`,
+ * 副本里是主目录的 `.cgraphx/`。内容格式为 `{turn_id, session_id, ts}`。
  *
  * 读取方容忍文件缺失 / 损坏(返回 null,duration_ms enricher 随之空转),
  * 写入 / 删除失败只写 stderr —— 任何情况都不阻塞 hook。
@@ -14,10 +15,12 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { getDataDir, resolveDataDir } from '../directory';
+
 /** 旧版全项目共享的 turn 状态文件名。新逻辑不再读写,只由 install 清理。 */
 export const LEGACY_TURN_STATE_FILENAME = 'timeline-current-turn.json';
 
-/** turn 状态目录(相对 `.cgraphx/`)。 */
+/** turn 状态目录(相对数据目录)。 */
 const TURNS_DIRNAME = 'turns';
 
 /** session_id 为 null 时使用的文件名。 */
@@ -35,8 +38,9 @@ export function safeSessionName(session_id: string | null): string {
   return createHash('sha1').update(session_id).digest('hex').slice(0, 16);
 }
 
+/** 本会话 turn 状态文件的路径;读、写、删都经这里取。 */
 export function turnStateFilePath(projectRoot: string, session_id: string | null): string {
-  return path.join(projectRoot, '.cgraphx', TURNS_DIRNAME, `${safeSessionName(session_id)}.json`);
+  return path.join(getDataDir(projectRoot), TURNS_DIRNAME, `${safeSessionName(session_id)}.json`);
 }
 
 /**
@@ -78,6 +82,8 @@ export function writeCurrentTurn(
     ts: turn.ts ?? new Date().toISOString(),
   };
   try {
+    // 副本关联的主目录已不在:不建目录、不写,否则会在旧位置重建 .cgraphx/(spec D24)
+    if (resolveDataDir(projectRoot).state === 'main-missing') return;
     const filePath = turnStateFilePath(projectRoot, turn.session_id);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(payload), { flag: 'w' });

@@ -2,20 +2,21 @@
  * 外部任务接口(spec §3.3 配置、§4 接口契约)。
  *
  * 配置文件 `.cgraphx/task-source.json`:不存在 → 未配置接口;存在但非法 → TaskConfigError。
+ * 配置文件在数据目录里(见 `directory.ts` 的 `getDataDir`),副本里读写的是主目录那份。
  * 拉取:`GET <url>` 附带 headers,AbortController 超时;失败一律 TaskSourceUnavailableError。
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { getCodeGraphDir } from '../directory';
+import { getDataDir } from '../directory';
 import { TASK_SOURCE_CONFIG_FILENAME, TASK_SOURCE_TIMEOUT_MS } from './constants';
 import { TaskConfigError, TaskSourceUnavailableError } from './errors';
 import type { RemoteTask, TaskSourceConfig } from './types';
 
 /** 配置文件绝对路径。 */
 export function getTaskSourceConfigPath(projectRoot: string): string {
-  return path.join(getCodeGraphDir(path.resolve(projectRoot)), TASK_SOURCE_CONFIG_FILENAME);
+  return path.join(getDataDir(path.resolve(projectRoot)), TASK_SOURCE_CONFIG_FILENAME);
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -73,10 +74,11 @@ export function loadTaskSourceConfig(projectRoot: string): TaskSourceConfig | nu
 /**
  * 写入任务源配置 `{"url":…,"headers":{…}}`(2 空格缩进 + 换行),文件权限 0o600。
  *
- * @throws TaskConfigError `.cgraphx/` 不存在(项目未初始化)或写入失败。
+ * @throws TaskConfigError 数据目录不存在(项目未初始化,或副本关联的主目录已不在)或写入失败。
  */
 export function writeTaskSourceConfig(projectRoot: string, config: TaskSourceConfig): void {
-  const dir = getCodeGraphDir(path.resolve(projectRoot));
+  // 数据目录不在时照原逻辑报错,不建目录(副本关联的主目录已不在时同样如此,spec D24)
+  const dir = getDataDir(path.resolve(projectRoot));
   if (!fs.existsSync(dir)) {
     throw new TaskConfigError(`cgraphx 未在 ${path.resolve(projectRoot)} 初始化,请先运行 \`cgraphx install\``);
   }

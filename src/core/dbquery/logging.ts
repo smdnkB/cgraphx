@@ -14,11 +14,13 @@ import * as path from 'node:path';
 
 import { LOG_FILENAME, LOG_MAX_BYTES, LOG_KEEP_FILES } from './constants';
 import type { QueryLogRecord } from './types';
+import { getDataDir, resolveDataDir } from '../directory';
 
 const POSIX = process.platform !== 'win32';
 
+/** 查询日志在数据目录里,副本里的查询记进主目录那份。 */
 function logPath(projectRoot: string): string {
-  return path.join(projectRoot, '.cgraphx', LOG_FILENAME);
+  return path.join(getDataDir(projectRoot), LOG_FILENAME);
 }
 
 /**
@@ -69,6 +71,9 @@ function rotateIfNeeded(filePath: string): void {
  *   - failures do not throw; one stderr warning per failure
  */
 export function logQuery(projectRoot: string, record: QueryLogRecord): void {
+  // 副本关联的主目录已不在:不建目录、不写、不报错,否则会在旧位置重建 .cgraphx/(spec D24)
+  if (resolveDataDir(projectRoot).state === 'main-missing') return;
+
   const filePath = logPath(projectRoot);
   const dir = path.dirname(filePath);
 

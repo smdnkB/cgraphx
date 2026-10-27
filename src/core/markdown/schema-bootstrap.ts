@@ -16,7 +16,7 @@ import path from 'node:path';
 
 import {
   DatabaseConnection,
-  getDatabasePath,
+  getLocalDatabasePath,
   type SqliteDatabase,
 } from '../db';
 import { ProjectNotInitializedError, SchemaMismatchError } from './errors';
@@ -78,7 +78,8 @@ export function ensureMarkdownSchema(db: SqliteDatabase): void {
  */
 export function openMarkdownDb(projectRoot: string): DatabaseConnection {
   const resolved = path.resolve(projectRoot);
-  const dbPath = getDatabasePath(resolved);
+  // 知识库固定用本地库:副本里知识库索引各目录各建各的,不走数据目录(spec D24)
+  const dbPath = getLocalDatabasePath(resolved);
 
   if (!fs.existsSync(dbPath)) {
     throw new ProjectNotInitializedError(resolved);

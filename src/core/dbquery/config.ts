@@ -40,6 +40,7 @@ import {
   type ConfigSource,
 } from './types';
 import { ConfigNotFoundError } from './errors';
+import { getDataDir } from '../directory';
 
 const VALID_DRIVERS: ReadonlySet<DriverKind> = new Set(['mysql', 'postgres', 'http']);
 
@@ -75,8 +76,9 @@ function userGlobalConfigPath(): string {
   return path.join(os.homedir(), '.cgraphx', PROFILES_FILENAME);
 }
 
+/** 项目级连接配置:在数据目录里,副本读的是主目录那份(与 init.ts 写入同一路径)。 */
 function projectLocalConfigPath(projectRoot: string): string {
-  return path.join(projectRoot, '.cgraphx', PROFILES_FILENAME);
+  return path.join(getDataDir(projectRoot), PROFILES_FILENAME);
 }
 
 function envConfigPath(): string | null {
