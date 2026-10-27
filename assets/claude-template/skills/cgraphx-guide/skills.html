@@ -299,7 +299,7 @@ footer p { margin: 0 0 6px; }
 <div class="group-title">版本流程(可选)</div>
 
 <details class="skill" id="release-start">
-<summary><span class="name">/release-start</span><span class="oneline">发完一版开下一版:打 tag、拉版本分支、装提交拦截</span><span class="how how-cmd">敲命令</span></summary>
+<summary><span class="name">/release-start</span><span class="oneline">发完一版开下一版:打 tag、拉版本分支、装提交拦截</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>刚发完一个版本、要按版本开发下一个;在主干(<code>main</code>,没有 main 时是 <code>master</code>)上跑。不跑就不按版本走。</dd>
 <dt>怎么用</dt><dd>敲 <code>/release-start</code>;下个版本号不是末位加一时说「下个版本是 2.1.0」。</dd>
@@ -310,7 +310,7 @@ footer p { margin: 0 0 6px; }
 </details>
 
 <details class="skill" id="dev-start">
-<summary><span class="name">/dev-start</span><span class="oneline">给需求开一个写时复制副本,在副本里单独做</span><span class="how how-cmd">敲命令</span></summary>
+<summary><span class="name">/dev-start</span><span class="oneline">给需求开一个写时复制副本,在副本里单独做</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>开始做一个需求,不想和别的需求挤在同一个分支上;开了版本时每个需求都先开副本,没开版本也能单独用。</dd>
 <dt>怎么用</dt><dd>在主目录的会话里敲 <code>/dev-start 订单导出</code>,再照给出的启动语到副本目录开新会话。</dd>
@@ -321,7 +321,7 @@ footer p { margin: 0 0 6px; }
 </details>
 
 <details class="skill" id="dev-merge">
-<summary><span class="name">/dev-merge</span><span class="oneline">需求做完合回主目录当前分支,合之前在副本里先同步</span><span class="how how-cmd">敲命令</span></summary>
+<summary><span class="name">/dev-merge</span><span class="oneline">需求做完合回主目录当前分支,合之前在副本里先同步</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>副本里的需求做完、<code>/code-review</code> 过了;合之前想先同步别的需求已经合入的改动;合入后又修了 bug,再合一次。</dd>
 <dt>怎么用</dt><dd>副本的会话里敲 <code>/dev-merge</code>:取主目录当前分支合进需求分支,有冲突就地解决;主目录的会话里敲 <code>/dev-merge 订单导出</code>:先预演,没冲突再合入。</dd>
@@ -332,7 +332,7 @@ footer p { margin: 0 0 6px; }
 </details>
 
 <details class="skill" id="release-review">
-<summary><span class="name">/release-review</span><span class="oneline">发版前出审核报告,你说「发」再合入主干</span><span class="how how-cmd">敲命令</span></summary>
+<summary><span class="name">/release-review</span><span class="oneline">发版前出审核报告,你说「发」再合入主干</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>发版那天,这一版的需求都合入版本分支之后。</dd>
 <dt>怎么用</dt><dd>先在版本分支上以 <code>chore(release): 版本号 2.0.10→2.0.11</code> 提交改好的版本号,再敲 <code>/release-review</code>;看完结论说「发」或「先不发」。</dd>
