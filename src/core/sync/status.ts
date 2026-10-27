@@ -7,7 +7,7 @@
 import { isInitialized } from '../directory';
 import { listSessionEventMaxIds, listSessionEventsAfter } from '../timeline';
 import { readConnection } from './connection';
-import { buildTerminalPayload, createSyncContext, type SyncContext } from './payload';
+import { buildReplicaSessionPayloads, buildTerminalPayload, createSyncContext, type SyncContext } from './payload';
 import { isAgentCandidate, terminalNeedsSend } from './runner';
 import { openSyncDb } from './schema-bootstrap';
 import {
@@ -99,6 +99,12 @@ export async function getSyncStatus(projectRoot: string): Promise<SyncStatusRepo
   }
   if (ctx !== null && terminalNeedsSend(buildTerminalPayload(ctx), rows, ctx.clientVersion)) {
     report.pendingSessions++;
+  }
+  // 副本里没对上会话的提交,每个副本一个会话(spec D28),判断同 runner 的发送口径
+  if (ctx !== null) {
+    for (const replica of buildReplicaSessionPayloads(ctx)) {
+      if (terminalNeedsSend(replica, rows, ctx.clientVersion)) report.pendingSessions++;
+    }
   }
   return report;
 }
