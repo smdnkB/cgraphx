@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { PROFILES_FILENAME } from './constants';
+import { DbQueryError } from './errors';
 import { getDataDir, resolveDataDir } from '../directory';
 
 const POSIX = process.platform !== 'win32';
@@ -75,7 +76,7 @@ export function initDbProfiles(projectRoot: string, opts: { force?: boolean } = 
   // 副本关联的主目录已不在:不建目录、不写,直接报错(spec D24、D31)
   const dataDir = resolveDataDir(resolved);
   if (dataDir.state === 'main-missing') {
-    throw new Error(`[cgraphx] 副本关联的主项目不在 ${dataDir.mainRoot} 了`);
+    throw new DbQueryError(`副本关联的主项目不在 ${dataDir.mainRoot} 了`, 'CONFIG_NOT_FOUND');
   }
   // 连接配置写进数据目录:副本里写的是主目录那份,与 config.ts 读取同一路径
   const codegraphDir = getDataDir(resolved);
