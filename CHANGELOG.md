@@ -135,6 +135,85 @@ option is dropped, since its template never loaded mermaid and diagrams did
 not render. The first-screen heading that `features check` requires for new
 design docs changes from 架构总览 to 30 秒看懂.
 
+### Added — release flow and requirement copies
+
+Until now every requirement of a release was committed onto one shared
+branch: a release review could not tell which change came from which
+requirement or whether anything slipped in, conflicts were hard to untangle,
+and agents working in parallel landed their changes on the same branch. Two
+optional flows address this. Projects that use neither keep developing on
+the current branch as before.
+
+- Version branches and release review. Right after a release, run
+  `/release-start` on `main` (`master` when there is no `main`): it tags the
+  release (`git tag -a v2.0.10 -m "发布 2.0.10"`), creates the version branch
+  `dev/2.0.11` and switches to it. Requirements reach the version branch only
+  as merge commits titled 「合入需求：<title>」. On release day, commit the
+  version bump as `chore(release): 版本号 2.0.10→2.0.11` and run
+  `/release-review`. It writes `docs/releases/v2.0.11-发版审核.md` — commits,
+  files and tests per requirement, suspected smuggled changes, sensitive
+  changes (SQL, dependency manifests, `.env*`), files two requirements both
+  changed, a dry-run merge into `main`, defects, and requirements still in
+  copies — commits it as `chore(release): 2.0.11 发版审核报告` and gives a
+  verdict: 可以发, 有风险 or 不能直接合. Say 「发」 and it merges the version
+  branch into `main` as 「发布 2.0.11:合入 …」 and lists the copies that can be
+  deleted. It does not tag, publish or push: publish the way you do today,
+  then run `/release-start` again, which tags the release.
+- A commit-msg hook keeps the version branch clean: on `dev/x.y.z` it
+  rejects direct commits and lets through only merge commits and commits
+  starting with `chore(release):`, whether they come from an agent or the
+  terminal. `/release-start` installs it with `cgraphx release guard` each
+  time it runs, restoring it if a hook manager overwrote it;
+  `cgraphx install` does not install it, and `cgraphx uninstall` removes it.
+- Requirement copies. `/dev-start <requirement>` clones the project next to
+  itself as `<project>@<prefix>` with copy-on-write (`cp -cR` on APFS,
+  `cp -R --reflink=always` on Linux: about a second for a 4 GB repository,
+  almost no extra disk), creates `feat/<prefix>` (`fix/` for bug fixes) from
+  the main directory's current branch, and gives the line for starting a new
+  session there. Ignored files such as dependencies and `.env` come along, so
+  nothing needs reinstalling; untracked files stay behind, except the
+  requirement's own drafts, which move into the copy. In the copy,
+  `/dev-merge` merges the main directory's current branch in, so conflicts
+  are resolved there; in the main directory, `/dev-merge <requirement>`
+  dry-runs the merge, then merges. Without a version branch, a copy merges
+  back into whatever branch the main directory is on and is offered for
+  deletion right after. `/dev-handoff` opens one copy per handoff target when
+  the main directory is on a version branch, and by default when copies are
+  already in use. The program side is
+  `cgraphx replica create | list | remove`; `remove` deletes a copy only when
+  it matches its registration and has no uncommitted changes, and never
+  follows links.
+- Copies share the main directory's data. A copy's `.cgraphx/` holds a
+  `shared` link to the main `.cgraphx/`, and every copy is registered in
+  `.cgraphx/replicas/<name>.json`. Sessions, tool calls, commits and task
+  bindings made in a copy are recorded in the main directory; a session
+  started in a copy belongs to the copy's requirement unless it was bound
+  with `cgraphx task use`. `task show`, `sync` and `/doc-report` show
+  project-relative paths, the records outlive the copy, and `features list`
+  also lists requirements being worked on in copies, marked 「在副本 <name>」
+  (in JSON, a `replica` field on those entries only). The knowledge-base
+  index and `my-features.md` stay per directory, so knowledge written in a
+  copy is recalled elsewhere once it is merged. If the main directory is
+  moved or renamed, hooks in the copy keep passing and cgraphx commands print
+  「副本关联的主项目不在 <path> 了」. `timeline uninstall --purge` is refused in a
+  copy. Copies run on macOS and Linux; the dry-run merges need git 2.38 or
+  later.
+- Merge commits are recorded. `git merge` does not run the post-commit hook,
+  so the timeline never saw merges. A post-merge hook now records merge
+  commits as `git_commit` events with an empty file list and the merge's
+  file and line counts in `metadata.merge`. A conflicted merge finished with
+  `git commit` is recorded the same way; fast-forwards are skipped, and no
+  commit is recorded twice.
+- Git hooks follow `core.hooksPath`. The timeline hooks and the release guard
+  are written to the directory `git rev-parse --git-path hooks` reports, so
+  commits are now recorded in projects that use husky. Snippets go right
+  after the shebang, so a hook ending in `exec` still runs them; a hook that
+  is not a shell script is left untouched, with a notice. `cgraphx install`
+  and `upgrade` add the missing timeline snippets.
+- `/dev-impl-subagent` no longer stops on `main` or `master` to ask whether
+  to create a branch; like `/dev-impl`, it works on the current branch. Both
+  now stop on a version branch and point to `/dev-start`.
+
 ## 2.0.10 - 2026-10-21
 
 ### Changed — clarification realignment, second pass: review gates follow the decisions
