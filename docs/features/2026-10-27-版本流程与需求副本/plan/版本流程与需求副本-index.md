@@ -580,7 +580,7 @@
    cd "$T" && git init -q g && cd g && echo a > a && git add a && git commit -qm init && init_cgx
    printf '#!/bin/sh\n\n# cgraphx-timeline-hook — record commit events\ncgraphx timeline-git-commit-hook >/dev/null 2>&1 &\n' > .git/hooks/post-commit && chmod +x .git/hooks/post-commit
    git config core.hooksPath "$T/gh" && cgraphx timeline install >/dev/null 2>&1; echo "旧片段=$(grep -c timeline-git-commit-hook .git/hooks/post-commit)"
-   cd "$T" && git init -q i && cd i && mkdir scripts && printf '#!/bin/sh\necho mine\n' > scripts/post-commit && chmod +x scripts/post-commit && git add -A && git commit -qm init && ln -s ../../scripts/post-commit .git/hooks/post-commit && init_cgx
+   cd "$T" && git init -q i && cd i && mkdir scripts && printf '#!/bin/sh\necho mine\n' > scripts/post-commit && chmod +x scripts/post-commit && printf '.cgraphx/\n' > .gitignore && git add -A && git commit -qm init && ln -s ../../scripts/post-commit .git/hooks/post-commit && init_cgx
    printf '\n# cgraphx-timeline-hook — record commit events\ncgraphx timeline-git-commit-hook >/dev/null 2>&1 &\n' >> scripts/post-commit
    cgraphx timeline uninstall >/dev/null 2>&1; echo "卸载后 status=[$(git status --porcelain)]"
    # ㉔ husky 9 冲掉片段后会话开始补回;队友提交同名钩子后不再写;卸载后不再补
@@ -590,7 +590,7 @@
    husky9 && git config core.hooksPath .husky/_ && cgraphx release guard >/dev/null 2>&1 && husky9
    echo "冲掉后=$(grep -c cgraphx-release-guard .husky/_/commit-msg)"; sess 1; echo "会话开始后=$(grep -c cgraphx-release-guard .husky/_/commit-msg)"
    git config core.hooksPath .husky && cgraphx release guard >/dev/null 2>&1
-   printf '#!/usr/bin/env sh\necho team\n' > .husky/commit-msg && git add -f .husky/commit-msg && git commit -qm "chore: 队友的钩子" >/dev/null
+   printf '#!/usr/bin/env sh\necho team\n' > .husky/commit-msg && git add -f .husky/commit-msg && git commit -qm "chore: 队友的钩子" >/dev/null 2>&1
    sess 2; echo "被跟踪后=$(grep -c cgraphx .husky/commit-msg) status=[$(git status --porcelain)]"
    cgraphx release guard --remove >/dev/null 2>&1; git config core.hooksPath .husky/_ && husky9 && sess 3; echo "卸载后=$(grep -c cgraphx-release-guard .husky/_/commit-msg)"
    # ㉕ 被忽略的文件留在主目录;主目录留下空壳时按 feature-id 找副本那份,副本 spec 声明的任务读得到
@@ -613,7 +613,7 @@
    → ㉑ `exit=0 首行=chore(release): 版本号 1.0.0→1.0.1`;`直接提交 exit=1`
    → ㉒ remove 输出 `"state": "removed"`;create 输出 `"code": "name_taken"`;`旧登记 2026-10-28-甲 true`
    → ㉓ `共用目录=[post-commit ] 3 行`;guard 输出 `"status": "present"`;`旧片段=1`;`卸载后 status=[]`
-   → ㉔ `冲掉后=0`、`会话开始后=1`;`被跟踪后=0 status=[]`;`卸载后=0`
+   → ㉔ `冲掉后=0`、`会话开始后=3`(拦截片段 3 行);`被跟踪后=0 status=[]`;`卸载后=0`
    → ㉕ `movedFiles=["docs/features/2026-10-28-会员导出/讨论稿.md"]`;`主目录 调研.local.md=在 讨论稿.md=没了`;`T-789 ["docs/features/2026-10-28-会员导出"] ["feat: 会员导出 spec"]`
 
 spec「设计验收」各条的落点:1 → 统一验证 3;2 的 `rm -rf` 部分、7、8、9 → 统一验证 5;12 → 统一验证 8;13 → 统一验证 1、2;14~21、23~25 → 统一验证 9;22 → 统一验证 9 先验一遍,单元测试与 3、4、5、6、10、11(单元测试、并发写、计时)以及 2 的 `cgraphx uninstall` 部分 → 全部任务完成后由 `/unit-spec` → `/unit-code` 补。
