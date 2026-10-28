@@ -91,6 +91,23 @@ function gitForCommit(ctx: SyncContext, hash: string, commitRoot: string | undef
   return ctx.gitFor(rootOrMain(commitRoot, ctx.projectRoot));
 }
 
+/** 提交事件在哪个根里做的:副本里做的 → 副本根(与 commitRootsOf 同一口径);其余 → 主目录。 */
+function commitEventRoot(ctx: SyncContext, e: TimelineEvent): string {
+  const replica = ctx.commitReplicas.get(e.id);
+  return replica === undefined ? ctx.projectRoot : path.resolve(replica.path);
+}
+
+/**
+ * 提交推送过没有:主目录的远程跟踪分支里有就算;副本里做的提交再到副本仓库查一次——列副本时主目录
+ * 已取回这个提交的对象,但副本推送出去的远程分支,主目录要等自己 fetch 之后才知道。
+ */
+function isPushed(ctx: SyncContext, hash: string, commitRoot: string | undefined): boolean {
+  if (ctx.git.isOnRemote(hash)) return true;
+  if (commitRoot === undefined) return false;
+  const root = rootOrMain(commitRoot, ctx.projectRoot);
+  return root !== ctx.projectRoot && ctx.gitFor(root).isOnRemote(hash);
+}
+
 /** 文件在不在:主目录照原来按仓库根拼仓库相对路径;副本按副本根拼项目内路径。 */
 function fileExistsIn(ctx: SyncContext, base: string, repoRel: string, projectRel: string): boolean {
   return fs.existsSync(base === ctx.projectRoot ? path.join(ctx.repoRoot, repoRel) : path.join(base, projectRel));
@@ -149,8 +166,13 @@ export function collectSessionArtifacts(
     if (identity === null || identity.localOnly) continue;
 
     const changeMs = Date.parse(lastChangeTs);
+    // 提交要和产出在同一个根里:主目录和各副本的仓库相对路径相同,只比路径会对上别的根里的提交
     const commit = ctx.commitEvents.find(
-      (ce) => ce.commit_hash !== null && Date.parse(ce.ts) >= changeMs && ce.commit_files.includes(repoRel),
+      (ce) =>
+        ce.commit_hash !== null &&
+        Date.parse(ce.ts) >= changeMs &&
+        ce.commit_files.includes(repoRel) &&
+        commitEventRoot(ctx, ce) === root,
     );
     const hasCommit = commit !== undefined && commit.commit_hash !== null;
 
@@ -166,12 +188,13 @@ export function collectSessionArtifacts(
     let artifact: IngestArtifact;
     if (commit !== undefined && commit.commit_hash !== null) {
       const hash = commit.commit_hash;
-      const git = gitForCommit(ctx, hash, commitRoots.get(hash));
+      const commitRoot = commitRoots.get(hash);
+      const git = gitForCommit(ctx, hash, commitRoot);
       artifact = {
         type: identity.type,
         path: repoRel,
         action: git.fileAddedIn(hash, repoRel) ? 'create' : 'modify',
-        commitHash: git.isOnRemote(hash) ? hash : null,
+        commitHash: isPushed(ctx, hash, commitRoot) ? hash : null,
         branch: typeof commit.metadata.branch === 'string' ? commit.metadata.branch : null,
         ts: lastChangeTs,
       };
