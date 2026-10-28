@@ -332,6 +332,26 @@ function ensureTaskForFeature(store: TaskStore, root: string, featureId: string,
   else store.ensureFeatureTask(featureId, now);
 }
 
+/**
+ * 在用副本登记的需求补本机任务行:需求目录有带负责人的 spec 才建(spec 还没写时不建,免得建出之后
+ * 声明了平台编号也不会再改的目录任务);按头部当前的任务声明定任务,先查后写,已有就不开写事务。
+ */
+function ensureReplicaFeatureTask(
+  store: TaskStore,
+  root: string,
+  featureId: string,
+  isEligible: (featureId: string) => boolean,
+  now: string,
+): void {
+  if (!isEligible(featureId)) return;
+  const declared = readFeatureTask(locateFeatureRoot(root, featureId) ?? root, featureId);
+  if (isPlatformTaskValue(declared)) {
+    if (store.findApiTaskByExternalId(declared) === null) store.transaction(() => store.ensureApiPlaceholder(declared, now));
+    return;
+  }
+  if (store.findFeatureTaskByFeatureId(featureId) === null) store.transaction(() => store.ensureFeatureTask(featureId, now));
+}
+
 /** 两个可空时间点取较早者。 */
 function earlier(a: string | null, b: string | null): string | null {
   if (a === null) return b;
@@ -461,15 +481,17 @@ export async function refreshAutoBindings(
     }
 
     // 在用副本登记的需求:没有会话派生到它(如副本里只有终端提交)也要有本机任务,task show <需求>
-    // 才查得到副本里没对上会话的提交(spec D28);已有目录任务的跳过,不再读头部
-    for (const { replica } of roots) {
-      if (replica === null || replica.removedAt !== null) continue;
-      if (store.findFeatureTaskByFeatureId(replica.featureId) !== null) continue;
-      try {
-        store.transaction(() => ensureTaskForFeature(store, root, replica.featureId, now));
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[task] 副本需求建任务失败 ${replica.featureId}: ${reason}\n`);
+    // 才查得到副本里没对上会话的提交(spec D28)。只在全量刷新(task 命令、sync)里做,Stop hook 只刷新
+    // 本会话、不做
+    if (opts.sessionIds === undefined) {
+      for (const { replica } of roots) {
+        if (replica === null || replica.removedAt !== null) continue;
+        try {
+          ensureReplicaFeatureTask(store, root, replica.featureId, isEligible, now);
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[task] 副本需求建任务失败 ${replica.featureId}: ${reason}\n`);
+        }
       }
     }
 

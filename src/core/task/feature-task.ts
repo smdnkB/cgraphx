@@ -4,8 +4,8 @@
  * 目录头部 `> 任务: T-\d+` → 接口任务;否则 → 目录任务(任务键 = feature-id)。
  * 目录没有负责人头部时不对应任何任务。只读调用方用 resolveFeatureTargetReadOnly,绝不建任务。
  *
- * 需求目录按「主目录 + 在用副本」找(版本流程与需求副本 spec D26,locateFeatureRoot):
- * 主目录里有就用主目录的,否则用登记了这个需求的副本里的;头部一律在找到的那个根里读。
+ * 需求目录按「在用副本 + 主目录」找(版本流程与需求副本 spec D26,locateFeatureRoot):
+ * 登记了这个需求的副本里有就用副本的,否则用主目录的;头部一律在找到的那个根里读。
  */
 
 import * as path from 'node:path';
@@ -102,18 +102,19 @@ export function resolveFeatureTargetReadOnly(
 }
 
 /**
- * scanFeatureTasks 的多根版(spec D26):主目录的结果,并上每个在用副本登记的那个需求——
- * 主目录里没有这个需求目录、副本里有且主 spec 声明了任务时加一条(path 同为项目相对路径)。
+ * scanFeatureTasks 的多根版(spec D26):主目录的结果,在用副本登记的需求按副本里那份算——副本里有这个
+ * 需求目录时,去掉主目录里同一个需求的那条,主 spec 声明了任务就加副本的一条(path 同为项目相对路径)。
  * root 为主目录。
  */
 export function scanFeatureTasksAcrossRoots(
   root: string,
 ): Array<{ featureId: string; path: string; task: string }> {
-  const result = scanFeatureTasks(root);
+  let result = scanFeatureTasks(root);
   for (const replica of listReplicas(root)) {
     const { featureId } = replica;
-    // locateFeatureRoot 指向这个副本 ⇔ 主目录里没有这个需求目录,副本还在且有这个目录
+    // locateFeatureRoot 指向这个副本 ⇔ 副本还在且有这个需求目录(先找副本,D26)
     if (locateFeatureRoot(root, featureId) !== path.resolve(replica.path)) continue;
+    result = result.filter((entry) => entry.featureId !== featureId);
     const task = readFeatureTask(replica.path, featureId);
     if (task !== null) result.push({ featureId, path: `docs/features/${featureId}`, task });
   }

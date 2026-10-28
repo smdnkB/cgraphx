@@ -76,10 +76,29 @@ function commitRootsOf(ctx: SyncContext): Map<string, string> {
   for (const e of ctx.commitEvents) {
     if (e.commit_hash === null || seen.has(e.commit_hash)) continue;
     seen.add(e.commit_hash);
-    const replica = ctx.commitReplicas.get(e.id);
-    if (replica !== undefined) roots.set(e.commit_hash, path.resolve(replica.path));
+    const root = commitRootOf(ctx, e);
+    if (root !== ctx.projectRoot) roots.set(e.commit_hash, root);
   }
   return roots;
+}
+
+/** 提交事件在哪个根里做的:副本里做的 → 副本根;其余 → 主目录。 */
+function commitRootOf(ctx: SyncContext, e: TimelineEvent): string {
+  const replica = ctx.commitReplicas.get(e.id);
+  return replica === undefined ? ctx.projectRoot : path.resolve(replica.path);
+}
+
+/**
+ * /dev-start 把主目录里没提交的需求文件移进副本(spec D21⑥):路径在某个副本登记的需求目录下、文件在那个
+ * 副本里 → 那个副本的根;否则 null。在主目录写的这些产出,读文件头、找提交都按副本算。
+ */
+function movedToReplica(ctx: SyncContext, projectRel: string): string | null {
+  const featureId = /^docs\/features\/([^/]+)\//.exec(projectRel)?.[1];
+  if (featureId === undefined) return null;
+  for (const { root, replica } of ctx.roots) {
+    if (replica !== null && replica.featureId === featureId && fs.existsSync(path.join(root, projectRel))) return root;
+  }
+  return null;
 }
 
 /**
@@ -89,12 +108,6 @@ function commitRootsOf(ctx: SyncContext): Map<string, string> {
 function gitForCommit(ctx: SyncContext, hash: string, commitRoot: string | undefined): GitCache {
   if (commitRoot === undefined || ctx.git.hasCommit(hash)) return ctx.git;
   return ctx.gitFor(rootOrMain(commitRoot, ctx.projectRoot));
-}
-
-/** 提交事件在哪个根里做的:副本里做的 → 副本根(与 commitRootsOf 同一口径);其余 → 主目录。 */
-function commitEventRoot(ctx: SyncContext, e: TimelineEvent): string {
-  const replica = ctx.commitReplicas.get(e.id);
-  return replica === undefined ? ctx.projectRoot : path.resolve(replica.path);
 }
 
 /**
@@ -159,8 +172,13 @@ export function collectSessionArtifacts(
 
   const artifacts: IngestArtifact[] = [];
   const unreported: UnreportedArtifact[] = [];
-  for (const [repoRel, { projectRel, root, lastChangeTs }] of candidates) {
-    // 读文件头、判断文件在不在都在路径所在的根里做;那个副本已不在就退回主目录
+  for (const [repoRel, { projectRel, root: editedRoot, lastChangeTs }] of candidates) {
+    // 文件所在的根:一般就是改它时所在的根;在主目录写、/dev-start 时移进副本的需求文件算那个副本
+    const root =
+      editedRoot === ctx.projectRoot && !fileExistsIn(ctx, ctx.projectRoot, repoRel, projectRel)
+        ? (movedToReplica(ctx, projectRel) ?? editedRoot)
+        : editedRoot;
+    // 读文件头、判断文件在不在都在文件所在的根里做;那个副本已不在就退回主目录
     const base = rootOrMain(root, ctx.projectRoot);
     const identity = identifyArtifact(base, projectRel);
     if (identity === null || identity.localOnly) continue;
@@ -172,7 +190,7 @@ export function collectSessionArtifacts(
         ce.commit_hash !== null &&
         Date.parse(ce.ts) >= changeMs &&
         ce.commit_files.includes(repoRel) &&
-        commitEventRoot(ctx, ce) === root,
+        commitRootOf(ctx, ce) === root,
     );
     const hasCommit = commit !== undefined && commit.commit_hash !== null;
 

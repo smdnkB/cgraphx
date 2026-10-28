@@ -90,9 +90,8 @@ export function findTaskByValue(projectRoot: string, value: string): TaskItem | 
     if (byFeatureId !== null) return byFeatureId;
     const byName = store.listFeatureTasks().find((task) => task.featureId !== null && featureTaskName(task.featureId) === v);
     if (byName !== undefined) return byName;
-    // 主 spec 头部声明了平台编号的需求目录没有目录任务:按 feature-id 查时落到它声明的那个任务(spec D28);
-    // 只认单段目录名,不拿带路径的参数去拼需求目录
-    if (/[\\/]/.test(v) || v === '.' || v === '..') return null;
+    // 主 spec 头部声明了平台编号的需求目录没有目录任务:按 feature-id 查时落到它声明的那个任务(spec D28;
+    // 不是单段目录名的由 resolveFeatureTargetReadOnly 挡掉)
     return resolveFeatureTargetReadOnly(projectRoot, store, v);
   } finally {
     conn.close();
