@@ -14,7 +14,12 @@
 import type { SqliteDatabase } from '../db';
 import { resolveSessionId } from './binding';
 import { TaskArgError, TaskSourceUnavailableError } from './errors';
-import { featureTaskBindError, featureTaskName, isEligibleFeatureDir } from './feature-task';
+import {
+  featureTaskBindError,
+  featureTaskName,
+  isEligibleFeatureDir,
+  resolveFeatureTargetReadOnly,
+} from './feature-task';
 import { openTaskDb } from './schema-bootstrap';
 import { fetchRemoteTasks, loadTaskSourceConfig } from './source';
 import { TaskStore } from './store';
@@ -83,10 +88,12 @@ export function findTaskByValue(projectRoot: string, value: string): TaskItem | 
     // 目录任务:先按 feature-id 精确匹配,再按去掉日期段的任务名称精确匹配。
     const byFeatureId = store.findFeatureTaskByFeatureId(v);
     if (byFeatureId !== null) return byFeatureId;
-    return (
-      store.listFeatureTasks().find((task) => task.featureId !== null && featureTaskName(task.featureId) === v) ??
-      null
-    );
+    const byName = store.listFeatureTasks().find((task) => task.featureId !== null && featureTaskName(task.featureId) === v);
+    if (byName !== undefined) return byName;
+    // 主 spec 头部声明了平台编号的需求目录没有目录任务:按 feature-id 查时落到它声明的那个任务(spec D28);
+    // 只认单段目录名,不拿带路径的参数去拼需求目录
+    if (/[\\/]/.test(v) || v === '.' || v === '..') return null;
+    return resolveFeatureTargetReadOnly(projectRoot, store, v);
   } finally {
     conn.close();
   }

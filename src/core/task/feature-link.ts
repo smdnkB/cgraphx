@@ -7,6 +7,8 @@
  * 以主目录为准(版本流程与需求副本 spec D25);副本里没对上会话的提交归副本登记的需求(D28)。
  */
 
+import * as path from 'node:path';
+
 import { listProjectRoots, replicaOfCwd, resolveMainRoot } from '../replica';
 import { listCommitEvents, type TimelineEvent } from '../timeline';
 import { queryBindingEvents } from './attribution';
@@ -16,23 +18,26 @@ import { listEffectiveBindings } from './report';
 import { findTask } from './resolve';
 import { openTaskDb } from './schema-bootstrap';
 import { TaskStore } from './store';
-import type { TaskDetail, TaskItem } from './types';
+import type { TaskDetail } from './types';
 
 /** `task show --events` 默认明细条数。 */
 const DEFAULT_DETAIL_EVENT_LIMIT = 100;
 
 /**
- * 副本里没对上会话的提交(spec D28 本地部分):只有目录任务有;session_id 为空、提交时的 cwd
- * 落在登记了这个需求的副本里(含已删除的副本)。没有这样的副本时不查时间线。
+ * 副本里没对上会话的提交(spec D28 本地部分):session_id 为空、提交时的 cwd 落在登记了这个任务的
+ * 需求目录的副本里(含已删除的副本)。需求目录取任务详情里的 featureDirs:目录任务是它自己,
+ * 接口任务是头部声明了它的需求目录(sync 上报时副本会话也绑到这个任务)。没有这样的副本时不查时间线。
  */
-async function unmatchedReplicaCommits(root: string, task: TaskItem): Promise<TimelineEvent[]> {
-  const featureId = task.source === 'feature' ? task.featureId : null;
-  if (featureId === null) return [];
+async function unmatchedReplicaCommits(root: string, featureDirs: readonly string[]): Promise<TimelineEvent[]> {
+  const featureIds = new Set(featureDirs.map((dir) => path.posix.basename(dir)));
+  if (featureIds.size === 0) return [];
   const roots = listProjectRoots(root);
-  if (!roots.some((r) => r.replica?.featureId === featureId)) return [];
-  return (await listCommitEvents(root)).filter(
-    (e) => e.session_id === null && replicaOfCwd(roots, e.cwd)?.featureId === featureId,
-  );
+  if (!roots.some((r) => r.replica !== null && featureIds.has(r.replica.featureId))) return [];
+  return (await listCommitEvents(root)).filter((e) => {
+    if (e.session_id !== null) return false;
+    const replica = replicaOfCwd(roots, e.cwd);
+    return replica !== null && featureIds.has(replica.featureId);
+  });
 }
 
 /**
@@ -76,7 +81,7 @@ export async function getTaskDetail(
     const { events } = await queryBindingEvents(root, binding);
     for (const e of events) byId.set(e.id, e);
   }
-  for (const e of await unmatchedReplicaCommits(root, detail.task)) byId.set(e.id, e);
+  for (const e of await unmatchedReplicaCommits(root, detail.featureDirs)) byId.set(e.id, e);
   const attributed = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts) || a.id - b.id);
 
   const eventCounts: Record<string, number> = {};

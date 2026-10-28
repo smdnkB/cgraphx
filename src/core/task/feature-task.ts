@@ -54,7 +54,7 @@ export function isEligibleFeatureDir(projectRoot: string, featureId: string): bo
 }
 
 /** 头部任务声明是否为平台任务编号。 */
-function isPlatformTaskValue(declared: string | null): declared is string {
+export function isPlatformTaskValue(declared: string | null): declared is string {
   return declared !== null && PLATFORM_TASK_PATTERN.test(declared);
 }
 

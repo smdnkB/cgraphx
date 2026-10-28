@@ -35,7 +35,7 @@ import {
   type TimelineEvent,
 } from '../timeline';
 import { AUTO_META_KEYS } from './constants';
-import { featureDatePrefix, isEligibleFeatureDir } from './feature-task';
+import { featureDatePrefix, isEligibleFeatureDir, isPlatformTaskValue } from './feature-task';
 import { openTaskDb } from './schema-bootstrap';
 import { TaskStore } from './store';
 import type { AutoSession, AutoStrength, TaskBinding, TaskSource } from './types';
@@ -45,9 +45,6 @@ const HISTORY_PASS_META_KEY = AUTO_META_KEYS[0]!;
 
 /** 项目相对路径中的产出目录(要求目录下至少还有一段,即指向文件)。 */
 const FEATURE_DIR_PATTERN = /^docs\/features\/([^/]+)\/.+/;
-
-/** 平台任务编号(spec §4.1);匹配时不建目录任务。 */
-const PLATFORM_TASK_PATTERN = /^T-\d+$/;
 
 /** 一次派生结果。 */
 export interface AutoDerivation {
@@ -325,6 +322,16 @@ function earliestBoundAt(
   return earliest;
 }
 
+/**
+ * 需求 → 本机任务行:主 spec 头部声明了平台编号 → 本机没有占位时补建(否则读取 / 上报解析不到任务);
+ * 否则 → 目录任务。
+ */
+function ensureTaskForFeature(store: TaskStore, root: string, featureId: string, now: string): void {
+  const declared = readFeatureTask(locateFeatureRoot(root, featureId) ?? root, featureId);
+  if (isPlatformTaskValue(declared)) store.ensureApiPlaceholder(declared, now);
+  else store.ensureFeatureTask(featureId, now);
+}
+
 /** 两个可空时间点取较早者。 */
 function earlier(a: string | null, b: string | null): string | null {
   if (a === null) return b;
@@ -434,15 +441,7 @@ export async function refreshAutoBindings(
         // 取代标记、目录任务与派生结果同事务落库;失败时整会话回滚并跳过。
         store.transaction(() => {
           for (const b of obsolete) store.supersedeBinding(b.id, now);
-          if (auto !== null) {
-            const declared = readFeatureTask(locateFeatureRoot(root, auto.featureId) ?? root, auto.featureId);
-            if (declared !== null && PLATFORM_TASK_PATTERN.test(declared)) {
-              // 头部声明平台编号:本机没有占位时补建,否则读取 / 上报解析不到任务。
-              store.ensureApiPlaceholder(declared, now);
-            } else {
-              store.ensureFeatureTask(auto.featureId, now);
-            }
-          }
+          if (auto !== null) ensureTaskForFeature(store, root, auto.featureId, now);
           store.upsertAutoSession({
             sessionId,
             derivedMaxEventId: maxId,
@@ -458,6 +457,19 @@ export async function refreshAutoBindings(
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         process.stderr.write(`[task] 派生失败 ${sessionId}: ${reason}\n`);
+      }
+    }
+
+    // 在用副本登记的需求:没有会话派生到它(如副本里只有终端提交)也要有本机任务,task show <需求>
+    // 才查得到副本里没对上会话的提交(spec D28);已有目录任务的跳过,不再读头部
+    for (const { replica } of roots) {
+      if (replica === null || replica.removedAt !== null) continue;
+      if (store.findFeatureTaskByFeatureId(replica.featureId) !== null) continue;
+      try {
+        store.transaction(() => ensureTaskForFeature(store, root, replica.featureId, now));
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[task] 副本需求建任务失败 ${replica.featureId}: ${reason}\n`);
       }
     }
 
