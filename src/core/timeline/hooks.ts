@@ -13,6 +13,7 @@
 import { runHook, isKillSwitchOn } from './hook-runner';
 import { extractHookPayload, type HookPayload } from './payload';
 import { resolveProjectRoot } from '../directory';
+import { repairHookSnippets } from '../git-hooks';
 import { summarizeToolResponse } from './post-tool-summary';
 import { sanitizeToolArgs } from './tool-args';
 import { COMMIT_BRANCH_ENV, COMMIT_HOOK_ENV, COMMIT_REFLOG_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
@@ -260,6 +261,19 @@ export async function sessionStartHook(agent: AgentId = DEFAULT_AGENT_ID): Promi
   if (started) {
     const { cwd, source } = started;
     writeSkillVersionNoticeWithoutTaskHook(agent, cwd, source);
+    repairGitHookSnippets(cwd);
+  }
+}
+
+/**
+ * spec D33⑥:会话开始时按登记补回缺了的 git 钩子片段(husky 9 每次装依赖都重写 `.husky/_/`、新开的
+ * worktree、被别的工具覆盖);不在 git 仓库、没有登记或任何异常都不输出,不影响会话。
+ */
+function repairGitHookSnippets(cwd: string | undefined): void {
+  try {
+    repairHookSnippets(cwd ?? process.cwd());
+  } catch {
+    // 补装失败只等下次会话或 cgraphx install 再补
   }
 }
 

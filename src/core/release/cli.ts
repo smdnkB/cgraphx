@@ -36,18 +36,15 @@ function writeErr(msg: string): void {
   process.stderr.write(`[release] ${msg}\n`);
 }
 
-/**
- * 不带 --json 时的结果输出:unsupported 只在 stderr 打没装上的原因,其余在 stdout 打一行结果;
- * 被跟踪的钩子文件靠本机过滤规则藏起改动时,再在 stderr 说一句。
- */
+/** 不带 --json 时的结果输出:unsupported 只在 stderr 打没装上的原因和要加的几行,其余在 stdout 打一行结果。 */
 function printGuard(result: GuardResult): void {
   const hookPath = result.hookPath ?? '';
-  const notice = result.hookPath === null || result.status === 'removed' || result.status === 'absent'
-    ? null
-    : hookNotice({ ...result, hookPath, status: result.status === 'unsupported' ? 'unsupported' : 'present' }, '没装上提交拦截');
   switch (result.status) {
-    case 'unsupported':
+    case 'unsupported': {
+      const notice = hookNotice({ ...result, hookPath }, '没装上提交拦截');
+      if (notice !== null) writeErr(notice);
       break;
+    }
     case 'installed':
       writeOut(`已装上版本分支提交拦截:${hookPath}`);
       break;
@@ -71,7 +68,6 @@ function printGuard(result: GuardResult): void {
       );
       break;
   }
-  if (notice !== null) writeErr(notice);
 }
 
 /** 把 `release` 命令组挂到 commander 程序上。主 CLI 调用一次。 */

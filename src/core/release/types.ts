@@ -2,7 +2,7 @@
  * release 子系统类型。
  */
 
-import type { HookSkipReason } from '../git-hooks';
+import type { HookLinkTarget, HookSkipReason } from '../git-hooks';
 
 /** 装上 / 卸掉版本分支提交拦截的结果。 */
 export interface GuardResult {
@@ -18,10 +18,10 @@ export interface GuardResult {
    * - absent:没装过,或不在 git 仓库,没有可删的
    */
   status: 'installed' | 'present' | 'updated' | 'repaired' | 'unsupported' | 'removed' | 'absent';
-  /** 钩子文件被 git 跟踪,片段靠本机过滤规则藏起来、不进提交;卸掉时恒为 false */
-  localFilter: boolean;
-  /** unsupported 时:not_shell 不是 shell 脚本 / outside_repo 钩子目录在仓库外 / symlink 钩子文件是链接 */
+  /** unsupported 时:not_shell 不是 shell 脚本 / outside_repo 钩子目录在仓库外 / symlink 钩子文件是链接 / tracked 钩子文件被 git 跟踪 */
   reason?: HookSkipReason;
   /** unsupported 时:要用户自己加的几行 */
   lines?: readonly string[];
+  /** reason 为 symlink 时:链接指向的文件,以及加进去的后果 */
+  linkTarget?: HookLinkTarget;
 }

@@ -131,12 +131,13 @@ function buildGitPostCommitSnippet(): string[] {
 /**
  * post-merge 片段:`$1` 为 1 是 squash 合并(不产生提交),跳过;其余同 post-commit,另传
  * COMMIT_HOOK_ENV=post-merge,并当场取 reflog 最新一行经 COMMIT_REFLOG_ENV 传过去,记录进程据此跳过快进
- * (快进不产生新提交)。
+ * (快进不产生新提交)。hash 和 reflog 那一行用一条 `git log -g` 同时取(`--no-show-signature`:配了
+ * log.showSignature 时不混进签名校验的输出);关掉了 reflog 取不到时 hash 退回 rev-parse。
  */
 function buildGitPostMergeSnippet(): string[] {
   return [
     `${GIT_HOOK_MARKER} — record merge commits to .cgraphx/cgraphx.db`,
-    `if [ "$1" != "1" ]; then __cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true); __cgx_reflog=$(git reflog -1 --format=%gs HEAD 2>/dev/null || true); ${COMMIT_HOOK_ENV}=post-merge ${COMMIT_REFLOG_ENV}="$__cgx_reflog" ${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & fi ${GIT_HOOK_MARKER}`,
+    `if [ "$1" != "1" ]; then __cgx_r=$(git log -g -1 --no-show-signature --format='%H %gs' HEAD 2>/dev/null || true); __cgx_sha=\${__cgx_r%% *}; __cgx_reflog=\${__cgx_r#* }; [ -n "$__cgx_sha" ] || __cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true); ${COMMIT_HOOK_ENV}=post-merge ${COMMIT_REFLOG_ENV}="$__cgx_reflog" ${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & fi ${GIT_HOOK_MARKER}`,
   ];
 }
 

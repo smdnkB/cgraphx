@@ -66,15 +66,13 @@ export function installReleaseGuard(cwd: string): GuardResult {
 
   const snippet = installHookSnippet(cwd, GUARD_HOOK, RELEASE_GUARD_MARKER, RELEASE_GUARD_LINES);
   if (snippet === null) throw notGitRepoError(cwd);
-  const { hookPath, localFilter } = snippet;
-  if (snippet.status === 'unsupported') {
-    return { hookPath, status: 'unsupported', localFilter, reason: snippet.reason, lines: snippet.lines };
-  }
+  const { hookPath } = snippet;
+  if (snippet.status === 'unsupported') return { ...snippet, status: 'unsupported' };
 
   const status: GuardResult['status'] =
     snippet.status === 'installed' && marked ? 'repaired' : snippet.status;
   runGit(cwd, ['config', '--local', RELEASE_GUARD_CONFIG_KEY, 'true']);
-  return { hookPath, status, localFilter };
+  return { hookPath, status };
 }
 
 /**
@@ -83,7 +81,7 @@ export function installReleaseGuard(cwd: string): GuardResult {
  */
 export function removeReleaseGuard(cwd: string): GuardResult {
   const hooksDir = resolveHooksDir(cwd);
-  if (hooksDir === null) return { hookPath: null, status: 'absent', localFilter: false };
+  if (hooksDir === null) return { hookPath: null, status: 'absent' };
 
   const removed = removeHookSnippet(cwd, GUARD_HOOK, RELEASE_GUARD_MARKER);
   // 没有这个键时 git 以非零退出,忽略
@@ -92,6 +90,5 @@ export function removeReleaseGuard(cwd: string): GuardResult {
   return {
     hookPath: removed ?? path.join(hooksDir, GUARD_HOOK),
     status: removed === null ? 'absent' : 'removed',
-    localFilter: false,
   };
 }
