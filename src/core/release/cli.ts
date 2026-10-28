@@ -8,14 +8,13 @@
  * (code 取 ReleaseError 的 code,其余错误为 runtime_error);不带 --json 时结果走 stdout,
  * 错误与提示走 stderr、前缀 `[release]`。
  *
- * 退出码(exitCodeForError):0 成功(含 unsupported:钩子文件不是 shell 脚本,没装上)/
+ * 退出码(exitCodeForError):0 成功(含 unsupported:没写入,原因见 reason)/
  * 1 其它 / 2 不在 git 仓库。
  */
 
-import * as path from 'node:path';
-
 import type { Command } from 'commander';
 
+import { hookNotice } from '../git-hooks';
 import { exitCodeForError, installReleaseGuard, ReleaseError, removeReleaseGuard } from './index';
 import type { GuardResult } from './types';
 
@@ -37,12 +36,17 @@ function writeErr(msg: string): void {
   process.stderr.write(`[release] ${msg}\n`);
 }
 
-/** 不带 --json 时的结果输出:unsupported 只在 stderr 打提示,其余在 stdout 打一行结果。 */
+/**
+ * 不带 --json 时的结果输出:unsupported 只在 stderr 打没装上的原因,其余在 stdout 打一行结果;
+ * 被跟踪的钩子文件靠本机过滤规则藏起改动时,再在 stderr 说一句。
+ */
 function printGuard(result: GuardResult): void {
   const hookPath = result.hookPath ?? '';
+  const notice = result.hookPath === null || result.status === 'removed' || result.status === 'absent'
+    ? null
+    : hookNotice({ ...result, hookPath, status: result.status === 'unsupported' ? 'unsupported' : 'present' }, '没装上提交拦截');
   switch (result.status) {
     case 'unsupported':
-      writeErr(`钩子文件 ${hookPath} 不是 shell 脚本,没装上提交拦截`);
       break;
     case 'installed':
       writeOut(`已装上版本分支提交拦截:${hookPath}`);
@@ -67,9 +71,7 @@ function printGuard(result: GuardResult): void {
       );
       break;
   }
-  if (result.hooksDirTracked && result.hookPath !== null) {
-    writeErr(`钩子目录 ${path.dirname(result.hookPath)} 由 git 跟踪,改动会出现在 git status 里`);
-  }
+  if (notice !== null) writeErr(notice);
 }
 
 /** 把 `release` 命令组挂到 commander 程序上。主 CLI 调用一次。 */
@@ -83,7 +85,7 @@ export function registerReleaseCommands(program: Command): void {
     .description(
       '在 commit-msg 钩子里装上版本分支提交拦截:版本分支只收合并提交和 chore(release): 开头的提交',
     )
-    .option('--remove', '卸掉提交拦截(删掉钩子片段和本地 git 配置里的记号)')
+    .option('--remove', '卸掉提交拦截,退出版本流程(删掉钩子片段和本地 git 配置里的两个记号)')
     .option('--json', '输出机器可读 JSON')
     .action((opts: GuardOptions) => {
       const cwd = process.cwd();
