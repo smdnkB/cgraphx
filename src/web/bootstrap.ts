@@ -113,9 +113,11 @@ export function openVerifiedConnection(projectRoot: string): DatabaseConnection 
   if (missing.length > 0) {
     connection.close();
     const where = (s: SchemaName): string => (s === 'timeline' ? mainRoot : resolved);
+    // 副本已初始化,install 什么都不做;知识库的 schema 由 docs index 建
+    const fix = missing.includes('markdown') ? `\`cgraphx docs index ${resolved}\`` : `\`cgraphx install\``;
     throw new WebStartupError(
       'schema-missing',
-      `schema missing: ${missing.map((s) => `${s} at ${where(s)}`).join(', ')} — run \`cgraphx install\` to apply schemas`,
+      `schema missing: ${missing.map((s) => `${s} at ${where(s)}`).join(', ')} — run ${fix} to apply schemas`,
       { missing },
     );
   }

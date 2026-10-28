@@ -71,6 +71,13 @@ export async function indexMarkdownKnowledgeBase(
   const knowledgeDir = path.join(projectRoot, KNOWLEDGE_DIR);
 
   if (!fs.existsSync(knowledgeDir)) {
+    // 没有知识库目录也把本地库的 schema 建好:新开的副本只有空库,读知识库的地方(web)才不会一直报
+    // schema 缺失;未初始化等打不开库的情况照旧只回下面的报错
+    try {
+      openMarkdownDb(projectRoot).close();
+    } catch {
+      // 未初始化:由调用方看到的 not found 报错为准
+    }
     return {
       runId,
       startedAt,
