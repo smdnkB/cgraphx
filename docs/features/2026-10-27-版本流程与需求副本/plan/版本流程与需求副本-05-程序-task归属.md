@@ -1,7 +1,7 @@
 # T-5: 程序——task 多根换算与副本会话归属
 
 > 产物: plan
-> 依据: spec@a8b762a
+> 依据: spec@16dc4b2
 
 - 目标:task 的路径换算、找需求目录都认「主目录 + 全部登记过的副本」;副本里开的会话归副本登记的需求;副本里没对上会话的提交算进该需求的 `task show`;在副本里执行和在主目录执行结果一样
 - 对应 spec 编号:F8(行为链、①②)、K2、D25、D26、D27、D28(本地部分)、D29(目录任务声明找目录)
@@ -41,7 +41,7 @@
      - 没命中副本(主目录的会话)→ 照旧 R1~R7,只是路径按第 3 条换算、合格判断按第 2 条
      - `refreshAutoBindings` 里 `roots = listProjectRoots(root)` 取一次,传给每个会话的派生;`readFeatureTask(root, auto.featureId)` 改为在 `locateFeatureRoot(root, auto.featureId) ?? root` 上读
      - 需求 → 本机任务行的规则只有一处(spec D38):feature-task.ts 的 `ensureFeatureTaskRow(store, roots, featureId, now)`——主 spec 头部声明了平台编号(`isPlatformTaskValue`)→ 接口任务,本机没有占位时补建;否则 → 目录任务,没有时新建;已有就不写。会话派生到需求时用它;另外每个在用副本登记的需求也用它补一行(副本里只有终端提交、没有会话时,`task show <需求>` 也查得到;不要求先有 spec),只在全量刷新时做(`opts.sessionIds === undefined`;Stop hook 只刷新本会话,不做)
-     - 全量刷新时对账(spec D38):登记过副本的需求(在用、已删都算),主 spec 头部现在声明了平台编号、它的目录任务还没有平台编号 → 删掉这条目录任务(`dropStaleFeatureTask`:先查后删,store 的 `deleteUnmappedFeatureTask` 只删 `platform_task_id IS NULL` 的行);已有平台编号的不删;没开过副本的需求不对账
+     - 全量刷新时对账(spec D38):登记过副本的需求(在用、已删都算),主 spec 头部现在声明了平台编号、读取侧认这个声明(目录有负责人)、它的目录任务还没有平台编号 → 先按 `ensureFeatureTaskRow` 补上声明的那条任务(本机没有时补占位,副本删了也补),再删掉这条目录任务(`dropStaleFeatureTask`,store 的 `deleteUnmappedFeatureTask` 只删 `platform_task_id IS NULL` 的行);已有平台编号的不删;没开过副本的需求不对账
   5. **副本里没对上会话的提交(D28 本地)**,feature-link.ts 的 `getTaskDetail`:这个任务的需求目录取任务详情里的 `featureDirs`(目录任务是它自己;接口任务是头部声明了它的需求目录,sync 上报时副本会话也绑到这个任务),取 `listCommitEvents(root)`(timeline 门面)里 `session_id === null`、`replicaOfCwd(roots, e.cwd)?.featureId` 是这些需求目录之一的事件,按 id 并进归属事件(去重、按 ts 再 id 排序)后再算 `commits`、`eventCounts`、`events`;`TaskDetail` 类型和输出字段不变。
   6. **需求目录对应的平台任务(C-13)**,feature-task.ts:新增导出 `featureBindingTarget(projectRoot, featureId)`,规则逐条照 C-13;「是 `T-<n>`」用文件里现有的 `isPlatformTaskValue` 判断(导出给 auto-binding.ts 用,task 里不另写平台编号的正则);index.ts 在 feature-task 那组导出里加上它。
   7. **按 feature-id 查任务**,resolve.ts 的 `findTaskByValue`:按目录任务名没找到时,参数是单段目录名(不含 `/`、`\`,不是 `.`、`..`)→ 照 `resolveFeatureTargetReadOnly` 落到这个需求目录对应的任务(头部声明了平台编号的,就是那个接口任务);带路径的参数不拿去拼需求目录。登记过副本的需求(spec D38)先照 `resolveFeatureTargetReadOnly` 看头部声明,查到就用,查不到再按目录任务找;没开过副本的需求查法不变。

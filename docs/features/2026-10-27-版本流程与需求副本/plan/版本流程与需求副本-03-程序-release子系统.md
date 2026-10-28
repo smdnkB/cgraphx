@@ -1,7 +1,7 @@
 # T-3: 程序——release 子系统
 
 > 产物: plan
-> 依据: spec@a8b762a
+> 依据: spec@16dc4b2
 
 - 目标:新增 release 子系统:K8 版本分支模式、commit-msg 提交拦截的装卸,以及 `cgraphx release guard` 命令
 - 对应 spec 编号:F2⑥、F10、D1、D5、D12;K8

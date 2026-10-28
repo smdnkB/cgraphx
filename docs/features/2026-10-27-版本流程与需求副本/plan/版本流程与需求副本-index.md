@@ -1,7 +1,7 @@
 # 实现计划: 版本流程与需求副本
 
 > 产物: plan
-> 依据: spec@a8b762a
+> 依据: spec@16dc4b2
 
 ## 设计预览
 
@@ -154,10 +154,11 @@
     ```
 
   - 规则(spec D33):
+    - 只保证 spec F8 细节方案末尾那段列的高频场景;那段列的低频情况(多个 worktree、子模块、链接、非 UTF-8、写不进的钩子等)出了问题记作已知限制,不加处理
     - `resolveHooksDir`:在 cwd 下跑 `git rev-parse --git-path hooks`,输出按 cwd 解析成绝对路径;不在 git 仓库 → null。安装、卸载、补装内部用一次 `git rev-parse --git-path hooks --git-common-dir --show-toplevel` 取齐(bare 仓库没有工作区,这条以非零退出,前两项从它失败时的输出里取,不跑第二次)
     - 钩子目录分三处:在 git 公共目录里、在工作区里、都不在(仓库外;两边都解析链接后判断);两边都含它时按更深的那个算(bare 仓库目录里建的 worktree 算工作区)
     - 只写不被 git 跟踪的钩子文件。install 按下面的顺序判断,什么都不写、返回 `unsupported` 的四种:钩子目录在仓库外(`outside_repo`);文件已存在(链接看它指向的文件)而第一行 shebang 的解释器不是 sh / bash / zsh / dash / ksh(含 `/usr/bin/env sh` 这类写法),或没有 shebang 而内容含 NUL 字节(`not_shell`,不带 lines);钩子文件是符号链接(`symlink`,带 `linkTarget`;链接悬空时顺着链接里写的路径解析指向);钩子文件或链接指向的文件被 git 跟踪(`tracked`)。`symlink`、`tracked` 带 `lines`
-    - 被跟踪的(含链接指向的、整个 `.git/hooks` 链进仓库的)看暂存区那份(`git show :<相对路径>`):含 marker → `present`(团队提交的,算已装上);暂存区那份没有片段行而工作区这份有 → 本机残留,删掉这些行(只写回、不删文件)再返回 `tracked`。链接指向本机没被跟踪的文件、里面已含 marker → `present`
+    - 被跟踪的(含链接指向的、整个 `.git/hooks` 链进仓库的)按 git 判断,文件不在工作区里(删了没暂存、稀疏检出)也不新建。链接、被跟踪的,git 实际执行的那份(工作区那份,链接看它指向的文件)含 marker → `present`(团队提交的、自己照提示加了没提交的都算);安装一行不删
     - 其余:先删掉文件里所有含 marker 的行(给了 legacyMatch 时含它的行也删),再把 lines 插到第一行 shebang 之后,没有 shebang 就放最前;文件不存在 → 新建(钩子目录不存在时一并创建),内容为 `#!/bin/sh` 加 lines,权限 0755;已有文件写回后没有执行位就补上
     - 新建在工作区里的钩子文件(本来没被忽略的)→ `gitPathPattern(相对路径)` 写进 `.git/info/exclude`;git 目录里的(如默认的 `.git/hooks`)不写;之后队友提交了同名钩子,就按 `tracked` 处理
     - 装上(installed / present / updated)后:片段登记进 `<git 公共目录>/cgraphx/hook-snippets.json`(`[{ hook, marker, lines, legacyMatch?, files }]`;files 是写进过的钩子文件,目录取 realpath、文件名照原样;临时文件 + rename,内容没变不写盘)。登记 files 里不是这次写的文件按 git 判断归谁(在文件所在目录跑上面那条 rev-parse,比公共目录和工作区根;不按路径前缀):本工作区或 git 目录的 → 删掉其中的片段(按 remove 的规则判断能不能动),从 files 去掉;同一仓库别的 worktree 的 → 留在 files,只在卸载时删;别的仓库的(副本整仓复制带过去的登记)、目录已不在的 → 从 files 去掉,不碰。再删默认钩子目录 `<git 公共目录>/hooks` 里含 marker(及 legacyMatch)的旧行——两边解析链接后不是同一个目录、`<git 公共目录>/hooks` 解析后仍在 git 目录里、旧钩子文件不是链接时才删;删后只剩 shebang 或空白就删掉文件
@@ -363,7 +364,7 @@
 | D35 🔒 删之前核对什么 | T-2(remove.ts);T-9(删之前先问用户) |
 | D36 skill 改动、install 不装拦截 | T-10;T-8 只在卸载时删拦截 |
 | D37 文档口径 | T-11 |
-| D38 需求的本机任务行 | T-5(`ensureFeatureTaskRow` 唯一一处规则;全量刷新对账删掉过时的目录任务;按 feature-id 查先看头部);store 加只删没有平台编号的目录任务 |
+| D38 需求的本机任务行 | T-5(`ensureFeatureTaskRow` 唯一一处规则;全量刷新对账先补上声明的那条任务、再删掉过时的目录任务;按 feature-id 查先看头部);store 加只删没有平台编号的目录任务 |
 | 全局约束「零变化」 | T-1、T-5、T-6、T-7 完成条件 + 统一验证 3 |
 | 全局约束「副本里拒绝清数据」 | T-4 |
 | 全局约束「git 2.38 以上」 | T-9 |
@@ -377,6 +378,8 @@
 复审后 spec 改到 spec@c1c2920,plan 随之同步:D33 被跟踪的钩子文件不写(去掉本机过滤规则)、会话开始按登记补装、`.git/hooks` 的旧片段只在新片段装上且它在 git 目录里时清;D21 ⑥ 被忽略的文件留在主目录;D26 按 feature-id 找需求目录先找副本;K3 改为两条计数,快进式同步主干判不准记进待确认项;对应的检查见统一验证 9 的 ⑮、㉓~㉕。
 
 第三轮复审后 spec 改到 spec@a8b762a,plan 随之同步:D33 ④ 被跟踪的钩子按暂存区那份区分团队提交的和本机残留、⑥ 登记记写进过的文件(按 git 判断归属,别的仓库的不碰)、补不上的在会话开始提示一次并删登记(C-2、C-6、C-7);D19 登记加 `movedFiles`、D29 据它定根(C-3、C-4、T-6);D38 需求的本机任务行收成一处规则并在全量刷新时对账(T-5);`locateFeatureRoot` 改收 roots、登记不再缓存(C-4);统一验证 9 补设计验收 26~30。
+
+第四轮复审后 spec 改到 spec@16dc4b2,plan 随之同步:D33 写明只保证高频场景(F8 细节方案末尾那段),链接、被跟踪的钩子安装时看工作区那份、不删,被跟踪的不在工作区里也不新建(C-2);D38 对账删目录任务之前先补上声明的那条任务,副本删了也补,目录没有负责人时不删(T-5);dev-merge 取主干时有 main 用 main、没有用 master(T-9);统一验证 9 补 ㉛、㉜。
 
 ## 适用规范
 
@@ -660,6 +663,20 @@
    git worktree add -q .claude/worktrees/wt -b wt && git config core.hooksPath .husky/_ && (cd .claude/worktrees/wt && cgraphx release guard >/dev/null 2>&1) && cgraphx release guard >/dev/null 2>&1
    echo "嵌套=$(grep -c cgraphx-release-guard .claude/worktrees/wt/.husky/_/commit-msg) 主=$(grep -c cgraphx-release-guard .husky/_/commit-msg)"
    cgraphx release guard --remove >/dev/null 2>&1; echo "卸载后 嵌套=$(test -e .claude/worktrees/wt/.husky/_/commit-msg && echo 在 || echo 没了) 主=$(test -e .husky/_/commit-msg && echo 在 || echo 没了)"
+   # ㉛ 被跟踪的钩子里自己加了没提交的片段:算已装上、再装不删,卸载删掉;被跟踪的钩子在工作区里删了也不新建
+   cd "$T" && git init -q x && cd x && mkdir .husky && printf '#!/usr/bin/env sh\necho team\n' > .husky/commit-msg && chmod +x .husky/commit-msg && printf '.cgraphx/\n.claude/\n' > .gitignore && git add -A && git commit -qm init && git config core.hooksPath .husky && init_cgx
+   cgraphx release guard --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const fs=require('fs');const t=fs.readFileSync('.husky/commit-msg','utf8').split('\n');t.splice(1,0,...JSON.parse(s).lines);fs.writeFileSync('.husky/commit-msg',t.join('\n'))})"
+   cgraphx release guard --json | grep '"status"'; cgraphx release guard >/dev/null 2>&1; echo "再装后=$(grep -c cgraphx-release-guard .husky/commit-msg)"
+   cgraphx release guard --remove >/dev/null 2>&1; echo "卸载后=$(grep -c cgraphx-release-guard .husky/commit-msg) status=[$(git status --porcelain)]"
+   rm .husky/commit-msg && cgraphx release guard --json | grep -E '"(status|reason)"'; echo "删了之后=$(test -e .husky/commit-msg && echo 新建了 || echo 没建) status=[$(git status --porcelain)]"
+   # ㉜ 副本删掉以后主 spec 头部才声明 T-123、本机没有这条任务:全量刷新补上 T-123,会话落到它;spec 没有负责人时目录任务不删
+   cd "$T" && git init -q y && cd y && printf '.cgraphx/\n.claude/\n' > .gitignore && echo a > a && git add -A && git commit -qm init && init_cgx
+   for r in 退款 积分; do cgraphx replica create 2026-10-28-$r --prefix $r --branch feat/$r --json >/dev/null; printf '{"session_id":"r-%s","cwd":"%s","source":"startup"}' "$r" "$T/y@$r" | cgraphx timeline-session-start-hook >/dev/null 2>&1; stop "r-$r" "$T/y@$r"; done
+   mkdir -p "$T/y@退款/docs/features/2026-10-28-退款" && printf '# 规格说明: 退款\n\n> 产物: spec\n> 负责人: t\n' > "$T/y@退款/docs/features/2026-10-28-退款/退款-spec.md"
+   (cd "$T/y@退款" && git add -A && git commit -qm "docs: 退款 spec") && git fetch -q --no-tags "$T/y@退款" feat/退款 && git merge -q --no-ff -m "合入需求：退款" FETCH_HEAD && cgraphx replica remove 2026-10-28-退款 --json >/dev/null
+   printf '# 规格说明: 退款\n\n> 产物: spec\n> 负责人: t\n> 任务: T-123\n' > docs/features/2026-10-28-退款/退款-spec.md
+   mkdir -p "$T/y@积分/docs/features/2026-10-28-积分" && printf '# 规格说明: 积分\n\n> 产物: spec\n> 任务: T-456\n' > "$T/y@积分/docs/features/2026-10-28-积分/积分-spec.md"
+   echo "声明之后:$(tasks)"; for v in 2026-10-28-退款 2026-10-28-积分; do cgraphx task show $v --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);console.log(r.task.externalId??r.task.featureId, JSON.stringify(r.sessions.map(x=>x.binding.sessionId)))})"; done
    cd "$REPO" && rm -rf "$T"
    ```
 
@@ -679,6 +696,8 @@
    → ㉘ `spec 之前:F:2026-10-28-发票@- F:2026-10-28-订单导出@-`;`声明之后:A:T-123 A:T-456 F:2026-10-28-发票@T-900`;`T-123 ["r-订单导出"]`
    → ㉙ `合入前`、`合入推送后`、`删副本后` 三处都是 `create+` 加末尾打出的 C1
    → ㉚ remove 输出 `"status": "removed"`;`主目录 拦截=3 提交记录=3 副本=0`;`嵌套=3 主=3`;`卸载后 嵌套=没了 主=没了`
+   → ㉛ guard 输出 `"status": "present"`;`再装后=3`;`卸载后=0 status=[]`;删了之后 guard 输出 `"status": "unsupported"`、`"reason": "tracked"`;`删了之后=没建 status=[ D .husky/commit-msg]`
+   → ㉜ `声明之后:A:T-123 A:T-456 F:2026-10-28-积分@-`;`T-123 ["r-退款"]`;`2026-10-28-积分 ["r-积分"]`
 
 spec「设计验收」各条的落点:1 → 统一验证 3;2 的 `rm -rf` 部分、7、8、9 → 统一验证 5;12 → 统一验证 8;13 → 统一验证 1、2;14~21、23~30 → 统一验证 9;22 → 统一验证 9 先验一遍,单元测试与 3、4、5、6、10、11(单元测试、并发写、计时)以及 2 的 `cgraphx uninstall` 部分 → 全部任务完成后由 `/unit-spec` → `/unit-code` 补。
 

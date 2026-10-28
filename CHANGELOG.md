@@ -205,9 +205,10 @@ the current branch as before.
   bindings made in a copy are recorded in the main directory; a session
   started in a copy belongs to the copy's requirement unless it was bound
   with `cgraphx task use`. When the copy's sessions created a local task
-  before the spec existed and the spec later declares `> 任务: T-n`, that
-  task is removed on the next full refresh and `task show <requirement>`
-  lands on T-n. A requirement file written in the main directory before
+  before the spec existed and the spec later declares `> 任务: T-n`, the
+  next full refresh adds T-n locally if it is missing — also after the copy
+  is removed — then removes that task, and `task show <requirement>` lands
+  on T-n with the copy's sessions. A requirement file written in the main directory before
   `/dev-start` moved it into the copy (recorded as `movedFiles` in the
   registration) keeps counting as the copy's output after it is merged
   back. `task show`, `sync` and `/doc-report` show
@@ -245,10 +246,12 @@ the current branch as before.
   it is a symlink or tracked by git (such as husky 5–8's
   `.husky/commit-msg`); a notice says why and, for the last two, prints the
   lines to add right after the shebang (for a symlink, where it points and
-  what adding them would affect). A tracked hook whose committed version
-  already carries the snippet counts as installed and is left alone on
-  uninstall (`cgraphx release guard --remove` says so); snippet lines only
-  this machine added to a tracked hook are removed. Hook files cgraphx
+  what adding them would affect). A tracked hook, or a symlink's target,
+  that already carries the snippet in the work tree counts as installed —
+  whether the team committed it or it was added here — and a tracked hook
+  missing from the work tree is not recreated. On uninstall, lines the team
+  committed are left alone (`cgraphx release guard --remove` says so) and
+  lines only this machine added are removed. Hook files cgraphx
   creates inside the work tree go into `.git/info/exclude`. Installed
   snippets are registered under the git directory together with the files
   they went into: after the hooks directory changes (husky 8's `.husky` to
@@ -259,7 +262,10 @@ the current branch as before.
   install; one it cannot put back is reported once in the session-start
   context and dropped from the registration. Leftover snippets in `.git/hooks` are removed once the new ones
   are in place elsewhere, and uninstalling also removes 2.0.10 snippets that
-  were written through a symlink into a file in the repository.
+  were written through a symlink into a file in the repository. These
+  guarantees cover plain `.git/hooks`, husky 5–9, copies and upgrades from
+  2.0.10; several git worktrees of one repository, hooks directories inside
+  a submodule, symlinked or non-UTF-8 hooks are not covered.
   `cgraphx install` and `upgrade` add the missing timeline snippets.
 - `/dev-impl-subagent` no longer stops on `main` or `master` to ask whether
   to create a branch; like `/dev-impl`, it works on the current branch. Both
