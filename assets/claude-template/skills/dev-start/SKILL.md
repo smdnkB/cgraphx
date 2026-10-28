@@ -99,6 +99,8 @@ $ cgraphx features sync /Users/smdnk/objects/ai/cgraphx@订单导出
 副本开好了:/Users/smdnk/objects/ai/cgraphx@订单导出,分支 feat/订单导出(从 dev/2.0.11 拉);讨论稿 v1、v2 已移进副本。副本里的会话和提交都记进主目录,归到 2026-10-27-订单导出;做完、/code-review 过了,在主目录输入 /dev-merge 订单导出 合入。
 
 在 /Users/smdnk/objects/ai/cgraphx@订单导出 开新会话，输入 /dev-spec
+
+副本里同步主目录的分支只用 /dev-merge,不要 git pull、git merge——快进同步过,合没合入就判断不准了
 ```
 
 这块盘不能写时复制:
@@ -122,6 +124,8 @@ $ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch 
 
 在 /Users/smdnk/objects/ai/cgraphx@积分发放 开新会话，输入 /dev-clarify
 在 /Users/smdnk/objects/ai/cgraphx@积分兑换 开新会话，输入 /dev-clarify
+
+副本里同步主目录的分支只用 /dev-merge,不要 git pull、git merge——快进同步过,合没合入就判断不准了
 ```
 
 ## 停下问用户

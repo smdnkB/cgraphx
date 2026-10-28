@@ -25,14 +25,14 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
 3. **定起点,看有没有合入**:起点是版本分支第一父链上最早一个不在主干里的提交的第一个父提交,即开版本的那个点;不用 `git merge-base main dev/2.0.11`——把主干合进过版本分支之后,它会移到主干的热修复上。
 
    ```bash
-   C=$(git rev-list --first-parent dev/2.0.11 --not main | tail -n 1); START=${C:+$C^1}; START=${START:-dev/2.0.11}
+   L=$(git rev-list --first-parent dev/2.0.11 --not main --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-dev/2.0.11}
    echo "起点 $(git rev-parse "$START")"
    git log --first-parent --merges --format=%h "$START"..dev/2.0.11 | while read -r M; do
      git merge-base --is-ancestor "$M^2" main && echo "$M 同步主干" || echo "$M 合入"
    done
    ```
 
-   整段放在一条命令里跑(每次调用都是新的 shell,上一次算的 START 不在了)。后面各步的 `<起点>` 都填这里打出来的那串 hash,不要填变量名。一个「合入」都没有(只有同步主干,或什么都没有)→ 只回一句「dev/2.0.11 还没有合入任何需求」,停下。手动合并也算合入。
+   整段放在一条命令里跑(每次调用都是新的 shell,上一次算的 START 不在了)。git 报错(如没有叫 main 的分支)时整段以非零退出、后面的不跑:停下,把报错原样转告用户。后面各步的 `<起点>` 都填这里打出来的那串 hash,不要填变量名。一个「合入」都没有(只有同步主干,或什么都没有)→ 只回一句「dev/2.0.11 还没有合入任何需求」,停下。手动合并也算合入。
 
 4. **按需求归组**:同步主干的合并不归到需求,单列;其余第一父链上的合并,说明是「合入需求：X」「合入需求：X(第 N 次)」的归到需求 X,X 的需求目录是 `cgraphx features list --json` 里 `title` 等于 X 的那条。找不到目录,或说明不是这个格式(手动合并,如 `Merge branch 'fix/登录超时' into dev/2.0.11`)→ 照常列出,需求一栏写分支名(取不到就写说明),标「未关联需求目录」。
 
@@ -42,10 +42,10 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
    |---|---|
    | 起点 tag | `git describe --tags --abbrev=0 --match 'v[0-9]*' <起点>` |
    | 版本分支上的提交 | `git log --first-parent --format='%H%x09%P%x09%s' <起点>..dev/2.0.11`:有两个父提交的是合并——第二个父提交在主干里的是同步主干,其余是合入;只有一个父提交的是直接提交 |
-   | 每次合入的提交数、文件、增删行 | 合入 M:`git rev-list --count --no-merges M^1..M^2`(副本里同步产生的合并提交不算);`git -c core.quotePath=false diff --numstat M^1 M` |
+   | 每次合入的提交数、文件、增删行 | 合入 M:`git rev-list --count --no-merges "M^1..M^2"`(副本里同步产生的合并提交不算);`git -c core.quotePath=false diff --numstat "M^1" M` |
    | 疑似夹带 | ① 直接提交里不以 `chore(release):` 开头的;② 合入改了别的需求目录 `docs/features/<别的需求>/`;③ 越界改代码(第 6 步)。不判:本需求目录,`docs/knowledge/`、`docs/schema-knowledge/`、`docs/code-map/`、`docs/design-map/`,本需求的 `docs/bruno/<服务>/<本需求前缀>/` 和 bruno 的公共文件(`bruno.json`、`environments/`) |
    | 已声明的版本级提交 | 直接提交里以 `chore(release):` 开头的 |
-   | 同步主干 | 每个同步主干的合并 M:`git log --format='%h %s' M^1..M^2`,即它带进来的主干提交;不进本版本的需求,也不进疑似夹带、两个需求都改了的文件、敏感改动 |
+   | 同步主干 | 每个同步主干的合并 M:`git log --format='%h %s' "M^1..M^2"`,即它带进来的主干提交;不进本版本的需求,也不进疑似夹带、两个需求都改了的文件、敏感改动 |
    | 两个需求都改了的文件 | 各需求合入文件的交集 |
    | 敏感改动 | 合入改到的:`*.sql`;依赖清单 `package.json`、`package-lock.json`、`pnpm-lock.yaml`、`yarn.lock`、`pom.xml`、`build.gradle(.kts)`、`go.mod`、`go.sum`、`requirements*.txt`、`pyproject.toml`、`Cargo.toml`、`Cargo.lock`;配置 `.env*` |
    | 和主干合并的预演 | `git -c core.quotePath=false merge-tree --write-tree --name-only main dev/2.0.11` |
@@ -60,13 +60,13 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
      ```bash
      git log --first-parent --merges --format='%h %s' <起点>..dev/2.0.11 | while read -r M S; do
        git merge-base --is-ancestor "$M^2" main && { echo "== $M 同步主干:"; git log --format='  %h %s' "$M^1..$M^2"; continue; }
-       echo "== $M $S · 提交 $(git rev-list --count --no-merges $M^1..$M^2)"
-       git -c core.quotePath=false diff --numstat $M^1 $M
+       echo "== $M $S · 提交 $(git rev-list --count --no-merges "$M^1..$M^2")"
+       git -c core.quotePath=false diff --numstat "$M^1" "$M"
      done
      ```
 
    - 一个需求合入几次,提交、增删行相加,文件去重后计数;二进制文件 numstat 显示 `-`,计文件不计行数。
-   - 合入里的疑似夹带落到提交:`git log --no-merges --format='%h %s' M^1..M^2 -- <文件>`;`<起点日期>` = `git log -1 --format=%cs <起点>`。
+   - 合入里的疑似夹带落到提交:`git log --no-merges --format='%h %s' "M^1..M^2" -- <文件>`;`<起点日期>` = `git log -1 --format=%cs <起点>`。
    - 「测试」一栏:测试环节是「✗ 缺(必需)」写「缺(必需)」;否则逐份写它列出的测试报告的结果(读报告的「结论」节),如「接口 12 个全过」「接口 8 个,2 个没过」;未关联需求目录的写「未关联需求目录」。
    - 「不在本版本的需求」取 `state` 是 `present`、`merged` 不是 true 的,写副本路径和情况:`ahead` 大于 0 写「差 2 个提交」,`merged` 是 false、`ahead` 是 0 写「还没有提交」,`merged` 是 null 写「判断不了合没合入」。
    - 预演有冲突时,每个冲突文件查涉及的需求。版本分支这边哪些合并改过它,第二个父提交已在主干里的写「同步主干」,其余写合并说明:
