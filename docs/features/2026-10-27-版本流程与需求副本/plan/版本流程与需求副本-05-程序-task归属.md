@@ -1,7 +1,7 @@
 # T-5: 程序——task 多根换算与副本会话归属
 
 > 产物: plan
-> 依据: spec@3eef166
+> 依据: spec@561fdba
 
 - 目标:task 的路径换算、找需求目录都认「主目录 + 全部登记过的副本」;副本里开的会话归副本登记的需求;副本里没对上会话的提交算进该需求的 `task show`;在副本里执行和在主目录执行结果一样
 - 对应 spec 编号:F8(行为链、①②)、K2、D25、D26、D27、D28(本地部分)、D29(目录任务声明找目录)
@@ -12,6 +12,7 @@
   - `src/core/task/feature-task.ts`
   - `src/core/task/report.ts`
   - `src/core/task/feature-link.ts`
+  - `src/core/task/resolve.ts`
   - `src/core/task/index.ts`
 - 必须严格执行:
   - 按 C-4:只经 `from '../replica'` 用 `resolveMainRoot`、`listProjectRoots`、`matchProjectRoot`、`replicaOfCwd`、`locateFeatureRoot`、`listReplicas`
@@ -38,8 +39,10 @@
      - `deriveSessionAutoBinding` 的输入加上 roots;函数内取本会话 id 最小的一条事件的 cwd,`replicaOfCwd(roots, cwd)` 命中副本 → 结果 `{ featureId: 副本.featureId, strength: 'write', boundAt: 全部事件里最早的 ts }`;但 `cutoffTs` 不为 null 且最早一条事件的 ts 不早于 cutoffTs 时,结果为 null(显式绑定优先,F8②);命中副本时不再按读写的文件派生(F8①),也不要求需求目录合格
      - 没命中副本(主目录的会话)→ 照旧 R1~R7,只是路径按第 3 条换算、合格判断按第 2 条
      - `refreshAutoBindings` 里 `roots = listProjectRoots(root)` 取一次,传给每个会话的派生;`readFeatureTask(root, auto.featureId)` 改为在 `locateFeatureRoot(root, auto.featureId) ?? root` 上读
-  5. **副本里没对上会话的提交(D28 本地)**,feature-link.ts 的 `getTaskDetail`:任务是目录任务(`task.source === 'feature'` 且 `featureId` 不为 null)时,取 `listCommitEvents(root)`(timeline 门面)里 `session_id === null`、`replicaOfCwd(roots, e.cwd)?.featureId === task.featureId` 的事件,按 id 并进归属事件(去重、按 ts 再 id 排序)后再算 `commits`、`eventCounts`、`events`;`TaskDetail` 类型和输出字段不变。
-  6. **需求目录对应的平台任务(C-13)**,feature-task.ts:新增导出 `featureBindingTarget(projectRoot, featureId)`,规则逐条照 C-13;「是 `T-<n>`」用文件里现有的 `isPlatformTaskValue` 判断;index.ts 在 feature-task 那组导出里加上它。
+     - 需求 → 本机任务行的规则收成一个内部函数:主 spec 头部声明了平台编号(`isPlatformTaskValue`)→ 补建接口任务占位;否则建目录任务。会话派生到需求时用它;另外每个在用副本登记的需求,本机还没有它的目录任务时也用它补一行(副本里只有终端提交、没有会话时,`task show <需求>` 也查得到)
+  5. **副本里没对上会话的提交(D28 本地)**,feature-link.ts 的 `getTaskDetail`:这个任务的需求目录取任务详情里的 `featureDirs`(目录任务是它自己;接口任务是头部声明了它的需求目录,sync 上报时副本会话也绑到这个任务),取 `listCommitEvents(root)`(timeline 门面)里 `session_id === null`、`replicaOfCwd(roots, e.cwd)?.featureId` 是这些需求目录之一的事件,按 id 并进归属事件(去重、按 ts 再 id 排序)后再算 `commits`、`eventCounts`、`events`;`TaskDetail` 类型和输出字段不变。
+  6. **需求目录对应的平台任务(C-13)**,feature-task.ts:新增导出 `featureBindingTarget(projectRoot, featureId)`,规则逐条照 C-13;「是 `T-<n>`」用文件里现有的 `isPlatformTaskValue` 判断(导出给 auto-binding.ts 用,task 里不另写平台编号的正则);index.ts 在 feature-task 那组导出里加上它。
+  7. **按 feature-id 查任务**,resolve.ts 的 `findTaskByValue`:按目录任务名没找到时,参数是单段目录名(不含 `/`、`\`,不是 `.`、`..`)→ 照 `resolveFeatureTargetReadOnly` 落到这个需求目录对应的任务(头部声明了平台编号的,就是那个接口任务);带路径的参数不拿去拼需求目录。
 - 完成条件:
   - 没有登记副本时:`task list --local --json`、`task show <任意任务> --json` 的输出与改动前逐字相同(统一验证 3 比对目录任务名)
   - 在副本里调用上面第 1 条列出的函数,与在主目录调用结果相同

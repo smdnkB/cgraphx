@@ -1,7 +1,7 @@
 # T-2: 程序——replica 子系统
 
 > 产物: plan
-> 依据: spec@3eef166
+> 依据: spec@561fdba
 
 - 目标:新增 replica 子系统:登记读写、主目录与副本的路径换算、开 / 列 / 删副本,以及 `cgraphx replica` 命令组
 - 对应 spec 编号:F7、F9、D1、D18、D19、D20、D21、D22、D26(换算函数)、D35;K1、K3、K9;spec「细节方案:F7」的登记文件示例、命令契约、K3 / K9 取法
@@ -33,20 +33,21 @@
        - 已有同 featureId、removedAt 为空、目录还在的登记 → 直接返回该登记,`created: false`、`movedFiles: []`、`warnings: []`(F7②)
        - 主目录 `git status --porcelain --untracked-files=no` 有输出 → `dirty_main`,`files` 为这些路径(F7①)
        - 主目录已有同名本地分支(`git show-ref --verify --quiet refs/heads/<branch>` 成功)→ `invalid_args`(提示换分支名)
+       - 副本目录名 `<主目录名>@<prefix>` 已登记给别的 featureId(在用、已删都算)→ `name_taken`(spec D22)
        - 目标路径 `<主目录的上级>/<主目录名>@<prefix>` 已存在 → `target_exists`
-     - 复制:darwin 先判断目标目录和主目录同卷(`fs.statSync(…).dev` 相同)、且卷是 APFS(`/usr/bin/stat -f %Sd` 取设备名,`/sbin/mount` 里这个设备那一行的文件系统类型),不满足或判断不了 → 抛 `no_cow`,满足才 `/bin/cp -cR <主目录> <目标>`;linux `cp -R --reflink=always <主目录> <目标>`;复制命令失败 → 删掉已产生的目标目录,抛 `no_cow`。`requiredBytes` = `du -sk <主目录>` × 1024。`fullCopy` 为 true 时用 `cp -R`,不做判断。
+     - 复制:darwin 先判断目标目录和主目录同卷(`fs.statSync(…).dev` 相同)、且卷是 APFS(`/usr/bin/stat -f %Sd` 取设备名,`/sbin/mount` 里这个设备那一行的文件系统类型),不满足或判断不了 → 抛 `no_cow`,满足才 `/bin/cp -cR <主目录> <目标>`;linux `cp -R --reflink=always <主目录> <目标>`;复制命令失败 → 删掉已产生的目标目录;报错是克隆不了(`failed to clone`、`clonefile`、`not supported`、`cross-device`、`EOPNOTSUPP`、`EXDEV`)才抛 `no_cow`,其余(读不了的文件、权限)照实抛运行时错误,message 写明已删掉复制了一半的目标目录、检查读权限后重跑。`requiredBytes` = `du -sk <主目录>` × 1024。`fullCopy` 为 true 时用 `cp -R`,不做判断。
      - 整理(spec D21 ①~⑥,①~⑤ 任一步失败:`fs.rmSync(目标, { recursive: true, force: true })`,已写的登记文件删掉,抛原错误;主目录不动):
-       1. 先把各 agent 配置目录(`listAgentProfiles()` 各项的 `configDirName`,如 `.claude`)和 `codeGraphDirName()` 写成 `/<目录名>/`,逐行追加到副本的 `.git/info/exclude`(`.git/info/` 不在就建;已有同一行不重复加);再在副本里取 `git ls-files --others --exclude-standard -z`(这时已不含上面这些目录):位于 `docs/features/<featureId>/` 下的保留,其余逐个删除,删完顺手删掉因此变空的目录(`docs/features/<featureId>/` 本身不删)
+       1. 先按 C-5 写副本的 exclude:各 agent 配置目录(`listAgentProfiles()` 各项的 `configDirName`,如 `.claude`)里开副本时没被跟踪的部分加 `codeGraphDirName()`,经 C-2 的 `gitPathPattern`、`appendGitInfoLines` 追加(仓库跟踪了配置目录的一部分时,被跟踪的位置之后新建的文件 git 看得见);再在副本里取 `git ls-files --others --exclude-standard -z`(这时已不含上面这些目录):位于 `docs/features/<featureId>/` 下的保留,其余逐个删除,删完顺手删掉因此变空的目录(`docs/features/<featureId>/` 本身不删)
        2. `<副本>/<codeGraphDirName()>/` 下除 `.gitignore` 以外的条目逐个 `fs.rmSync(…, { recursive: true, force: true })`,`.gitignore` 原样保留、不改写;目录不在或没有 `.gitignore` 时才调 `createDirectory(副本)`(它会建目录和 `.gitignore`)→ `DatabaseConnection.open(getLocalDatabasePath(副本)).close()`(空的本地库)→ `fs.symlinkSync(realpath(getCodeGraphDir(主目录)), path.join(getCodeGraphDir(副本), SHARED_LINK_NAME), 'dir')`
        3. 副本里 `git checkout -q -b <branch>`;`fs.mkdirSync(<副本>/docs/features/<featureId>, { recursive: true })`
        4. 副本根下一层、两层目录里的 `pyvenv.cfg`,内容含主目录绝对路径 → warnings 加一条「副本里的 <目录> 写死了主目录路径,在副本里重建虚拟环境」
-       5. 写登记(C-3):`baseBranch` = 主目录 `git symbolic-ref --short HEAD`,`createdAt` = 当前时间,`removedAt: null`
-       6. 删掉主目录 `docs/features/<featureId>/` 下没被跟踪的文件(第 1 步保留的那些),路径记进 `movedFiles`;删不掉的记进 warnings,不回滚
+       5. 写登记(C-3):`baseBranch` = 主目录 `git symbolic-ref --short HEAD`,`baseCommit` = 复制前主目录 `git rev-parse --verify -q HEAD`,`createdAt` = 当前时间,`removedAt: null`
+       6. 删掉主目录 `docs/features/<featureId>/` 下没被跟踪的文件(第 1 步保留的那些),路径记进 `movedFiles`;这个需求目录里没有被跟踪的文件时,被忽略的文件(如 `.DS_Store`)也删掉,目录删空;删不掉的记进 warnings,不回滚
      - 返回 C-4 的 `CreateReplicaResult`,`created: true`
   6. `status.ts`(`listReplicaStatus`,spec「F7」K3、K9 取法):
      - state:removedAt 非空 → `removed`;目录不在 → `missing`;否则 `present`
      - dirty(只对 present):副本里 `git status --porcelain --untracked-files=no` 的路径,加上 `git ls-files --others --exclude-standard` 的路径
-     - merged、ahead(只对 present,目标分支 = 主目录当前分支):`git ls-remote <副本路径> refs/heads/<branch>` 取提交;主目录里 `git fetch --no-tags --no-write-fetch-head <副本路径> <branch>`;`git merge-base --is-ancestor <提交> <目标分支>` 成立 → `merged: true, ahead: 0`;否则 `merged: false`,`ahead` = `git rev-list --count <目标分支>..<提交>`;副本里分支不存在 → `merged: null, ahead: null`
+     - merged、ahead(只对 present,目标分支 = 主目录当前分支):`git ls-remote <副本路径> refs/heads/<branch>` 取提交;主目录里 `git fetch --no-tags --no-write-fetch-head <副本路径> <branch>`;按 C-5 的 K3 取法:自己做的提交 = `git rev-list --first-parent --no-merges <提交> ^<baseCommit>`,没有 → `merged: false, ahead: 0`(还没有提交);还没合入的 = 其中也在 `git rev-list --no-merges <提交> ^<baseCommit> ^HEAD` 里的,个数为 `ahead`,0 个 → `merged: true`;登记里没有 baseCommit(旧登记)→ 照旧 `git merge-base --is-ancestor <提交> HEAD` 与 `git rev-list --count HEAD..<提交>`;副本里分支不存在、git 出错 → `merged: null, ahead: null`
      - 默认不含 removed,`includeRemoved` 为 true 时含
   7. `remove.ts`(`removeReplica`,spec D35):
      - 按调用方传入的项目根查 C-5:`resolveDataDir(projectRoot).state` 不是 `own` → `not_main_dir`

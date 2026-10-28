@@ -1,7 +1,7 @@
 # T-7: 程序——features 列出副本里的需求
 
 > 产物: plan
-> 依据: spec@3eef166
+> 依据: spec@561fdba
 
 - 目标:主目录的 `cgraphx features list` / `features sync` 另外列出在用副本里登记的需求,标「在副本 <副本目录名>」;副本里只列副本自己的目录树;没有副本的项目输出不变
 - 对应 spec 编号:F8(「主目录的 cgraphx features list 也列出副本里在做的需求」)、D30

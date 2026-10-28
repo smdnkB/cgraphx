@@ -1,7 +1,7 @@
 # T-6: 程序——sync 以主目录上报
 
 > 产物: plan
-> 依据: spec@3eef166
+> 依据: spec@561fdba
 
 - 目标:上报不论从哪个目录触发都按主目录跑;路径按「主目录 + 全部登记过的副本」换算;副本里的提交在副本仓库里查;副本里没对上会话的提交,每个副本单独上报一个带绑定的会话
 - 对应 spec 编号:F8(平台上报那一段)、D25、D26、D28(上报部分)、D29
@@ -39,10 +39,11 @@
      - payload.ts:`SyncContext` 加 `roots: ProjectRoot[]`(`createSyncContext` 里 `listProjectRoots(root)` 取一次)
      - artifacts.ts、references.ts:建 resolver 时传 `ctx.roots`;读文件头(`identifyArtifact`)和判断文件存在(`fs.existsSync`、`isExistingFile`)都在路径所在的根里做,那个根已不在就退回主目录
      - 提交里的文件(`fromRepoRel`):根取该提交事件 cwd 所在的根(`replicaOfCwd(ctx.roots, e.cwd)?.path`,不在副本里就是主目录);artifacts.ts 用 `ctx.commitEvents` 建 hash → 根的映射
+     - 产出对提交:文件只对上同一个根里的提交(副本里的文件对副本里的提交,主目录的对主目录的),不跨根认
   3. **git 查询(D29)**:
      - git.ts:`GitCache` 加 `hasCommit(hash: string): boolean`(`git cat-file -e <hash>^{commit}`,结果缓存)
      - payload.ts:`SyncContext` 加 `gitFor(root: string): GitCache`(按根懒建、缓存;主目录返回现有的 `ctx.git`)
-     - artifacts.ts:提交相关的查询(`fileAddedIn`、`isOnRemote`)先用主目录的 GitCache;`hasCommit` 为 false 且该提交的根是还在的副本 → 改用 `ctx.gitFor(副本 path)`;`isTracked`、文件存在判断用路径所在的根
+     - artifacts.ts:提交相关的查询(`fileAddedIn`、`isOnRemote`)先用主目录的 GitCache;`hasCommit` 为 false 且该提交的根是还在的副本 → 改用 `ctx.gitFor(副本 path)`;查推送没有也一样:主目录查不到就到提交所在的副本仓库查;`isTracked`、文件存在判断用路径所在的根
   4. **副本会话(D28,C-11)**,payload.ts:
      - `buildTerminalPayload` 只收 session_id 为空、`replicaOfCwd` 没命中副本的提交(主目录的终端提交)
      - 新增 `buildReplicaSessionPayloads(ctx): BuiltSession[]`:session_id 为空、命中副本的提交按副本分组,每组按 C-11 构造一个会话(id、空 events / references、commits、artifacts、一条绑定);绑定的 taskId、taskKey 取 `featureBindingTarget(ctx.projectRoot, 副本.featureId)`(C-13),`taskKey` 只在它不为 null 且协议支持任务键(与 `toIngestBinding` 的 `supportsTaskKey` 同一判断)时带
