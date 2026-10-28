@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { ALL_TARGETS, getTarget, resolveTargetFlag } from './targets/registry';
 import type { AgentTarget, Location } from './targets/types';
 import { isInitialized } from '../../core/directory';
-import type { HookSnippetResult } from '../../core/git-hooks';
+import { hookNotice, type HookSnippetResult } from '../../core/git-hooks';
 import {
   DEFAULT_AGENT_ID,
   defaultAgentProfile,
@@ -22,7 +22,7 @@ type Clack = typeof import('@clack/prompts');
 /**
  * timeline 安装成功那行的 git 部分:有写了盘的钩子(installed / updated)→ ` + git <钩子名用 / 连起来>`;
  * 全是 present → `(git hook 已存在)`;不在 git 仓库 → `(非 git 仓库,跳过 git hook)`;
- * 其余(有没写入的非 shell 钩子)不写这部分,由随后的提示逐个说明。
+ * 其余(有没写入的钩子)不写这部分,由随后的提示逐个说明原因。
  */
 function gitHookSummary(hooks: readonly HookSnippetResult[]): string {
   if (hooks.length === 0) return '(非 git 仓库,跳过 git hook)';
@@ -31,16 +31,9 @@ function gitHookSummary(hooks: readonly HookSnippetResult[]): string {
   return hooks.every((h) => h.status === 'present') ? '(git hook 已存在)' : '';
 }
 
-/** git 钩子的安装提示(plan C-7 原文):非 shell 钩子每个一行;钩子目录由 git 跟踪时打一行。 */
+/** git 钩子的安装提示(spec D33):没写入的说原因,被跟踪的钩子文件靠本机过滤规则藏起改动的说一句。 */
 function gitHookNotices(hooks: readonly HookSnippetResult[]): string[] {
-  const notices = hooks
-    .filter((h) => h.status === 'unsupported')
-    .map((h) => `钩子文件 ${h.hookPath} 不是 shell 脚本,没写入`);
-  const tracked = hooks.find((h) => h.hooksDirTracked);
-  if (tracked !== undefined) {
-    notices.push(`钩子目录 ${path.dirname(tracked.hookPath)} 由 git 跟踪,改动会出现在 git status 里`);
-  }
-  return notices;
+  return hooks.map((h) => hookNotice(h)).filter((n): n is string => n !== null);
 }
 
 /** 描述对应的 target(注册表由全部描述生成,必然存在)。 */

@@ -20,13 +20,12 @@
  *   4  DB error (schema / query failure)
  */
 
-import path from 'node:path';
-
 import type { Command } from 'commander';
 
 import { queryEvents, getEventById, getEventStats } from './indexer';
 import { installTimelineHooks, uninstallTimelineHooks, type InstallReport } from './installer';
 import { resolveProjectRoot } from '../directory';
+import { hookNotice } from '../git-hooks';
 import { TimelineSchemaError, StoreQueryError } from './errors';
 import { assertEventType } from './payload';
 import { HOOK_EVENTS_TO_COMMANDS, GIT_COMMIT_SUBCOMMAND, type HookEventName } from './constants';
@@ -412,8 +411,8 @@ function writeReports(reports: readonly unknown[]): void {
 }
 
 /**
- * git 钩子的安装提示往 stderr 打:钩子文件不是 shell 脚本(没写入)每个文件一行;钩子目录由
- * git 跟踪的,同一目录只打一行。多个 agent 的报告里是同一批钩子,同一句话只打一次。
+ * git 钩子的安装提示往 stderr 打:没写入的说原因,被跟踪的钩子文件靠本机过滤规则藏起改动的说一句
+ * (hookNotice)。多个 agent 的报告里是同一批钩子,同一句话只打一次。
  */
 function writeGitHookNotices(reports: readonly InstallReport[]): void {
   const printed = new Set<string>();
@@ -424,8 +423,8 @@ function writeGitHookNotices(reports: readonly InstallReport[]): void {
   };
   for (const report of reports) {
     for (const hook of report.gitHooks) {
-      if (hook.status === 'unsupported') notice(`钩子文件 ${hook.hookPath} 不是 shell 脚本,没写入`);
-      if (hook.hooksDirTracked) notice(`钩子目录 ${path.dirname(hook.hookPath)} 由 git 跟踪,改动会出现在 git status 里`);
+      const text = hookNotice(hook);
+      if (text !== null) notice(text);
     }
   }
 }
