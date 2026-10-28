@@ -15,7 +15,7 @@ import { extractHookPayload, type HookPayload } from './payload';
 import { resolveProjectRoot } from '../directory';
 import { summarizeToolResponse } from './post-tool-summary';
 import { sanitizeToolArgs } from './tool-args';
-import { COMMIT_BRANCH_ENV, COMMIT_HOOK_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
+import { COMMIT_BRANCH_ENV, COMMIT_HOOK_ENV, COMMIT_REFLOG_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
 import { readCurrentTurnId, writeCurrentTurn, removeTurnState } from './turn-state';
 import type { TimelineEventInput } from './types';
 import { DEFAULT_AGENT_ID, requireAgentProfile, resolveSessionIdFromEnv, type AgentId } from '../agents';
@@ -310,7 +310,7 @@ export async function sessionEndHook(agent: AgentId = DEFAULT_AGENT_ID): Promise
  *
  * 由钩子目录里 post-commit、post-merge 片段后台调起(`&`),耗时可以比 Claude Code hook 宽松。
  * - 合并提交(父提交 ≥ 2):文件列表为空、增删行记 0,相对第一父提交的统计记进 `metadata.merge`
- * - post-merge 调起(COMMIT_HOOK_ENV 为 post-merge)而提交只有一个父提交:快进,不产生新提交,不记
+ * - post-merge 调起(COMMIT_HOOK_ENV 为 post-merge)而这次合并是快进(isFastForward):不产生新提交,不记
  * - 同一 commit_hash 已记过的不再记(去重在 recordEvent 里)
  *
  * 会话 id 与来源 agent 经 agents 门面从会话环境变量解析:agent 在会话内通过 Bash
@@ -325,8 +325,8 @@ export async function gitCommitHook(): Promise<void> {
     branch: process.env[COMMIT_BRANCH_ENV],
   });
   if (!info) return;
-  // post-merge 遇到只有一个父提交的提交 = 快进:不产生新提交,提交本身在当时已记过
-  if (info.parents.length === 1 && process.env[COMMIT_HOOK_ENV] === 'post-merge') return;
+  // post-merge 遇到快进:不产生新提交,快进到的提交在别处做的,不算本机的提交(spec D32)
+  if (process.env[COMMIT_HOOK_ENV] === 'post-merge' && isFastForward(info)) return;
 
   // 归属会话与来源 agent 取自会话环境变量;终端手动提交时两者均为 null。
   const fromEnv = resolveSessionIdFromEnv();
@@ -353,6 +353,25 @@ export async function gitCommitHook(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[timeline] git-commit record failed: ${msg}\n`);
   }
+}
+
+/**
+ * post-merge 时这次合并是不是快进(spec D32):HEAD 的 reflog 最新一行含 `: Fast-forward`
+ * (`pull -q: Fast-forward`、带 -m 时 `merge x: Fast-forward (no commit created; …)`;git 不翻译这个词)。
+ * 不能只看父提交数——快进到别人做的合并提交时,HEAD 也有两个父提交。reflog 那一行取片段当场传来的
+ * COMMIT_REFLOG_ENV,旧版片段不传时现读;读不到(关掉了 core.logAllRefUpdates 等)才退回看父提交数。
+ */
+function isFastForward(info: GitCommitInfo): boolean {
+  let subject = process.env[COMMIT_REFLOG_ENV];
+  if (subject === undefined) {
+    try {
+      subject = runGit('reflog -1 --format=%gs HEAD', info.cwd).trim();
+    } catch {
+      subject = '';
+    }
+  }
+  if (subject !== '') return subject.includes(': Fast-forward');
+  return info.parents.length === 1;
 }
 
 /** git_commit 的 metadata:分支(读得到才带)+ 合并统计(合并提交才带);都没有 → undefined。 */
@@ -427,7 +446,9 @@ export function readGitCommitInfo(pinned: { hash?: string; branch?: string } = {
       return { hash, message, files: [], cwd, insertions: 0, deletions: 0, branch, parents, merge };
     }
 
-    const files = runGit(`diff-tree --no-commit-id --name-only -r ${ref}`, cwd)
+    // quotePath=false:中文等非 ASCII 路径原样输出,不转成 "\344\270..." 带引号的形式;
+    // --root:仓库的第一个提交也列出文件
+    const files = runGit(`-c core.quotePath=false diff-tree --root --no-commit-id --name-only -r ${ref}`, cwd)
       .split('\n').map(s => s.trim()).filter(Boolean);
     const { insertions, deletions } = readNumstat(`show --numstat --format= ${ref}`, cwd);
     return { hash, message, files, cwd, insertions, deletions, branch, parents, merge: null };

@@ -96,10 +96,15 @@ export const COMMIT_BRANCH_ENV = 'CGRAPHX_COMMIT_BRANCH';
 
 /**
  * 调起记录进程的 git 钩子,经环境变量交给 `timeline-git-commit-hook`:post-merge 片段传
- * `post-merge`;没有这个变量即视为 post-commit。post-merge 遇到只有一个父提交的提交是快进,
- * 不产生新提交,不记。
+ * `post-merge`;没有这个变量即视为 post-commit。post-merge 遇到快进不记(快进不产生新提交)。
  */
 export const COMMIT_HOOK_ENV = 'CGRAPHX_GIT_HOOK';
+
+/**
+ * post-merge 片段在合并当下同步取得的 HEAD reflog 最新一行(`git reflog -1 --format=%gs HEAD`),
+ * 记录进程据它判断快进(spec D32);后台进程启动时用户可能已经又提交了一笔,不能等那时再读。
+ */
+export const COMMIT_REFLOG_ENV = 'CGRAPHX_COMMIT_REFLOG';
 
 // ─── Tool classification (timeline-data-quality feature) ───────────────────
 // Defined here so the enricher hooks share one source of truth.

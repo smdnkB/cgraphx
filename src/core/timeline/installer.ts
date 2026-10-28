@@ -20,6 +20,7 @@ import { installHookSnippet, removeHookSnippet, resolveHooksDir, type HookSnippe
 import {
   COMMIT_BRANCH_ENV,
   COMMIT_HOOK_ENV,
+  COMMIT_REFLOG_ENV,
   COMMIT_SHA_ENV,
   GIT_COMMIT_SUBCOMMAND,
   HOOK_EVENTS_TO_COMMANDS,
@@ -129,12 +130,13 @@ function buildGitPostCommitSnippet(): string[] {
 
 /**
  * post-merge 片段:`$1` 为 1 是 squash 合并(不产生提交),跳过;其余同 post-commit,另传
- * COMMIT_HOOK_ENV=post-merge,记录进程据此跳过快进(快进不产生新提交)。
+ * COMMIT_HOOK_ENV=post-merge,并当场取 reflog 最新一行经 COMMIT_REFLOG_ENV 传过去,记录进程据此跳过快进
+ * (快进不产生新提交)。
  */
 function buildGitPostMergeSnippet(): string[] {
   return [
     `${GIT_HOOK_MARKER} — record merge commits to .cgraphx/cgraphx.db`,
-    `if [ "$1" != "1" ]; then __cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true); ${COMMIT_HOOK_ENV}=post-merge ${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & fi ${GIT_HOOK_MARKER}`,
+    `if [ "$1" != "1" ]; then __cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true); __cgx_reflog=$(git reflog -1 --format=%gs HEAD 2>/dev/null || true); ${COMMIT_HOOK_ENV}=post-merge ${COMMIT_REFLOG_ENV}="$__cgx_reflog" ${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & fi ${GIT_HOOK_MARKER}`,
   ];
 }
 
@@ -237,6 +239,15 @@ export function uninstallTimelineHooks(
 ): UninstallReport {
   const profile = requireAgentProfile(opts.agent ?? DEFAULT_AGENT_ID);
   const resolvedRoot = path.resolve(projectRoot);
+  // 副本里共用库在主目录,会删共用数据的操作直接拒绝:先判断,什么都不动(spec 全局约束)
+  if (opts.purgeData) {
+    const dataDir = resolveDataDir(resolvedRoot);
+    if (dataDir.state !== 'own') {
+      throw new Error(
+        `这是副本,数据在主目录 ${dataDir.mainRoot};要清数据,到主目录执行 cgraphx timeline uninstall --purge(这次什么都没动)`,
+      );
+    }
+  }
   const settingsPath = agentSettingsPath(resolvedRoot, profile);
   const gitRoot = findGitRoot(resolvedRoot);
   const hooksDir = gitRoot ? resolveHooksDir(gitRoot) : null;
@@ -284,29 +295,22 @@ export function uninstallTimelineHooks(
     mergeHookRemoved = removeHookSnippet(gitRoot, 'post-merge', GIT_HOOK_MARKER) !== null;
   }
 
-  // 可选:删 timeline 数据。副本里共用库在主目录,会删共用数据的操作直接拒绝
+  // 可选:删 timeline 数据(在副本里已在开头拒绝)
   let dataDropped = false;
   if (opts.purgeData) {
-    const dataDir = resolveDataDir(resolvedRoot);
-    if (dataDir.state !== 'own') {
-      process.stderr.write(
-        `[timeline] 这是副本,数据在主目录 ${dataDir.mainRoot};要清数据,到主目录执行 cgraphx timeline uninstall --purge\n`,
-      );
-    } else {
-      try {
-        const dbPath = getDatabasePath(resolvedRoot);
-        if (fs.existsSync(dbPath)) {
-          const conn = DatabaseConnection.open(dbPath);
-          conn.getDb().exec('DROP TABLE IF EXISTS timeline_events');
-          conn.getDb().exec('DROP TABLE IF EXISTS timeline_schema_versions');
-          conn.close();
-          dataDropped = true;
-        }
-      } catch (err) {
-        process.stderr.write(
-          `[timeline] --purge failed: ${err instanceof Error ? err.message : String(err)}\n`,
-        );
+    try {
+      const dbPath = getDatabasePath(resolvedRoot);
+      if (fs.existsSync(dbPath)) {
+        const conn = DatabaseConnection.open(dbPath);
+        conn.getDb().exec('DROP TABLE IF EXISTS timeline_events');
+        conn.getDb().exec('DROP TABLE IF EXISTS timeline_schema_versions');
+        conn.close();
+        dataDropped = true;
       }
+    } catch (err) {
+      process.stderr.write(
+        `[timeline] --purge failed: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
     }
   }
 
