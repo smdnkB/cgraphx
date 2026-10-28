@@ -616,9 +616,9 @@
    # ㉖ husky 8 → 9:旧目录里的拦截迁走,--remove 两处都不留;换了钩子目录再 cgraphx uninstall,旧目录里的片段也删
    cd "$T" && git init -q p && cd p && echo a > a && printf '.cgraphx/\n.claude/\n' > .gitignore && git add -A && git commit -qm init && init_cgx
    mkdir .husky && git config core.hooksPath .husky && cgraphx release guard >/dev/null 2>&1
-   echo "husky8=$(grep -c cgraphx-release-guard .husky/commit-msg) exclude=$(grep -c '^/.husky/commit-msg .git/info/exclude)"
+   echo "husky8=$(grep -c cgraphx-release-guard .husky/commit-msg) exclude=$(grep -c '^/.husky/commit-msg$' .git/info/exclude)"
    husky9 && git config core.hooksPath .husky/_ && cgraphx release guard >/dev/null 2>&1
-   echo "husky9=$(grep -c cgraphx-release-guard .husky/_/commit-msg) 旧文件=$(test -e .husky/commit-msg && echo 在 || echo 没了) exclude=$(grep -c '^/.husky/commit-msg .git/info/exclude)"
+   echo "husky9=$(grep -c cgraphx-release-guard .husky/_/commit-msg) 旧文件=$(test -e .husky/commit-msg && echo 在 || echo 没了) exclude=$(grep -c '^/.husky/commit-msg$' .git/info/exclude)"
    cgraphx release guard --remove >/dev/null 2>&1; echo "卸载后=$(grep -c cgraphx .husky/_/commit-msg)"
    git config core.hooksPath .githooks && cgraphx timeline install >/dev/null 2>&1 && git config core.hooksPath .husky/_
    cgraphx uninstall -y >/dev/null 2>&1; echo "uninstall 后 .githooks=[$(ls .githooks 2>/dev/null | tr '\n' ' ')]"
