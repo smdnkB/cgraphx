@@ -180,12 +180,15 @@ the current branch as before.
   disk that is not APFS), it asks before making a full copy. Ignored files
   such as dependencies and `.env` come along, so nothing needs reinstalling;
   untracked files stay behind, except the
-  requirement's own drafts, which move into the copy. In the copy,
+  requirement's own drafts, which move into the copy; ignored files in that
+  requirement's directory stay in the main directory too. In the copy,
   `/dev-merge` merges the main directory's current branch in, so conflicts
   are resolved there; in the main directory, `/dev-merge <requirement>`
   dry-runs the merge, then merges. A copy counts as merged once the commits
   made on its own branch are in the target branch; a copy without commits of
-  its own is shown as 「还没有提交」 and never offered for deletion. Without a
+  its own is shown as 「还没有提交」 and never offered for deletion. Sync a copy
+  only with `/dev-merge`: a fast-forward `git pull` makes the main branch's
+  commits look like the copy's own. Without a
   version branch, a copy merges back into whatever branch the main directory
   is on and is offered for deletion right after. `/dev-handoff` opens one copy per handoff target when
   the main directory is on a version branch, and by default when copies are
@@ -206,7 +209,9 @@ the current branch as before.
   also lists requirements being worked on in copies, marked 「在副本 <name>」
   (in JSON, a `replica` field on those entries only). The knowledge-base
   index and `my-features.md` stay per directory, so knowledge written in a
-  copy is recalled elsewhere once it is merged. If the main directory is
+  copy is recalled elsewhere once it is merged. Looking up a requirement's
+  directory prefers the copy that is working on it, as `features list` does.
+  If the main directory is
   moved or renamed, hooks in the copy keep passing and cgraphx commands print
   「副本关联的主项目不在 <path> 了」. `timeline uninstall --purge` is refused in a
   copy. Copies run on macOS and Linux; the dry-run merges need git 2.38 or
@@ -228,15 +233,19 @@ the current branch as before.
   timeline hooks and the release guard are written to the directory
   `git rev-parse --git-path hooks` reports, so commits are now recorded in
   projects that use husky. Snippets go right after the shebang, so a hook
-  ending in `exec` still runs them. Nothing is written when `core.hooksPath`
-  points to a shared directory outside the repository, or when the hook is
-  a symlink or not a shell script; a notice says why. A hook file tracked by
-  git (husky 5–8) gets the snippet plus a local clean/smudge filter in
-  `.git/info/attributes`, so the change never shows up in `git status` or a
-  commit, and pulls keep it. Hook files cgraphx creates inside the work tree
-  go into `.git/info/exclude`, and leftover snippets in `.git/hooks` are
-  removed once hooks live elsewhere. `cgraphx install` and `upgrade` add the
-  missing timeline snippets.
+  ending in `exec` still runs them. Only hook files git does not track are
+  written. Nothing is written when the hooks directory is a shared one
+  outside the repository, or when the hook file is tracked by git (such as
+  husky 5–8's `.husky/commit-msg`), a symlink or not a shell script; a
+  notice says why and prints the lines to add by hand (for a symlink, where
+  it points and what adding them would affect). Hook files cgraphx creates
+  inside the work tree go into `.git/info/exclude`. Installed snippets are
+  registered under the git directory, and the timeline's session-start hook
+  puts back any that went missing — husky 9 rewrites `.husky/_/` on every
+  install. Leftover snippets in `.git/hooks` are removed once the new ones
+  are in place elsewhere, and uninstalling also removes 2.0.10 snippets that
+  were written through a symlink into a file in the repository.
+  `cgraphx install` and `upgrade` add the missing timeline snippets.
 - `/dev-impl-subagent` no longer stops on `main` or `master` to ask whether
   to create a branch; like `/dev-impl`, it works on the current branch. Both
   now stop on a version branch and point to `/dev-start`.

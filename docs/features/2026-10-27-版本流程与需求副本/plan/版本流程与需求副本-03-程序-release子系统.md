@@ -1,7 +1,7 @@
 # T-3: 程序——release 子系统
 
 > 产物: plan
-> 依据: spec@561fdba
+> 依据: spec@c1c2920
 
 - 目标:新增 release 子系统:K8 版本分支模式、commit-msg 提交拦截的装卸,以及 `cgraphx release guard` 命令
 - 对应 spec 编号:F2⑥、F10、D1、D5、D12;K8
@@ -18,9 +18,9 @@
   1. `constants.ts`:`VERSION_BRANCH_PATTERN = /^dev\/[0-9]+\.[0-9]+\.[0-9]+$/`;`RELEASE_GUARD_MARKER = '# cgraphx-release-guard'`;`RELEASE_GUARD_LINES`(C-6 的三行,逐字);`RELEASE_GUARD_CONFIG_KEY = 'cgraphx.releaseGuard'`;`RELEASE_FLOW_CONFIG_KEY = 'cgraphx.releaseFlow'`。
   2. `errors.ts`:`ReleaseError extends Error`,带 `code`(目前只有 `not_git_repo`);`exitCodeForError`:`not_git_repo` → 2,其余 → 1。
   3. `guard.ts`:
-     - `installReleaseGuard(cwd)`:`resolveHooksDir(cwd)` 为 null → 抛 `ReleaseError('not_git_repo')`;先 `git config --local cgraphx.releaseFlow true`(按版本走的记号,装不上也写);再读记号 `git config --local --get cgraphx.releaseGuard`;再 `installHookSnippet(cwd, 'commit-msg', RELEASE_GUARD_MARKER, RELEASE_GUARD_LINES)`;C-2 返回 `unsupported` → 返回 `{ hookPath, status: 'unsupported', localFilter, reason, lines }`,不写 `cgraphx.releaseGuard`;返回 `installed` 且记号原来为 `true` → status 改成 `repaired`;不是 `unsupported` 时最后 `git config --local cgraphx.releaseGuard true`,返回 `{ hookPath, status, localFilter }`
-     - `removeReleaseGuard(cwd)`:不在 git 仓库 → `{ hookPath: null, status: 'absent', localFilter: false }`;`removeHookSnippet(cwd, 'commit-msg', RELEASE_GUARD_MARKER)` 返回路径 → `removed`,返回 null → `absent`;两种情况都 `git config --local --unset` 掉 `cgraphx.releaseGuard`、`cgraphx.releaseFlow`(没有这个键时忽略错误)
-  4. `cli.ts`:`export function registerReleaseCommands(program: Command): void`,注册 `release` 命令组和 `guard` 子命令(`--remove`、`--json`);在 `process.cwd()` 下执行;带 `--json` 按 C-6 输出(成功、失败都是 `JSON.stringify(x, null, 2)` 加换行,失败为 `{ "ok": false, "code", "message" }`),不带时错误走 stderr、前缀 `[release]`;status 为 `unsupported` → 退出码 0;不带 `--json` 时,`unsupported` 或 `localFilter` 为 true 都在 stderr 打 `[release] ` + `hookNotice(…, '没装上提交拦截')`(C-6)。
+     - `installReleaseGuard(cwd)`:`resolveHooksDir(cwd)` 为 null → 抛 `ReleaseError('not_git_repo')`;先 `git config --local cgraphx.releaseFlow true`(按版本走的记号,装不上也写);再读记号 `git config --local --get cgraphx.releaseGuard`;再 `installHookSnippet(cwd, 'commit-msg', RELEASE_GUARD_MARKER, RELEASE_GUARD_LINES)`;C-2 返回 `unsupported` → 原样带上 `reason`、`lines`、`linkTarget`(symlink 时)返回 `{ hookPath, status: 'unsupported', … }`,不写 `cgraphx.releaseGuard`;返回 `installed` 且记号原来为 `true` → status 改成 `repaired`;不是 `unsupported` 时最后 `git config --local cgraphx.releaseGuard true`,返回 `{ hookPath, status }`
+     - `removeReleaseGuard(cwd)`:不在 git 仓库 → `{ hookPath: null, status: 'absent' }`;`removeHookSnippet(cwd, 'commit-msg', RELEASE_GUARD_MARKER)` 返回路径 → `removed`,返回 null → `absent`;两种情况都 `git config --local --unset` 掉 `cgraphx.releaseGuard`、`cgraphx.releaseFlow`(没有这个键时忽略错误)
+  4. `cli.ts`:`export function registerReleaseCommands(program: Command): void`,注册 `release` 命令组和 `guard` 子命令(`--remove`、`--json`);在 `process.cwd()` 下执行;带 `--json` 按 C-6 输出(成功、失败都是 `JSON.stringify(x, null, 2)` 加换行,失败为 `{ "ok": false, "code", "message" }`),不带时错误走 stderr、前缀 `[release]`;status 为 `unsupported` → 退出码 0;不带 `--json` 时,只有 `unsupported` 在 stderr 打 `[release] ` + `hookNotice(…, '没装上提交拦截')`(C-6)。
   5. `index.ts`:按 C-6 导出。
 - 完成条件:
   - C-6 列出的导出全部存在,签名一致
