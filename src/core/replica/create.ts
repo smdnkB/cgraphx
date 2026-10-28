@@ -263,8 +263,11 @@ function copyTree(source: string, target: string, fullCopy: boolean): void {
     if (blocker !== null) throw noCowError(source, blocker, '');
   }
   const { cmd, args } = copyCommand(fullCopy);
-  // LC_ALL=C:GNU cp、glibc 的报错按 locale 翻译,中文环境下下面按英文认「克隆不了」会认不出
-  const r = runCommand(cmd, [...args, source, target], path.dirname(source), { ...process.env, LC_ALL: 'C' });
+  // LC_MESSAGES=C:GNU cp、glibc 的报错按 locale 翻译,中文环境下下面按英文认「克隆不了」会认不出。只改报错的
+  // 语言、不动 LC_CTYPE(C 下 GNU cp 把中文文件名转义成 $'\350…');继承来的 LC_ALL 会盖过它,去掉
+  const env: NodeJS.ProcessEnv = { ...process.env, LC_MESSAGES: 'C' };
+  delete env.LC_ALL;
+  const r = runCommand(cmd, [...args, source, target], path.dirname(source), env);
   if (r.status === 0) return;
   removeQuietly(target);
   const reason = r.error?.message ?? firstLine(r.stderr);
@@ -440,6 +443,11 @@ function moveOutOfMain(
   return { movedFiles, warnings };
 }
 
+/** 第 ① 步保留的、第 ⑥ 步要从主目录移走的文件(登记的 movedFiles):内嵌的 git 仓库(目录)不移,不算。 */
+function filesToMove(mainRoot: string, kept: readonly string[]): string[] {
+  return kept.filter((rel) => fs.lstatSync(path.join(mainRoot, rel), { throwIfNoEntry: false })?.isDirectory() !== true);
+}
+
 // ---------- 入口 ----------
 
 /**
@@ -454,7 +462,7 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
   const existing = listReplicas(mainRoot).find(
     (e) => e.featureId === opts.featureId && isDirectory(e.path),
   );
-  if (existing !== undefined) return { ...existing, created: false, movedFiles: [], warnings: [] };
+  if (existing !== undefined) return { ...existing, created: false, movedFiles: existing.movedFiles ?? [], warnings: [] };
 
   assertCleanMain(mainRoot);
   assertBranchFree(mainRoot, opts.branch);
@@ -484,6 +492,7 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
       branch: opts.branch,
       baseBranch,
       baseCommit,
+      movedFiles: filesToMove(realRoot, kept),
       createdAt: new Date().toISOString(),
       removedAt: null,
     };

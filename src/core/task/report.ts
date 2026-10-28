@@ -8,7 +8,7 @@
  */
 
 import type { SqliteDatabase } from '../db';
-import { resolveMainRoot } from '../replica';
+import { listProjectRoots, resolveMainRoot } from '../replica';
 import type { TimelineEvent } from '../timeline';
 import { collectOutputs, collectReferences } from './artifacts';
 import { queryBindingEvents } from './attribution';
@@ -149,9 +149,10 @@ function collectEffectiveBindings(
       const prev = earliestBoundAt.get(binding.sessionId);
       if (prev === undefined || binding.boundAt < prev) earliestBoundAt.set(binding.sessionId, binding.boundAt);
     }
+    const roots = listProjectRoots(projectRoot);
     for (const auto of store.listAutoSessions()) {
       if (auto.featureId === null || auto.boundAt === null) continue;
-      const task = resolveFeatureTargetReadOnly(projectRoot, store, auto.featureId);
+      const task = resolveFeatureTargetReadOnly(roots, store, auto.featureId);
       if (task === null) continue;
       const unboundAt = earlier(earliestBoundAt.get(auto.sessionId) ?? null, auto.stoppedAt);
       if (unboundAt !== null && unboundAt <= auto.boundAt) continue;

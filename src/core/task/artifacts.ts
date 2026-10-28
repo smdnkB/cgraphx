@@ -141,7 +141,7 @@ function commitRootOf(ctx: RootContext, e: TimelineEvent): string {
 function featureRootOf(ctx: RootContext, dir: string): string {
   const prefix = `${FEATURES_DIR_POSIX}/`;
   if (!dir.startsWith(prefix)) return ctx.mainRoot;
-  return locateFeatureRoot(ctx.mainRoot, dir.slice(prefix.length)) ?? ctx.mainRoot;
+  return locateFeatureRoot(ctx.roots, dir.slice(prefix.length)) ?? ctx.mainRoot;
 }
 
 /** 取 tool_args 中的字符串字段。 */

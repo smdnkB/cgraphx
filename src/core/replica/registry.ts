@@ -40,11 +40,11 @@ function readRaw(file: string): Record<string, unknown> | null {
 }
 
 /**
- * 7 个必有字段齐全、类型对、path 是绝对路径 → 登记;否则 null(按解析失败跳过)。baseCommit 是后加的
- * 字段:不是字符串(以前的登记没有)→ null。
+ * 7 个必有字段齐全、类型对、path 是绝对路径 → 登记;否则 null(按解析失败跳过)。baseCommit、movedFiles
+ * 是后加的字段:以前的登记没有、类型不对 → null。
  */
 function toEntry(raw: Record<string, unknown>): ReplicaEntry | null {
-  const { name, path: replicaPath, featureId, branch, baseBranch, baseCommit, createdAt, removedAt } = raw;
+  const { name, path: replicaPath, featureId, branch, baseBranch, baseCommit, movedFiles, createdAt, removedAt } = raw;
   if (
     typeof name !== 'string' ||
     typeof replicaPath !== 'string' ||
@@ -64,24 +64,20 @@ function toEntry(raw: Record<string, unknown>): ReplicaEntry | null {
     branch,
     baseBranch,
     baseCommit: typeof baseCommit === 'string' && baseCommit !== '' ? baseCommit : null,
+    movedFiles:
+      Array.isArray(movedFiles) && movedFiles.every((f) => typeof f === 'string') ? (movedFiles as string[]) : null,
     createdAt,
     removedAt,
   };
 }
 
 /**
- * 读过的登记目录:目录的修改时间没变就不再逐个读文件(Stop hook 一轮里找需求目录要读很多次,登记里
- * 已删的副本也一直留着)。登记文件都经临时文件 + rename 写入,增删改都会改到目录的修改时间。
+ * 全部登记(含已删除),按文件名排序;登记目录不在 → [],解析失败的文件跳过。每次都读文件:登记可能被
+ * 原地改写(编辑器保存),长驻进程(web、sync worker)要读到改过的;一轮里要多次用的,调用方取一次
+ * listProjectRoots 复用。
  */
-const entriesCache = new Map<string, { mtimeMs: number; entries: ReplicaEntry[] }>();
-
-/** 全部登记(含已删除),按文件名排序;登记目录不在 → [],解析失败的文件跳过。 */
 export function readEntries(mainRoot: string): ReplicaEntry[] {
   const dir = registryDir(mainRoot);
-  const stat = fs.statSync(dir, { throwIfNoEntry: false });
-  if (stat === undefined || !stat.isDirectory()) return [];
-  const cached = entriesCache.get(dir);
-  if (cached !== undefined && cached.mtimeMs === stat.mtimeMs) return [...cached.entries];
   let files: string[];
   try {
     files = fs.readdirSync(dir);
@@ -95,8 +91,7 @@ export function readEntries(mainRoot: string): ReplicaEntry[] {
     const entry = raw === null ? null : toEntry(raw);
     if (entry !== null) entries.push(entry);
   }
-  entriesCache.set(dir, { mtimeMs: stat.mtimeMs, entries });
-  return [...entries];
+  return entries;
 }
 
 /**
@@ -111,7 +106,6 @@ function writeJsonAtomic(file: string, value: Record<string, unknown>): void {
     if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
   }
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  entriesCache.delete(path.dirname(file));
   try {
     fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf-8');
     fs.renameSync(tmp, file);
@@ -131,6 +125,7 @@ export function writeEntry(mainRoot: string, entry: ReplicaEntry): string {
     branch: entry.branch,
     baseBranch: entry.baseBranch,
     baseCommit: entry.baseCommit,
+    movedFiles: entry.movedFiles,
     createdAt: entry.createdAt,
     removedAt: entry.removedAt,
   });

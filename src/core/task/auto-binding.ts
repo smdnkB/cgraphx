@@ -17,10 +17,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { DEFAULT_AGENT_ID, requireAgentProfile } from '../agents';
-import { readFeatureTask } from '../features';
 import {
   listProjectRoots,
-  locateFeatureRoot,
   matchProjectRoot,
   replicaOfCwd,
   resolveMainRoot,
@@ -35,7 +33,7 @@ import {
   type TimelineEvent,
 } from '../timeline';
 import { AUTO_META_KEYS } from './constants';
-import { featureDatePrefix, isEligibleFeatureDir, isPlatformTaskValue } from './feature-task';
+import { dropStaleFeatureTask, ensureFeatureTaskRow, featureDatePrefix, isEligibleFeatureDir } from './feature-task';
 import { openTaskDb } from './schema-bootstrap';
 import { TaskStore } from './store';
 import type { AutoSession, AutoStrength, TaskBinding, TaskSource } from './types';
@@ -322,36 +320,6 @@ function earliestBoundAt(
   return earliest;
 }
 
-/**
- * 需求 → 本机任务行:主 spec 头部声明了平台编号 → 本机没有占位时补建(否则读取 / 上报解析不到任务);
- * 否则 → 目录任务。
- */
-function ensureTaskForFeature(store: TaskStore, root: string, featureId: string, now: string): void {
-  const declared = readFeatureTask(locateFeatureRoot(root, featureId) ?? root, featureId);
-  if (isPlatformTaskValue(declared)) store.ensureApiPlaceholder(declared, now);
-  else store.ensureFeatureTask(featureId, now);
-}
-
-/**
- * 在用副本登记的需求补本机任务行:需求目录有带负责人的 spec 才建(spec 还没写时不建,免得建出之后
- * 声明了平台编号也不会再改的目录任务);按头部当前的任务声明定任务,先查后写,已有就不开写事务。
- */
-function ensureReplicaFeatureTask(
-  store: TaskStore,
-  root: string,
-  featureId: string,
-  isEligible: (featureId: string) => boolean,
-  now: string,
-): void {
-  if (!isEligible(featureId)) return;
-  const declared = readFeatureTask(locateFeatureRoot(root, featureId) ?? root, featureId);
-  if (isPlatformTaskValue(declared)) {
-    if (store.findApiTaskByExternalId(declared) === null) store.transaction(() => store.ensureApiPlaceholder(declared, now));
-    return;
-  }
-  if (store.findFeatureTaskByFeatureId(featureId) === null) store.transaction(() => store.ensureFeatureTask(featureId, now));
-}
-
 /** 两个可空时间点取较早者。 */
 function earlier(a: string | null, b: string | null): string | null {
   if (a === null) return b;
@@ -408,16 +376,16 @@ export async function refreshAutoBindings(
       return taskSources.get(taskId) ?? null;
     };
 
+    // 主目录 + 全部登记过的副本(含已删除):取一次,每个会话的派生、合格判断共用
+    const roots = listProjectRoots(root);
     const eligibleCache = new Map<string, boolean>();
     const isEligible = (featureId: string): boolean => {
       const cached = eligibleCache.get(featureId);
       if (cached !== undefined) return cached;
-      const value = isEligibleFeatureDir(root, featureId);
+      const value = isEligibleFeatureDir(roots, featureId);
       eligibleCache.set(featureId, value);
       return value;
     };
-    // 主目录 + 全部登记过的副本(含已删除):取一次,每个会话的派生共用
-    const roots = listProjectRoots(root);
 
     let recomputed = 0;
     for (const { sessionId, maxId } of targets) {
@@ -461,7 +429,7 @@ export async function refreshAutoBindings(
         // 取代标记、目录任务与派生结果同事务落库;失败时整会话回滚并跳过。
         store.transaction(() => {
           for (const b of obsolete) store.supersedeBinding(b.id, now);
-          if (auto !== null) ensureTaskForFeature(store, root, auto.featureId, now);
+          if (auto !== null) ensureFeatureTaskRow(store, roots, auto.featureId, now);
           store.upsertAutoSession({
             sessionId,
             derivedMaxEventId: maxId,
@@ -480,17 +448,22 @@ export async function refreshAutoBindings(
       }
     }
 
-    // 在用副本登记的需求:没有会话派生到它(如副本里只有终端提交)也要有本机任务,task show <需求>
-    // 才查得到副本里没对上会话的提交(spec D28)。只在全量刷新(task 命令、sync)里做,Stop hook 只刷新
-    // 本会话、不做
+    // 登记过副本的需求(spec D28、D38):在用副本的需求没有会话派生到它(如副本里只有终端提交)也要有
+    // 本机任务,task show <需求> 才查得到副本里没对上会话的提交;主 spec 头部声明了平台编号后,删掉 spec
+    // 写出之前建出的、还没有平台编号的目录任务(在用、已删的副本都算)。只在全量刷新(task 命令、sync)里
+    // 做,Stop hook 只刷新本会话、不做
     if (opts.sessionIds === undefined) {
+      const inUse = new Map<string, boolean>();
       for (const { replica } of roots) {
-        if (replica === null || replica.removedAt !== null) continue;
+        if (replica !== null) inUse.set(replica.featureId, inUse.get(replica.featureId) === true || replica.removedAt === null);
+      }
+      for (const [featureId, active] of inUse) {
         try {
-          ensureReplicaFeatureTask(store, root, replica.featureId, isEligible, now);
+          if (active) ensureFeatureTaskRow(store, roots, featureId, now);
+          dropStaleFeatureTask(store, roots, featureId);
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
-          process.stderr.write(`[task] 副本需求建任务失败 ${replica.featureId}: ${reason}\n`);
+          process.stderr.write(`[task] 副本需求的任务行失败 ${featureId}: ${reason}\n`);
         }
       }
     }

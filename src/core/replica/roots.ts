@@ -51,9 +51,9 @@ export function realpathOr(p: string): string {
 }
 
 /**
- * 主目录加全部登记(含已删除),按 root 路径长度降序:依次匹配时第一个命中的就是最长的根。
- * 每个根的 realpath 在这里算一次(走目录缓存,已删副本的目录不在也不抛错),matchProjectRoot、
- * replicaOfCwd 不再给根算。
+ * 主目录加全部登记(含已删除),按 root 路径长度降序(嵌套的根里更深的在前;按顺序遍历的读者靠它)。
+ * 同一路径取哪条由查找表定(preferRoot)。每个根的 realpath 在这里算一次(走目录缓存,已删副本的目录
+ * 不在也不抛错),matchProjectRoot、replicaOfCwd 不再给根算。
  */
 export function listProjectRoots(projectRoot: string): ProjectRoot[] {
   const mainRoot = resolveMainRoot(projectRoot);
@@ -62,7 +62,7 @@ export function listProjectRoots(projectRoot: string): ProjectRoot[] {
     const root = path.resolve(entry.path);
     roots.push({ root, realRoot: realDir(root), replica: entry });
   }
-  // sort 是稳定排序:长度相同时保持主目录在前、副本按 createdAt
+  // 稳定排序:长度相同时主目录在前、副本按 createdAt
   return roots.sort((a, b) => b.root.length - a.root.length);
 }
 
@@ -208,13 +208,15 @@ export function featureDirOf(root: string, featureId: string): string {
  * 需求目录在哪个根里(spec D26):先找没删、featureId 相同、目录里有这个需求目录的副本(按 createdAt
  * 升序取第一个)——副本里那份是正在改的,和 features list 取副本那份(D30)同一口径;开副本后主目录
  * 留下的空壳(被忽略的文件、空子目录)也就不影响查找。没有再找主目录;都没有 → null。
+ * roots 是 listProjectRoots 的返回,调用方整轮复用,不再每次读登记。
  */
-export function locateFeatureRoot(projectRoot: string, featureId: string): string | null {
-  const mainRoot = resolveMainRoot(projectRoot);
-  for (const entry of entriesOf(mainRoot, false)) {
-    if (entry.featureId === featureId && isDirectory(featureDirOf(entry.path, featureId))) {
-      return path.resolve(entry.path);
-    }
+export function locateFeatureRoot(roots: readonly ProjectRoot[], featureId: string): string | null {
+  const replicas = roots
+    .flatMap(({ replica }) => (replica !== null && replica.removedAt === null && replica.featureId === featureId ? [replica] : []))
+    .sort(byCreatedAt);
+  for (const entry of replicas) {
+    if (isDirectory(featureDirOf(entry.path, featureId))) return path.resolve(entry.path);
   }
-  return isDirectory(featureDirOf(mainRoot, featureId)) ? mainRoot : null;
+  const main = roots.find(({ replica }) => replica === null)?.root;
+  return main !== undefined && isDirectory(featureDirOf(main, featureId)) ? main : null;
 }

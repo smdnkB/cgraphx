@@ -15,13 +15,18 @@ export interface ReplicaEntry {
   baseBranch: string;
   /** 开副本那一刻的提交:K3 据它只数需求分支自己做的提交;以前的登记没有这个字段 → null(spec D19) */
   baseCommit: string | null;
+  /**
+   * 开副本时从主目录这个需求目录移进副本的文件(仓库相对路径):sync 据它给开副本之前在主目录写的这些
+   * 文件定根(spec D19、D29);以前的登记没有这个字段 → null
+   */
+  movedFiles: string[] | null;
   /** ISO 8601 */
   createdAt: string;
   /** ISO 8601;没删为 null */
   removedAt: string | null;
 }
 
-/** replica 为 null 即主目录;realRoot 是 root 的 realpath(目录不在时等于 root),在 listProjectRoots 里一次算好 */
+/** replica 为 null 即主目录;realRoot 是 root 的 realpath(目录不在时取最近一级在的上级的 realpath 拼回),在 listProjectRoots 里一次算好 */
 export interface ProjectRoot {
   root: string;
   realRoot: string;
@@ -56,7 +61,7 @@ export interface CreateReplicaOptions {
 export interface CreateReplicaResult extends ReplicaEntry {
   /** false:这个需求的副本已经有了,没重建 */
   created: boolean;
-  /** 从主目录移进副本的文件(仓库相对路径) */
+  /** 从主目录移进副本的文件(仓库相对路径);副本已在(created 为 false)时照登记,以前的登记没有时为 [] */
   movedFiles: string[];
   warnings: string[];
 }
