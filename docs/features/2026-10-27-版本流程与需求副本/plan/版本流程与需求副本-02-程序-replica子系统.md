@@ -1,7 +1,7 @@
 # T-2: 程序——replica 子系统
 
 > 产物: plan
-> 依据: spec@c1c2920
+> 依据: spec@a8b762a
 
 - 目标:新增 replica 子系统:登记读写、主目录与副本的路径换算、开 / 列 / 删副本,以及 `cgraphx replica` 命令组
 - 对应 spec 编号:F7、F9、D1、D18、D19、D20、D21、D22、D26(换算函数)、D35;K1、K3、K9;spec「细节方案:F7」的登记文件示例、命令契约、K3 / K9 取法
@@ -23,19 +23,19 @@
 - 具体要求:
   1. `constants.ts`:`FEATURES_DIR_POSIX = 'docs/features'`(注释写明与 artifact-registry 同值,replica 按 D1 不依赖它);敏感字符集 `/ \ : * ? " < > |`;支持的平台 `darwin`、`linux`。
   2. `errors.ts`:`ReplicaError extends Error`,带 `code`(C-5 的九个 code 联合类型)和 `details`(如 `{ files }`、`{ requiredBytes }`);`exitCodeForError(err)`:`invalid_args` → 3,其余八个 code → 2,非 ReplicaError → 1。
-  3. `registry.ts`:按 C-3 读写;`readEntries(mainRoot)` 返回全部登记(含已删除),解析失败的文件跳过,按 `replicas/` 目录的 mtime 缓存(C-4),写登记后清缓存;`writeEntry(mainRoot, entry)` 走临时文件 + rename;`markRemoved(mainRoot, name, at)` 只改 `removedAt`。
-  4. `roots.ts`:按 C-4 实现 `resolveMainRoot`、`listProjectRoots`、`matchProjectRoot`、`replicaOfCwd`、`locateFeatureRoot`、`listReplicas`;`realRoot` 只在 `listProjectRoots` 里给每个根算一次(走目录 realpath 缓存,目录不在时取最近一级在的上级),`matchProjectRoot`、`replicaOfCwd` 不再给根算 realpath,按 C-4 用查找表逐级往上找;`locateFeatureRoot` 先找副本再找主目录(C-4)。
+  3. `registry.ts`:按 C-3 读写;`readEntries(mainRoot)` 返回全部登记(含已删除),解析失败的文件跳过,每次都读文件、不缓存(C-4);`writeEntry(mainRoot, entry)` 走临时文件 + rename;`markRemoved(mainRoot, name, at)` 只改 `removedAt`。
+  4. `roots.ts`:按 C-4 实现 `resolveMainRoot`、`listProjectRoots`、`matchProjectRoot`、`replicaOfCwd`、`locateFeatureRoot`、`listReplicas`;`realRoot` 只在 `listProjectRoots` 里给每个根算一次(走目录 realpath 缓存,目录不在时取最近一级在的上级),`matchProjectRoot`、`replicaOfCwd` 不再给根算 realpath,按 C-4 用查找表逐级往上找;`locateFeatureRoot(roots, featureId)` 先找副本再找主目录,roots 由调用方传入(C-4)。
   5. `create.ts`(`createReplica`,spec D20、D21、D22),按顺序:
      - 前置检查,任一不过就抛对应 code,什么都不改:
        - 平台不是 darwin / linux → `unsupported_platform`
        - featureId、prefix 不是单段目录名或含敏感字符、branch 为空或 `git check-ref-format --branch <branch>` 不通过 → `invalid_args`
        - 按调用方传入的项目根(不先换成主目录)逐条查 C-5 列出的 `not_main_dir` 情形:在副本里或主目录已不在、未初始化、项目根不是 `git rev-parse --show-toplevel`、`.git` 不是 `<项目根>/.git` 目录(worktree、子模块)、detached HEAD → `not_main_dir`(message 说明是哪一种、怎么改)。下面各步的「主目录」就是这个项目根
-       - 已有同 featureId、removedAt 为空、目录还在的登记 → 直接返回该登记,`created: false`、`movedFiles: []`、`warnings: []`(F7②)
+       - 已有同 featureId、removedAt 为空、目录还在的登记 → 直接返回该登记,`created: false`、`movedFiles` 照登记(以前的登记为 `[]`)、`warnings: []`(F7②)
        - 主目录 `git status --porcelain --untracked-files=no` 有输出 → `dirty_main`,`files` 为这些路径(F7①)
        - 主目录已有同名本地分支(`git show-ref --verify --quiet refs/heads/<branch>` 成功)→ `invalid_args`(提示换分支名)
        - 副本目录名 `<主目录名>@<prefix>` 已登记给别的 featureId(在用、已删都算)→ `name_taken`(spec D22)
        - 目标路径 `<主目录的上级>/<主目录名>@<prefix>` 已存在 → `target_exists`
-     - 复制:darwin 先判断目标目录和主目录同卷(`fs.statSync(…).dev` 相同)、且卷是 APFS(`/usr/bin/stat -f %Sd` 取设备名,`/sbin/mount` 里这个设备那一行的文件系统类型),不满足或判断不了 → 抛 `no_cow`,满足才 `/bin/cp -cR <主目录> <目标>`;linux `cp -R --reflink=always <主目录> <目标>`;cp 子进程的环境加 `LC_ALL=C`(报错按英文认);复制命令失败 → 删掉已产生的目标目录;报错是克隆不了(`failed to clone`、`clonefile`、`not supported`、`cross-device`、`EOPNOTSUPP`、`EXDEV`)才抛 `no_cow`,其余(读不了的文件、权限)照实抛运行时错误,message 写明已删掉复制了一半的目标目录、检查读权限后重跑。`requiredBytes` = `du -sk <主目录>` × 1024。`fullCopy` 为 true 时用 `cp -R`,不做判断。
+     - 复制:darwin 先判断目标目录和主目录同卷(`fs.statSync(…).dev` 相同)、且卷是 APFS(`/usr/bin/stat -f %Sd` 取设备名,`/sbin/mount` 里这个设备那一行的文件系统类型),不满足或判断不了 → 抛 `no_cow`,满足才 `/bin/cp -cR <主目录> <目标>`;linux `cp -R --reflink=always <主目录> <目标>`;cp 子进程的环境加 `LC_MESSAGES=C`、去掉继承的 `LC_ALL`(报错按英文认,文件名照原样不转义);复制命令失败 → 删掉已产生的目标目录;报错是克隆不了(`failed to clone`、`clonefile`、`not supported`、`cross-device`、`EOPNOTSUPP`、`EXDEV`)才抛 `no_cow`,其余(读不了的文件、权限)照实抛运行时错误,message 写明已删掉复制了一半的目标目录、检查读权限后重跑。`requiredBytes` = `du -sk <主目录>` × 1024。`fullCopy` 为 true 时用 `cp -R`,不做判断。
      - 整理(spec D21 ①~⑥,①~⑤ 任一步失败:`fs.rmSync(目标, { recursive: true, force: true })`,已写的登记文件删掉,抛原错误;主目录不动):
        1. 先按 C-5 写副本的 exclude:各 agent 配置目录(`listAgentProfiles()` 各项的 `configDirName`,如 `.claude`)里开副本时没被跟踪的部分加 `codeGraphDirName()`,经 C-2 的 `gitPathPattern`、`appendGitInfoLines` 追加(仓库跟踪了配置目录的一部分时,被跟踪的位置之后新建的文件 git 看得见);再在副本里取 `git ls-files --others --exclude-standard -z`(这时已不含上面这些目录):位于 `docs/features/<featureId>/` 下的保留,其余逐个删除,删完顺手删掉因此变空的目录(`docs/features/<featureId>/` 本身不删)
        2. `<副本>/<codeGraphDirName()>/` 下除 `.gitignore` 以外的条目逐个 `fs.rmSync(…, { recursive: true, force: true })`,`.gitignore` 原样保留、不改写;目录不在或没有 `.gitignore` 时才调 `createDirectory(副本)`(它会建目录和 `.gitignore`)→ `DatabaseConnection.open(getLocalDatabasePath(副本)).close()`(空的本地库)→ `fs.symlinkSync(realpath(getCodeGraphDir(主目录)), path.join(getCodeGraphDir(副本), SHARED_LINK_NAME), 'dir')`

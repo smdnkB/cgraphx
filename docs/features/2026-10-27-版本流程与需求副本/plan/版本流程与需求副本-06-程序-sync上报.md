@@ -1,7 +1,7 @@
 # T-6: 程序——sync 以主目录上报
 
 > 产物: plan
-> 依据: spec@c1c2920
+> 依据: spec@a8b762a
 
 - 目标:上报不论从哪个目录触发都按主目录跑;路径按「主目录 + 全部登记过的副本」换算;副本里的提交在副本仓库里查;副本里没对上会话的提交,每个副本单独上报一个带绑定的会话
 - 对应 spec 编号:F8(平台上报那一段)、D25、D26、D28(上报部分)、D29
@@ -40,7 +40,7 @@
      - artifacts.ts、references.ts:建 resolver 时传 `ctx.roots`;读文件头(`identifyArtifact`)和判断文件存在(`fs.existsSync`、`isExistingFile`)都在路径所在的根里做,那个根已不在就退回主目录
      - 提交在哪个根里做的,全文件只用一个内部函数判断:该提交事件 cwd 所在的根(`replicaOfCwd(ctx.roots, e.cwd)?.path`,不在副本里就是主目录);提交里的文件(`fromRepoRel`)落在这个根里,artifacts.ts 用 `ctx.commitEvents` 建 hash → 根的映射
      - 产出对提交:文件只对上同一个根里的提交(副本里的文件对副本里的提交,主目录的对主目录的),不跨根认
-     - 在主目录写、开副本时移进副本的需求文件(spec D21⑥):改它时所在的根是主目录、主目录里已没有这个文件,而路径在某个副本登记的需求目录下、文件在那个副本里 → 这个产出的根算那个副本(读文件头、找提交都按副本)
+     - 在主目录写、开副本时移进副本的需求文件(spec D21⑥、D29):改它时所在的根是主目录、列在某个副本登记的 `movedFiles` 里、最后一次改早于这个副本的 `createdAt` → 这个产出的根算那个副本(改过之后最早开的那个,副本删了也算;读文件头、找提交都按副本),不看文件此刻在不在主目录——合入后文件回到主目录,归属不变;登记没有 `movedFiles`(以前的登记)时照旧推断:主目录里已没有这个文件、路径在这类副本登记的需求目录下、文件在那个副本里 → 那个副本
   3. **git 查询(D29)**:
      - git.ts:`GitCache` 加 `hasCommit(hash: string): boolean`(`git cat-file -e <hash>^{commit}`,结果缓存)
      - payload.ts:`SyncContext` 加 `gitFor(root: string): GitCache`(按根懒建、缓存;主目录返回现有的 `ctx.git`)

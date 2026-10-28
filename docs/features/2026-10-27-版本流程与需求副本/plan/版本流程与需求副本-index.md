@@ -1,7 +1,7 @@
 # 实现计划: 版本流程与需求副本
 
 > 产物: plan
-> 依据: spec@c1c2920
+> 依据: spec@a8b762a
 
 ## 设计预览
 
@@ -104,7 +104,7 @@
   - 主目录不在(`state === 'main-missing'`)时,写数据目录的地方一律不建目录、不写(spec D24):轮次文件写入、db-query 日志直接跳过;`db init` 写连接配置报错,message 用 C-12 的 D31 原文;web 启动预检由 T-8 先查库文件存在再开。其余写入方本来就在目录不存在时失败,不用改:timeline、task、sync 的 `open*Db` 都先查库文件存在再 `DatabaseConnection.open`,`task-source.json` 写入先查目录存在,sync 的锁和触发文件直接写、目录不在即失败。否则 `mkdirSync({ recursive: true })`(`DatabaseConnection.open` 里也有)会在旧主目录位置重建 `.cgraphx/`,解析随之退成 own,数据写进副本本地
   - 固定用本地目录的:知识库库文件(经 getLocalDatabasePath,T-1 改 markdown)、`my-features.md`(`src/core/features/sync.ts` 现在就拼本地 `.cgraphx`,不改)
 - **C-2 钩子片段写入**(T-1 实现;T-3、T-4 只用不改)
-  - `src/core/git-hooks.ts`(新):
+  - `src/core/git-hooks.ts`(新;文件级辅助——路径与链接、片段行、shebang 判断、`.git/info/` 增删行——拆到 `src/core/git-hooks-files.ts`,只给它用,外部一律经 git-hooks.ts):
 
     ```ts
     export type GitHookName = 'post-commit' | 'post-merge' | 'commit-msg';
@@ -117,7 +117,7 @@
       /** 钩子文件绝对路径(unsupported 时为没写入的那个文件) */
       hookPath: string;
       status: 'installed' | 'present' | 'updated' | 'unsupported';
-      /** unsupported 时:没写入的原因、要用户自己加的几行 */
+      /** unsupported 时:没写入的原因;symlink、tracked 带要用户自己加的几行 */
       reason?: HookSkipReason;
       lines?: readonly string[];
       /** reason 为 symlink 时:链接指向的文件 */
@@ -142,34 +142,42 @@
       hook: GitHookName,
       marker: string,
       opts?: { legacyMatch?: string },
-    ): string | null; // 返回删过片段的钩子文件路径;没有可删的 → null
-    export function repairHookSnippets(cwd: string): HookSnippetResult[];  // 按登记补回缺了的片段
+    ): HookRemoveResult | null; // 不在 git 仓库 → null
+    export interface HookRemoveResult {
+      /** removed:删过片段的文件;unsupported:片段提交在仓库里、没删的文件;absent:当前的钩子文件 */
+      hookPath: string;
+      status: 'removed' | 'absent' | 'unsupported';
+      reason?: 'tracked';                             // unsupported 时:片段在被跟踪的文件里,是提交进仓库的
+    }
+    export function hookRemoveNotice(result: HookRemoveResult, what?: string): string | null;  // 卸载提示;status 不是 unsupported → null
+    export function repairHookSnippets(cwd: string): HookSnippetResult[];  // 按登记补回缺了的片段,返回这次尝试补装的结果
     ```
 
   - 规则(spec D33):
-    - `resolveHooksDir`:在 cwd 下跑 `git rev-parse --git-path hooks`,输出按 cwd 解析成绝对路径;不在 git 仓库 → null。安装、卸载、补装内部用一次 `git rev-parse --git-path hooks --git-common-dir --show-toplevel` 取齐(bare 仓库去掉 `--show-toplevel` 再取)
-    - 钩子目录分三处:在 git 公共目录里、在工作区里、都不在(仓库外;两边都解析链接后判断)
-    - 只写不被 git 跟踪的钩子文件。install 什么都不写、返回 `unsupported` 的四种:钩子目录在仓库外(`outside_repo`);钩子文件是符号链接(`symlink`,带 `linkTarget`);钩子文件被 git 跟踪(`tracked`);文件已存在而第一行 shebang 的解释器不是 sh / bash / zsh / dash / ksh(含 `/usr/bin/env sh` 这类写法),或没有 shebang 而内容含 NUL 字节(`not_shell`)。都带 `lines`
-    - 其余:先删掉文件里所有含 marker 的行(给了 legacyMatch 时含它的行也删),再把 lines 插到第一行 shebang 之后,没有 shebang 就放最前;文件不存在 → 新建(钩子目录不存在时一并创建),内容为 `#!/bin/sh` 加 lines,权限 0755;已有文件写回保留原权限
-    - 新建在工作区里的钩子文件(本来没被忽略的)→ `gitPathPattern(相对路径)` 写进 `.git/info/exclude`;之后队友提交了同名钩子,就按 `tracked` 处理
-    - 装上(installed / present / updated)后:片段登记进 `<git 公共目录>/cgraphx/hook-snippets.json`(`[{ hook, marker, lines, legacyMatch? }]`,临时文件 + rename);再删默认钩子目录 `<git 公共目录>/hooks` 里含 marker(及 legacyMatch)的旧行——两边解析链接后不是同一个目录、`<git 公共目录>/hooks` 解析后仍在 git 目录里、旧钩子文件不是链接时才删;删后只剩 shebang 或空白就删掉文件
+    - `resolveHooksDir`:在 cwd 下跑 `git rev-parse --git-path hooks`,输出按 cwd 解析成绝对路径;不在 git 仓库 → null。安装、卸载、补装内部用一次 `git rev-parse --git-path hooks --git-common-dir --show-toplevel` 取齐(bare 仓库没有工作区,这条以非零退出,前两项从它失败时的输出里取,不跑第二次)
+    - 钩子目录分三处:在 git 公共目录里、在工作区里、都不在(仓库外;两边都解析链接后判断);两边都含它时按更深的那个算(bare 仓库目录里建的 worktree 算工作区)
+    - 只写不被 git 跟踪的钩子文件。install 按下面的顺序判断,什么都不写、返回 `unsupported` 的四种:钩子目录在仓库外(`outside_repo`);文件已存在(链接看它指向的文件)而第一行 shebang 的解释器不是 sh / bash / zsh / dash / ksh(含 `/usr/bin/env sh` 这类写法),或没有 shebang 而内容含 NUL 字节(`not_shell`,不带 lines);钩子文件是符号链接(`symlink`,带 `linkTarget`;链接悬空时顺着链接里写的路径解析指向);钩子文件或链接指向的文件被 git 跟踪(`tracked`)。`symlink`、`tracked` 带 `lines`
+    - 被跟踪的(含链接指向的、整个 `.git/hooks` 链进仓库的)看暂存区那份(`git show :<相对路径>`):含 marker → `present`(团队提交的,算已装上);暂存区那份没有片段行而工作区这份有 → 本机残留,删掉这些行(只写回、不删文件)再返回 `tracked`。链接指向本机没被跟踪的文件、里面已含 marker → `present`
+    - 其余:先删掉文件里所有含 marker 的行(给了 legacyMatch 时含它的行也删),再把 lines 插到第一行 shebang 之后,没有 shebang 就放最前;文件不存在 → 新建(钩子目录不存在时一并创建),内容为 `#!/bin/sh` 加 lines,权限 0755;已有文件写回后没有执行位就补上
+    - 新建在工作区里的钩子文件(本来没被忽略的)→ `gitPathPattern(相对路径)` 写进 `.git/info/exclude`;git 目录里的(如默认的 `.git/hooks`)不写;之后队友提交了同名钩子,就按 `tracked` 处理
+    - 装上(installed / present / updated)后:片段登记进 `<git 公共目录>/cgraphx/hook-snippets.json`(`[{ hook, marker, lines, legacyMatch?, files }]`;files 是写进过的钩子文件,目录取 realpath、文件名照原样;临时文件 + rename,内容没变不写盘)。登记 files 里不是这次写的文件按 git 判断归谁(在文件所在目录跑上面那条 rev-parse,比公共目录和工作区根;不按路径前缀):本工作区或 git 目录的 → 删掉其中的片段(按 remove 的规则判断能不能动),从 files 去掉;同一仓库别的 worktree 的 → 留在 files,只在卸载时删;别的仓库的(副本整仓复制带过去的登记)、目录已不在的 → 从 files 去掉,不碰。再删默认钩子目录 `<git 公共目录>/hooks` 里含 marker(及 legacyMatch)的旧行——两边解析链接后不是同一个目录、`<git 公共目录>/hooks` 解析后仍在 git 目录里、旧钩子文件不是链接时才删;删后只剩 shebang 或空白就删掉文件
     - status:原文件里没有含 marker 的行 → `installed`;插入后的内容与原文件逐字相同 → `present`(不写盘);其余 → `updated`
-    - remove:先删登记、清默认钩子目录里的旧行(规则同上);钩子目录在仓库外、钩子文件被跟踪 → 不碰;钩子文件是链接 → 链到仓库外不碰,链到本仓库里的文件就删掉其中的片段行(只写回、不删文件);其余删掉含 marker(及 legacyMatch)的行,剩下的只有 shebang 或空白 → 删掉文件,连同它在 exclude 里的那一行。删掉的行都在文件末尾(2.0.10 追加的写法)时,连同末尾空行去掉、只留一个换行
-    - repairHookSnippets:按登记逐条看,钩子文件里已有这个 marker 的跳过,其余照 installHookSnippet 写(同样按上面四种不写判断);不在 git 仓库、没有登记 → []
-    - 提示:`hookNotice` 给出——`outside_repo` →「钩子目录 <目录> 在仓库外,是多个仓库共用的,没写入」;`symlink` →「钩子文件 <hookPath> 是链接,指向 <linkTarget.path>(被跟踪:它被 git 跟踪,加进去会随提交给全组 / 仓库外:它在仓库外,加进去会影响所有用它的仓库),没写入;要装的话,把下面几行加到它指向的文件第一行之后:」加 lines;`tracked` →「钩子文件 <hookPath> 被 git 跟踪,没写入(写进去会出现在 git status 里、随提交给全组);要装的话,把下面几行加到它第一行之后:」加 lines;`not_shell` →「钩子文件 <hookPath> 不是 shell 脚本,没写入」;「没写入」可由调用方换说法
+    - remove:先删登记;当前钩子文件、默认钩子目录里的旧行(规则同上)、登记 files 里本仓库的文件(别的 worktree 的按那个 worktree 判断,别的仓库的不碰)都按这几条删:钩子目录在仓库外、链到仓库外 → 不碰;被跟踪的 → 暂存区那份有片段行就不删(当前钩子文件是这种情况时返回 `unsupported`、reason `tracked`),只是本机残留就删掉这些行(只写回、不删文件);链到本仓库里没被跟踪的文件 → 删掉其中的片段行(只写回);其余删掉含 marker(及 legacyMatch)的行,剩下的只有 shebang 或空白 → 删掉文件,连同它在 exclude 里的那一行。删掉的行都在文件末尾(2.0.10 追加的写法)时,连同末尾空行去掉、只留一个换行。status:当前钩子文件删过 → `removed`;只删了别处的 → `removed`,hookPath 为删过的那个;都没有 → `absent`
+    - repairHookSnippets:按登记逐条看,钩子文件里已有这个 marker 的跳过,其余在已取到的位置照 install 写(同样按上面四种不写判断、登记、迁走旧位置);补不上(`unsupported`)的删掉这条登记,不再每次重试;返回这次尝试补装的结果,不在 git 仓库、没有登记 → []
+    - 提示:`hookNotice` 给出——`outside_repo` →「钩子目录 <目录> 在仓库外,是多个仓库共用的,没写入」;`symlink` →「钩子文件 <hookPath> 是链接,指向 <linkTarget.path>(被跟踪:它被 git 跟踪,加进去会随提交给全组 / 仓库外:它在仓库外,加进去会影响所有用它的仓库),没写入;要装的话,把下面几行加到它指向的文件第一行 shebang 之后(没有 shebang 就放最前):」加 lines;`tracked` →「钩子文件 <hookPath> 被 git 跟踪,没写入(写进去会出现在 git status 里、随提交给全组);要装的话,把下面几行加到它第一行 shebang 之后(没有 shebang 就放最前):」加 lines;`not_shell` →「钩子文件 <hookPath> 不是 shell 脚本,没写入」;「没写入」可由调用方换说法。`hookRemoveNotice` →「钩子文件 <hookPath> 被 git 跟踪,里面的片段是提交在仓库里的,没删;要去掉就从仓库里删掉这几行再提交」,「片段」可由调用方换说法
     - git 调用一律 `execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'ignore'] })`,出错按「不在仓库」处理
 - **C-3 登记文件**(T-2 写;T-1 的 resolveDataDir 只读 `path`、`removedAt`)
   - 路径:`<主目录数据目录>/replicas/<副本目录名>.json`,一个副本一个文件
-  - 字段照 spec「细节方案:F7」的登记文件示例:`name`、`path`(绝对路径)、`featureId`、`branch`、`baseBranch`、`baseCommit`(开副本那一刻主目录的提交)、`createdAt`(ISO 8601)、`removedAt`(ISO 8601 或 null);读的时候 `baseCommit` 不是字符串(以前的登记)→ null,其余 7 个缺一个就按解析失败跳过
+  - 字段照 spec「细节方案:F7」的登记文件示例:`name`、`path`(绝对路径)、`featureId`、`branch`、`baseBranch`、`baseCommit`(开副本那一刻主目录的提交)、`movedFiles`(开副本时从主目录这个需求目录移进副本的文件,仓库相对路径:第 ① 步保留、第 ⑥ 步要从主目录移走的,内嵌的 git 仓库不算)、`createdAt`(ISO 8601)、`removedAt`(ISO 8601 或 null);读的时候 `baseCommit` 不是字符串、`movedFiles` 不是字符串数组(以前的登记)→ null,其余 7 个缺一个就按解析失败跳过
   - 写入:同目录先写临时文件再 rename;`replicas/` 不存在时创建;读到不认识的字段,写回时原样保留
 - **C-4 replica 门面**(T-2 实现;T-5、T-6、T-7、T-8 只用,一律 `from '../replica'`)
 
   ```ts
   export interface ReplicaEntry {
     name: string; path: string; featureId: string; branch: string;
-    baseBranch: string; baseCommit: string | null; createdAt: string; removedAt: string | null;
+    baseBranch: string; baseCommit: string | null; movedFiles: string[] | null; createdAt: string; removedAt: string | null;
   }
-  /** replica 为 null 即主目录;realRoot 是 root 的 realpath(目录不在时等于 root),在 listProjectRoots 里一次算好 */
+  /** replica 为 null 即主目录;realRoot 是 root 的 realpath(目录不在时取最近一级在的上级的 realpath 拼回),在 listProjectRoots 里一次算好 */
   export interface ProjectRoot { root: string; realRoot: string; replica: ReplicaEntry | null }
   export interface ReplicaStatus extends ReplicaEntry {
     state: 'present' | 'missing' | 'removed';
@@ -177,7 +185,7 @@
     ahead: number | null;     // 需求分支自己做的提交里还没合入的个数;已合入、还没有提交为 0,不判时为 null
     dirty: string[];          // K9 文件列表(仓库相对路径)
   }
-  export interface CreateReplicaResult extends ReplicaEntry { created: boolean; movedFiles: string[]; warnings: string[] }
+  export interface CreateReplicaResult extends ReplicaEntry { created: boolean; movedFiles: string[]; warnings: string[] }  // 副本已在时 movedFiles 照登记,以前的登记为 []
   export interface RemoveReplicaResult { name: string; state: 'removed' | 'missing' }
 
   export function resolveMainRoot(projectRoot: string): string;
@@ -185,7 +193,7 @@
   export function listProjectRoots(projectRoot: string): ProjectRoot[];
   export function matchProjectRoot(roots: readonly ProjectRoot[], absPath: string): { root: ProjectRoot; rel: string } | null;
   export function replicaOfCwd(roots: readonly ProjectRoot[], cwd: string): ReplicaEntry | null;
-  export function locateFeatureRoot(projectRoot: string, featureId: string): string | null;
+  export function locateFeatureRoot(roots: readonly ProjectRoot[], featureId: string): string | null;  // roots 是 listProjectRoots 的返回
   export function createReplica(projectRoot: string, opts: { featureId: string; prefix: string; branch: string; fullCopy?: boolean }): CreateReplicaResult;
   export function listReplicaStatus(projectRoot: string, opts?: { includeRemoved?: boolean }): ReplicaStatus[];
   export function removeReplica(projectRoot: string, nameOrFeatureId: string): RemoveReplicaResult;
@@ -197,8 +205,8 @@
   - `listProjectRoots`:主目录(replica 为 null)加全部登记(含已删除),按 root 路径长度降序
   - `matchProjectRoot`:absPath 先 `path.resolve`;每份 roots 建一次查找表(root → 根、realRoot → 根各一张,按 roots 对象缓存;同一路径登记过多次时取在用的,都删了取 createdAt 最新的),从 absPath 的上级目录逐级往上查表,第一个命中的就是最长的根——耗时只看路径深度,和登记了多少副本无关;都不中时取 absPath 所在目录的 realpath 拼回文件名,再按 realRoot 表查一次(和原路径相同也查);目录的 realpath 按目录缓存,先查目录在不在,不在时取最近一级在的上级;不在调用里给 root 算 realpath;`rel` 用 POSIX 分隔。Stop hook 每轮要比上万次,登记 5 个副本、另有 300 条已删登记时仍要在 50ms 预算内(spec 设计验收 11)
   - `replicaOfCwd`:判断同上,但 cwd 等于 root 本身也算命中;命中主目录或都不中 → null
-  - `locateFeatureRoot`(spec D26,与 D30 同一口径):按 createdAt 升序,第一个 removedAt 为空、featureId 相同、`<path>/docs/features/<featureId>` 是目录的副本 → 它的 path;否则 `<主目录>/docs/features/<featureId>` 是目录 → 主目录;都没有 → null。开副本后主目录留下的空壳(被忽略的文件)不影响查找
-  - 登记读取按 `replicas/` 目录的 mtime 缓存,写登记后清缓存
+  - `locateFeatureRoot`(spec D26,与 D30 同一口径):按 createdAt 升序,第一个 removedAt 为空、featureId 相同、`<path>/docs/features/<featureId>` 是目录的副本 → 它的 path;否则 `<主目录>/docs/features/<featureId>` 是目录 → 主目录;都没有 → null。开副本后主目录留下的空壳(被忽略的文件)不影响查找;roots 由调用方整轮取一次传入,不在函数里读登记
+  - 登记每次都读文件,不缓存:登记可能被原地改写(编辑器保存),长驻进程(web、sync worker)要读到新值;一轮里要多次用的,调用方取一次 `listProjectRoots` 复用
 - **C-5 replica 命令**(T-2 实现;T-9、T-10、T-11 照写)
   - `cgraphx replica create <feature-id> --prefix <文件前缀> --branch <分支> [--full-copy] [--json]`
   - `cgraphx replica list [--all] [--json]`
@@ -227,14 +235,15 @@
       reason?: HookSkipReason;           // unsupported 时,同 C-2
       lines?: readonly string[];         // unsupported 时
       linkTarget?: HookLinkTarget;       // reason 为 symlink 时,同 C-2
+      notice?: string;                   // unsupported 时:给人看的提示,和不带 --json 时 stderr 打的相同
     }
     export function installReleaseGuard(cwd: string): GuardResult; // 不在 git 仓库 → 抛 ReleaseError,code 'not_git_repo'
-    export function removeReleaseGuard(cwd: string): GuardResult;  // 不在 git 仓库或没装 → status 'absent'
+    export function removeReleaseGuard(cwd: string): GuardResult;  // 不在 git 仓库或没装 → 'absent';拦截那几行提交在被跟踪的钩子文件里 → 'unsupported'(reason 'tracked',带 notice;两个记号照样清)
     export { ReleaseError, exitCodeForError } from './errors';
     ```
 
     `registerReleaseCommands(program: Command): void` 由 `src/core/release/cli.ts` 导出(`src/cli/index.ts` 和其他子系统一样从 cli 模块导入)
-  - 命令:`cgraphx release guard [--remove] [--json]`;带 `--json` 输出 `{ "ok": true, ...GuardResult }`,`JSON.stringify(x, null, 2)` 加换行;不在 git 仓库:code `not_git_repo`,退出码 2;status 为 `unsupported` 时退出码 0,不带 `--json` 时 stderr 打 `[release] ` + `hookNotice(…, '没装上提交拦截')`;其余 status 不打提示
+  - 命令:`cgraphx release guard [--remove] [--json]`;带 `--json` 输出 `{ "ok": true, ...GuardResult }`,`JSON.stringify(x, null, 2)` 加换行;不在 git 仓库:code `not_git_repo`,退出码 2;status 为 `unsupported` 时退出码 0,结果带 `notice`(安装为 `hookNotice(…, '没装上提交拦截')`,卸载为 `hookRemoveNotice(…, '拦截那几行')`),不带 `--json` 时 stderr 打 `[release] ` + notice;其余 status 不打提示
   - 两个记号(本地 git 配置):「按版本走」`cgraphx.releaseFlow`——install 一开始就写 true,`unsupported` 也写;装过的 `cgraphx.releaseGuard`——装上(含 present)后写 true;remove 两个都 `--unset`;片段原来不在而 `cgraphx.releaseGuard` 为 true → status `repaired`(其余按 C-2 的 status)
   - commit-msg 片段,marker `# cgraphx-release-guard`,三行逐字:
 
@@ -269,9 +278,9 @@
     - `CGRAPHX_GIT_HOOK=post-merge` 且这次是快进 → 不记:reflog 那一行(取 `CGRAPHX_COMMIT_REFLOG`,旧片段不传时现读)含 `: Fast-forward`;读不到 reflog 才看父提交只有 1 个。快进到别人做的合并提交时 HEAD 也有两个父提交,不能只看父提交数
     - 已有同一 commit_hash 的 git_commit 事件 → 不记(post-commit、post-merge 都查;查和写在同一个 `BEGIN IMMEDIATE` 事务里,两个钩子进程同时记同一提交时不会重复)
   - 其余照现有 gitCommitHook:fail-silent、全部 await、只写 stderr `[timeline] …`
-  - 安装报告:`InstallReport`(`src/core/timeline/installer.ts`)新增 `gitHooks: HookSnippetResult[]`(C-2;post-commit、post-merge 各一项,不在 git 仓库为 `[]`);已有字段不改名、不删,`gitHookPath`、`gitHookWritten` 照旧指 post-commit(写入 = status 是 `installed` 或 `updated`)。`UninstallReport` 新增 `mergeHookRemoved: boolean`
+  - 安装报告:`InstallReport`(`src/core/timeline/installer.ts`)新增 `gitHooks: HookSnippetResult[]`(C-2;post-commit、post-merge 各一项,不在 git 仓库为 `[]`);已有字段不改名、不删,`gitHookPath`、`gitHookWritten` 照旧指 post-commit(写入 = status 是 `installed` 或 `updated`)。`UninstallReport` 新增 `mergeHookRemoved: boolean`、`gitHookNotices: string[]`(片段提交在被跟踪的钩子文件里、没删时的 `hookRemoveNotice(…, '提交记录片段')`,timeline uninstall、cgraphx uninstall 都打);`gitHookRemoved`、`mergeHookRemoved` = 对应 remove 的 status 是 `removed`
   - 安装提示(timeline install、cgraphx install 都打):逐项 `hookNotice(…)`(C-2),同一句只打一次
-  - 会话开始补装(spec D33⑥):`timeline-session-start-hook` 在已有逻辑之后调 C-2 的 `repairHookSnippets(cwd)`,出错吞掉、不打提示(post-commit、post-merge、commit-msg 三个片段都按登记补)
+  - 会话开始补装(spec D33⑥):`timeline-session-start-hook` 在写完事件之后调 C-2 的 `repairHookSnippets(cwd)`(post-commit、post-merge、commit-msg 三个片段都按登记补);补不上的逐条 `hookNotice(…, '版本分支提交拦截没补上')`(commit-msg)/ `hookNotice(…, '提交记录片段没补上')`(其余)加 `[cgraphx] ` 前缀,和没接 task hook 时的 skill 版本落后提示合成一条 SessionStart 的 `additionalContext`(stdout 一行 JSON),都没有时 stdout 为空;出错吞掉
   - diff-tree 取文件列表加 `-c core.quotePath=false` 和 `--root`:中文路径原样、根提交也列出文件;读 `commit_files` 时,截断写法 `{ files, _truncated_count }` 取其中的 `files` 当数组
   - 副本里 `timeline uninstall --purge`:一开始就拒绝,什么都不动(message 见 C-12)
 - **C-8 命名与说明**(T-9 写进 skill;T-10、T-11 引用)
@@ -310,7 +319,7 @@
     export function featureBindingTarget(projectRoot: string, featureId: string): { taskId: string | null; taskKey: string | null };
     ```
 
-  - 规则(与 sync 的 `toIngestBinding` 对目录任务、接口任务的口径一致):`root = resolveMainRoot(projectRoot)`;在 `locateFeatureRoot(root, featureId) ?? root` 上 `readFeatureTask` 读主 spec 头部声明;是 `T-<n>` → `{ taskId: 它, taskKey: null }`;否则 → `{ taskId: findTaskByValue(root, featureId)?.externalId ?? null, taskKey: featureId }`
+  - 规则(与 sync 的 `toIngestBinding` 对目录任务、接口任务的口径一致):`root = resolveMainRoot(projectRoot)`;在 `locateFeatureRoot(listProjectRoots(root), featureId)` 找到的根上 `readFeatureTask` 读主 spec 头部声明(哪里都没有这个需求目录 → 算没声明);是 `T-<n>` → `{ taskId: 它, taskKey: null }`;否则 → `{ taskId: findTaskByValue(root, featureId)?.externalId ?? null, taskKey: featureId }`
   - sync 只经 task 门面取这个结果,不直接 import features
 
 ## 细节方案核对
@@ -335,7 +344,7 @@
 | D16 报告存放与提交 | T-9(C-9) |
 | D17 报告过期 | T-9(release-review) |
 | D18 🔒 副本的数据布局 | T-2(create.ts);T-1(resolveDataDir) |
-| D19 🔒 登记 | T-2(registry.ts,C-3;status.ts 读 `baseCommit` 判 K3);T-1 读 |
+| D19 🔒 登记 | T-2(registry.ts,C-3;status.ts 读 `baseCommit` 判 K3;create.ts 写 `movedFiles`);T-1 读;T-6 读 `movedFiles` |
 | D20 复制方式 | T-2(create.ts);T-9(dev-start 问用户后带 `--full-copy`) |
 | D21 复制后的整理 | T-2(create.ts;exclude 只写配置目录里没被跟踪的部分,⑥ 被忽略的文件留在主目录,C-5);T-9(dev-start 接着建两份索引) |
 | D22 名字从哪来 | T-2(校验;撞名报 `name_taken`,C-5)、T-9(dev-start 定名字、处理 `name_taken`)、T-10(dev-spec 复用目录) |
@@ -345,7 +354,7 @@
 | D26 路径读取时换算 | T-2(C-4 的换算函数;按 feature-id 找需求目录先找副本)、T-5、T-6 |
 | D27 副本会话的归属(K2) | T-5 |
 | D28 🔒 没对上会话的副本提交 | T-5(本地)、T-6(上报,C-11) |
-| D29 上报 | T-6;目录任务声明的找目录在 T-5 |
+| D29 上报 | T-6(移进副本的文件按登记 `movedFiles` 定根);目录任务声明的找目录在 T-5 |
 | D30 主目录列出副本里的需求 | T-7(C-10) |
 | D31 主目录挪走后的提示 | T-8(C-12) |
 | D32 🔒 合并提交怎么记 | T-4(C-7) |
@@ -354,6 +363,7 @@
 | D35 🔒 删之前核对什么 | T-2(remove.ts);T-9(删之前先问用户) |
 | D36 skill 改动、install 不装拦截 | T-10;T-8 只在卸载时删拦截 |
 | D37 文档口径 | T-11 |
+| D38 需求的本机任务行 | T-5(`ensureFeatureTaskRow` 唯一一处规则;全量刷新对账删掉过时的目录任务;按 feature-id 查先看头部);store 加只删没有平台编号的目录任务 |
 | 全局约束「零变化」 | T-1、T-5、T-6、T-7 完成条件 + 统一验证 3 |
 | 全局约束「副本里拒绝清数据」 | T-4 |
 | 全局约束「git 2.38 以上」 | T-9 |
@@ -365,6 +375,8 @@
 代码审查后 spec 改到 spec@561fdba,plan 的契约与任务随之同步:K3 只数需求分支自己的提交(登记加 `baseCommit`)、D33 钩子只动本机、D32 快进按 reflog 判断、D12 拦截看第一行有内容的说明、D5 记「按版本走」、F3 起点按第一父链取且同步主干单列、D21 ① exclude 只写没被跟踪的部分、D22 撞名报 `name_taken`;对应的检查见统一验证 9。
 
 复审后 spec 改到 spec@c1c2920,plan 随之同步:D33 被跟踪的钩子文件不写(去掉本机过滤规则)、会话开始按登记补装、`.git/hooks` 的旧片段只在新片段装上且它在 git 目录里时清;D21 ⑥ 被忽略的文件留在主目录;D26 按 feature-id 找需求目录先找副本;K3 改为两条计数,快进式同步主干判不准记进待确认项;对应的检查见统一验证 9 的 ⑮、㉓~㉕。
+
+第三轮复审后 spec 改到 spec@a8b762a,plan 随之同步:D33 ④ 被跟踪的钩子按暂存区那份区分团队提交的和本机残留、⑥ 登记记写进过的文件(按 git 判断归属,别的仓库的不碰)、补不上的在会话开始提示一次并删登记(C-2、C-6、C-7);D19 登记加 `movedFiles`、D29 据它定根(C-3、C-4、T-6);D38 需求的本机任务行收成一处规则并在全量刷新时对账(T-5);`locateFeatureRoot` 改收 roots、登记不再缓存(C-4);统一验证 9 补设计验收 26~30。
 
 ## 适用规范
 
@@ -505,7 +517,7 @@
    ```
 
    → create 的 real 时间不超过 5 秒;remove 输出 `"state": "removed"`
-9. 钩子只动本机、K3、版本起点的临时仓库冒烟(在仓库根执行;全局 git 配置换成临时文件,不碰本机的;副本要写时复制,在 macOS 上跑):
+9. 钩子只动本机、K3、版本起点、目录任务对账、移进副本的文件定根的临时仓库冒烟(在仓库根执行;全局 git 配置换成临时文件,不碰本机的;副本要写时复制,在 macOS 上跑):
 
    ```bash
    REPO="$PWD"; T="$(mktemp -d)"; T="$(cd "$T" && pwd -P)"; mkdir -p "$T/bin"
@@ -556,7 +568,7 @@
    START0=$(git rev-parse HEAD) && git checkout -qb dev/1.0.1
    git fetch -q --no-tags "$T/m@戊" feat/戊 && git merge -q --no-ff -m "合入需求：戊" FETCH_HEAD
    git checkout -q main && echo hot > hot && git add hot && git commit -qm "fix: 热修复" && git checkout -q dev/1.0.1 && git merge -q --no-ff -m "Merge branch 'main' into dev/1.0.1" main
-   C=$(git rev-list --first-parent dev/1.0.1 --not main | tail -n 1); START=${C:+$C^1}; START=${START:-dev/1.0.1}
+   L=$(git rev-list --first-parent dev/1.0.1 --not main --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-dev/1.0.1}
    test "$(git rev-parse "$START")" = "$START0" && echo OK-start; test "$(git merge-base main dev/1.0.1)" != "$START0" && echo merge-base-moved
    git log --first-parent --merges --format='%h %p' "$START"..dev/1.0.1 | while read -r M P1 P2; do
      git merge-base --is-ancestor "$P2" main && echo "$(git log -1 --format=%s "$M") → 同步主干" || echo "$(git log -1 --format=%s "$M") → 合入"
@@ -601,6 +613,53 @@
    printf '# 规格说明: 会员导出\n\n> 产物: spec\n> 负责人: t\n> 任务: T-789\n' > "$T/n@会员导出/$F/会员导出-spec.md"
    (cd "$T/n@会员导出" && git add -A && git commit -qm "feat: 会员导出 spec"); node -e "setTimeout(()=>{},2000)"
    cgraphx task show T-789 --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);console.log(r.task.externalId, JSON.stringify(r.featureDirs), JSON.stringify(r.commits.map(c=>c.commit_message)))})"
+   # ㉖ husky 8 → 9:旧目录里的拦截迁走,--remove 两处都不留;换了钩子目录再 cgraphx uninstall,旧目录里的片段也删
+   cd "$T" && git init -q p && cd p && echo a > a && printf '.cgraphx/\n.claude/\n' > .gitignore && git add -A && git commit -qm init && init_cgx
+   mkdir .husky && git config core.hooksPath .husky && cgraphx release guard >/dev/null 2>&1
+   echo "husky8=$(grep -c cgraphx-release-guard .husky/commit-msg) exclude=$(grep -c '^/.husky/commit-msg .git/info/exclude)"
+   husky9 && git config core.hooksPath .husky/_ && cgraphx release guard >/dev/null 2>&1
+   echo "husky9=$(grep -c cgraphx-release-guard .husky/_/commit-msg) 旧文件=$(test -e .husky/commit-msg && echo 在 || echo 没了) exclude=$(grep -c '^/.husky/commit-msg .git/info/exclude)"
+   cgraphx release guard --remove >/dev/null 2>&1; echo "卸载后=$(grep -c cgraphx .husky/_/commit-msg)"
+   git config core.hooksPath .githooks && cgraphx timeline install >/dev/null 2>&1 && git config core.hooksPath .husky/_
+   cgraphx uninstall -y >/dev/null 2>&1; echo "uninstall 后 .githooks=[$(ls .githooks 2>/dev/null | tr '\n' ' ')]"
+   # ㉗ 被跟踪的非 shell 钩子报 not_shell、不带几行;bare 仓库目录里的 worktree,被跟踪的钩子按 ④ 不写,会话开始也不写回;悬空链接说清指向
+   cd "$T" && git init -q q && cd q && mkdir githooks && printf '#!/usr/bin/env python3\nprint(1)\n' > githooks/commit-msg && chmod +x githooks/commit-msg && printf '.cgraphx/\n.claude/\n' > .gitignore && git add -A && git commit -qm init && git config core.hooksPath githooks && init_cgx
+   cgraphx release guard --json | grep -cE '"reason": "not_shell"|"lines"'
+   cd "$T" && git init -q r0 && cd r0 && printf '.cgraphx/\n.claude/\n' > .gitignore && echo a > a && git add -A && git commit -qm init && cd "$T" && git clone -q --bare r0 r.git && git -C r.git worktree add -q -b wt "$T/r.git/wt" main
+   cd "$T/r.git/wt" && init_cgx && git config core.hooksPath .husky && cgraphx release guard --json | grep '"status"'
+   printf '#!/usr/bin/env sh\necho team\n' > .husky/commit-msg && git add -f .husky/commit-msg && git commit -q --no-verify -m "chore: 队友的钩子"
+   ctx=$(printf '{"session_id":"s27","cwd":"%s","source":"startup"}' "$PWD" | cgraphx timeline-session-start-hook 2>/dev/null)
+   echo "会话开始提示=$(printf '%s' "$ctx" | grep -c '被 git 跟踪') 写回=$(grep -c cgraphx .husky/commit-msg) status=[$(git status --porcelain)]"; cgraphx release guard --json | grep '"reason"'
+   cd "$T" && git init -q s && cd s && echo a > a && git add a && git commit -qm init && init_cgx && ln -s "$T/nowhere/commit-msg" .git/hooks/commit-msg
+   cgraphx release guard --json | grep -E '"(reason|scope)"'; cgraphx release guard 2>&1 >/dev/null | grep -c "指向 $T/nowhere/commit-msg(它在仓库外"
+   # ㉘ 副本会话在 spec 之前建出目录任务;spec 声明 T-123 后全量刷新删掉它,task show <需求> 落到 T-123;已有平台编号的目录任务不删
+   tasks() { cgraphx task list --local --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).tasks.map(t=>t.source==='feature'?'F:'+t.featureId+'@'+(t.externalId??'-'):'A:'+t.externalId).sort().join(' ')))"; }
+   stop() { printf '{"session_id":"%s","cwd":"%s"}' "$1" "$2" | cgraphx task-stop-hook >/dev/null 2>&1; }
+   cd "$T" && git init -q t && cd t && printf '.cgraphx/\n.claude/\n' > .gitignore && echo a > a && git add -A && git commit -qm init && init_cgx
+   for r in 订单导出 发票; do cgraphx replica create 2026-10-28-$r --prefix $r --branch feat/$r --json >/dev/null; printf '{"session_id":"r-%s","cwd":"%s","source":"startup"}' "$r" "$T/t@$r" | cgraphx timeline-session-start-hook >/dev/null 2>&1; stop "r-$r" "$T/t@$r"; done
+   echo "spec 之前:$(tasks)"
+   node -e "require(process.argv[1]).recordFeatureTaskMappings(process.cwd(), [{ featureId: '2026-10-28-发票', taskId: 'T-900' }])" "$REPO/dist/core/task/index.js"
+   for x in 订单导出:T-123 发票:T-456; do r=${x%%:*}; printf '# 规格说明: %s\n\n> 产物: spec\n> 负责人: t\n> 任务: %s\n' "$r" "${x#*:}" > "$T/t@$r/docs/features/2026-10-28-$r/$r-spec.md"; done
+   echo "声明之后:$(tasks)"
+   cgraphx task show 2026-10-28-订单导出 --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);console.log(r.task.externalId, JSON.stringify(r.sessions.map(x=>x.binding.sessionId)))})"
+   # ㉙ 主目录会话写的 spec 开副本移走、副本里提交并推送、合入主目录并推送、删副本:这个会话的产出一直是 create 带副本那笔提交
+   art() { node -e "const p=require(process.argv[1]);p.createSyncContext(process.cwd(),{tier:'1.2'}).then(c=>p.buildSessionPayload(c,'s29',0)).then(b=>console.log(b.session.artifacts.map(a=>a.action+'+'+(a.commitHash?a.commitHash.slice(0,7):'空')).join(' ')))" "$REPO/dist/core/sync/payload.js"; }
+   cd "$T" && git init -q --bare u-origin.git && git init -q u && cd u && printf '.cgraphx/\n.claude/\n' > .gitignore && echo a > a && git add -A && git commit -qm init && git remote add origin "$T/u-origin.git" && git push -q origin main && init_cgx && cgraphx timeline install >/dev/null 2>&1
+   F=docs/features/2026-10-28-订单导出 && mkdir -p "$F" && printf '# 规格说明: 订单导出\n\n> 产物: spec\n> 负责人: t\n' > "$F/订单导出-spec.md"
+   node -e "const t=require(process.argv[1]),c=process.cwd();(async()=>{await t.recordEvent(c,{session_id:'s29',event_type:'session_start',cwd:c});await t.recordEvent(c,{session_id:'s29',event_type:'post_tool_use',tool_name:'Write',tool_args:{file_path:c+'/'+process.argv[2]},tool_result_summary:'{\"success\":true}',cwd:c})})()" "$REPO/dist/core/timeline/index.js" "$F/订单导出-spec.md"
+   node -e "setTimeout(()=>{},1100)"; cgraphx replica create 2026-10-28-订单导出 --prefix 订单导出 --branch feat/订单导出 --json >/dev/null
+   (cd "$T/u@订单导出" && git add -A && git commit -qm "docs: 订单导出 spec" && git push -q origin feat/订单导出); C1=$(git -C "$T/u@订单导出" rev-parse --short=7 HEAD); node -e "setTimeout(()=>{},2000)"
+   echo "合入前=$(art)"
+   git fetch -q --no-tags "$T/u@订单导出" feat/订单导出 && git merge -q --no-ff -m "合入需求：订单导出" FETCH_HEAD && git push -q origin main; node -e "setTimeout(()=>{},2000)"
+   echo "合入推送后=$(art)"; cgraphx replica remove 2026-10-28-订单导出 --json >/dev/null; echo "删副本后=$(art) C1=$C1"
+   # ㉚ 副本里卸载只删副本的片段;建在主工作区里的 worktree,主目录装不迁走它的,主目录卸载两边都删
+   cd "$T" && git init -q w && cd w && printf '.cgraphx/\n.claude/\n' > .gitignore && echo a > a && git add -A && git commit -qm init && init_cgx && cgraphx release guard >/dev/null 2>&1 && cgraphx timeline install >/dev/null 2>&1
+   cgraphx replica create 2026-10-28-乙 --prefix 乙 --branch feat/乙 --json >/dev/null
+   (cd "$T/w@乙" && cgraphx release guard --remove --json | grep '"status"' && cgraphx timeline uninstall >/dev/null 2>&1)
+   echo "主目录 拦截=$(grep -c cgraphx-release-guard .git/hooks/commit-msg) 提交记录=$(grep -c cgraphx-timeline-hook .git/hooks/post-commit) 副本=$(cat "$T/w@乙/.git/hooks/commit-msg" "$T/w@乙/.git/hooks/post-commit" 2>/dev/null | grep -c cgraphx)"
+   git worktree add -q .claude/worktrees/wt -b wt && git config core.hooksPath .husky/_ && (cd .claude/worktrees/wt && cgraphx release guard >/dev/null 2>&1) && cgraphx release guard >/dev/null 2>&1
+   echo "嵌套=$(grep -c cgraphx-release-guard .claude/worktrees/wt/.husky/_/commit-msg) 主=$(grep -c cgraphx-release-guard .husky/_/commit-msg)"
+   cgraphx release guard --remove >/dev/null 2>&1; echo "卸载后 嵌套=$(test -e .claude/worktrees/wt/.husky/_/commit-msg && echo 在 || echo 没了) 主=$(test -e .husky/_/commit-msg && echo 在 || echo 没了)"
    cd "$REPO" && rm -rf "$T"
    ```
 
@@ -615,8 +674,13 @@
    → ㉓ `共用目录=[post-commit ] 3 行`;guard 输出 `"status": "present"`;`旧片段=1`;`卸载后 status=[]`
    → ㉔ `冲掉后=0`、`会话开始后=3`(拦截片段 3 行);`被跟踪后=0 status=[]`;`卸载后=0`
    → ㉕ `movedFiles=["docs/features/2026-10-28-会员导出/讨论稿.md"]`;`主目录 调研.local.md=在 讨论稿.md=没了`;`T-789 ["docs/features/2026-10-28-会员导出"] ["feat: 会员导出 spec"]`
+   → ㉖ `husky8=3 exclude=1`;`husky9=3 旧文件=没了 exclude=0`;`卸载后=0`;`uninstall 后 .githooks=[]`
+   → ㉗ 计数为 `1`(有 `"reason": "not_shell"`,没有 `"lines"`);guard 输出 `"status": "installed"`;`会话开始提示=1 写回=0 status=[]`,再跑 guard 输出 `"reason": "tracked"`;悬空链接 guard 输出 `"reason": "symlink"`、`"scope": "outside_repo"`,提示计数 `1`
+   → ㉘ `spec 之前:F:2026-10-28-发票@- F:2026-10-28-订单导出@-`;`声明之后:A:T-123 A:T-456 F:2026-10-28-发票@T-900`;`T-123 ["r-订单导出"]`
+   → ㉙ `合入前`、`合入推送后`、`删副本后` 三处都是 `create+` 加末尾打出的 C1
+   → ㉚ remove 输出 `"status": "removed"`;`主目录 拦截=3 提交记录=3 副本=0`;`嵌套=3 主=3`;`卸载后 嵌套=没了 主=没了`
 
-spec「设计验收」各条的落点:1 → 统一验证 3;2 的 `rm -rf` 部分、7、8、9 → 统一验证 5;12 → 统一验证 8;13 → 统一验证 1、2;14~21、23~25 → 统一验证 9;22 → 统一验证 9 先验一遍,单元测试与 3、4、5、6、10、11(单元测试、并发写、计时)以及 2 的 `cgraphx uninstall` 部分 → 全部任务完成后由 `/unit-spec` → `/unit-code` 补。
+spec「设计验收」各条的落点:1 → 统一验证 3;2 的 `rm -rf` 部分、7、8、9 → 统一验证 5;12 → 统一验证 8;13 → 统一验证 1、2;14~21、23~30 → 统一验证 9;22 → 统一验证 9 先验一遍,单元测试与 3、4、5、6、10、11(单元测试、并发写、计时)以及 2 的 `cgraphx uninstall` 部分 → 全部任务完成后由 `/unit-spec` → `/unit-code` 补。
 
 ## 允许局部适配的范围
 

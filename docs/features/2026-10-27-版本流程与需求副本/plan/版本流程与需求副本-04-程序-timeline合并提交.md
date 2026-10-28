@@ -1,7 +1,7 @@
 # T-4: 程序——timeline 记合并提交
 
 > 产物: plan
-> 依据: spec@c1c2920
+> 依据: spec@a8b762a
 
 - 目标:timeline 的 git 钩子改经 git-hooks 写入(跟随 core.hooksPath、紧跟 shebang),新增 post-merge 片段记下合并提交;会话开始按登记补装钩子片段;副本里拒绝 `--purge` 清数据
 - 对应 spec 编号:F8(合并提交记进主目录)、D32、D33;全局约束「副本里会删共用数据的操作直接拒绝」
@@ -25,7 +25,7 @@
   1. `constants.ts`:新增 `COMMIT_HOOK_ENV = 'CGRAPHX_GIT_HOOK'`,注释说明取值 `post-merge`、缺省即 post-commit;新增 `COMMIT_REFLOG_ENV = 'CGRAPHX_COMMIT_REFLOG'`,注释说明是 post-merge 片段当场取的 HEAD reflog 最新一行(后台进程再读可能已是下一条)。
   2. `installer.ts`:
      - 安装:post-commit 片段改为 `installHookSnippet(gitRoot, 'post-commit', GIT_HOOK_MARKER, <C-7 的 post-commit 三行>, { legacyMatch: GIT_COMMIT_SUBCOMMAND })`;再写 post-merge:`installHookSnippet(gitRoot, 'post-merge', GIT_HOOK_MARKER, <C-7 两行>)`;两个结果按顺序放进 C-7 的 `gitHooks`;`gitHookPath` 取 post-commit 结果的 hookPath,`gitHookWritten` 为它的 status 是 `installed` 或 `updated`
-     - 卸载(`keepGitHook` 为 false 时):对 post-commit(带 legacyMatch)、post-merge 各调一次 `removeHookSnippet`;`gitHookRemoved` 照旧指 post-commit,`mergeHookRemoved` 指 post-merge
+     - 卸载(`keepGitHook` 为 false 时):对 post-commit(带 legacyMatch)、post-merge 各调一次 `removeHookSnippet`;`gitHookRemoved` 照旧指 post-commit,`mergeHookRemoved` 指 post-merge(都是 status 为 `removed`);返回 `unsupported` 的各取 `hookRemoveNotice(…, '提交记录片段')` 放进 `gitHookNotices`(C-7),timeline uninstall 的 cli 往 stderr 打 `[timeline] ` + 提示(去重),cgraphx uninstall 逐条 `clack.log.warn`
      - `--purge`:`resolveDataDir(resolvedRoot).state` 不是 `own` → 一开始就抛错,钩子、agent 配置、表都不动(message 照 C-12 原文,主目录路径取 `mainRoot`;CLI 照现有错误处理打到 stderr,退出码非 0);是 `own` → 照旧删表,库路径改用 `getDatabasePath(resolvedRoot)`(不再手拼 `.cgraphx/cgraphx.db`)
      - 删掉不再使用的本地函数(`findGitRoot` 若只剩取仓库根的用途可保留;`buildGitPostCommitSnippet` 保留,改为返回三行数组)
   3. `hooks.ts` 的 `gitCommitHook` / `readGitCommitInfo`:
@@ -34,7 +34,7 @@
      - `process.env[COMMIT_HOOK_ENV] === 'post-merge'` 且是快进 → 直接返回,不记。快进按 C-7 判断:reflog 那一行取 `process.env[COMMIT_REFLOG_ENV]`(新片段和提交号同一条 `git log -g` 取),没有(旧片段)才现跑 `git reflog -1 --format=%gs HEAD`;非空时含 `: Fast-forward` 即快进;取不到 reflog 才看父提交只有 1 个
      - 取文件列表的 `git diff-tree` 加 `-c core.quotePath=false` 和 `--root`
      - 其余照现有逻辑
-  3a. `hooks.ts` 的 `sessionStartHook`:写完事件、打完版本提示后调 C-2 的 `repairHookSnippets(cwd)`(C-7「会话开始补装」),包在 try/catch 里,出错不输出、不影响会话。
+  3a. `hooks.ts` 的 `sessionStartHook`:写完事件后调 C-2 的 `repairHookSnippets(cwd)`(C-7「会话开始补装」),补不上的按 C-7 转成提示,和版本落后提示合成一条 additionalContext 输出;包在 try/catch 里,出错不输出、不影响会话。
   3b. `store.ts`:`rowToEvent` 读 `commit_files` 时,值是截断写法 `{ files, _truncated_count }` 就取其中的 `files`,保证 `TimelineEvent.commit_files` 总是字符串数组(C-7);不往 `store.ts` 加别的代码。
   4. `recorder.ts`:`recordEvent` 写 git_commit 事件时,在同一连接上 `exec('BEGIN IMMEDIATE')` → `SELECT id FROM timeline_events WHERE event_type = 'git_commit' AND commit_hash = ? LIMIT 1`,查到就返回这个 id、不写;查不到照常 enrich + insert → `COMMIT`;出错先 `ROLLBACK` 再照旧抛出(C-7 去重)。连接的 `transaction()` 用的是普通 `BEGIN`,两个钩子进程会都查不到、都写进去,这里不用它;其他事件类型照旧,不开事务;去重不放进 `store.ts`(它已接近 600 行)。
   5. `cli.ts`:`timeline install` 的说明文字由「.git/hooks/」改成「git 钩子目录」;报告照旧由 `writeReports` 输出到 stdout;输出报告后,对每份报告的 `gitHooks` 逐项取 `hookNotice(…)`(C-2),往 stderr 打 `[timeline] …`,同一句只打一次。
