@@ -14,10 +14,10 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 - 说法:**主干** = `main`,没有 main、有 master 时用 master;**版本分支** = 名字是 `dev/数字.数字.数字` 的分支(`^dev/[0-9]+\.[0-9]+\.[0-9]+$`);**开了版本** = 主目录当前分支是版本分支;**在副本里** = 项目根下 `.cgraphx/shared` 是符号链接;**版本起点** = 版本分支第一父链上最早一个不在主干里的提交的第一个父提交(没有这样的提交就是版本分支的最新提交),主干合进过版本分支也不变:
 
   ```bash
-  L=$(git rev-list --first-parent HEAD --not main --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
+  B=$(git rev-parse -q --verify refs/heads/main >/dev/null && echo main || echo master); L=$(git rev-list --first-parent HEAD --not "$B" --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
   ```
 
-  用到 START 的命令,都把这一行写在同一条命令的开头:每次调用都是新的 shell,上一次算的 START 不在了,空着的 START 让 `"$START"..HEAD` 变成空范围,命令照样成功、结果却是空的。git 报错(如没有叫 main 的分支)时这一行以非零退出、后面的不跑:停下,把报错原样转告用户。
+  用到 START 的命令,都把这一行写在同一条命令的开头:每次调用都是新的 shell,上一次算的 START 不在了,空着的 START 让 `"$START"..HEAD` 变成空范围,命令照样成功、结果却是空的。B 是主干:有 main 用 main,没有用 master。git 报错(如 main、master 都没有)时这一行以非零退出、后面的不跑:停下,把报错原样转告用户。
 - 副本里同步主目录的分支只用 /dev-merge(它用 `--no-ff` 产生合并提交);用 `git pull`、默认的 `git merge` 快进同步过,同步进来的提交会被当成需求自己做的,`replica list` 的合入判断就不准了。
 - 输出文件路径的 git 命令都带 `-c core.quotePath=false`,中文路径原样输出,不转成 `"\344\270…"`。
 
@@ -93,9 +93,9 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
    ```bash
    # 开了版本:从版本起点找(START 的取法见「定位」,和下面的循环在同一条命令里)
-   L=$(git rev-list --first-parent HEAD --not main --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
+   B=$(git rev-parse -q --verify refs/heads/main >/dev/null && echo main || echo master); L=$(git rev-list --first-parent HEAD --not "$B" --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
    git log --first-parent --merges --format='%H %s' "$START"..HEAD -- src/order/routes.ts | while read -r h s; do
-     git merge-base --is-ancestor "$h^2" main && echo "同步主干" || echo "$s"
+     git merge-base --is-ancestor "$h^2" "$B" && echo "同步主干" || echo "$s"
    done    # → 合入需求：积分发放
    # 没开版本:从这条副本登记的 createdAt 之后找
    git log --first-parent --merges --since=2026-10-27T08:00:00.000Z --format=%s HEAD -- src/order/routes.ts
@@ -114,7 +114,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
    ```bash
    # 开了版本:从版本起点数(和算 START 的那一行在同一条命令里)
-   L=$(git rev-list --first-parent HEAD --not main --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
+   B=$(git rev-parse -q --verify refs/heads/main >/dev/null && echo main || echo master); L=$(git rev-list --first-parent HEAD --not "$B" --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
    git log --first-parent --merges --format=%s "$START"..HEAD | grep -cE '^合入需求：订单导出(\(第 [0-9]+ 次\))?$'
    # 没开版本:从这条副本登记的 createdAt 之后数
    git log --first-parent --merges --since=2026-10-27T08:00:00.000Z --format=%s HEAD | grep -cE '^合入需求：订单导出(\(第 [0-9]+ 次\))?$'
@@ -184,7 +184,7 @@ $ git fetch --no-tags /Users/smdnk/objects/ai/cgraphx@订单导出 feat/订单�
 $ git -c core.quotePath=false merge-tree --write-tree --name-only HEAD FETCH_HEAD; echo "exit=$?"
 9b1c4d7e2f0a6b8c3d5e7f9a1b2c4d6e8f0a2b4c
 exit=0
-$ L=$(git rev-list --first-parent HEAD --not main --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}; git log --first-parent --merges --format=%s "$START"..HEAD | grep -cE '^合入需求：订单导出(\(第 [0-9]+ 次\))?$'
+$ B=$(git rev-parse -q --verify refs/heads/main >/dev/null && echo main || echo master); L=$(git rev-list --first-parent HEAD --not "$B" --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}; git log --first-parent --merges --format=%s "$START"..HEAD | grep -cE '^合入需求：订单导出(\(第 [0-9]+ 次\))?$'
 0
 $ git merge --no-ff -m "合入需求：订单导出" FETCH_HEAD
 $ git rev-list --count --no-merges "HEAD^1..HEAD^2"
@@ -210,7 +210,7 @@ src/order/routes.ts
 Auto-merging src/order/routes.ts
 CONFLICT (content): Merge conflict in src/order/routes.ts
 exit=1
-$ L=$(git rev-list --first-parent HEAD --not main --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}; git log --first-parent --merges --format='%H %s' "$START"..HEAD -- src/order/routes.ts | while read -r h s; do git merge-base --is-ancestor "$h^2" main && echo "同步主干" || echo "$s"; done
+$ B=$(git rev-parse -q --verify refs/heads/main >/dev/null && echo main || echo master); L=$(git rev-list --first-parent HEAD --not "$B" --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}; git log --first-parent --merges --format='%H %s' "$START"..HEAD -- src/order/routes.ts | while read -r h s; do git merge-base --is-ancestor "$h^2" "$B" && echo "同步主干" || echo "$s"; done
 合入需求：积分发放
 ```
 
