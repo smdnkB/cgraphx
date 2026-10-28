@@ -18,8 +18,8 @@
 |---|---|---|---|---|
 | K1 | 副本 | 经 F7 开出、在主目录登记过的目录 | 算:cgraphx@订单导出;不算：自己用 cp 复制的目录、git worktree | 新定 |
 | K2 | 副本里的会话 | 会话开始时所在的目录在副本里 | 在 cgraphx@订单导出 里开的会话算，中途 cd 到别处也还算;在主目录开、只读过副本里文件的不算 | timeline 每条记录都带所在目录;新定 |
-| K3 | 已合入 | 副本里需求分支的最新提交，已经在它要合入的分支里(开了版本是 dev/2.0.11,没开是 main) | 合入后没再提交 → 已合入;合入后又提交了 1 笔 → 未合入，差 1 个提交 | git 能直接判断;新定 |
-| K5 | 疑似夹带 | 本版本里没声明、又不属于所在需求的改动 | 算：直接提交在 dev/2.0.11 上、不是 chore(release): 开头的提交(绕过了拦截);订单导出的合入里改了积分发放需求目录下的文件;订单导出的合入改了 src/points/ 下的积分代码，而它 plan 的「涉及范围」只有 src/order/(没有 plan 的按 spec 写到的模块判)。不算:chore(release): 开头的提交(单列为「已声明的版本级提交」);开版本前已进主干的提交(单列);本需求自己的需求目录，以及知识库、DDL 知识、本需求的接口测试用例这类流程产物;plan 和 spec 都没写范围的需求，报告标「未声明范围」,不判夹带 | 沿用 F3 报告示例和 F8 边界 ①;plan 的任务清单本来就列每个任务的涉及范围;新定 |
+| K3 | 已合入 | 需求分支自己做过提交(开副本以后在这个分支上做的;同步进来的不算),而且这些提交都已经在它要合入的分支里(开了版本是 dev/2.0.11,没开是 main) | 合入后没再提交 → 已合入;合入后只在副本里同步过 → 仍是已合入;合入后又提交了 1 笔 → 未合入，差 1 个提交;刚开出来还没提交过(同步过也一样)→ 不算已合入，是「还没有提交」 | git 能直接判断;开副本时登记当时的提交(D19);新定 |
+| K5 | 疑似夹带 | 本版本里没声明、又不属于所在需求的改动 | 算：直接提交在 dev/2.0.11 上、不是 chore(release): 开头的提交(绕过了拦截);订单导出的合入里改了积分发放需求目录下的文件;订单导出的合入改了 src/points/ 下的积分代码，而它 plan 的「涉及范围」只有 src/order/(没有 plan 的按 spec 写到的模块判)。不算:chore(release): 开头的提交(单列为「已声明的版本级提交」);开版本前已进主干的提交(单列);版本开发期间从主干同步进来的提交(单列为「同步主干」);本需求自己的需求目录，以及知识库、DDL 知识、本需求的接口测试用例这类流程产物;plan 和 spec 都没写范围的需求，报告标「未声明范围」,不判夹带 | 沿用 F3 报告示例和 F8 边界 ①;plan 的任务清单本来就列每个任务的涉及范围;新定 |
 | K6 | 敏感改动 | 改了表结构、依赖清单或配置的文件 | 算:.sql 文件;package.json、pom.xml 这类依赖清单;.env、.env.example 这类配置。不算：只改代码和文档 | 沿用 F3 报告示例;新定 |
 | K7 | 缺陷 | 本版本合入的需求，测试报告里没通过的用例;加上需求第一次合入之后的修复 | 算：订单导出接口测试报告里 2 个没通过的用例;订单导出第 2 次合入带进来的 fix 提交。不算：第一次合入前、开发过程中的 fix 提交(如 /dev-impl-subagent 统一验证后的修复);需求缺测试报告(记进风险) | 接口、单元、UI 三种测试报告已登记在产物注册表;/dev-impl-subagent 统一验证后的修复按规定提交成 fix(<scope>);新定 |
 | K8 | 版本分支 | 名字是「dev/数字.数字.数字」的分支 | 算:dev/2.0.11、dev/2.1.0;不算:dev/zhangsan、develop、main | F1 开出的分支都是这个格式;新定 |
@@ -60,13 +60,13 @@ flowchart TB
 | 编号 | 功能点 | 类别 | 行为链(已锁定) | 边界 | 落地依据 |
 |---|---|---|---|---|---|
 | F1 | 开版本 | 核心 | 发完 2.0.10,在 main 上输入 /release-start → 读出 package.json 里的版本号 2.0.10 → 在 main 当前提交上打 tag v2.0.10(说明「发布 2.0.10」)→ 拉出 dev/2.0.11(K8)并切过去 → 回报「已打 v2.0.10,开始 2.0.11」;tag 和分支只建在本地，推不推远程由你定 | ① 不在 main 上，或工作区有改了没提交的文件 → 停下，不打 tag、不建分支(没被跟踪的新文件不拦) ② v2.0.10 已经存在 → 不重打，直接用 ③ 上个版本分支 dev/2.0.10 还没合进 main → 停下「dev/2.0.10 还没发，先跑 /release-review」 ④ 仓库里一个 tag 都没有 → 默认打在最近一次改版本号的提交上，打之前给你确认 ⑤ 读不到版本号 → 问你刚发的版本号 ⑥ 下个版本号默认末位加一，你说「下个版本是 2.1.0」就开 dev/2.1.0 ⑦ 下个版本分支 dev/2.0.11 已经存在、已合进 main(发 2.0.11 前没改版本号，读到的还是 2.0.10)→ 停下「dev/2.0.11 已经发过了，版本号还是 2.0.10:发版前没改版本号?」 | package.json 版本 2.0.10;仓库里 0 个 tag;最近一次改版本号是 3f7f4f6,之后 main 上还有 9 个提交(正是边界 ④) |
-| F2 | 需求合入 | 核心 | 需求在自己的副本(K1)里、在 feat/订单导出 上做 → 做完、/code-review 过了，在主目录的会话里输入 /dev-merge 订单导出 → 从副本取回 feat/订单导出，先预演合并，不动工作区 → 没冲突就用合并提交合入主目录当前所在的分支(开了版本是 dev/2.0.11,没开是 main),说明「合入需求：订单导出」→ 回报「已合入：3 个提交，改了 7 个文件;副本留到发版后清理」;在副本的会话里输入 /dev-merge → 先从主目录取最新的 dev/2.0.11 合进 feat/订单导出，有冲突就地解决、提交 → 提示「可以合入了：到主目录的会话里输入 /dev-merge 订单导出」 | ① 预演有冲突 → 分支不动，列出冲突文件和各自撞上的已合入需求(「src/order/routes.ts:积分发放 也改过」),提示「到副本会话里输入 /dev-merge,同步最新的 dev/2.0.11、就地解决冲突，再回主目录合入」 ② 副本里有没提交的改动(K9)→ 停下，提示先在副本里提交 ③ 合入后在副本里又修了 bug → 再跑一次 /dev-merge,说明「合入需求：订单导出(第 2 次)」,审核报告里归同一个需求 ④ 主目录有改了没提交的文件 → 停下，提示先提交或收好(没被跟踪的新文件不拦) ⑤ 跨版本没做完 → 副本留着，发版后直接合进下个版本分支;副本里同步时取的就是新的版本分支 ⑥ 主目录在版本分支(K8)上时直接做需求 → /dev-impl、/dev-impl-subagent 开跑前停下，提示先 /dev-start 开副本;直接 git commit 也当场拦下，只放行合并提交和 chore(release): 开头的整版改动(改版本号、主目录里写的知识库和 DDL 知识、发版审核报告),审核报告里单列;拦截装在 git 上，不支持 hooks 的 agent、终端里手敲的提交都拦得住 | 副本整仓复制，带完整的 git 仓库，主目录能直接从副本取回分支;开副本时登记过主目录，副本也能从主目录取版本分支;本机 git 2.50.1 能不动工作区预演合并;现有提交钩子没管自定义钩子目录(用 husky 的项目会失效),这次一起改 |
-| F3 | 发版审核 | 核心 | 发版那天，先在 dev/2.0.11 上以「chore(release): 版本号 2.0.10→2.0.11」改好版本号，输入 /release-review → 以 v2.0.10 为起点出审核报告，存成 docs/releases/v2.0.11-发版审核.md,并以「chore(release): 2.0.11 发版审核报告」提交：结论(可以发 / 有风险 / 不能直接合);按需求列出提交数、文件数、增删行数和测试情况;疑似夹带(K5);已声明的版本级提交;两个需求都改了的文件;敏感改动(K6);和主干合并的预演;缺陷(K7);版本号改了没有;不在本版本的需求(还在副本里没合入的，带副本路径和差几个提交)→ 对话里给结论和摘要;你说「发」进 F4,说「先不发」什么都不动 | ① 还没合入任何需求 → 只回一句「dev/2.0.11 还没有合入任何需求」 ② 预演有冲突 → 结论写「不能直接合」,列出冲突文件和涉及的需求 ③ 合入的分支找不到需求目录(如 fix/登录超时)→ 照常列出，标「未关联需求目录」 ④ 需求缺测试，或测试报告里有没通过的用例 → 记进风险和缺陷，不拦发版 ⑤ 上个版本 tag 和版本分支起点之间的主干提交 → 单列「开版本前已进主干、本版本首次发布」,不算夹带 ⑥ 版本号还是 2.0.10 → 记进风险，提示以「chore(release): 版本号 2.0.10→2.0.11」提交 ⑦ 需求没声明涉及范围(K5)→ 报告标「未声明范围」 | 本机 git 能预演冲突;需求的平台环节能查到(如「测试 ✗ 缺(必需)」);接口、单元、UI 三种测试报告已登记;plan 的任务清单列了涉及范围;timeline 记的提交约六成能对上会话，只用来给疑似夹带补一句是哪个会话提交的 |
+| F2 | 需求合入 | 核心 | 需求在自己的副本(K1)里、在 feat/订单导出 上做 → 做完、/code-review 过了，在主目录的会话里输入 /dev-merge 订单导出 → 从副本取回 feat/订单导出，先预演合并，不动工作区 → 没冲突就用合并提交合入主目录当前所在的分支(开了版本是 dev/2.0.11,没开是 main),说明「合入需求：订单导出」→ 回报「已合入：3 个提交，改了 7 个文件;副本留到发版后清理」;在副本的会话里输入 /dev-merge → 先从主目录取最新的 dev/2.0.11 合进 feat/订单导出，有冲突就地解决、提交 → 提示「可以合入了：到主目录的会话里输入 /dev-merge 订单导出」 | ① 预演有冲突 → 分支不动，列出冲突文件和各自撞上的已合入需求(「src/order/routes.ts:积分发放 也改过」),提示「到副本会话里输入 /dev-merge,同步最新的 dev/2.0.11、就地解决冲突，再回主目录合入」 ② 副本里有没提交的改动(K9)→ 停下，提示先在副本里提交 ③ 合入后在副本里又修了 bug → 再跑一次 /dev-merge,说明「合入需求：订单导出(第 2 次)」,审核报告里归同一个需求;副本里没有新提交(K3 已合入)→ 不合，回「已经合入过了，副本里没有新的提交」 ④ 主目录有改了没提交的文件 → 停下，提示先提交或收好(没被跟踪的新文件不拦) ⑤ 跨版本没做完 → 副本留着，发版后直接合进下个版本分支;副本里同步时取的就是新的版本分支 ⑥ 主目录在版本分支(K8)上时直接做需求 → /dev-impl、/dev-impl-subagent 开跑前停下，提示先 /dev-start 开副本;直接 git commit 也当场拦下，只放行合并提交和 chore(release): 开头的整版改动(改版本号、主目录里写的知识库和 DDL 知识、发版审核报告),审核报告里单列;拦截装在 git 上，不支持 hooks 的 agent、终端里手敲的提交都拦得住 ⑦ 主目录在 main 上，开过版本流程、还没退出(发完版还没跑 /release-start)→ 停下问「刚发完版，还没开下个版本。要合进下个版本，先跑 /release-start;这次直接合进 main,说『合进 main』;以后都不按版本走，说『不再按版本走』」;说「合进 main」只合这一次，下次还问;说「不再按版本走」→ 卸掉提交拦截，以后在 main 上 /dev-merge 不再问 | 副本整仓复制，带完整的 git 仓库，主目录能直接从副本取回分支;开副本时登记过主目录，副本也能从主目录取版本分支;本机 git 2.50.1 能不动工作区预演合并;现有提交钩子没管自定义钩子目录(用 husky 的项目会失效),这次一起改 |
+| F3 | 发版审核 | 核心 | 发版那天，先在 dev/2.0.11 上以「chore(release): 版本号 2.0.10→2.0.11」改好版本号，输入 /release-review → 以 v2.0.10 为起点出审核报告，存成 docs/releases/v2.0.11-发版审核.md,并以「chore(release): 2.0.11 发版审核报告」提交：结论(可以发 / 有风险 / 不能直接合);按需求列出提交数、文件数、增删行数和测试情况;疑似夹带(K5);已声明的版本级提交;同步主干(版本开发期间合进来的主干提交);两个需求都改了的文件;敏感改动(K6);和主干合并的预演;缺陷(K7);版本号改了没有;不在本版本的需求(还在副本里没合入的，带副本路径和差几个提交)→ 对话里给结论和摘要;你说「发」进 F4,说「先不发」什么都不动 | ① 还没合入任何需求 → 只回一句「dev/2.0.11 还没有合入任何需求」 ② 预演有冲突 → 结论写「不能直接合」,列出冲突文件和涉及的需求 ③ 合入的分支找不到需求目录(如 fix/登录超时)→ 照常列出，标「未关联需求目录」 ④ 需求缺测试，或测试报告里有没通过的用例 → 记进风险和缺陷，不拦发版 ⑤ 上个版本 tag 和版本分支起点之间的主干提交 → 单列「开版本前已进主干、本版本首次发布」,不算夹带 ⑥ 版本号还是 2.0.10 → 记进风险，提示以「chore(release): 版本号 2.0.10→2.0.11」提交 ⑦ 需求没声明涉及范围(K5)→ 报告标「未声明范围」 | 本机 git 能预演冲突;需求的平台环节能查到(如「测试 ✗ 缺(必需)」);接口、单元、UI 三种测试报告已登记;plan 的任务清单列了涉及范围;timeline 记的提交约六成能对上会话，只用来给疑似夹带补一句是哪个会话提交的 |
 | F4 | 合入主干 | 核心 | 审核结论不是「不能直接合」,你说「发」→ 切到 main,用合并提交合入 dev/2.0.11,说明「发布 2.0.11:合入 订单导出、退款、积分发放」→ 不打 tag、不发布、不推送(版本号已在版本分支上改好)→ 列出可以清理的副本(F9)→ 提示「发布照你们现在的流程走;发完跑 /release-start」 | ① 审核之后版本分支又合入了新需求 → 报告过期，提示重跑 /release-review,这次不合 ② 版本开发期间 main 上有了不在版本分支里的提交 → 预演没冲突照常合入，合并说明里列出这几笔;有冲突就停下 ③ 工作区有改了没提交的文件 → 停下(没被跟踪的新文件不拦) | main 上已有「Merge branch 'feat/…'」这样的合并提交;git merge 不触发提交钩子(实测),合入、发布的合并提交要另外记录(F8) |
 | F7 | 开副本 | 核心 | 在主目录的会话里输入 /dev-start 订单导出 → 当场定好需求目录名 2026-10-27-订单导出(业务 ID、标题按 dev-spec 的命名规则确认)→ 在主目录旁边复制出 cgraphx@订单导出(写时复制：本项目 4.1 GB 约 1 秒，几乎不占空间;依赖包、.env 这类被忽略的本地文件一起复制，不用重装;没被跟踪的文件不带过去，这个需求在主目录里还没提交的文件(如讨论稿)移进副本)→ 副本里建好需求目录，从主目录当前所在的分支拉出 feat/订单导出(bug 修复用 fix/)→ 副本的会话、提交、任务归属记进主目录，登记「cgraphx@订单导出 → 2026-10-27-订单导出」(F8);知识库索引和「我的需求」索引副本自己建 → 给启动语「在 /Users/smdnk/objects/ai/cgraphx@订单导出 开新会话，输入 /dev-clarify」(已经澄清过的，输入 /dev-spec);之后 /dev-spec 直接复用这个需求目录;在主目录澄清完再 /dev-handoff 的，每个交接目标各开一个副本：讨论稿移进主任务的副本，其他副本的交接文件照抄本会话负责的那几行功能方案和共享背景，不再指向别的需求目录;在副本里交接(同一个需求换个会话)不开新副本 | ① 主目录有改了没提交的文件 → 停下并列出来(不然副本会带走这些改动);没被跟踪的新文件不拦，也不带进副本 ② 这个需求的副本已经有了 → 不重建，直接给启动语 ③ 交接的需求之间有依赖(积分兑换 要用 积分发放 写的流水)→ 各开一个副本、都从当前分支拉;积分发放 合入后，在 积分兑换 的副本会话里输入 /dev-merge 同步一次再联调 ④ 磁盘不支持写时复制(Linux 的 ext4、外接的 HFS+ 盘)→ 先问「这块盘不能快速复制，要整份复制 4.1 GB,继续吗?」 ⑤ 副本里有写死主目录路径的东西(如 Python 的 .venv)→ 开完提示在副本里重建 | 实测写时复制克隆本项目(4.1 GB、7881 个文件)用 1.15 秒，可用空间只少约 5 MB;实测项目现有的忽略规则盖不住数据链接,git 会把它当新文件提交，开副本时只在副本自己的仓库里忽略;dev-spec 遇到已建好的需求目录直接复用;/dev-handoff 现在就是一个交接目标一个需求目录 |
 | F8 | 副本数据归属主项目 | 核心 | 在副本里开会话、改代码、提交 → 会话、工具调用、提交、任务归属都记进主目录的数据;知识库索引和「我的需求」索引各个目录自己建 → 副本里的会话(K2)归副本登记的需求;在主目录为它澄清、交接的会话，交接文件写进了副本，也归到这个需求 → /dev-merge 的「合入需求」、F4 的「发布」这两种合并提交也记进主目录的数据，同样靠 git 钩子，不靠 agent → 在主目录按需求查(任务绑定、/doc-report、平台上报):都在「订单导出」下，文件显示成项目内路径 docs/features/…,不是副本的绝对路径 → 主目录的 cgraphx features list 也列出副本里在做的需求，标「在副本 cgraphx@订单导出」→ 副本删了，这些记录照样在、照样归属;副本里新写的知识，这个副本马上能召回，别处等它随需求合入、同步之后才召回得到;换成不支持 hooks 的 agent,在副本里的提交照样记下、归到需求，提问和工具调用记不到(和在不在副本里无关) | ① 副本里的会话改了别的需求的目录 → 照样归副本的需求,F3 列为疑似夹带(K5) ② 用 cgraphx task 显式绑定过的会话 → 以显式绑定为准 ③ 不算副本的目录(K1)→ 照旧记进它自己的库，不进主项目 ④ 主目录挪了位置或改了名 → 副本里的记录写不进去,hook 照常放行、不影响开发;cgraphx 命令提示「副本关联的主项目不在 /Users/smdnk/objects/ai/cgraphx 了」 | cgraphx 从当前目录往上找第一个已初始化的目录当项目根，会顺着链接走;任务归属和平台上报都按项目根换算文件路径，要补上按副本根换算;平台按 git 远程地址认项目，副本整仓复制，远程地址相同;知识库索引里同一个项目内路径只存一条，建索引是清空重建，读正文按当前目录找文件，所以各建各的;git merge 只触发合并钩子、不触发提交钩子(实测),现有记录漏了全部合并提交 |
-| F9 | 副本清理 | 支撑 | F4 合入 main 之后(没开版本时接在 /dev-merge 之后)列出副本:「cgraphx@订单导出、cgraphx@积分发放 已合入(K3),可以删;cgraphx@导出优化 还差 2 个提交没合入，留着，跟到下个版本;删掉这 2 个已合入的副本吗?」→ 你说删 → 删除这些副本目录，登记和数据都留着(F8);平时在主目录说「删副本 订单导出」也行，先做同样的检查 | ① 副本里有没提交的改动(K9)→ 不删，列出来「cgraphx@订单导出 有 2 个文件没提交」 ② 副本目录已经被手动删掉 → 列表里标「已不在」,不报错 | git 能判断需求分支是不是已经在目标分支里;删副本只删副本目录和里面那个链接本身，主目录的数据不受影响 |
-| F10 | 流程按需启用 | 核心 | 不跑 /release-start、也不跑 /dev-start 的项目一切照旧，默认就在主分支上开发:/dev-impl-subagent 开跑前不再问要不要建分支，和 /dev-impl 一样直接在当前分支上做;不装版本分支的提交拦截 → 在 main 上跑 /release-start 才按版本走(F1~F4),第一次跑时才装上提交拦截(F2 ⑥)→ 副本单独也能用：主目录在哪个分支上,/dev-start 就从哪个分支拉,/dev-merge 就合回哪个分支(没开版本、主目录在 main 上:/dev-start 订单导出 → 副本从 main 拉 feat/订单导出 → /dev-merge 合回 main)→ 不想再用：发完这一版不再跑 /release-start,主目录留在 main 上 | ① 项目里本来就有 dev/ 开头的分支(如 dev/zhangsan)→ 只认版本分支(K8),其余照旧 ② 一个版本做到一半想退出 → 主目录切回 main 就算退出;dev/2.0.11 和副本都留着，不自动删 ③ 没开版本时用副本 → /dev-merge 合完直接问要不要删这个副本(没有 F4 那一步) | F1~F4 和副本都由命令触发，不跑就不发生;/dev-impl-subagent 现在开跑前在 main/master 上会停下问要不要建分支,/dev-impl 没有这一步 |
+| F9 | 副本清理 | 支撑 | F4 合入 main 之后(没开版本时接在 /dev-merge 之后)列出副本:「cgraphx@订单导出、cgraphx@积分发放 已合入(K3),可以删;cgraphx@导出优化 还差 2 个提交没合入，留着，跟到下个版本;cgraphx@会员积分 还没有提交，留着;删掉这 2 个已合入的副本吗?」→ 你说删 → 删除这些副本目录，登记和数据都留着(F8);平时在主目录说「删副本 订单导出」也行，先做同样的检查 | ① 副本里有没提交的改动(K9)→ 不删，列出来「cgraphx@订单导出 有 2 个文件没提交」 ② 副本目录已经被手动删掉 → 列表里标「已不在」,不报错 | git 能判断需求分支是不是已经在目标分支里;删副本只删副本目录和里面那个链接本身，主目录的数据不受影响 |
+| F10 | 流程按需启用 | 核心 | 不跑 /release-start、也不跑 /dev-start 的项目一切照旧，默认就在主分支上开发:/dev-impl-subagent 开跑前不再问要不要建分支，和 /dev-impl 一样直接在当前分支上做;不装版本分支的提交拦截 → 在 main 上跑 /release-start 才按版本走(F1~F4),第一次跑时才装上提交拦截(F2 ⑥)→ 副本单独也能用：主目录在哪个分支上,/dev-start 就从哪个分支拉,/dev-merge 就合回哪个分支(没开版本、主目录在 main 上:/dev-start 订单导出 → 副本从 main 拉 feat/订单导出 → /dev-merge 合回 main)→ 不想再用：发完这一版不再跑 /release-start,在 main 上 /dev-merge 停下问时回答「不再按版本走」(F2⑦) | ① 项目里本来就有 dev/ 开头的分支(如 dev/zhangsan)→ 只认版本分支(K8),其余照旧 ② 一个版本做到一半想退出 → 主目录切回 main,/dev-merge 停下问时回答「不再按版本走」就算退出;dev/2.0.11 和副本都留着，不自动删 ③ 没开版本时用副本 → /dev-merge 合完直接问要不要删这个副本(没有 F4 那一步) | F1~F4 和副本都由命令触发，不跑就不发生;/dev-impl-subagent 现在开跑前在 main/master 上会停下问要不要建分支,/dev-impl 没有这一步 |
 | — | 同目录下的提交与合并(原 F5) | ✂️ | 不做：并行改成每个需求一个副本，同一目录里不再有多个需求 | — | — |
 | — | 文件租约(原 F6) | ✂️ | 不做：理由同上 | — | — |
 | — | 线上修复回流 | 建议新增 ✂️ | 不做：从发版 tag 拉修复分支、合进主干再合回当前版本分支，默认砍 | — | — |
@@ -226,7 +226,7 @@ flowchart TB
 |---|---|---|
 | replica 子系统(新) | `cgraphx replica create / list / remove`:开、列、删副本,写登记 | F7、F9;K1、K3、K9 |
 | release 子系统(新) | `cgraphx release guard`:装上 / 卸掉版本分支的提交拦截 | F2⑥、F10 |
-| 钩子片段写入(基础层,新) | `src/core/git-hooks.ts`:按标记写入 / 删除钩子片段,钩子目录跟随 core.hooksPath | F2⑥、F8 |
+| 钩子片段写入(基础层,新) | `src/core/git-hooks.ts`:按标记写入 / 删除钩子片段,钩子目录跟随 core.hooksPath;仓库外的共用钩子目录不写,被跟踪的钩子文件配本机过滤规则(D33) | F2⑥、F8 |
 | 数据目录解析(`src/core/directory.ts`) | 副本里经 `.cgraphx/shared` 找到主目录的数据目录 | F8 |
 | timeline | 记合并提交;钩子改用 git-hooks 写入 | F8 |
 | task / sync / features | 路径按主目录 + 登记过的副本换算;副本会话归登记的需求;主目录列出副本里的需求 | F8 |
@@ -245,44 +245,45 @@ flowchart TB
 |---|---|---|---|---|---|
 | D3 | 主干、版本号、tag | 主干是 `main`,没有 main、有 master 时用 master;版本号读主干上 `package.json` 的 version;tag 名 `v<版本号>`,打带说明的 tag:`git tag -a v2.0.10 -m "发布 2.0.10"` | 轻量 tag——不带说明,F1 要写「发布 2.0.10」;另外读 pom.xml 等清单——F1 只锁定了 package.json,读不到走 F1⑤ 问 | F1 行为链;package.json 版本 2.0.10 | release-start |
 | D4 | F1 边界的判定 | ① 当前分支(`git symbolic-ref --short HEAD`)是主干,且 `git status --porcelain --untracked-files=no` 为空;③ 本地任一 K8 分支不是主干的祖先(`git merge-base --is-ancestor <分支> main` 不成立)就停下并点名;④ 仓库没有 tag 时,候选提交取 `git log -1 --format=%H -G'"version"' -- package.json`,确认后再打;⑦ 下个版本分支已存在且是主干的祖先就停下 | ③ 只查 dev/<当前版本号>——发版前没改版本号时查不到(正是 ⑦ 的情形) | F1 边界 ①③④⑦;K8、K9;同一时间只有一个在做的版本 | release-start |
-| D5 | 拦截什么时候装 | release-start 每次都跑 `cgraphx release guard`(幂等):第一次装上,之后片段被钩子管理工具冲掉了就补回;装过的记号记在仓库本地 git 配置 `cgraphx.releaseGuard`(区分新装和补回),卸载时删掉 | 只在第一次装——husky 这类工具重装依赖时会重写钩子文件,拦截静默失效 | F10「第一次跑时才装上提交拦截」;D33 | release-start |
+| D5 | 拦截什么时候装 | release-start 每次都跑 `cgraphx release guard`(幂等):第一次装上,之后片段被钩子管理工具冲掉了就补回;装过的记号记在仓库本地 git 配置 `cgraphx.releaseGuard`(区分新装和补回),卸载时删掉。另记「按版本走」的记号 `cgraphx.releaseFlow`(本地 git 配置):`cgraphx release guard` 每次都写,拦截没装上(D33 不写的几种情况)也写;F2⑦ 据它判断主目录在主干上时要不要停下问;`cgraphx release guard --remove`、`cgraphx uninstall` 连同拦截一起清掉 | 只在第一次装——husky 这类工具重装依赖时会重写钩子文件,拦截静默失效;「按版本走」不另记、看本地有没有已合进主干的版本分支——想退出就得删掉旧的版本分支,留着版本分支打补丁的团队会一直被问 | F10「第一次跑时才装上提交拦截」;F2⑦;D33 | release-start;dev-merge |
 
 ### 细节方案:F2 需求合入
 
 | # | 决策 | 选择 | 没选的(为什么) | 理由(依据) | 影响面 |
 |---|---|---|---|---|---|
 | D6 | 从副本取分支 | 主目录 `git fetch --no-tags <副本路径> <需求分支>`,只用 FETCH_HEAD;不把副本加成远程,不在主目录建需求分支 | `git remote add`——sync 用 `git branch -r --contains` 判断提交是否已推到远程,副本远程会让没推送的提交被当成已推送;在主目录建同名分支——删副本时还要清,分支越积越多 | `src/core/sync/git.ts` isOnRemote | dev-merge |
-| D7 | 预演与冲突归属 | `git merge-tree --write-tree --name-only HEAD FETCH_HEAD`:退出码 1 即有冲突,输出里列出冲突文件;每个冲突文件用 `git log --first-parent --merges --format=%s <版本起点>..HEAD -- <文件>` 找出改过它的「合入需求：X」,即撞上的需求(F2①) | `git merge --no-commit` 再回滚——动工作区,F2 要求不动 | merge-tree --write-tree 要 git 2.38 以上,本机 2.50.1 | dev-merge;git 版本要求见全局约束 |
-| D8 | 合并说明 | `git merge --no-ff -m "合入需求：<标题>" FETCH_HEAD`,标题 = 需求目录名去掉日期段;同一需求第 2 次起写「合入需求：<标题>(第 N 次)」,N = 版本起点以来同标题的合入数 + 1;没开版本时写法相同 | 只写分支名——F3 要按需求归组,分支名和需求目录对不上(fix/ 分支、改过名的) | F2 行为链与 ③;F3 归组(D13) | dev-merge;release-review |
+| D7 | 预演与冲突归属 | `git merge-tree --write-tree --name-only HEAD FETCH_HEAD`:退出码 1 即有冲突,输出里列出冲突文件;每个冲突文件用 `git log --first-parent --merges --format=%s <版本起点>..HEAD -- <文件>` 找出改过它的「合入需求：X」,即撞上的需求(F2①);撞上的是同步主干的合并(D13)时说「主干上的改动也改过」;版本起点的取法见 F3 取法表 | `git merge --no-commit` 再回滚——动工作区,F2 要求不动 | merge-tree --write-tree 要 git 2.38 以上,本机 2.50.1 | dev-merge;git 版本要求见全局约束 |
+| D8 | 合并说明 | `git merge --no-ff -m "合入需求：<标题>" FETCH_HEAD`,标题 = 需求目录名去掉日期段;同一需求第 2 次起写「合入需求：<标题>(第 N 次)」,N = 版本起点(取法见 F3 取法表)以来同标题的合入数 + 1;没开版本时写法相同 | 只写分支名——F3 要按需求归组,分支名和需求目录对不上(fix/ 分支、改过名的) | F2 行为链与 ③;F3 归组(D13) | dev-merge;release-review |
 | D9 | 副本里同步 | 副本里输入 `/dev-merge`:主目录路径从 `.cgraphx/shared` 链接读出,取主目录当前所在的分支(`git -C <主目录> symbolic-ref --short HEAD`),`git fetch --no-tags <主目录> <分支>` 后 `git merge --no-ff FETCH_HEAD`;有冲突就地解决、提交 | 取登记时的起点分支——跨版本时同步不到新的版本分支(F2⑤) | F2 行为链与 ⑤ | dev-merge |
 | D10 | 合入带进知识文件 | 合入或同步的改动里有 `docs/knowledge/` 下的文件 → 合完问一句要不要在这个目录跑 `cgraphx docs index` | 自动跑——knowledge-write 规定没经确认不跑 docs index | knowledge-write 红线 3;F8「合入、同步之后才召回得到」 | dev-merge |
 | D11 | 实现前查版本分支 | dev-impl、dev-impl-subagent 开跑前看当前分支,匹配 K8(`^dev/[0-9]+\.[0-9]+\.[0-9]+$`)就停下,提示先 `/dev-start <需求>` | 只靠提交拦截——改完提交时才被拦,白改一轮 | F2⑥ | 两个 skill 的开跑前 |
-| D12 | 提交拦截 | commit-msg 钩子里一段纯 shell:当前分支匹配 K8、没有 MERGE_HEAD、提交说明首行不以 `chore(release):` 开头 → 退出 1,提示「dev/2.0.11 是版本分支:需求改动到副本里做(/dev-start <需求>);整个版本的改动以 chore(release): 开头提交」;不匹配 K8 的分支一行判断就放行 | pre-commit——这时还没有提交说明,认不出 chore(release):;片段里调 cgraphx——每次提交多起一个 node 进程,PATH 里没有 cgraphx 的图形客户端会被拦死;Claude Code 的 PreToolUse——只管 agent 发出的提交,终端和不支持 hooks 的 agent 拦不住 | 临时仓库实测:`git merge --no-ff` 会跑 commit-msg,此时有 MERGE_HEAD;冲突后用 `git commit` 收尾时也有 MERGE_HEAD;`--no-verify` 能绕过,F3 把绕过的列为疑似夹带 | release 子系统;`cgraphx uninstall` 一并删除 |
+| D12 | 提交拦截 | commit-msg 钩子里一段纯 shell:当前分支匹配 K8、没有 MERGE_HEAD、提交说明第一行有内容的(跳过 `#` 开头的注释行和空行)不以 `chore(release):` 开头 → 退出 1,提示「dev/2.0.11 是版本分支:需求改动到副本里做(/dev-start <需求>);整个版本的改动以 chore(release): 开头提交」;不匹配 K8 的分支一行判断就放行 | pre-commit——这时还没有提交说明,认不出 chore(release):;片段里调 cgraphx——每次提交多起一个 node 进程,PATH 里没有 cgraphx 的图形客户端会被拦死;Claude Code 的 PreToolUse——只管 agent 发出的提交,终端和不支持 hooks 的 agent 拦不住 | 临时仓库实测:`git merge --no-ff` 会跑 commit-msg,此时有 MERGE_HEAD;冲突后用 `git commit` 收尾时也有 MERGE_HEAD;`--no-verify` 能绕过,F3 把绕过的列为疑似夹带;在编辑器里写说明时,钩子拿到的文件里注释还没去掉——用注释开头的提交模板时,第一行是注释,git 最后存的说明在注释下面(临时仓库实测) | release 子系统;`cgraphx uninstall` 一并删除 |
 
 命令契约:
 
 | 命令 | 参数 | 输出 | 失败 |
 |---|---|---|---|
-| `cgraphx release guard` | `--remove` 卸掉;`--json` | 片段所在的钩子文件,以及这次是新装、已在还是补回;钩子目录被 git 跟踪时加一句「这个钩子目录由 git 跟踪,改动会出现在 git status 里」 | 不在 git 仓库内 |
+| `cgraphx release guard` | `--remove` 卸掉,连同「按版本走」的记号(D5);`--json` | 片段所在的钩子文件(`hookPath`),以及这次是新装、已在、更新还是补回(`status`:`installed` / `present` / `updated` / `repaired`;`--remove` 时 `removed` / `absent`);钩子文件被 git 跟踪、靠本机过滤规则藏起改动时 `localFilter` 为 true,加一句「<钩子文件> 跟着仓库提交,这几行只在本机,不会进提交」;没写时 `status` 为 `unsupported`,`reason` 说原因——`not_shell`(不是 shell 脚本)、`outside_repo`(钩子目录在仓库外)、`symlink`(钩子文件是链接),`lines` 带上要加的几行(D33) | 不在 git 仓库内 |
 
 ### 细节方案:F3 发版审核
 
 | # | 决策 | 选择 | 没选的(为什么) | 理由(依据) | 影响面 |
 |---|---|---|---|---|---|
-| D13 | 按需求归组 | 版本分支第一父链上,说明是「合入需求：X」「合入需求：X(第 N 次)」的合并提交归到需求 X;X 在 `docs/features/` 下找不到对应目录,或合并说明不是这个格式(手动合并)→ 照常列出,标「未关联需求目录」(F3③) | 按 timeline 的会话归属归组——只有约六成提交对得上会话 | 合并说明格式(D8);timeline 提交与会话的对应率 | release-review |
+| D13 | 按需求归组 | 版本分支第一父链上的合并提交,第二个父提交已经在主干里的是「同步主干」(版本开发期间把主干上的热修复合进来):报告单列一节,写它带进了主干上的哪些提交;不归到需求,不进疑似夹带、两个需求都改了的文件、敏感改动,F3①「还没合入任何需求」也不算它。其余合并提交,说明是「合入需求：X」「合入需求：X(第 N 次)」的归到需求 X;X 在 `docs/features/` 下找不到对应目录,或合并说明不是这个格式(手动合并)→ 照常列出,标「未关联需求目录」(F3③) | 按 timeline 的会话归属归组——只有约六成提交对得上会话;同步主干的合并也按说明归组——说明是 git 默认的「Merge branch 'main' …」,会被列成一个未关联需求目录的需求,热修复的文件和行数都算到它头上 | 合并说明格式(D8);timeline 提交与会话的对应率 | release-review |
 | D14 | 越界改代码怎么判(K5 第三类) | skill 读该需求 plan index「任务清单」的涉及范围,没有 plan 读 spec 写到的模块,判合入改的代码文件在不在里面;两样都没写范围 → 标「未声明范围」,不判 | 程序按路径前缀比对——涉及范围是自然语言(如「`src/core/features/` 4 个文件」),写不成可比对的规则 | plan index 任务清单「涉及范围」列;K5 | release-review |
 | D15 | 结论 | 预演有冲突 →「不能直接合」;否则「风险」一节不空 →「有风险」;否则「可以发」。进「风险」的:版本号没改(F3⑥)、需求缺测试和测试有没通过的用例(F3④)、疑似夹带;敏感改动、两个需求都改了的文件、未关联需求目录、未声明范围只列出,不进风险 | 敏感改动也算风险——改表、改依赖是需求的正常内容,几乎每版都有,结论会一直是「有风险」 | F3 行为链与 ②④⑥⑦ | release-review |
 | D16 | 报告存放 | `docs/releases/v<版本号>-发版审核.md`,头部记版本分支、起点 tag、审核时版本分支的最新提交(F4 判断过期用);不写 `> 产物:`、不登记进产物注册表、不上报平台;写完以 `chore(release): <版本号> 发版审核报告` 提交 | 登记成产物类型上报——审核报告属于整个版本,平台的产物都挂在需求下 | 体验决策:报告存成文件、由 /release-review 自己提交;产物注册表按需求目录识别 | release-review |
 
-取法(都在主目录执行;`<起点>` = `git merge-base main dev/2.0.11`):
+取法(都在主目录执行;`<起点>` 是版本起点:版本分支第一父链上最早一个不在主干里的提交,它的第一个父提交——`C=$(git rev-list --first-parent dev/2.0.11 --not main | tail -n 1)`,起点 = `C^1`;没有输出时起点就是 dev/2.0.11。不用 `git merge-base main dev/2.0.11`:把主干合进版本分支之后,它会移到主干的热修复上(临时仓库实测)。D7、D8 的版本起点同此):
 
 | 报告项 | 取法 |
 |---|---|
 | 起点 tag | `git describe --tags --abbrev=0 --match 'v[0-9]*' <起点>` |
-| 版本分支上的提交 | `git log --first-parent --format='%H%x09%P%x09%s' <起点>..dev/2.0.11`:有两个父提交的是合入,其余是直接提交 |
+| 版本分支上的提交 | `git log --first-parent --format='%H%x09%P%x09%s' <起点>..dev/2.0.11`:有两个父提交的是合并——第二个父提交在主干里(`git merge-base --is-ancestor <第二个父提交> main` 成立)的是同步主干(D13),其余是合入;只有一个父提交的是直接提交 |
 | 每次合入的提交数、文件、增删行 | 合入 M:`git rev-list --count --no-merges M^1..M^2`(副本里同步产生的合并提交不算);`git diff --numstat M^1 M` |
 | 疑似夹带(K5) | ① 直接提交里不以 `chore(release):` 开头的;② 合入改了别的需求目录 `docs/features/<别的需求>/`;③ D14。不判:本需求目录,`docs/knowledge/`、`docs/schema-knowledge/`、`docs/code-map/`、`docs/design-map/`,本需求的 `docs/bruno/<服务>/<本需求前缀>/` 和 bruno 的公共文件(`bruno.json`、`environments/`) |
 | 已声明的版本级提交 | 直接提交里以 `chore(release):` 开头的 |
+| 同步主干 | 每个同步主干的合并 M:`git log --format='%h %s' M^1..M^2`,即它带进来的主干提交 |
 | 两个需求都改了的文件 | 各需求合入文件的交集 |
 | 敏感改动(K6) | 合入改到的:`*.sql`;依赖清单 `package.json`、`package-lock.json`、`pnpm-lock.yaml`、`yarn.lock`、`pom.xml`、`build.gradle(.kts)`、`go.mod`、`go.sum`、`requirements*.txt`、`pyproject.toml`、`Cargo.toml`、`Cargo.lock`;配置 `.env*` |
 | 和主干合并的预演 | `git merge-tree --write-tree --name-only main dev/2.0.11` |
@@ -312,6 +313,7 @@ flowchart TB
 
 ## 疑似夹带
 ## 已声明的版本级提交
+## 同步主干
 ## 两个需求都改了的文件
 ## 敏感改动
 ## 和主干合并的预演
@@ -335,10 +337,10 @@ flowchart TB
 | # | 决策 | 选择 | 没选的(为什么) | 理由(依据) | 影响面 |
 |---|---|---|---|---|---|
 | D18 🔒 | 副本的数据布局 | 副本的 `.cgraphx/` 是普通目录,只放副本自己的知识库索引(`cgraphx.db`)、「我的需求」索引(`my-features.md`)和 `.gitignore`;另放一个符号链接 `.cgraphx/shared` 指向主目录的 `.cgraphx/`,其余数据都经它读写主目录(D24) | 副本的 `.cgraphx` 整个做成链接——实测 macOS 上在副本里 `rm -rf .cgraphx/` 会把主目录的 `.cgraphx/` 整个删掉,现有忽略规则也盖不住这个链接,副本自己的两份索引还得另找地方;只链 `cgraphx.db`——知识库索引和时间线同在这一个库里,会被一起共用,锁文件这类每次新建的文件也链不了;库里按工作目录分区——知识库的每条查询都要带分区条件,漏一处就串,「我的需求」是文件,分区不了 | 「副本的数据链回主目录」由用户指定;F8 的两个例外;markdown_*、timeline_*、task_* 同在 `.cgraphx/cgraphx.db` | 链接在已被忽略的 `.cgraphx/` 里,副本不用另加忽略规则;在副本里 `cgraphx uninstall`、`rm -rf .cgraphx/` 只删副本自己的(Node `fs.rmSync` 实测不跟随链接) |
-| D19 🔒 | 登记 | 主目录 `.cgraphx/replicas/<副本目录名>.json`,一个副本一个文件,格式见下;删副本只填 `removedAt`,文件保留 | 库里建表——features 无库,主目录列出副本里的需求就要开库,副本里判断「是不是登记过的副本」得先连主库;一个总 JSON——两个会话同时开副本会互相覆盖 | K1;F8「副本删了,这些记录照样在、照样归属」 | replica 写;directory(D24)、task、sync、features 读 |
+| D19 🔒 | 登记 | 主目录 `.cgraphx/replicas/<副本目录名>.json`,一个副本一个文件,格式见下;删副本只填 `removedAt`,文件保留;开副本时记下 `baseCommit`(开副本那一刻的提交),K3 据它只数需求分支自己做的提交;以前的登记没有这个字段,K3 按旧取法 | 库里建表——features 无库,主目录列出副本里的需求就要开库,副本里判断「是不是登记过的副本」得先连主库;一个总 JSON——两个会话同时开副本会互相覆盖 | K1;F8「副本删了,这些记录照样在、照样归属」 | replica 写;directory(D24)、task、sync、features 读 |
 | D20 | 怎么复制 | macOS 复制前先判断:目标目录(主目录的上级)和主目录在同一个卷上,且这个卷是 APFS(`/usr/bin/stat -f %Sd` 取设备、`/sbin/mount` 取文件系统类型),才用 `cp -cR`(APFS 克隆),不满足或判断不了就返回 `no_cow` 和需要的空间;Linux 用 `cp -R --reflink=always`,克隆失败就删掉半成品,返回 `no_cow`;skill 问过用户后带 `--full-copy` 重跑(普通 `cp -R`);Windows 返回 `unsupported_platform` | macOS 也只看复制命令失没失败——`cp -c` 遇到跨卷或不支持克隆的盘会退成整份复制、命令照样成功,F7④ 的先问就落空;用 Node 的 `COPYFILE_FICLONE_FORCE` 先克隆一个文件试试——macOS 上一律返回 ENOSYS | 实测 `cp -cR` 克隆本项目 4.1 GB、7881 个文件用 1.15 秒,可用空间只少约 5 MB;macOS `man cp`:`-c` 在跨文件系统或目标不支持克隆时退回 copyfile(2);F7④ | replica create |
-| D21 | 复制后的整理 | 依次:① 副本里删掉没被跟踪的文件(`git ls-files --others --exclude-standard`),三类除外:`docs/features/<feature-id>/` 下的(移进副本);各 agent 的配置目录(如 `.claude/`)和 cgraphx 的数据目录 `.cgraphx/`——写进副本自己的 `.git/info/exclude`,按被忽略的本地文件处理,一起带过去、K9 也不算它们;② 清空副本 `.cgraphx/` 里除 `.gitignore` 以外的内容(克隆带过来的是主目录的数据;`.gitignore` 原样保留,没有才建),建空的本地库和 `shared` 链接;③ 副本里从当前提交 `git checkout -b <需求分支>`,建 `docs/features/<feature-id>/`;④ 找已知的写死路径:`pyvenv.cfg` 里写着主目录路径 → 警告在副本里重建虚拟环境;⑤ 写登记;⑥ 最后删掉主目录 `docs/features/<feature-id>/` 下没被跟踪的文件(移进副本)。①~⑤ 失败:删掉副本目录和登记,主目录不动;⑥ 删不掉的文件列进 warnings。知识库索引和「我的需求」索引由 dev-start 接着在副本里跑 `cgraphx docs index`、`cgraphx features sync` 建 | 复制前先在主目录挑文件逐个拷——丢了整目录克隆的速度;扫一遍被忽略的文件找主目录路径——依赖目录动辄几 GB,F7⑤ 只要求提示已知情形 | F7 行为链与 ①⑤;K9;agent 配置目录里是 hook 配置,删了副本会话就记不下来(F8);`openMarkdownDb` 要求库文件已存在 | replica create;dev-start |
-| D22 | 名字从哪来 | 副本目录 `<主目录名>@<文件前缀>`,放在主目录的上级目录;需求分支 `feat/<文件前缀>`,bug 修复 `fix/<文件前缀>`;feature-id、文件前缀和分支由 skill 按 dev-spec 第 0 步确认后传入(`--prefix`、`--branch`),replica 只校验 feature-id 和前缀都是单段目录名、不含敏感字符 | replica 自己按命名规范推 feature-id——要读 feature-standards.md,命名规则就有了两份;replica 自己从 feature-id 去掉日期段算前缀——日期段解析在 features 子系统,D1 不让 replica 依赖 features | 体验决策「项目目录名@文件前缀」;仓库现有分支 feat/<中文需求名>;dev-spec 第 0 步 | replica create;dev-start;dev-spec 第 0 步「目录已由 /dev-handoff 建立 → 直接复用」补上 /dev-start |
+| D21 | 复制后的整理 | 依次:① 副本里删掉没被跟踪的文件(`git ls-files --others --exclude-standard`),三类除外:`docs/features/<feature-id>/` 下的(移进副本);各 agent 的配置目录(如 `.claude/`)里开副本时没被跟踪的部分(`git ls-files --others --exclude-standard --directory -- <配置目录>` 列出的每一项,照原样写、不加末尾 `/`;仓库完全不跟踪这个目录时就是整个目录),和 cgraphx 的数据目录 `.cgraphx/`——写进副本自己的 `.git/info/exclude`,按被忽略的本地文件处理,一起带过去、K9 也不算它们;之后在配置目录里没写进 exclude 的位置新建的文件,照常算没提交的改动(K9);② 清空副本 `.cgraphx/` 里除 `.gitignore` 以外的内容(克隆带过来的是主目录的数据;`.gitignore` 原样保留,没有才建),建空的本地库和 `shared` 链接;③ 副本里从当前提交 `git checkout -b <需求分支>`,建 `docs/features/<feature-id>/`;④ 找已知的写死路径:`pyvenv.cfg` 里写着主目录路径 → 警告在副本里重建虚拟环境;⑤ 写登记;⑥ 最后删掉主目录 `docs/features/<feature-id>/` 下没被跟踪的文件(移进副本)。①~⑤ 失败:删掉副本目录和登记,主目录不动;⑥ 删不掉的文件列进 warnings。知识库索引和「我的需求」索引由 dev-start 接着在副本里跑 `cgraphx docs index`、`cgraphx features sync` 建 | 整个配置目录写进 exclude——仓库跟踪了配置目录的一部分(如团队共用的 `.claude/commands/`)时,副本里在那里新建的文件 git 看不见,合入时不带、删副本时不拦,会丢;写成带末尾 `/` 的目录模式——`.claude` 是链接时匹配不上,会被当成没被跟踪的文件删掉;复制前先在主目录挑文件逐个拷——丢了整目录克隆的速度;扫一遍被忽略的文件找主目录路径——依赖目录动辄几 GB,F7⑤ 只要求提示已知情形 | F7 行为链与 ①⑤;K9;agent 配置目录里是 hook 配置,删了副本会话就记不下来(F8);`openMarkdownDb` 要求库文件已存在 | replica create;dev-start |
+| D22 | 名字从哪来 | 副本目录 `<主目录名>@<文件前缀>`,放在主目录的上级目录;需求分支 `feat/<文件前缀>`,bug 修复 `fix/<文件前缀>`;feature-id、文件前缀和分支由 skill 按 dev-spec 第 0 步确认后传入(`--prefix`、`--branch`),replica 只校验 feature-id 和前缀都是单段目录名、不含敏感字符;副本目录名已登记给别的需求(副本在用、已删都算)→ 拒绝,返回 `name_taken`,dev-start 提示给新需求换个标题或加业务 ID;同一个需求删了副本再开照旧 | 目录名撞上已删的副本时照开——登记按目录名一个文件,会覆盖旧需求的登记,旧会话重新算归属时就算到了新需求头上;replica 自己按命名规范推 feature-id——要读 feature-standards.md,命名规则就有了两份;replica 自己从 feature-id 去掉日期段算前缀——日期段解析在 features 子系统,D1 不让 replica 依赖 features | 体验决策「项目目录名@文件前缀」;仓库现有分支 feat/<中文需求名>;dev-spec 第 0 步 | replica create;dev-start;dev-spec 第 0 步「目录已由 /dev-handoff 建立 → 直接复用」补上 /dev-start |
 | D23 | dev-handoff 何时开副本 | 主目录在版本分支上 → 每个交接目标开一个副本;不在版本分支上、登记里有在用的副本 → 默认开,写交接文件前说一句,用户说不开就照旧;没开过副本 → 照旧,不提;在副本里交接(同一个需求换个会话)不开新副本。开副本时先开副本(讨论稿随主任务的需求目录移进主任务的副本),再把交接文件写进各副本的需求目录;非主任务的交接文件照抄本会话负责的功能方案行和共享背景,不再指向主任务目录;启动语写成「在 <副本路径> 开新会话，输入：先读 … 再继续。」 | 每次交接都问开不开——不用副本的项目每次多一问,不符合 F10 的「一切照旧」 | F7 交接一句;F10;dev-handoff 现在非主任务的交接文件指向主任务目录 | dev-handoff |
 
 登记文件(`<主目录>/.cgraphx/replicas/cgraphx@订单导出.json`):
@@ -350,6 +352,7 @@ flowchart TB
   "featureId": "2026-10-27-订单导出",
   "branch": "feat/订单导出",
   "baseBranch": "dev/2.0.11",
+  "baseCommit": "98218c5ec46954b00ef01bd775aa237043169716",
   "createdAt": "2026-10-27T08:00:00.000Z",
   "removedAt": null
 }
@@ -359,14 +362,14 @@ flowchart TB
 
 | 命令 | 参数 | 输出(`--json`) | 失败(`code`) |
 |---|---|---|---|
-| `cgraphx replica create <feature-id>` | `--prefix <文件前缀>`、`--branch <分支>`(都必填)、`--full-copy`、`--json` | `name, path, featureId, branch, baseBranch, created, movedFiles, warnings`;副本已在 → `created: false`,其余照登记(F7②) | `not_main_dir`(不在主目录执行:在副本里、未初始化、项目根不是独立 git 仓库的根——含 worktree 与子模块、主目录处于 detached HEAD)、`dirty_main`(带 `files`,F7①)、`no_cow`(带 `requiredBytes`,F7④)、`target_exists`(目标目录已存在、不是登记过的副本)、`unsupported_platform` |
-| `cgraphx replica list` | `--all`(含已删除)、`--json` | 每个副本:`name, path, featureId, branch, state`(`present` / `missing` / `removed`)、`merged`(K3)、`ahead`、`dirty`(K9 文件列表) | — |
+| `cgraphx replica create <feature-id>` | `--prefix <文件前缀>`、`--branch <分支>`(都必填)、`--full-copy`、`--json` | `name, path, featureId, branch, baseBranch, created, movedFiles, warnings`;副本已在 → `created: false`,其余照登记(F7②) | `not_main_dir`(不在主目录执行:在副本里、未初始化、项目根不是独立 git 仓库的根——含 worktree 与子模块、主目录处于 detached HEAD)、`dirty_main`(带 `files`,F7①)、`no_cow`(带 `requiredBytes`,F7④)、`target_exists`(目标目录已存在、不是登记过的副本)、`name_taken`(副本目录名已登记给别的需求,D22)、`unsupported_platform` |
+| `cgraphx replica list` | `--all`(含已删除)、`--json` | 每个副本:`name, path, featureId, branch, state`(`present` / `missing` / `removed`)、`merged`(K3;还没有提交时为 false、`ahead` 为 0;git 出错判断不了时为 null)、`ahead`(需求分支自己做的提交里还没合入的个数)、`dirty`(K9 文件列表) | — |
 | `cgraphx replica remove <名称或 feature-id>` | `--json` | `name, state` | `dirty`(带 `files`,F9①)、`not_found`、`unsafe_target`(D35) |
 
 K3、K9 的取法:
 
 - K9:副本一侧 `git -C <副本> status --porcelain --untracked-files=no` 加 `git -C <副本> ls-files --others --exclude-standard`;主目录一侧只看前者。
-- K3:`git ls-remote <副本路径> refs/heads/<需求分支>` 取最新提交 → 主目录 `git fetch --no-tags --no-write-fetch-head <副本路径> <需求分支>` 取回对象 → `git merge-base --is-ancestor <提交> <主目录当前分支>` 成立即已合入,不成立时 `git rev-list --count <主目录当前分支>..<提交>` 就是差几个提交。副本已不在时不判。
+- K3:`git ls-remote <副本路径> refs/heads/<需求分支>` 取最新提交 → 主目录 `git fetch --no-tags --no-write-fetch-head <副本路径> <需求分支>` 取回对象 → 需求分支自己做的提交 = `git rev-list --first-parent --no-merges <baseCommit>..<最新提交>`(同步进来的提交在合并的第二个父提交那边,不在其中)→ 一个都没有:还没有提交(`merged` 为 false、`ahead` 为 0);否则逐个 `git merge-base --is-ancestor <提交> <主目录当前分支>`,都成立即已合入,不成立的个数就是 `ahead`。不能把 `--first-parent` 和 `^<主目录当前分支>` 写进同一条 rev-list:临时仓库实测「合入后又同步」时会多数出 1 个。登记里没有 `baseCommit` 时照旧:`git merge-base --is-ancestor <最新提交> <主目录当前分支>` 成立即已合入,不成立时 `git rev-list --count <主目录当前分支>..<最新提交>` 就是差几个提交。副本已不在时不判;git 出错判断不了时 `merged` 为 null。
 
 ### 细节方案:F8 副本数据归属主项目
 
@@ -380,8 +383,8 @@ K3、K9 的取法:
 | D29 | 上报 | 从副本触发的上报换成主目录跑(同一把锁、同一份进度);git 查询先在主目录仓库,查不到这个提交再到它所在副本的仓库(副本还在时);目录任务声明按 D26 找需求目录 | 副本里各跑各的——两份进度,同一批记录会重复上报 | `sync/payload.ts` createSyncContext;`task/feature-task.ts` listMyFeatureTaskDeclarations;`sync/git.ts` | sync |
 | D30 | 主目录列出副本里的需求 | 主目录的 `features list` / `features sync` 另外列出在用副本(未删、目录在)登记的需求,阶段和负责人从副本的目录树取;同一 feature-id 主目录里也有时只出一行,取副本那份;表格「目录」列写 `docs/features/<id>(在副本 cgraphx@订单导出)`,JSON 只在副本里的需求上加 `replica: { name, path }`,主目录自己的条目不带这个字段(没有副本的项目输出不变);my-features.md 这一行链到副本里的主 spec。副本里只列副本自己的目录树 | 两行都出——同一需求出现两次,阶段还可能不同 | F8 行为链;`features/sync.ts` 的链接相对 `.cgraphx/` | features 门面与 CLI 输出(只加字段) |
 | D31 | 主目录挪走后的提示 | 非隐藏的 cgraphx 命令启动时,当前项目的 `shared` 链接目标不在 → stderr 一行「副本关联的主项目不在 <链接目标的上级目录> 了」,命令照常执行;hook 不打 | 每个子系统各自报——同一句话写好几处 | F8④ | `src/cli/index.ts` |
-| D32 🔒 | 合并提交怎么记 | timeline 安装时加 post-merge 片段,复用 `timeline-git-commit-hook`;记录时 HEAD 有两个以上父提交 → 记成 git_commit,`commit_files` 为空、增删行为 0,`metadata.merge = { parents, files, insertions, deletions }`(相对第一父提交);快进(HEAD 只有一个父提交)不记;同一 hash 已有记录不再记;冲突后用 `git commit` 收尾走 post-commit,同样按合并提交记 | 新事件类型 git_merge——现在读提交的地方(/doc-report、sync、web)都看不到;把合并带进的文件写进 commit_files——需求的文件会再算一遍产出,记到执行合并的会话头上 | 实测 `git merge --no-ff` 只触发 post-merge;合并提交上 `git diff-tree` 输出为空;`timeline/hooks.ts` readGitCommitInfo | timeline 钩子安装与记录;隐藏命令数不变 |
-| D33 | 钩子装在哪 | `src/core/git-hooks.ts` 把片段写进 `git rev-parse --git-path hooks`(已跟随 core.hooksPath);片段紧跟 shebang 插入,原有内容照常执行;钩子文件不是 shell 脚本(shebang 不是 sh、bash、zsh、dash、ksh)时不写,输出提示;钩子目录被 git 跟踪时输出提示;`cgraphx install` / upgrade 时补上缺了的提交记录片段(提交拦截由 D5 补) | 继续写 `.git/hooks/`——设了 core.hooksPath 的项目(如用 husky)提交记录和拦截都不生效;追加在文件末尾——原钩子以 exec 结尾时片段永远跑不到 | 实测 `--git-path hooks` 跟随 core.hooksPath;`timeline/installer.ts:155、249` 写死 `.git/hooks` | timeline 安装 / 卸载;release guard |
+| D32 🔒 | 合并提交怎么记 | timeline 安装时加 post-merge 片段,复用 `timeline-git-commit-hook`;记录时 HEAD 有两个以上父提交 → 记成 git_commit,`commit_files` 为空、增删行为 0,`metadata.merge = { parents, files, insertions, deletions }`(相对第一父提交);快进不记:post-merge 运行时读 `git reflog -1 --format=%gs HEAD`,含 `: Fast-forward` 就是快进(快进到别人做的合并提交时 HEAD 也有两个父提交,只看父提交数会把别人的合并记成本机的;带 `-m` 的快进写成「…: Fast-forward (no commit created; -m option ignored)」,所以按「含」判断,不按结尾),读不到 reflog 时才退回看父提交数;同一 hash 已有记录不再记;冲突后用 `git commit` 收尾走 post-commit,同样按合并提交记 | 新事件类型 git_merge——现在读提交的地方(/doc-report、sync、web)都看不到;快进只看 HEAD 的父提交数——git pull 快进到同事在 GitLab 上做的合并提交时会记成本机合并;快进看合并提交在不在远程分支上——从本机目录取分支再合并(副本)没有远程分支可比;把合并带进的文件写进 commit_files——需求的文件会再算一遍产出,记到执行合并的会话头上 | 实测 `git merge --no-ff` 只触发 post-merge;临时仓库在 post-merge 里实测:pull 快进到别人的合并提交时 reflog 是「pull -q: Fast-forward」、HEAD 有两个父提交,本机合并是「merge <分支>: Merge made by the 'ort' strategy.」;「Fast-forward」是 git merge 源码里不做翻译的字串;合并提交上 `git diff-tree` 输出为空;`timeline/hooks.ts` readGitCommitInfo | timeline 钩子安装与记录;隐藏命令数不变 |
+| D33 | 钩子装在哪 | `src/core/git-hooks.ts` 把片段写进 `git rev-parse --git-path hooks`(已跟随 core.hooksPath);片段紧跟 shebang 插入,原有内容照常执行。按钩子的情况分别处理:① 钩子目录既不在工作区内、也不在 git 目录内(core.hooksPath 指向仓库外的共用目录)→ 不写,输出提示,卸载也不动这个目录;② 钩子文件不是 shell 脚本(shebang 不是 sh、bash、zsh、dash、ksh;没有 shebang 而内容含 NUL 字节的按二进制算)→ 不写,输出提示;③ 钩子文件是符号链接 → 不写,输出要加的几行;④ 钩子文件被 git 跟踪 → 照样插入,并在本机给它配一条过滤规则(`.git/info/attributes` 指定这个文件,本地 git 配置里配 clean / smudge):git 读这个文件时去掉带标记的行,写出时插回,所以 git status 看不到这处改动、提交不会带上,拉取和切分支照常;卸载时连同过滤规则一起删掉;⑤ 在工作区里新建的钩子文件写进 `.git/info/exclude`,卸载删掉文件时一并删掉这一行。钩子目录不是 `.git/hooks` 时,安装和卸载都顺手删掉 `.git/hooks` 里旧版本留下的提交记录片段。`cgraphx install` / upgrade 时补上缺了的提交记录片段(提交拦截由 D5 补) | 继续写 `.git/hooks/`——设了 core.hooksPath 的项目(如用 husky)提交记录和拦截都不生效;追加在文件末尾——原钩子以 exec 结尾时片段永远跑不到;仓库外的共用目录照写、片段先认项目——改的是全机共用的目录,卸载时不知道别的项目还用不用;被跟踪的钩子文件写入后提交给全组——不用 cgraphx 的同事在版本分支上直接提交也会被拦;被跟踪的钩子文件只用 `git update-index --skip-worktree` 藏起改动——别人改了这个文件后 pull、切分支都报本地改动会被覆盖,而 git status 什么都看不出来 | 实测 `--git-path hooks` 跟随 core.hooksPath;`timeline/installer.ts:155、249` 写死 `.git/hooks`;临时仓库实测:过滤规则下 git status 干净、提交不带这几行,别的克隆改了钩子文件后 pull 和切分支照常、几行自动插回,`--skip-worktree` 下 pull 报「Your local changes … would be overwritten」;过滤规则和 exclude 都在 `.git/` 里,只影响本机 | timeline 安装 / 卸载;release guard;本机的 `.git/info/attributes`、`.git/info/exclude`、本地 git 配置 |
 | D34 | /doc-report 按需求出报告 | 按需求出报告时,会话和产出取 `cgraphx task show <需求>`(路径已换算);按时间窗出报告时,副本里的绝对路径按 `cgraphx replica list` 换成项目内路径再写 | 改 timeline query / stats 的输出路径——没有副本的项目输出也会变 | F8「在主目录按需求查(任务绑定、/doc-report、平台上报)…文件显示成项目内路径」;doc-report 现在只读 timeline | doc-report |
 
 ### 细节方案:F9 副本清理
@@ -390,7 +393,7 @@ K3、K9 的取法:
 |---|---|---|---|---|---|
 | D35 🔒 | 删之前核对什么 | `replica remove` 删之前逐条核对:登记过且没删;目录就是登记的 path,不是主目录、也不是主目录的上级;目录名是 `<主目录名>@…`;目录里的 `.cgraphx/shared` 指向本主目录的 `.cgraphx/`;K9 没有改动。任一条不符就不删(`unsafe_target` / `dirty`);删除不跟随链接;删完填 removedAt。目录已经没了 → 只填 removedAt,state 为 `missing`(F9②) | 只核对登记——登记文件的 path 被改错就可能删到别处 | F9 行为链与 ①②;体验决策:直接删除,不进废纸篓 | replica remove;dev-merge、release-review |
 
-F9 列副本用 `cgraphx replica list --json` 的 K3 结果,无其他新决策。
+F9 列副本用 `cgraphx replica list --json` 的 K3 结果,分四种说:已合入(可以删)、差几个提交、还没有提交、判断不了(`merged` 为 null);后三种都留着,不放进可删的那组。无其他新决策。
 
 ### 细节方案:F10 流程按需启用
 
@@ -418,14 +421,29 @@ F9 列副本用 `cgraphx replica list --json` 的 K3 结果,无其他新决策�
 | 4 | D24 | 主目录和副本各一个会话同时写事件,不丢、不报库锁 | 两个进程并发写 |
 | 5 | D25、D26 | 在副本里和在主目录里跑全量归属刷新,结果相同;删掉副本后再跑,归属不变 | 单元测试 |
 | 6 | D29 | 副本会话上报的产出路径都是项目内路径,不含副本的绝对路径 | 单元测试(payload) |
-| 7 | D32 | `--no-ff` 合并记一条带 `metadata.merge` 的提交;冲突后 `git commit` 收尾也记;快进不记;同一 hash 不重复 | 临时仓库 |
+| 7 | D32 | `--no-ff` 合并记一条带 `metadata.merge` 的提交;冲突后 `git commit` 收尾也记;快进不记,含快进到别人做的合并提交、带 `-m` 的快进;同一 hash 不重复 | 临时仓库 |
 | 8 | D33 | core.hooksPath 指向 `.husky/_` 时,post-commit、post-merge、commit-msg 片段都写进那里并会执行;原钩子以 exec 结尾时片段照样执行 | 临时仓库 |
 | 9 | D12 | dev/2.0.11 上普通提交被拒,`chore(release):` 放行,合并提交和冲突收尾放行;feat/ 分支、dev/zhangsan 不受影响 | 临时仓库 |
 | 10 | D35 | remove 指向主目录、主目录的上级、未登记的目录、链接不指向本主目录的目录时都拒绝,一个文件都不删 | 单元测试 |
 | 11 | D27 | 登记 5 个副本时,Stop hook 刷新本会话仍在 50ms 预算内 | 计时 |
 | 12 | D20 | 本项目开副本(写时复制)5 秒内完成 | 计时 |
 | 13 | 全局约束 | `npm run build`、`npm test` 通过 | 命令 |
+| 14 | D33① | core.hooksPath 指向仓库外的目录时,三个片段都不写、提示原因;卸载不动那个目录 | 临时仓库(全局配置指向临时文件) |
+| 15 | D33④ | 被跟踪的钩子文件:插入后 git status 干净、`git commit -a` 不带这几行;别的克隆改了这个文件后 pull、切分支照常,几行自动插回;卸载后文件和过滤规则都恢复原样 | 临时仓库 |
+| 16 | D33③⑤ | 钩子文件是链接时不写、链接目标不变;在工作区里新建的钩子文件写进 `.git/info/exclude`,卸载后文件和这一行都删掉 | 临时仓库 |
+| 17 | D21 | 仓库跟踪了 `.claude/` 的一部分时,副本里在被跟踪的位置新建的文件出现在 git status 里,删副本前按 K9 拦下;`.claude` 是链接时副本里照样保留 | 临时仓库 |
+| 18 | K3、D19 | 刚开、没提交过但同步过、已合入后又同步、合入后又提交、提交过没合入五种情况,分别判为还没有提交、还没有提交、已合入、差 1 个、差 1 个 | 临时仓库 |
+| 19 | D13、F3 取法 | 版本开发期间把主干合进版本分支后,起点仍是开版本的点;这次合并只出现在「同步主干」,不进本版本的需求和各项统计 | 临时仓库 |
+| 20 | D5 | `cgraphx release guard` 拦截没装上时也写 `cgraphx.releaseFlow`;`--remove` 后记号和拦截都清掉 | 临时仓库 |
+| 21 | D12 | 用注释开头的提交模板写 `chore(release):` 说明时放行 | 临时仓库 |
+| 22 | D22 | 副本目录名已登记给别的需求(副本已删)时 create 返回 `name_taken`,旧登记不变 | 单元测试 |
 
 ## 待确认项
 
 - D28【待确认】平台对「只有提交、没有事件、带一段绑定」的会话能否照常归到任务,需平台侧确认;不能的话退回:副本里没对上会话的提交照旧挂仓库终端会话(平台算未归属),本地 `task show` 仍归到需求。不阻塞成文和实现,发版前确认。
+- 以下情形这次不处理,记下待后续确认:
+  - 主目录的 `.cgraphx` 本身是链接(如链到别的盘)时,副本推出的主目录是链接目标的上级目录,副本里经主目录换算的功能(`replica list`、task、sync、多根换算)都会失效。
+  - 副本的本地库被删、`shared` 链接还在时跑 `cgraphx install`(`cgraphx upgrade` 也会自动跑):schema 打进主目录的共用库,本地库建不出来;主目录同时已挪走时,还会在旧位置重建 `.cgraphx/`。
+  - 主目录经符号链接路径打开(如 macOS 的 `/tmp`)且登记了副本时,从主目录和从副本触发的上报,路径换算可能不同;Claude Code 记录的是物理路径,基本触发不了。
+  - 事件的所在目录为空串时,在副本里和在主目录里执行 `cgraphx task show` 结果不同;现有记录路径上基本出现不了空串。
+  - 路径换算把根下 `..foo` 这类以 `..` 开头的子目录误判成在根外,对上报结果没有影响。
