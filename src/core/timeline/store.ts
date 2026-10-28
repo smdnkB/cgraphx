@@ -520,18 +520,7 @@ export class TimelineStore {
             writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
           }
         }
-        if (r.commit_files) {
-          const parsed = tryParseJson<string[] | { files: string[] }>(r.commit_files);
-          if (Array.isArray(parsed)) {
-            for (const f of parsed.filter((s): s is string => typeof s === 'string')) {
-              writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
-            }
-          } else if (parsed && Array.isArray(parsed.files)) {
-            for (const f of parsed.files.filter((s): s is string => typeof s === 'string')) {
-              writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
-            }
-          }
-        }
+        for (const f of parseCommitFiles(r.commit_files)) writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
       }
 
       const topFilesRead = Array.from(readCounts.entries())

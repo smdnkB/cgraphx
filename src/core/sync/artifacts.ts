@@ -89,16 +89,35 @@ function commitRootOf(ctx: SyncContext, e: TimelineEvent): string {
 }
 
 /**
- * /dev-start 把主目录里没提交的需求文件移进副本(spec D21⑥):路径在某个副本登记的需求目录下、文件在那个
- * 副本里 → 那个副本的根;否则 null。在主目录写的这些产出,读文件头、找提交都按副本算。
+ * 以前的登记(没有 movedFiles)按文件此刻在哪推断移进副本的需求文件:路径在这类副本登记的需求目录下、文件
+ * 在那个副本里 → 那个副本的根;否则 null。
  */
 function movedToReplica(ctx: SyncContext, projectRel: string): string | null {
   const featureId = /^docs\/features\/([^/]+)\//.exec(projectRel)?.[1];
   if (featureId === undefined) return null;
   for (const { root, replica } of ctx.roots) {
-    if (replica !== null && replica.featureId === featureId && fs.existsSync(path.join(root, projectRel))) return root;
+    if (replica === null || replica.movedFiles !== null || replica.featureId !== featureId) continue;
+    if (fs.existsSync(path.join(root, projectRel))) return root;
   }
   return null;
+}
+
+/**
+ * /dev-start 把主目录里没提交的需求文件移进副本(spec D21⑥、D29):在主目录改的文件,列在副本登记的
+ * movedFiles 里、最后一次改早于开副本 → 那个副本的根(改过之后最早开的那个;副本删了也算),不看文件此刻
+ * 在不在主目录——合入后文件回到主目录,归属不变。以前的登记没有 movedFiles:文件此刻不在主目录时按
+ * movedToReplica 推断。都不是 → null。这些产出读文件头、找提交都按副本算。
+ */
+function movedRootOf(ctx: SyncContext, repoRel: string, projectRel: string, lastChangeTs: string): string | null {
+  const changeMs = Date.parse(lastChangeTs);
+  let hit: { root: string; createdMs: number } | null = null;
+  for (const { root, replica } of ctx.roots) {
+    if (replica === null || replica.movedFiles === null || !replica.movedFiles.includes(projectRel)) continue;
+    const createdMs = Date.parse(replica.createdAt);
+    if (createdMs > changeMs && (hit === null || createdMs < hit.createdMs)) hit = { root, createdMs };
+  }
+  if (hit !== null) return hit.root;
+  return fileExistsIn(ctx, ctx.projectRoot, repoRel, projectRel) ? null : movedToReplica(ctx, projectRel);
 }
 
 /**
@@ -175,9 +194,7 @@ export function collectSessionArtifacts(
   for (const [repoRel, { projectRel, root: editedRoot, lastChangeTs }] of candidates) {
     // 文件所在的根:一般就是改它时所在的根;在主目录写、/dev-start 时移进副本的需求文件算那个副本
     const root =
-      editedRoot === ctx.projectRoot && !fileExistsIn(ctx, ctx.projectRoot, repoRel, projectRel)
-        ? (movedToReplica(ctx, projectRel) ?? editedRoot)
-        : editedRoot;
+      editedRoot === ctx.projectRoot ? (movedRootOf(ctx, repoRel, projectRel, lastChangeTs) ?? editedRoot) : editedRoot;
     // 读文件头、判断文件在不在都在文件所在的根里做;那个副本已不在就退回主目录
     const base = rootOrMain(root, ctx.projectRoot);
     const identity = identifyArtifact(base, projectRel);
