@@ -449,8 +449,8 @@ export async function refreshAutoBindings(
     }
 
     // 登记过副本的需求(spec D28、D38):在用副本的需求没有会话派生到它(如副本里只有终端提交)也要有
-    // 本机任务,task show <需求> 才查得到副本里没对上会话的提交;主 spec 头部声明了平台编号后,删掉 spec
-    // 写出之前建出的、还没有平台编号的目录任务(在用、已删的副本都算)。只在全量刷新(task 命令、sync)里
+    // 本机任务,task show <需求> 才查得到副本里没对上会话的提交;主 spec 头部声明了平台编号后,补上声明的那条
+    // 任务,再删掉 spec 写出之前建出的、还没有平台编号的目录任务(在用、已删的副本都算)。只在全量刷新(task 命令、sync)里
     // 做,Stop hook 只刷新本会话、不做
     if (opts.sessionIds === undefined) {
       const inUse = new Map<string, boolean>();
@@ -460,7 +460,7 @@ export async function refreshAutoBindings(
       for (const [featureId, active] of inUse) {
         try {
           if (active) ensureFeatureTaskRow(store, roots, featureId, now);
-          dropStaleFeatureTask(store, roots, featureId);
+          dropStaleFeatureTask(store, roots, featureId, now);
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
           process.stderr.write(`[task] 副本需求的任务行失败 ${featureId}: ${reason}\n`);

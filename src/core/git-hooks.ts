@@ -12,8 +12,8 @@
  *   ② 钩子文件(链接看它指向的文件)不是 shell 脚本(node、python 等;没有 shebang 而含 NUL 字节的按
  *      二进制算):插进 sh 片段会让钩子报错、每次提交都失败
  *   ③ 钩子文件是符号链接:写入会顺着链接改到别处(被跟踪的文件、别的仓库也在用的文件)
- *   ④ 钩子文件或链接指向的文件被 git 跟踪:看暂存区那份——有片段是团队提交的(算已装上,卸载不删),
- *      只有工作区这份有是本机没提交的残留(装、卸都删掉,恢复成提交时的样子)
+ *   ④ 钩子文件或链接指向的文件被 git 跟踪(不在工作区里也算):工作区这份有片段就算已装上;卸载看暂存区
+ *      那份——有片段是团队提交的,不删;只有工作区这份有是本机没提交的,删掉
  *   ⑤ 钩子文件不存在 → 新建,建在工作区里的写进 `.git/info/exclude`
  *   ⑥ 装上的片段登记在 `<git 公共目录>/cgraphx/hook-snippets.json`,连同写进过的文件:换了钩子目录
  *      后迁走同一工作区或 git 目录下旧文件里的片段,卸载按登记清(别的仓库的不碰);会话开始时按登记补回缺了的
@@ -206,7 +206,7 @@ function stripAt(loc: HookLocation, file: string, needles: readonly string[]): S
   // ① 仓库外的共用目录、链到仓库外的文件:不动
   if (!isWithin(loc.commonDir, realFile) && (loc.top === null || !isWithin(loc.top, realFile))) return 'skipped';
   const tracked = trackedFileOf(loc, realFile);
-  // ④ 被跟踪的:团队提交了片段就不删;只是本机残留就删掉,恢复成提交时的样子
+  // ④ 被跟踪的:团队提交了片段就不删;只是本机没提交的就删掉
   if (tracked !== null && hasSnippetLine(committedContent(tracked), needles)) return 'committed';
   // ③ 链到本仓库里的文件、④ 被跟踪的文件:只写回,不删文件
   if (link || tracked !== null) return stripSnippetLines(realFile, needles, false) === null ? 'absent' : 'removed';
@@ -360,17 +360,11 @@ function writeSnippet(
   // ② 先看内容(链接看它指向的文件):不是 shell 脚本就不给 sh 片段
   if (original !== null && (isBinaryHook(original) || isNonShellShebang(kept[0]))) return skip('not_shell');
 
-  const tracked = original === null ? null : trackedFileOf(loc, realFile);
+  // ④ 被跟踪的按 git 判断:文件不在工作区里(删了没暂存、稀疏检出)也不新建
+  const tracked = trackedFileOf(loc, realFile);
   if (link || tracked !== null) {
-    if (tracked !== null) {
-      const committed = committedContent(tracked);
-      // ④ 团队提交了这段片段:算已装上
-      if (marker !== '' && committed.includes(marker)) return { hookPath, status: 'present' };
-      // 本机没提交的残留(2.0.10 顺着链接追加的、自己加了没提交的):删掉,恢复成提交时的样子
-      if (!hasSnippetLine(committed, needles)) stripSnippetLines(realFile, needles, false);
-    } else if (original !== null && marker !== '' && original.includes(marker)) {
-      return { hookPath, status: 'present' };
-    }
+    // ③④ 不写;git 实际执行的那份(链接看它指向的文件)里已经有这段片段:算已装上
+    if (original !== null && marker !== '' && original.includes(marker)) return { hookPath, status: 'present' };
     return link ? skip('symlink', { linkTarget: linkTargetOf(loc, realFile, tracked) }) : skip('tracked');
   }
 
@@ -417,7 +411,7 @@ function installAt(
  *
  * - ① 钩子目录在仓库外、② 钩子文件不是 shell 脚本、③ 钩子文件是链接、④ 钩子文件被 git 跟踪 →
  *   什么都不写,status `unsupported`,带 reason(链接、被跟踪的还带要用户自己加的 lines,链接带它指向
- *   的文件);③④ 里已经有这段片段(④ 看暂存区那份)→ `present`
+ *   的文件);git 实际执行的那份(③ 看链接指向的文件)里已经有这段片段 → `present`
  * - ⑤ 文件不存在 → 新建(钩子目录不在时一并创建),内容为 `#!/bin/sh` 加 lines;建在工作区里的写进
  *   `.git/info/exclude`(本来就被忽略的不写)
  * - 否则先删掉含 marker(及 legacyMatch)的行,再把 lines 插到 shebang 之后(没有就放最前),设为可执行

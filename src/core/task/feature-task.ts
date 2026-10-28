@@ -93,13 +93,20 @@ export function ensureFeatureTaskRow(
 }
 
 /**
- * 登记过副本的需求对账(spec D38):主 spec 头部现在声明了平台编号、它的目录任务还没有平台编号 → 删掉这条
- * 目录任务(副本会话在 spec 写出之前建出的);已有平台编号的不删。先查后删;删过返回 true。
+ * 登记过副本的需求对账(spec D38):主 spec 头部声明了平台编号、读取侧认这个声明(目录有负责人),而目录任务
+ * 还没有平台编号 → 先按 ensureFeatureTaskRow 补上声明的那条任务(本机没有时补占位,副本删了也补),再删掉
+ * 这条目录任务(副本会话在 spec 写出之前建出的);已有平台编号的、读取侧不认声明的不删。删过返回 true。
  */
-export function dropStaleFeatureTask(store: TaskStore, roots: readonly ProjectRoot[], featureId: string): boolean {
+export function dropStaleFeatureTask(
+  store: TaskStore,
+  roots: readonly ProjectRoot[],
+  featureId: string,
+  now: string,
+): boolean {
   const task = store.findFeatureTaskByFeatureId(featureId);
   if (task === null || task.externalId !== null) return false;
-  if (!isPlatformTaskValue(declaredTaskOf(roots, featureId))) return false;
+  if (!isEligibleFeatureDir(roots, featureId) || !isPlatformTaskValue(declaredTaskOf(roots, featureId))) return false;
+  ensureFeatureTaskRow(store, roots, featureId, now);
   return store.deleteUnmappedFeatureTask(featureId);
 }
 
