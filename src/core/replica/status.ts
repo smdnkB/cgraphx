@@ -104,9 +104,14 @@ function replicaBranchTip(mainRoot: string, entry: ReplicaEntry): string | null 
 }
 
 /**
- * K3(只对目录在的副本):副本里需求分支的最新提交,是否已在主目录当前分支里。比较对象用 HEAD
- * ——在分支上时就是当前分支。主目录里还没有这个提交就先 fetch 对象(不写引用、不写
+ * K3(只对目录在的副本):需求分支自己做的提交,是否都已在主目录当前分支里。比较对象用 HEAD
+ * ——在分支上时就是当前分支。主目录里还没有最新提交就先 fetch 对象(不写引用、不写
  * FETCH_HEAD,也不连带去取子模块)。副本里分支不存在、git 判不了 → 都为 null。
+ *
+ * 自己做的提交 = 从登记的 baseCommit 起、沿需求分支第一父链、不算合并提交(同步进来的别人的提交在
+ * 合并的第二个父提交那边,不在其中):一个都没有 → 还没有提交(merged false、ahead 0);逐个查在不在
+ * HEAD 里。不能把 --first-parent 和 ^HEAD 写进一条 rev-list:「合入后又同步」时会多数出 1 个。
+ * 登记里没有 baseCommit(旧登记)→ 照旧只看最新提交。
  */
 function mergeState(mainRoot: string, entry: ReplicaEntry): { merged: boolean | null; ahead: number | null } {
   const undecided = { merged: null, ahead: null };
@@ -125,6 +130,8 @@ function mergeState(mainRoot: string, entry: ReplicaEntry): { merged: boolean | 
     if (fetched.status !== 0) return undecided;
   }
 
+  if (entry.baseCommit !== null) return ownCommitsState(mainRoot, entry.baseCommit, tip);
+
   // --is-ancestor:0 是祖先、1 不是,其余为出错
   const ancestor = runGit(mainRoot, ['merge-base', '--is-ancestor', tip, 'HEAD']);
   if (ancestor.status === 0) return { merged: true, ahead: 0 };
@@ -133,6 +140,27 @@ function mergeState(mainRoot: string, entry: ReplicaEntry): { merged: boolean | 
   const count = runGit(mainRoot, ['rev-list', '--count', `HEAD..${tip}`]);
   const ahead = Number.parseInt(count.stdout.trim(), 10);
   return count.status === 0 && Number.isInteger(ahead) ? { merged: false, ahead } : undecided;
+}
+
+/**
+ * K3 新取法:baseCommit..tip 第一父链上的非合并提交里,还不在主目录 HEAD 里的个数;git 出错 → null。
+ * 「不在 HEAD 里」另用一条不带 --first-parent 的 rev-list 取(tip ^baseCommit ^HEAD)再求交集,
+ * 两条命令判完,不按提交逐个起 git。
+ */
+function ownCommitsState(
+  mainRoot: string,
+  baseCommit: string,
+  tip: string,
+): { merged: boolean | null; ahead: number | null } {
+  const own = runGit(mainRoot, ['rev-list', '--first-parent', '--no-merges', tip, `^${baseCommit}`]);
+  if (own.status !== 0) return { merged: null, ahead: null };
+  const commits = own.stdout.split('\n').filter((line) => line !== '');
+  if (commits.length === 0) return { merged: false, ahead: 0 };
+  const notInHead = runGit(mainRoot, ['rev-list', '--no-merges', tip, `^${baseCommit}`, '^HEAD']);
+  if (notInHead.status !== 0) return { merged: null, ahead: null };
+  const pending = new Set(notInHead.stdout.split('\n').filter((line) => line !== ''));
+  const ahead = commits.filter((commit) => pending.has(commit)).length;
+  return { merged: ahead === 0, ahead };
 }
 
 function statusOf(mainRoot: string, entry: ReplicaEntry): ReplicaStatus {

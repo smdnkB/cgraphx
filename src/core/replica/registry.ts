@@ -39,9 +39,12 @@ function readRaw(file: string): Record<string, unknown> | null {
   }
 }
 
-/** 7 个字段齐全、类型对、path 是绝对路径 → 登记;否则 null(按解析失败跳过)。 */
+/**
+ * 7 个必有字段齐全、类型对、path 是绝对路径 → 登记;否则 null(按解析失败跳过)。baseCommit 是后加的
+ * 字段:不是字符串(以前的登记没有)→ null。
+ */
 function toEntry(raw: Record<string, unknown>): ReplicaEntry | null {
-  const { name, path: replicaPath, featureId, branch, baseBranch, createdAt, removedAt } = raw;
+  const { name, path: replicaPath, featureId, branch, baseBranch, baseCommit, createdAt, removedAt } = raw;
   if (
     typeof name !== 'string' ||
     typeof replicaPath !== 'string' ||
@@ -54,7 +57,16 @@ function toEntry(raw: Record<string, unknown>): ReplicaEntry | null {
   ) {
     return null;
   }
-  return { name, path: replicaPath, featureId, branch, baseBranch, createdAt, removedAt };
+  return {
+    name,
+    path: replicaPath,
+    featureId,
+    branch,
+    baseBranch,
+    baseCommit: typeof baseCommit === 'string' && baseCommit !== '' ? baseCommit : null,
+    createdAt,
+    removedAt,
+  };
 }
 
 /** 全部登记(含已删除),按文件名排序;登记目录不在 → [],解析失败的文件跳过。 */
@@ -106,6 +118,7 @@ export function writeEntry(mainRoot: string, entry: ReplicaEntry): string {
     featureId: entry.featureId,
     branch: entry.branch,
     baseBranch: entry.baseBranch,
+    baseCommit: entry.baseCommit,
     createdAt: entry.createdAt,
     removedAt: entry.removedAt,
   });

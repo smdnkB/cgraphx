@@ -74,8 +74,41 @@ export function relativeInside(root: string, p: string, allowSelf: boolean): str
 }
 
 /**
- * 先按各根的原样路径找,都不中时才对 absPath 取一次 realpath(存在才取),再与各 realRoot 比一次。
- * 根的 realpath 不在这里算(listProjectRoots 已算好)。
+ * p(已 resolve)在 root 之内时返回相对路径。按字符串前缀比、不拼接新串:Stop hook 每轮要比上万次,
+ * path.relative 和临时拼的前缀串都是这里的大头。
+ */
+function insideByPrefix(root: string, p: string, allowSelf: boolean): string | null {
+  if (p === root) return allowSelf ? '' : null;
+  if (root.endsWith(path.sep)) return p.startsWith(root) ? p.slice(root.length) : null;
+  return p.length > root.length && p[root.length] === path.sep && p.startsWith(root) ? p.slice(root.length + 1) : null;
+}
+
+/**
+ * 目录 → realpath 的缓存:一个会话的路径大多落在少数几个目录里,不必每条都做一次 realpath
+ * (路径不在时 realpath 还要抛错,更慢)。只增不删,超过上限整个清掉,长驻进程里也不会无限涨。
+ */
+const dirRealpathCache = new Map<string, string>();
+const DIR_REALPATH_CACHE_LIMIT = 4096;
+
+/** 目录的 realpath;目录不在时取最近一级在的上级做 realpath 再拼回去。结果进缓存。 */
+function realDir(dir: string): string {
+  const cached = dirRealpathCache.get(dir);
+  if (cached !== undefined) return cached;
+  let real: string;
+  try {
+    real = fs.realpathSync(dir);
+  } catch {
+    const parent = path.dirname(dir);
+    real = parent === dir ? dir : path.join(realDir(parent), path.basename(dir));
+  }
+  if (dirRealpathCache.size >= DIR_REALPATH_CACHE_LIMIT) dirRealpathCache.clear();
+  dirRealpathCache.set(dir, real);
+  return real;
+}
+
+/**
+ * 先按各根的原样路径找,都不中时才取 absPath 所在目录的 realpath(带缓存)拼回文件名,再与各 realRoot
+ * 比一次。根的 realpath 不在这里算(listProjectRoots 已算好)。
  */
 function findRoot(
   roots: readonly ProjectRoot[],
@@ -84,17 +117,13 @@ function findRoot(
 ): { root: ProjectRoot; rel: string } | null {
   const resolved = path.resolve(absPath);
   for (const root of roots) {
-    const rel = relativeInside(root.root, resolved, allowSelf);
+    const rel = insideByPrefix(root.root, resolved, allowSelf);
     if (rel !== null) return { root, rel };
   }
-  let real: string;
-  try {
-    real = fs.realpathSync(resolved);
-  } catch {
-    return null;
-  }
+  const real = path.join(realDir(path.dirname(resolved)), path.basename(resolved));
+  if (real === resolved) return null;
   for (const root of roots) {
-    const rel = relativeInside(root.realRoot, real, allowSelf);
+    const rel = insideByPrefix(root.realRoot, real, allowSelf);
     if (rel !== null) return { root, rel };
   }
   return null;

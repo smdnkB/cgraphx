@@ -21,6 +21,7 @@ import {
   resolveDataDir,
   SHARED_LINK_NAME,
 } from '../directory';
+import { appendGitInfoLines, gitPathPattern } from '../git-hooks';
 import {
   FEATURES_DIR_POSIX,
   REPLICA_NAME_SEPARATOR,
@@ -171,6 +172,21 @@ function assertBranchFree(mainRoot: string, branch: string): void {
   }
 }
 
+/**
+ * D22:副本目录名已登记给别的需求(副本在用、已删都算)→ name_taken。登记按目录名一个文件,照开会覆盖
+ * 旧需求的登记,旧会话重新算归属时就算到新需求头上;同一个需求删了副本再开照旧。
+ */
+function assertNameFree(mainRoot: string, name: string, featureId: string): void {
+  const owner = listReplicas(mainRoot, { includeRemoved: true }).find(
+    (e) => e.name === name && e.featureId !== featureId,
+  );
+  if (owner === undefined) return;
+  throw new ReplicaError(
+    'name_taken',
+    `副本目录名 ${name} 已登记给需求 ${owner.featureId}${owner.removedAt !== null ? '(副本已删)' : ''};给这个需求换个标题或加业务 ID,换个文件前缀(--prefix)再开`,
+  );
+}
+
 function assertTargetFree(mainRoot: string, target: string): void {
   if (fs.lstatSync(target, { throwIfNoEntry: false }) === undefined) return;
   const owner = listReplicas(mainRoot).find((e) => path.resolve(e.path) === target);
@@ -183,6 +199,9 @@ function assertTargetFree(mainRoot: string, target: string): void {
 }
 
 // ---------- 复制(D20) ----------
+
+/** cp 克隆不了时的报错(GNU cp 的 reflink、macOS 的 clonefile):只有这类失败才报 no_cow。 */
+const CLONE_UNSUPPORTED = /failed to clone|clonefile|not supported|cross-device|EOPNOTSUPP|EXDEV/i;
 
 /** macOS 固定用系统的 /bin/cp:PATH 上若是 GNU cp,-c 不是 clonefile。 */
 function copyCommand(fullCopy: boolean): { cmd: string; args: string[] } {
@@ -251,35 +270,25 @@ function copyTree(source: string, target: string, fullCopy: boolean): void {
   if (fullCopy) {
     throw new Error(`整份复制失败(${reason}),已删掉复制了一半的 ${target};检查磁盘空间和权限后重跑`);
   }
-  throw noCowError(source, reason, `,已删掉复制了一半的 ${target}`);
+  // 克隆不了才算 no_cow;读不了的文件、权限这类原因整份复制也会一样失败,照实报错
+  if (CLONE_UNSUPPORTED.test(`${reason}\n${r.stderr}`)) throw noCowError(source, reason, `,已删掉复制了一半的 ${target}`);
+  throw new Error(`复制失败(${reason}),已删掉复制了一半的 ${target};检查主目录里文件的读权限后重跑`);
 }
 
 // ---------- 整理(D21) ----------
 
-/** 各 agent 的配置目录和 cgraphx 数据目录,写成 exclude 的 `/<目录名>/`。 */
-function localDirPatterns(): string[] {
-  const names = [...listAgentProfiles().map((p) => p.configDirName), codeGraphDirName()];
-  return [...new Set(names)].map((name) => `/${name}/`);
-}
-
-/** ① 追加到副本自己的 `.git/info/exclude`(主目录的不动);已有同一行不重复加。 */
-function appendExclude(replicaRoot: string, patterns: readonly string[]): void {
-  const infoDir = path.join(replicaRoot, '.git', 'info');
-  fs.mkdirSync(infoDir, { recursive: true });
-  const file = path.join(infoDir, 'exclude');
-  let existing = '';
-  try {
-    existing = fs.readFileSync(file, 'utf8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-  }
-  const present = new Set(existing.split(/\r?\n/).map((line) => line.trim()));
-  const missing = patterns.filter((p) => !present.has(p));
-  if (missing.length === 0) return;
-  const sep = existing === '' || existing.endsWith('\n') ? '' : '\n';
-  // 克隆带过来的 exclude 是符号链接时,先删链接本身再写,免得写进它指向的文件
-  if (fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink() === true) fs.rmSync(file);
-  fs.writeFileSync(file, `${existing}${sep}${missing.join('\n')}\n`, 'utf8');
+/**
+ * ① 写进副本 exclude 的模式:各 agent 配置目录里开副本时没被跟踪的部分(`git ls-files --others
+ * --exclude-standard --directory` 列出的每一项,照原样写、去掉末尾 `/`——整个没被跟踪的目录列成
+ * `.claude/`,写成 `/.claude` 才连链接形式的 `.claude` 也匹配上),加上 cgraphx 数据目录。仓库跟踪了
+ * 配置目录的一部分时,之后在被跟踪的位置新建的文件 git 看得见,K9 照常算(spec D21)。
+ */
+function localDirPatterns(replicaRoot: string): string[] {
+  const dirs = [...new Set(listAgentProfiles().map((p) => p.configDirName))];
+  const listed = runGit(replicaRoot, ['ls-files', '-z', '--others', '--exclude-standard', '--directory', '--', ...dirs]);
+  if (listed.status !== 0) throw new Error(`副本 ${replicaRoot} 里列不出 agent 配置目录里没被跟踪的文件(git ls-files 失败)`);
+  const untracked = listed.stdout.split('\0').filter((s) => s !== '').map((s) => s.replace(/\/+$/, ''));
+  return [...new Set([...untracked, codeGraphDirName()])].map(gitPathPattern);
 }
 
 /** 从 start 往上逐级删空目录,到 top 为止(includeTop 决定 top 本身删不删);遇到非空或删不掉就停。 */
@@ -426,8 +435,31 @@ function moveOutOfMain(
     }
   }
   const featureDir = featureDirOf(mainRoot, featureId);
+  dropIgnoredLeftovers(mainRoot, featureId, parents, warnings);
   for (const dir of parents) pruneEmptyDirs(dir, featureDir, true);
   return { movedFiles, warnings };
+}
+
+/**
+ * 主目录这个需求目录里没有被跟踪的文件时,被忽略的文件(如 `.DS_Store`;克隆时副本里已有一份)也删掉,
+ * 需求目录才删得空——留着空壳,按 feature-id 找需求目录会先命中主目录。有被跟踪的文件时目录本来就留着,不动。
+ */
+function dropIgnoredLeftovers(mainRoot: string, featureId: string, parents: Set<string>, warnings: string[]): void {
+  const rel = `${FEATURES_DIR_POSIX}/${featureId}/`;
+  const tracked = runGit(mainRoot, ['ls-files', '-z', '--', rel]);
+  if (tracked.status !== 0 || tracked.stdout !== '') return;
+  const ignored = runGit(mainRoot, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', rel]);
+  if (ignored.status !== 0) return;
+  for (const file of ignored.stdout.split('\0').filter((s) => s !== '')) {
+    const abs = path.join(mainRoot, file);
+    try {
+      fs.rmSync(abs, { force: true });
+      parents.add(path.dirname(abs));
+    } catch (err) {
+      warnings.push(`主目录里被忽略的 ${file} 没删掉(${errorMessage(err)}),副本里已有一份;手动删掉主目录这份`);
+    }
+  }
+  parents.add(featureDirOf(mainRoot, featureId));
 }
 
 // ---------- 入口 ----------
@@ -450,7 +482,9 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
   assertBranchFree(mainRoot, opts.branch);
   const name = `${path.basename(realRoot)}${REPLICA_NAME_SEPARATOR}${opts.prefix}`;
   const target = path.join(path.dirname(realRoot), name);
+  assertNameFree(mainRoot, name, opts.featureId);
   assertTargetFree(mainRoot, target);
+  const baseCommit = gitValue(realRoot, ['rev-parse', '--verify', '-q', 'HEAD']);
 
   copyTree(realRoot, target, opts.fullCopy === true);
 
@@ -459,7 +493,7 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
   let entry: ReplicaEntry;
   const warnings: string[] = [];
   try {
-    appendExclude(target, localDirPatterns()); // ①
+    appendGitInfoLines(path.join(target, '.git', 'info', 'exclude'), localDirPatterns(target)); // ①
     kept = dropUntracked(target, opts.featureId);
     resetDataDir(target, mainRoot); // ②
     checkoutBranch(target, opts.branch); // ③
@@ -471,6 +505,7 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
       featureId: opts.featureId,
       branch: opts.branch,
       baseBranch,
+      baseCommit,
       createdAt: new Date().toISOString(),
       removedAt: null,
     };

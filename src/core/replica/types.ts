@@ -13,6 +13,8 @@ export interface ReplicaEntry {
   branch: string;
   /** 开副本时主目录所在的分支 */
   baseBranch: string;
+  /** 开副本那一刻的提交:K3 据它只数需求分支自己做的提交;以前的登记没有这个字段 → null(spec D19) */
+  baseCommit: string | null;
   /** ISO 8601 */
   createdAt: string;
   /** ISO 8601;没删为 null */
@@ -31,9 +33,12 @@ export type ReplicaState = 'present' | 'missing' | 'removed';
 
 export interface ReplicaStatus extends ReplicaEntry {
   state: ReplicaState;
-  /** K3:需求分支的最新提交已在主目录当前分支里;state 不是 present、或判不了时为 null */
+  /**
+   * K3:需求分支自己做的提交都已在主目录当前分支里;还没有提交时为 false(ahead 为 0);
+   * state 不是 present、或 git 判不了时为 null
+   */
   merged: boolean | null;
-  /** 差几个提交;已合入为 0,不判时为 null */
+  /** 需求分支自己做的提交里还没合入的个数;已合入、还没有提交为 0,不判时为 null */
   ahead: number | null;
   /** K9:改了没提交的已跟踪文件 + 没被跟踪也没被忽略的文件(仓库相对路径) */
   dirty: string[];

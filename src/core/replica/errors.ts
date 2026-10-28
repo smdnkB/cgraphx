@@ -6,13 +6,14 @@
  * 非 ReplicaError → 1。用户可修复的错误,消息带修复提示。
  */
 
-/** C-5 的九个 code。 */
+/** C-5 的十个 code。 */
 export const REPLICA_ERROR_CODES = [
   'invalid_args',
   'not_main_dir',
   'dirty_main',
   'no_cow',
   'target_exists',
+  'name_taken',
   'unsupported_platform',
   'dirty',
   'not_found',
