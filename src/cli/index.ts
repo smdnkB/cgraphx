@@ -124,7 +124,14 @@ async function confirmProjectInstall(message: string): Promise<boolean> {
 function warnIfMainRootMissing(subcommand: string | undefined): void {
   if (subcommand === undefined || subcommand.startsWith('-')) return;
   if (subcommand.endsWith('-hook') || subcommand === 'sync-worker') return;
-  const dataDir = resolveDataDir(resolveProjectRoot(process.cwd()));
+  let cwd: string;
+  try {
+    cwd = process.cwd();
+  } catch {
+    // 当前目录已被删掉:没有可提示的项目,命令照常执行(version、help 这类不碰数据的命令不该因此崩)
+    return;
+  }
+  const dataDir = resolveDataDir(resolveProjectRoot(cwd));
   if (dataDir.state === 'main-missing') {
     process.stderr.write(`[cgraphx] 副本关联的主项目不在 ${dataDir.mainRoot} 了\n`);
   }
