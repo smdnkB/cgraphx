@@ -9,7 +9,7 @@ description: 开版本:发完一个版本,在主干上输入 /release-start,读�
 
 - 版本流程(可选)的起点:/release-start → 每个需求 /dev-start 开副本 →(副本里澄清到 /code-review)→ /dev-merge 合入 → 发版那天改好版本号、/release-review 审核 → 说「发」合入主干 → 发布后再 /release-start。
 - 只在本地打 tag、建分支;推不推远程由用户定。
-- 不跑就不按版本走:照旧在当前分支上开发,也不装提交拦截。版本做到一半想退出,把主目录切回主干就算退出;版本分支和副本都留着,不自动删。
+- 不跑就不按版本走:照旧在当前分支上开发,也不装提交拦截。版本做到一半想退出,把主目录切回主干,之后在主干上 /dev-merge 停下问时回答「不再按版本走」就算退出(卸掉提交拦截、清掉按版本走的记号);版本分支和副本都留着,不自动删。
 - 说法:**主干** = `main`,没有 main、有 master 时用 master;**版本分支** = 名字是 `dev/数字.数字.数字` 的分支(`^dev/[0-9]+\.[0-9]+\.[0-9]+$`),`dev/zhangsan`、`develop` 不算,照旧不管。
 
 ## 流程
@@ -67,10 +67,10 @@ description: 开版本:发完一个版本,在主干上输入 /release-start,读�
 
 7. **装提交拦截**:每次开版本都跑,幂等;它同时记下「按版本走」的本地记号(拦截没装上也记),发完版在 main 上 /dev-merge 会据它先问。`cgraphx release guard --json`,按输出说:
    - `status` 是 `repaired` → 多说一句「提交拦截被钩子工具冲掉过,已补回」
-   - `localFilter` 是 true → 说一句「<hookPath> 跟着仓库提交,拦截这几行只在本机,不会进提交」
    - `status` 是 `unsupported` → 按 `reason` 说没装上的原因,其余步骤照常:
-     - `outside_repo` →「core.hooksPath 指向仓库外的共用目录 <hookPath 所在目录>,没装提交拦截:装进去会影响这台机器上的所有仓库」
-     - `symlink` →「钩子文件 <hookPath> 是链接,没装提交拦截」,把 `lines` 给用户,说要装的话加到它指向的文件第一行之后
+     - `outside_repo` →「钩子目录 <hookPath 所在目录> 在仓库外,是多个仓库共用的,没装提交拦截:装进去会影响这台机器上的所有仓库」
+     - `tracked` →「钩子文件 <hookPath> 被 git 跟踪,没装提交拦截:写进去会出现在 git status 里、随提交给全组」,把 `lines` 给用户,要不要加进去、加了提不提交由用户定
+     - `symlink` →「钩子文件 <hookPath> 是链接,指向 <linkTarget.path>,没装提交拦截」;`linkTarget.scope` 是 `tracked` 补一句「它被 git 跟踪,加进去会随提交给全组」,是 `outside_repo` 补一句「它在仓库外,加进去会影响所有用它的仓库」;把 `lines` 给用户,由用户定加不加
      - `not_shell` →「钩子文件 <hookPath> 不是 shell 脚本,没装提交拦截」
      - 都补一句:没有拦截时,版本分支上的直接提交发版审核时照样列进疑似夹带
    - 命令报错 → 把输出原样告诉用户;tag 和分支照常保留
@@ -102,8 +102,7 @@ $ cgraphx release guard --json
 {
   "ok": true,
   "hookPath": "/Users/smdnk/objects/ai/cgraphx/.git/hooks/commit-msg",
-  "status": "installed",
-  "localFilter": false
+  "status": "installed"
 }
 ```
 
@@ -130,7 +129,7 @@ tag v2.0.10 和分支 dev/2.0.11 只建在本地,推不推远程由你定。dev/
 | 读不到版本号 | 问用户刚发的版本号 |
 | 下个版本分支已存在且已合进主干 | 停下「dev/2.0.11 已经发过了，版本号还是 2.0.10:发版前没改版本号?」 |
 | 仓库一个 tag 都没有 | 给出候选提交和它之后的提交数,问打在哪,确认后再打 |
-| 提交拦截没装上(`unsupported`) | 按 `reason` 说原因(仓库外的共用目录 / 链接 / 不是 shell 脚本),其余照常 |
+| 提交拦截没装上(`unsupported`) | 按 `reason` 说原因(仓库外的共用目录 / 被 git 跟踪 / 链接 / 不是 shell 脚本),其余照常 |
 
 ## 红线
 

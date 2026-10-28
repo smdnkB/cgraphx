@@ -17,6 +17,8 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
   C=$(git rev-list --first-parent HEAD --not main | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
   ```
 
+  用到 START 的命令,都把这一行写在同一条命令的开头:每次调用都是新的 shell,上一次算的 START 不在了,空着的 START 让 `"$START"..HEAD` 变成空范围,命令照样成功、结果却是空的。
+- 副本里同步主干只用 /dev-merge(它用 `--no-ff` 产生合并提交);用 `git pull`、默认的 `git merge` 快进同步过,同步进来的主干提交会被当成需求自己做的,`replica list` 的合入判断就不准了。
 - 输出文件路径的 git 命令都带 `-c core.quotePath=false`,中文路径原样输出,不转成 `"\344\270…"`。
 
 ## 流程
@@ -90,7 +92,8 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
    有冲突 → 分支不动;每个冲突文件找出撞上的、已经合入的需求。改过它的合并里,第二个父提交已在主干里的是同步主干(把主干上的热修复合进了版本分支),其余是「合入需求：X」:
 
    ```bash
-   # 开了版本:从版本起点找(START 的取法见「定位」)
+   # 开了版本:从版本起点找(START 的取法见「定位」,和下面的循环在同一条命令里)
+   C=$(git rev-list --first-parent HEAD --not main | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
    git log --first-parent --merges --format='%H %s' "$START"..HEAD -- src/order/routes.ts | while read -r h s; do
      git merge-base --is-ancestor "$h^2" main && echo "同步主干" || echo "$s"
    done    # → 合入需求：积分发放
@@ -110,7 +113,8 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 7. **合并说明**:「合入需求：订单导出」;这个需求第 2 次起写「合入需求：订单导出(第 2 次)」。N = 已有的同标题合入数 + 1:
 
    ```bash
-   # 开了版本:从版本起点数
+   # 开了版本:从版本起点数(和算 START 的那一行在同一条命令里)
+   C=$(git rev-list --first-parent HEAD --not main | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
    git log --first-parent --merges --format=%s "$START"..HEAD | grep -cE '^合入需求：订单导出(\(第 [0-9]+ 次\))?$'
    # 没开版本:从这条副本登记的 createdAt 之后数
    git log --first-parent --merges --since=2026-10-27T08:00:00.000Z --format=%s HEAD | grep -cE '^合入需求：订单导出(\(第 [0-9]+ 次\))?$'
@@ -180,8 +184,7 @@ $ git fetch --no-tags /Users/smdnk/objects/ai/cgraphx@订单导出 feat/订单�
 $ git -c core.quotePath=false merge-tree --write-tree --name-only HEAD FETCH_HEAD; echo "exit=$?"
 9b1c4d7e2f0a6b8c3d5e7f9a1b2c4d6e8f0a2b4c
 exit=0
-$ C=$(git rev-list --first-parent HEAD --not main | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}
-$ git log --first-parent --merges --format=%s "$START"..HEAD | grep -cE '^合入需求：订单导出(\(第 [0-9]+ 次\))?$'
+$ C=$(git rev-list --first-parent HEAD --not main | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}; git log --first-parent --merges --format=%s "$START"..HEAD | grep -cE '^合入需求：订单导出(\(第 [0-9]+ 次\))?$'
 0
 $ git merge --no-ff -m "合入需求：订单导出" FETCH_HEAD
 $ git rev-list --count --no-merges HEAD^1..HEAD^2
@@ -207,7 +210,7 @@ src/order/routes.ts
 Auto-merging src/order/routes.ts
 CONFLICT (content): Merge conflict in src/order/routes.ts
 exit=1
-$ git log --first-parent --merges --format='%H %s' "$START"..HEAD -- src/order/routes.ts | while read -r h s; do git merge-base --is-ancestor "$h^2" main && echo "同步主干" || echo "$s"; done
+$ C=$(git rev-list --first-parent HEAD --not main | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}; git log --first-parent --merges --format='%H %s' "$START"..HEAD -- src/order/routes.ts | while read -r h s; do git merge-base --is-ancestor "$h^2" main && echo "同步主干" || echo "$s"; done
 合入需求：积分发放
 ```
 
