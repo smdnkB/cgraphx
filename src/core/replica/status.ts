@@ -21,13 +21,14 @@ export interface CommandResult {
 /** 输出上限:大仓库里没被跟踪的文件列表、cp 的告警都可能很长,超了子进程会被杀掉。 */
 const MAX_BUFFER = 64 * 1024 * 1024;
 
-/** 跑一条外部命令(不经 shell)。 */
-export function runCommand(cmd: string, args: readonly string[], cwd: string): CommandResult {
+/** 跑一条外部命令(不经 shell);env 不给时继承当前进程的环境。 */
+export function runCommand(cmd: string, args: readonly string[], cwd: string, env?: NodeJS.ProcessEnv): CommandResult {
   const r = spawnSync(cmd, args, {
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     maxBuffer: MAX_BUFFER,
+    ...(env !== undefined ? { env } : {}),
   });
   const result: CommandResult = { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
   if (r.error !== undefined) result.error = r.error;
@@ -109,9 +110,9 @@ function replicaBranchTip(mainRoot: string, entry: ReplicaEntry): string | null 
  * FETCH_HEAD,也不连带去取子模块)。副本里分支不存在、git 判不了 → 都为 null。
  *
  * 自己做的提交 = 从登记的 baseCommit 起、沿需求分支第一父链、不算合并提交(同步进来的别人的提交在
- * 合并的第二个父提交那边,不在其中):一个都没有 → 还没有提交(merged false、ahead 0);逐个查在不在
- * HEAD 里。不能把 --first-parent 和 ^HEAD 写进一条 rev-list:「合入后又同步」时会多数出 1 个。
- * 登记里没有 baseCommit(旧登记)→ 照旧只看最新提交。
+ * 合并的第二个父提交那边,不在其中):一个都没有 → 还没有提交(merged false、ahead 0);其中还不在 HEAD
+ * 里的个数就是 ahead。副本只用 /dev-merge 同步(合并提交),快进同步过时同步进来的主干提交落在第一父链上,
+ * 会被当成自己做的(spec K3)。登记里没有 baseCommit(旧登记)→ 照旧只看最新提交。
  */
 function mergeState(mainRoot: string, entry: ReplicaEntry): { merged: boolean | null; ahead: number | null } {
   const undecided = { merged: null, ahead: null };
@@ -143,24 +144,25 @@ function mergeState(mainRoot: string, entry: ReplicaEntry): { merged: boolean | 
 }
 
 /**
- * K3 新取法:baseCommit..tip 第一父链上的非合并提交里,还不在主目录 HEAD 里的个数;git 出错 → null。
- * 「不在 HEAD 里」另用一条不带 --first-parent 的 rev-list 取(tip ^baseCommit ^HEAD)再求交集,
- * 两条命令判完,不按提交逐个起 git。
+ * K3 新取法:两条计数——baseCommit..tip 第一父链上的非合并提交有几个(0 个即还没有提交),其中还不在
+ * HEAD 里的有几个(ahead)。排除一侧(^HEAD)照常沿全部父提交标记,合入后又同步时同步产生的合并提交由
+ * --no-merges 去掉。git 出错 → null。
  */
 function ownCommitsState(
   mainRoot: string,
   baseCommit: string,
   tip: string,
 ): { merged: boolean | null; ahead: number | null } {
-  const own = runGit(mainRoot, ['rev-list', '--first-parent', '--no-merges', tip, `^${baseCommit}`]);
-  if (own.status !== 0) return { merged: null, ahead: null };
-  const commits = own.stdout.split('\n').filter((line) => line !== '');
-  if (commits.length === 0) return { merged: false, ahead: 0 };
-  const notInHead = runGit(mainRoot, ['rev-list', '--no-merges', tip, `^${baseCommit}`, '^HEAD']);
-  if (notInHead.status !== 0) return { merged: null, ahead: null };
-  const pending = new Set(notInHead.stdout.split('\n').filter((line) => line !== ''));
-  const ahead = commits.filter((commit) => pending.has(commit)).length;
-  return { merged: ahead === 0, ahead };
+  const count = (exclude: readonly string[]): number | null => {
+    const r = runGit(mainRoot, ['rev-list', '--count', '--first-parent', '--no-merges', tip, `^${baseCommit}`, ...exclude]);
+    const n = Number.parseInt(r.stdout.trim(), 10);
+    return r.status === 0 && Number.isInteger(n) ? n : null;
+  };
+  const own = count([]);
+  if (own === null) return { merged: null, ahead: null };
+  if (own === 0) return { merged: false, ahead: 0 };
+  const ahead = count(['^HEAD']);
+  return ahead === null ? { merged: null, ahead: null } : { merged: ahead === 0, ahead };
 }
 
 function statusOf(mainRoot: string, entry: ReplicaEntry): ReplicaStatus {

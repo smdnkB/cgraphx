@@ -263,7 +263,8 @@ function copyTree(source: string, target: string, fullCopy: boolean): void {
     if (blocker !== null) throw noCowError(source, blocker, '');
   }
   const { cmd, args } = copyCommand(fullCopy);
-  const r = runCommand(cmd, [...args, source, target], path.dirname(source));
+  // LC_ALL=C:GNU cp、glibc 的报错按 locale 翻译,中文环境下下面按英文认「克隆不了」会认不出
+  const r = runCommand(cmd, [...args, source, target], path.dirname(source), { ...process.env, LC_ALL: 'C' });
   if (r.status === 0) return;
   removeQuietly(target);
   const reason = r.error?.message ?? firstLine(r.stderr);
@@ -408,8 +409,8 @@ function venvWarnings(replicaRoot: string, mainPaths: readonly string[]): string
 
 /**
  * ⑥ 删掉主目录 `docs/features/<featureId>/` 下第 ① 步保留的文件(已移进副本),再删掉因此变空的
- * 目录(含这个需求目录本身:留下空目录,按 feature-id 找需求目录时会先命中主目录)。
- * 删不掉的、内嵌的 git 仓库只记进 warnings,不回滚。
+ * 目录(含这个需求目录本身)。被忽略的文件留在原处(副本里已有一份);删不干净留下的空壳不影响查找,
+ * 按 feature-id 找需求目录先找副本(spec D26)。删不掉的、内嵌的 git 仓库只记进 warnings,不回滚。
  */
 function moveOutOfMain(
   mainRoot: string,
@@ -435,31 +436,8 @@ function moveOutOfMain(
     }
   }
   const featureDir = featureDirOf(mainRoot, featureId);
-  dropIgnoredLeftovers(mainRoot, featureId, parents, warnings);
   for (const dir of parents) pruneEmptyDirs(dir, featureDir, true);
   return { movedFiles, warnings };
-}
-
-/**
- * 主目录这个需求目录里没有被跟踪的文件时,被忽略的文件(如 `.DS_Store`;克隆时副本里已有一份)也删掉,
- * 需求目录才删得空——留着空壳,按 feature-id 找需求目录会先命中主目录。有被跟踪的文件时目录本来就留着,不动。
- */
-function dropIgnoredLeftovers(mainRoot: string, featureId: string, parents: Set<string>, warnings: string[]): void {
-  const rel = `${FEATURES_DIR_POSIX}/${featureId}/`;
-  const tracked = runGit(mainRoot, ['ls-files', '-z', '--', rel]);
-  if (tracked.status !== 0 || tracked.stdout !== '') return;
-  const ignored = runGit(mainRoot, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', rel]);
-  if (ignored.status !== 0) return;
-  for (const file of ignored.stdout.split('\0').filter((s) => s !== '')) {
-    const abs = path.join(mainRoot, file);
-    try {
-      fs.rmSync(abs, { force: true });
-      parents.add(path.dirname(abs));
-    } catch (err) {
-      warnings.push(`主目录里被忽略的 ${file} 没删掉(${errorMessage(err)}),副本里已有一份;手动删掉主目录这份`);
-    }
-  }
-  parents.add(featureDirOf(mainRoot, featureId));
 }
 
 // ---------- 入口 ----------

@@ -120,6 +120,7 @@ const STATE_LABELS: Readonly<Record<ReplicaState, string>> = {
 
 function mergeLabel(s: ReplicaStatus): string {
   if (s.merged === true) return '已合入';
+  if (s.merged === false && s.ahead === 0) return '还没有提交';
   if (s.merged === false && s.ahead !== null) return `差 ${s.ahead} 个提交`;
   return '-';
 }

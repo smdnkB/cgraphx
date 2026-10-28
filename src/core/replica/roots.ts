@@ -52,14 +52,15 @@ export function realpathOr(p: string): string {
 
 /**
  * 主目录加全部登记(含已删除),按 root 路径长度降序:依次匹配时第一个命中的就是最长的根。
- * 每个根的 realpath 在这里算一次,matchProjectRoot、replicaOfCwd 不再给根算。
+ * 每个根的 realpath 在这里算一次(走目录缓存,已删副本的目录不在也不抛错),matchProjectRoot、
+ * replicaOfCwd 不再给根算。
  */
 export function listProjectRoots(projectRoot: string): ProjectRoot[] {
   const mainRoot = resolveMainRoot(projectRoot);
-  const roots: ProjectRoot[] = [{ root: mainRoot, realRoot: realpathOr(mainRoot), replica: null }];
+  const roots: ProjectRoot[] = [{ root: mainRoot, realRoot: realDir(mainRoot), replica: null }];
   for (const entry of entriesOf(mainRoot, true)) {
     const root = path.resolve(entry.path);
-    roots.push({ root, realRoot: realpathOr(root), replica: entry });
+    roots.push({ root, realRoot: realDir(root), replica: entry });
   }
   // sort 是稳定排序:长度相同时保持主目录在前、副本按 createdAt
   return roots.sort((a, b) => b.root.length - a.root.length);
@@ -74,31 +75,28 @@ export function relativeInside(root: string, p: string, allowSelf: boolean): str
 }
 
 /**
- * p(已 resolve)在 root 之内时返回相对路径。按字符串前缀比、不拼接新串:Stop hook 每轮要比上万次,
- * path.relative 和临时拼的前缀串都是这里的大头。
- */
-function insideByPrefix(root: string, p: string, allowSelf: boolean): string | null {
-  if (p === root) return allowSelf ? '' : null;
-  if (root.endsWith(path.sep)) return p.startsWith(root) ? p.slice(root.length) : null;
-  return p.length > root.length && p[root.length] === path.sep && p.startsWith(root) ? p.slice(root.length + 1) : null;
-}
-
-/**
- * 目录 → realpath 的缓存:一个会话的路径大多落在少数几个目录里,不必每条都做一次 realpath
- * (路径不在时 realpath 还要抛错,更慢)。只增不删,超过上限整个清掉,长驻进程里也不会无限涨。
+ * 目录 → realpath 的缓存:一个会话的路径大多落在少数几个目录里,不必每条都做一次 realpath。只增不删,
+ * 超过上限整个清掉,长驻进程里也不会无限涨。
  */
 const dirRealpathCache = new Map<string, string>();
 const DIR_REALPATH_CACHE_LIMIT = 4096;
 
-/** 目录的 realpath;目录不在时取最近一级在的上级做 realpath 再拼回去。结果进缓存。 */
+/**
+ * 目录的 realpath;目录不在时取最近一级在的上级做 realpath 再拼回去(先查在不在:已删副本的目录、
+ * 删掉的文件所在目录很常见,realpath 抛错比查一次慢得多)。结果进缓存。
+ */
 function realDir(dir: string): string {
   const cached = dirRealpathCache.get(dir);
   if (cached !== undefined) return cached;
   let real: string;
-  try {
-    real = fs.realpathSync(dir);
-  } catch {
-    const parent = path.dirname(dir);
+  const parent = path.dirname(dir);
+  if (fs.existsSync(dir)) {
+    try {
+      real = fs.realpathSync(dir);
+    } catch {
+      real = dir;
+    }
+  } else {
     real = parent === dir ? dir : path.join(realDir(parent), path.basename(dir));
   }
   if (dirRealpathCache.size >= DIR_REALPATH_CACHE_LIMIT) dirRealpathCache.clear();
@@ -106,9 +104,59 @@ function realDir(dir: string): string {
   return real;
 }
 
+/** 根路径 → 根的查找表(原样路径、realpath 各一张);同一路径登记过多次时取在用的,都删了取最新的。 */
+interface RootIndex {
+  byRoot: Map<string, ProjectRoot>;
+  byReal: Map<string, ProjectRoot>;
+}
+
+/** 每份 roots 只建一次查找表;roots 是 listProjectRoots 的返回,调用方整轮复用同一份。 */
+const rootIndexCache = new WeakMap<readonly ProjectRoot[], RootIndex>();
+
+function preferRoot(current: ProjectRoot | undefined, next: ProjectRoot): ProjectRoot {
+  if (current === undefined) return next;
+  const curInUse = current.replica === null || current.replica.removedAt === null;
+  const nextInUse = next.replica === null || next.replica.removedAt === null;
+  if (curInUse !== nextInUse) return curInUse ? current : next;
+  return (next.replica?.createdAt ?? '') > (current.replica?.createdAt ?? '') ? next : current;
+}
+
+function rootIndexOf(roots: readonly ProjectRoot[]): RootIndex {
+  const cached = rootIndexCache.get(roots);
+  if (cached !== undefined) return cached;
+  const byRoot = new Map<string, ProjectRoot>();
+  const byReal = new Map<string, ProjectRoot>();
+  for (const root of roots) {
+    byRoot.set(root.root, preferRoot(byRoot.get(root.root), root));
+    byReal.set(root.realRoot, preferRoot(byReal.get(root.realRoot), root));
+  }
+  const index = { byRoot, byReal };
+  rootIndexCache.set(roots, index);
+  return index;
+}
+
 /**
- * 先按各根的原样路径找,都不中时才取 absPath 所在目录的 realpath(带缓存)拼回文件名,再与各 realRoot
- * 比一次。根的 realpath 不在这里算(listProjectRoots 已算好)。
+ * 从 p 逐级往上找第一个是根的目录(最近的就是最长的根);allowSelf 为假时 p 本身不算。
+ * 只看路径深度,和登记了多少副本无关:Stop hook 每轮要换算上万条路径。
+ */
+function walkUp(table: Map<string, ProjectRoot>, p: string, allowSelf: boolean): { root: ProjectRoot; rel: string } | null {
+  let dir = allowSelf ? p : path.dirname(p);
+  for (;;) {
+    const root = table.get(dir);
+    if (root !== undefined) {
+      if (dir === p) return { root, rel: '' };
+      const rel = dir.endsWith(path.sep) ? p.slice(dir.length) : p.slice(dir.length + 1);
+      return { root, rel };
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+/**
+ * 先按各根的原样路径找,都不中时再取 absPath 所在目录的 realpath(带缓存)拼回文件名,和各根的
+ * realpath 比:根以经链接的路径给出、而查询路径已是真实路径时也对得上。
  */
 function findRoot(
   roots: readonly ProjectRoot[],
@@ -116,17 +164,11 @@ function findRoot(
   allowSelf: boolean,
 ): { root: ProjectRoot; rel: string } | null {
   const resolved = path.resolve(absPath);
-  for (const root of roots) {
-    const rel = insideByPrefix(root.root, resolved, allowSelf);
-    if (rel !== null) return { root, rel };
-  }
+  const index = rootIndexOf(roots);
+  const literal = walkUp(index.byRoot, resolved, allowSelf);
+  if (literal !== null) return literal;
   const real = path.join(realDir(path.dirname(resolved)), path.basename(resolved));
-  if (real === resolved) return null;
-  for (const root of roots) {
-    const rel = insideByPrefix(root.realRoot, real, allowSelf);
-    if (rel !== null) return { root, rel };
-  }
-  return null;
+  return walkUp(index.byReal, real, allowSelf);
 }
 
 /** POSIX 分隔的相对路径。 */
@@ -163,16 +205,16 @@ export function featureDirOf(root: string, featureId: string): string {
 }
 
 /**
- * 需求目录在哪个根里:先找主目录,再找第一个没删、featureId 相同、目录里有这个需求目录的副本
- * (按 createdAt 升序);都没有 → null。
+ * 需求目录在哪个根里(spec D26):先找没删、featureId 相同、目录里有这个需求目录的副本(按 createdAt
+ * 升序取第一个)——副本里那份是正在改的,和 features list 取副本那份(D30)同一口径;开副本后主目录
+ * 留下的空壳(被忽略的文件、空子目录)也就不影响查找。没有再找主目录;都没有 → null。
  */
 export function locateFeatureRoot(projectRoot: string, featureId: string): string | null {
   const mainRoot = resolveMainRoot(projectRoot);
-  if (isDirectory(featureDirOf(mainRoot, featureId))) return mainRoot;
   for (const entry of entriesOf(mainRoot, false)) {
     if (entry.featureId === featureId && isDirectory(featureDirOf(entry.path, featureId))) {
       return path.resolve(entry.path);
     }
   }
-  return null;
+  return isDirectory(featureDirOf(mainRoot, featureId)) ? mainRoot : null;
 }
