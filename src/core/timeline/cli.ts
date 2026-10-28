@@ -365,6 +365,7 @@ export function registerTimelineCommands(program: Command): void {
           uninstallTimelineHooks(projectRoot, { purgeData: opts.purge === true, agent: p.id, keepGitHook }),
         );
         writeReports(reports);
+        for (const line of new Set(reports.flatMap((r) => r.gitHookNotices))) process.stderr.write(`[timeline] ${line}\n`);
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
@@ -411,8 +412,8 @@ function writeReports(reports: readonly unknown[]): void {
 }
 
 /**
- * git 钩子的安装提示往 stderr 打:没写入的说原因,被跟踪的钩子文件靠本机过滤规则藏起改动的说一句
- * (hookNotice)。多个 agent 的报告里是同一批钩子,同一句话只打一次。
+ * git 钩子的安装提示往 stderr 打:没写入的说原因,链接、被跟踪的还给要加的几行(hookNotice)。
+ * 多个 agent 的报告里是同一批钩子,同一句话只打一次。
  */
 function writeGitHookNotices(reports: readonly InstallReport[]): void {
   const printed = new Set<string>();

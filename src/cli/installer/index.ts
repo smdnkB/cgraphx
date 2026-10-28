@@ -379,6 +379,8 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
       const guard = removeReleaseGuard(process.cwd());
       if (guard.status === 'removed') {
         clack.log.success(`已移除版本分支提交拦截:${guard.hookPath}`);
+      } else if (guard.notice !== undefined) {
+        clack.log.warn(guard.notice);
       }
     } catch (err) {
       clack.log.warn(

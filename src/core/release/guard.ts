@@ -13,7 +13,7 @@
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 
-import { installHookSnippet, removeHookSnippet, resolveHooksDir } from '../git-hooks';
+import { hookNotice, hookRemoveNotice, installHookSnippet, removeHookSnippet, resolveHooksDir } from '../git-hooks';
 import {
   RELEASE_FLOW_CONFIG_KEY,
   RELEASE_GUARD_CONFIG_KEY,
@@ -54,9 +54,9 @@ function readGuardMark(cwd: string): boolean {
 /**
  * 在 cwd 所在仓库的 commit-msg 钩子里装上提交拦截。不在 git 仓库 → 抛 ReleaseError(not_git_repo)。
  *
- * 先写「按版本走」的记号(拦截没装上也写);没写入 → 原样返回 unsupported(带 reason 和要加的几行),
- * 不写装过的记号;原来没有片段而装过的记号为 true → repaired;其余照基础层给的 status。装上(含
- * present)后写装过的记号。
+ * 先写「按版本走」的记号(拦截没装上也写);没写入 → 原样返回 unsupported(带 reason、要加的几行和
+ * 提示),不写装过的记号;原来没有片段而装过的记号为 true → repaired;其余照基础层给的 status。装上
+ * (含 present)后写装过的记号。
  */
 export function installReleaseGuard(cwd: string): GuardResult {
   if (resolveHooksDir(cwd) === null) throw notGitRepoError(cwd);
@@ -67,7 +67,10 @@ export function installReleaseGuard(cwd: string): GuardResult {
   const snippet = installHookSnippet(cwd, GUARD_HOOK, RELEASE_GUARD_MARKER, RELEASE_GUARD_LINES);
   if (snippet === null) throw notGitRepoError(cwd);
   const { hookPath } = snippet;
-  if (snippet.status === 'unsupported') return { ...snippet, status: 'unsupported' };
+  if (snippet.status === 'unsupported') {
+    const notice = hookNotice(snippet, '没装上提交拦截');
+    return { ...snippet, status: 'unsupported', ...(notice !== null ? { notice } : {}) };
+  }
 
   const status: GuardResult['status'] =
     snippet.status === 'installed' && marked ? 'repaired' : snippet.status;
@@ -77,7 +80,8 @@ export function installReleaseGuard(cwd: string): GuardResult {
 
 /**
  * 从 cwd 所在仓库的 commit-msg 钩子删掉提交拦截,并清掉两个记号(退出版本流程)。
- * 删过片段 → removed;没装过 → absent;不在 git 仓库 → absent,hookPath 为 null。
+ * 删过片段 → removed;没装过 → absent;拦截那几行是提交在被跟踪的钩子文件里的 → unsupported
+ * (reason tracked,带提示,记号照样清);不在 git 仓库 → absent,hookPath 为 null。
  */
 export function removeReleaseGuard(cwd: string): GuardResult {
   const hooksDir = resolveHooksDir(cwd);
@@ -87,8 +91,10 @@ export function removeReleaseGuard(cwd: string): GuardResult {
   // 没有这个键时 git 以非零退出,忽略
   runGit(cwd, ['config', '--local', '--unset', RELEASE_GUARD_CONFIG_KEY]);
   runGit(cwd, ['config', '--local', '--unset', RELEASE_FLOW_CONFIG_KEY]);
-  return {
-    hookPath: removed ?? path.join(hooksDir, GUARD_HOOK),
-    status: removed === null ? 'absent' : 'removed',
-  };
+  if (removed === null) return { hookPath: path.join(hooksDir, GUARD_HOOK), status: 'absent' };
+  if (removed.status === 'unsupported') {
+    const notice = hookRemoveNotice(removed, '拦截那几行');
+    return { hookPath: removed.hookPath, status: 'unsupported', reason: 'tracked', ...(notice !== null ? { notice } : {}) };
+  }
+  return { hookPath: removed.hookPath, status: removed.status };
 }

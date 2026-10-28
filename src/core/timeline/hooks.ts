@@ -13,7 +13,7 @@
 import { runHook, isKillSwitchOn } from './hook-runner';
 import { extractHookPayload, type HookPayload } from './payload';
 import { resolveProjectRoot } from '../directory';
-import { repairHookSnippets } from '../git-hooks';
+import { hookNotice, repairHookSnippets } from '../git-hooks';
 import { summarizeToolResponse } from './post-tool-summary';
 import { sanitizeToolArgs } from './tool-args';
 import { COMMIT_BRANCH_ENV, COMMIT_HOOK_ENV, COMMIT_REFLOG_ENV, COMMIT_SHA_ENV, WRITE_TOOLS_WHITELIST } from './constants';
@@ -23,6 +23,7 @@ import { DEFAULT_AGENT_ID, requireAgentProfile, resolveSessionIdFromEnv, type Ag
 import { hasTaskSessionStartHook, skillVersionNotice } from '../skill-version';
 import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
+import * as path from 'node:path';
 
 /**
  * 工具事件的 metadata:tool_use_id、子 agent 归属(只写入,读取方不展示)。
@@ -242,7 +243,8 @@ export async function stopHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void>
  *
  * 该 agent 的 settings 里没接 task 会话开始 hook(只接了 timeline hook 的早期项目)时,
  * 项目 skill 版本落后的提示由这里单独输出一段(skill版本落后提示 spec D6);接了 task hook 时
- * 提示跟会话 id 走 task hook,这里 stdout 仍为空。
+ * 提示跟会话 id 走 task hook。按登记补装 git 钩子片段补不上时,原因也由这里输出(spec D33⑥);
+ * 两段合成一条 additionalContext,都没有时 stdout 为空。
  */
 export async function sessionStartHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   // runHook 不提供写库后回调;buildEvent 被调用时记下 cwd 与 source,runHook 返回后再检查版本。
@@ -260,36 +262,43 @@ export async function sessionStartHook(agent: AgentId = DEFAULT_AGENT_ID): Promi
   });
   if (started) {
     const { cwd, source } = started;
-    writeSkillVersionNoticeWithoutTaskHook(agent, cwd, source);
-    repairGitHookSnippets(cwd);
+    const notices = [skillVersionNoticeWithoutTaskHook(agent, cwd, source), ...repairGitHookSnippets(cwd)];
+    const text = notices.filter((n): n is string => n !== null).join('\n\n');
+    if (text !== '') {
+      process.stdout.write(
+        JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: text } }) + '\n',
+      );
+    }
   }
 }
 
 /**
  * spec D33⑥:会话开始时按登记补回缺了的 git 钩子片段(husky 9 每次装依赖都重写 `.husky/_/`、新开的
- * worktree、被别的工具覆盖);不在 git 仓库、没有登记或任何异常都不输出,不影响会话。
+ * worktree、被别的工具覆盖)。补不上的(登记已由基础层删掉)返回给人看的原因,只说这一次;不在 git
+ * 仓库、没有登记或任何异常都返回 [],不影响会话。
  */
-function repairGitHookSnippets(cwd: string | undefined): void {
+function repairGitHookSnippets(cwd: string | undefined): string[] {
   try {
-    repairHookSnippets(cwd ?? process.cwd());
+    return repairHookSnippets(cwd ?? process.cwd())
+      .map((r) => hookNotice(r, path.basename(r.hookPath) === 'commit-msg' ? '版本分支提交拦截没补上' : '提交记录片段没补上'))
+      .filter((n): n is string => n !== null)
+      .map((n) => `[cgraphx] ${n}`);
   } catch {
     // 补装失败只等下次会话或 cgraphx install 再补
+    return [];
   }
 }
 
-/** 没接 task 会话开始 hook 时输出版本落后提示;settings 读不出、无需提示或任何异常都不输出。 */
-function writeSkillVersionNoticeWithoutTaskHook(agent: AgentId, cwd: string | undefined, source: string | undefined): void {
+/** 没接 task 会话开始 hook 时的版本落后提示;settings 读不出、无需提示或任何异常都 → null。 */
+function skillVersionNoticeWithoutTaskHook(agent: AgentId, cwd: string | undefined, source: string | undefined): string | null {
   try {
     const profile = requireAgentProfile(agent);
     const projectRoot = resolveProjectRoot(cwd ?? process.cwd());
-    if (hasTaskSessionStartHook(projectRoot, profile) !== false) return;
-    const notice = skillVersionNotice(projectRoot, profile, source);
-    if (notice === null) return;
-    process.stdout.write(
-      JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: notice } }) + '\n',
-    );
+    if (hasTaskSessionStartHook(projectRoot, profile) !== false) return null;
+    return skillVersionNotice(projectRoot, profile, source);
   } catch (err) {
     process.stderr.write(`[timeline] skill version notice failed: ${err instanceof Error ? err.message : String(err)}\n`);
+    return null;
   }
 }
 

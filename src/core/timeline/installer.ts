@@ -16,7 +16,7 @@ import { execSync } from 'node:child_process';
 import { agentSettingsPath, DEFAULT_AGENT_ID, hookCommand, requireAgentProfile, type AgentId } from '../agents';
 import { DatabaseConnection, getDatabasePath } from '../db';
 import { resolveDataDir } from '../directory';
-import { installHookSnippet, removeHookSnippet, resolveHooksDir, type HookSnippetResult } from '../git-hooks';
+import { hookRemoveNotice, installHookSnippet, removeHookSnippet, resolveHooksDir, type HookSnippetResult } from '../git-hooks';
 import {
   COMMIT_BRANCH_ENV,
   COMMIT_HOOK_ENV,
@@ -55,6 +55,8 @@ export interface UninstallReport {
   gitHookRemoved: boolean;
   /** 本次从 post-merge 钩子删掉了片段。 */
   mergeHookRemoved: boolean;
+  /** 片段是提交在被跟踪的钩子文件里的、没删时给人看的提示(spec D33④)。 */
+  gitHookNotices: string[];
   dataDropped: boolean;
 }
 
@@ -289,11 +291,16 @@ export function uninstallTimelineHooks(
   // git 钩子:keepGitHook(只卸指定 agent)时保留;post-commit 连同旧版不带标记的调用行一起删
   let gitHookRemoved = false;
   let mergeHookRemoved = false;
+  const gitHookNotices: string[] = [];
   if (!opts.keepGitHook && gitRoot) {
-    gitHookRemoved = removeHookSnippet(gitRoot, 'post-commit', GIT_HOOK_MARKER, {
-      legacyMatch: GIT_COMMIT_SUBCOMMAND,
-    }) !== null;
-    mergeHookRemoved = removeHookSnippet(gitRoot, 'post-merge', GIT_HOOK_MARKER) !== null;
+    const commit = removeHookSnippet(gitRoot, 'post-commit', GIT_HOOK_MARKER, { legacyMatch: GIT_COMMIT_SUBCOMMAND });
+    const merge = removeHookSnippet(gitRoot, 'post-merge', GIT_HOOK_MARKER);
+    gitHookRemoved = commit?.status === 'removed';
+    mergeHookRemoved = merge?.status === 'removed';
+    for (const r of [commit, merge]) {
+      const notice = r === null ? null : hookRemoveNotice(r, '提交记录片段');
+      if (notice !== null) gitHookNotices.push(notice);
+    }
   }
 
   // 可选:删 timeline 数据(在副本里已在开头拒绝)
@@ -322,6 +329,7 @@ export function uninstallTimelineHooks(
     removedHookEvents: removed,
     gitHookRemoved,
     mergeHookRemoved,
+    gitHookNotices,
     dataDropped,
   };
 }

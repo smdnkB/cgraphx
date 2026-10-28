@@ -13,15 +13,17 @@ export interface GuardResult {
    * - present:片段已是当前内容,没写盘
    * - updated:片段原来就在,这次换成当前内容
    * - repaired:片段原来不在,但装过的记号为 true(钩子文件被别的工具覆盖、换了 core.hooksPath 等),这次补装
-   * - unsupported:没写入,原因见 reason(spec D33)
+   * - unsupported:装的时候没写入,原因见 reason;卸的时候拦截那几行是提交在仓库里的,没删(spec D33)
    * - removed:删掉了片段
    * - absent:没装过,或不在 git 仓库,没有可删的
    */
   status: 'installed' | 'present' | 'updated' | 'repaired' | 'unsupported' | 'removed' | 'absent';
   /** unsupported 时:not_shell 不是 shell 脚本 / outside_repo 钩子目录在仓库外 / symlink 钩子文件是链接 / tracked 钩子文件被 git 跟踪 */
   reason?: HookSkipReason;
-  /** unsupported 时:要用户自己加的几行 */
+  /** reason 为 symlink、tracked 的安装:要用户自己加的几行 */
   lines?: readonly string[];
   /** reason 为 symlink 时:链接指向的文件,以及加进去的后果 */
   linkTarget?: HookLinkTarget;
+  /** unsupported 时:给人看的那句提示,和不带 --json 时打在 stderr 的相同 */
+  notice?: string;
 }

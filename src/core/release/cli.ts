@@ -14,7 +14,6 @@
 
 import type { Command } from 'commander';
 
-import { hookNotice } from '../git-hooks';
 import { exitCodeForError, installReleaseGuard, ReleaseError, removeReleaseGuard } from './index';
 import type { GuardResult } from './types';
 
@@ -36,15 +35,13 @@ function writeErr(msg: string): void {
   process.stderr.write(`[release] ${msg}\n`);
 }
 
-/** 不带 --json 时的结果输出:unsupported 只在 stderr 打没装上的原因和要加的几行,其余在 stdout 打一行结果。 */
+/** 不带 --json 时的结果输出:unsupported 只在 stderr 打提示(没装上的原因和要加的几行,或没删掉的原因),其余在 stdout 打一行结果。 */
 function printGuard(result: GuardResult): void {
   const hookPath = result.hookPath ?? '';
   switch (result.status) {
-    case 'unsupported': {
-      const notice = hookNotice({ ...result, hookPath }, '没装上提交拦截');
-      if (notice !== null) writeErr(notice);
+    case 'unsupported':
+      if (result.notice !== undefined) writeErr(result.notice);
       break;
-    }
     case 'installed':
       writeOut(`已装上版本分支提交拦截:${hookPath}`);
       break;

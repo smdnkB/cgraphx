@@ -31,7 +31,7 @@ function gitHookSummary(hooks: readonly HookSnippetResult[]): string {
   return hooks.every((h) => h.status === 'present') ? '(git hook 已存在)' : '';
 }
 
-/** git 钩子的安装提示(spec D33):没写入的说原因,被跟踪的钩子文件靠本机过滤规则藏起改动的说一句。 */
+/** git 钩子的安装提示(spec D33):没写入的说原因,链接、被跟踪的还给要加的几行。 */
 function gitHookNotices(hooks: readonly HookSnippetResult[]): string[] {
   return hooks.map((h) => hookNotice(h)).filter((n): n is string => n !== null);
 }
@@ -214,6 +214,7 @@ export async function uninstallAgentHooks(
       if (tlReport.gitHookRemoved) {
         clack.log.success(`${prefix}Developer Timeline:已移除 git post-commit hook`);
       }
+      for (const notice of tlReport.gitHookNotices) clack.log.warn(`${prefix}Developer Timeline:${notice}`);
     } catch (err) {
       clack.log.warn(`${prefix}timeline uninstall 失败:${errorMessage(err)}`);
     }

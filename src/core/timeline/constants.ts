@@ -101,7 +101,7 @@ export const COMMIT_BRANCH_ENV = 'CGRAPHX_COMMIT_BRANCH';
 export const COMMIT_HOOK_ENV = 'CGRAPHX_GIT_HOOK';
 
 /**
- * post-merge 片段在合并当下同步取得的 HEAD reflog 最新一行(`git reflog -1 --format=%gs HEAD`),
+ * post-merge 片段在合并当下同步取得的 HEAD reflog 最新一行(和提交号同一条 `git log -g -1` 取),
  * 记录进程据它判断快进(spec D32);后台进程启动时用户可能已经又提交了一笔,不能等那时再读。
  */
 export const COMMIT_REFLOG_ENV = 'CGRAPHX_COMMIT_REFLOG';
