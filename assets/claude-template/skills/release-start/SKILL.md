@@ -21,7 +21,7 @@ description: 开版本:发完一个版本,在主干上输入 /release-start,读�
    ```bash
    git branch --list main master --format='%(refname:short)'   # 有 main 用 main;只有 master 用 master
    git symbolic-ref --short HEAD                                # → main
-   git status --porcelain --untracked-files=no                  # → 无输出
+   git -c core.quotePath=false status --porcelain --untracked-files=no  # → 无输出
    ```
 
    当前分支不是主干 → 停下,提示先切回 main;第三条有输出 → 停下,列出这些文件,提示先提交或收好(没被跟踪的新文件不拦)。两种都不打 tag、不建分支。
@@ -65,10 +65,14 @@ description: 开版本:发完一个版本,在主干上输入 /release-start,读�
 
 6. **拉版本分支**:`git checkout -b dev/2.0.11`(从主干当前提交拉,切过去)。
 
-7. **装提交拦截**:每次开版本都跑,幂等。`cgraphx release guard --json`,按输出说:
+7. **装提交拦截**:每次开版本都跑,幂等;它同时记下「按版本走」的本地记号(拦截没装上也记),发完版在 main 上 /dev-merge 会据它先问。`cgraphx release guard --json`,按输出说:
    - `status` 是 `repaired` → 多说一句「提交拦截被钩子工具冲掉过,已补回」
-   - `status` 是 `unsupported` → 告诉用户「钩子文件 <hookPath> 不是 shell 脚本,没装上提交拦截」,其余步骤照常
-   - `hooksDirTracked` 是 true → 提醒钩子目录由 git 跟踪,改动会出现在 git status 里
+   - `localFilter` 是 true → 说一句「<hookPath> 跟着仓库提交,拦截这几行只在本机,不会进提交」
+   - `status` 是 `unsupported` → 按 `reason` 说没装上的原因,其余步骤照常:
+     - `outside_repo` →「core.hooksPath 指向仓库外的共用目录 <hookPath 所在目录>,没装提交拦截:装进去会影响这台机器上的所有仓库」
+     - `symlink` →「钩子文件 <hookPath> 是链接,没装提交拦截」,把 `lines` 给用户,说要装的话加到它指向的文件第一行之后
+     - `not_shell` →「钩子文件 <hookPath> 不是 shell 脚本,没装提交拦截」
+     - 都补一句:没有拦截时,版本分支上的直接提交发版审核时照样列进疑似夹带
    - 命令报错 → 把输出原样告诉用户;tag 和分支照常保留
 
 8. **回报**:「已打 v2.0.10,开始 2.0.11」,并说明 tag 和分支只建在本地,见范例。
@@ -80,7 +84,7 @@ description: 开版本:发完一个版本,在主干上输入 /release-start,读�
 ```text
 $ git symbolic-ref --short HEAD
 main
-$ git status --porcelain --untracked-files=no
+$ git -c core.quotePath=false status --porcelain --untracked-files=no
 $ git branch --list 'dev/*' --format='%(refname:short)' | grep -E '^dev/[0-9]+\.[0-9]+\.[0-9]+$'
 dev/2.0.10
 $ git merge-base --is-ancestor dev/2.0.10 main; echo $?
@@ -99,7 +103,7 @@ $ cgraphx release guard --json
   "ok": true,
   "hookPath": "/Users/smdnk/objects/ai/cgraphx/.git/hooks/commit-msg",
   "status": "installed",
-  "hooksDirTracked": false
+  "localFilter": false
 }
 ```
 
@@ -126,7 +130,7 @@ tag v2.0.10 和分支 dev/2.0.11 只建在本地,推不推远程由你定。dev/
 | 读不到版本号 | 问用户刚发的版本号 |
 | 下个版本分支已存在且已合进主干 | 停下「dev/2.0.11 已经发过了，版本号还是 2.0.10:发版前没改版本号?」 |
 | 仓库一个 tag 都没有 | 给出候选提交和它之后的提交数,问打在哪,确认后再打 |
-| 提交拦截没装上(`unsupported`) | 告诉用户「钩子文件 <hookPath> 不是 shell 脚本,没装上提交拦截」,其余照常 |
+| 提交拦截没装上(`unsupported`) | 按 `reason` 说原因(仓库外的共用目录 / 链接 / 不是 shell 脚本),其余照常 |
 
 ## 红线
 
