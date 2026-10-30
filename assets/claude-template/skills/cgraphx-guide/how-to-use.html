@@ -485,7 +485,7 @@ footer p { margin: 0; }
   <div id="tab-dev" class="tab-panel active">
     <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;">做需求的主线。</p>
     <ul class="phase-list">
-      <li><strong style="color:var(--color-primary);">必经</strong> <code>/dev-clarify</code> 澄清<em>(先探索项目现实,再以功能点为单位给行为链提案、人审稿式改稿,体验变体让人选);结束时在对话里给《需求功能方案》</em></li>
+      <li><strong style="color:var(--color-primary);">必经</strong> <code>/dev-clarify</code> 澄清<em>(先探索项目现实、定业务口径,再以功能点为单位给行为链提案、人审稿式改稿,体验变体让人选);结束时给《需求功能方案》,多功能点需求另写一份带 mermaid 流程图的讨论稿</em></li>
       <li><strong style="color:var(--color-primary);">核心</strong> <code>/dev-spec</code> 环节二:唯一契约<em>(第一节原样收录功能方案,主体写怎么实现:每个功能点出设计决策表——机制选型/数据模型/接口契约,🔒 难回头的等你确认)</em></li>
       <li><strong style="color:var(--color-primary);">大需求必走</strong> <code>/dev-plan</code><em>(小需求可跳过)</em>:拆执行计划,不重新选型(以 spec 设计决策表为准,缺口回 spec);index 加一个任务一个文件,先按任务类型拆,一个任务预估超过 15 个文件再按并行度拆;大需求给一句 <code>/dev-impl-subagent</code> 启动语</li>
       <li><strong style="color:var(--color-primary);">必经</strong> <code>/dev-impl</code>(小需求)或 <code>/dev-impl-subagent</code>(大需求):大需求在一个会话里按任务派子 agent,主会话按提交点提交,全部做完统一验证、修复,最后提示跑 <code>/code-review</code>;判据是需求规模(预估变更文件 ≥10,且跨 ≥3 个相互独立的模块),不是任务量</li>

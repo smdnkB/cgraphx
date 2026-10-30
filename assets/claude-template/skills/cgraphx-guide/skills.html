@@ -207,8 +207,8 @@ footer p { margin: 0 0 6px; }
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>接到需求、想法、bug、重构请求,在写任何文档和代码之前;也能拿现成方案让它拷问。</dd>
 <dt>怎么用</dt><dd>直接说需求,如「想给订单列表加个导出」;要拷问就说「拷问一下这个方案」。</dd>
-<dt>要你拍板</dt><dd>功能点清单增删;每张功能点卡片采纳或改具体值;体验变体二选一;整份《需求功能方案》你说「对了」才算完。</dd>
-<dt>产出</dt><dd>对话里的《需求功能方案》:流程图加功能点表(F1、F2…),不写文件;spec 会原样收录。</dd>
+<dt>要你拍板</dt><dd>功能点清单增删;业务口径(哪些数据算、按哪个时间、怎么算)改具体值;每张功能点卡片采纳或改具体值;体验变体二选一;整份《需求功能方案》你说「对了」才算完。</dd>
+<dt>产出</dt><dd>对话里的《需求功能方案》:口径表(K1、K2…)加功能点表(F1、F2…);多功能点需求另写一份带 mermaid 流程图的讨论稿 <code>&lt;前缀&gt;-功能方案-v&lt;N&gt;.md</code>;spec 会原样收录。</dd>
 <dt>前后</dt><dd>之前可以先用 knowledge-recall 对齐概念;之后 <code>/dev-spec</code>,要换会话用 <code>/dev-handoff</code>,没看懂用 <code>/visual-explain</code>。</dd>
 </dl></div>
 </details>
@@ -240,7 +240,7 @@ footer p { margin: 0 0 6px; }
 <dt>什么时候用</dt><dd>探索或澄清结束、上下文太长要开新会话;一个需求要分给几个会话做。</dd>
 <dt>怎么用</dt><dd>说「交接一下」「拆成两个会话」。</dd>
 <dt>要你拍板</dt><dd>哪几个功能点归哪个会话;每个会话的需求目录名;主任务和负责人。</dd>
-<dt>产出</dt><dd>每个会话一份 <code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-交接提示词.md</code>(澄清已确认时带功能方案原文),外加一句启动语,贴给新会话。</dd>
+<dt>产出</dt><dd>每个会话一份 <code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-交接提示词.md</code>(澄清已确认时带功能方案,有讨论稿就指向它),外加一句启动语,贴给新会话。</dd>
 <dt>前后</dt><dd>之前 <code>/dev-clarify</code>;新会话里接着 <code>/dev-spec</code>。</dd>
 </dl></div>
 </details>

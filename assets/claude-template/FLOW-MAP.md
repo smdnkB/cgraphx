@@ -10,14 +10,14 @@
                 knowledge-recall(先聊概念,实体条目优先)
                         │
                         ▼
-  dev-clarify(必经;探索现实 → 功能点提案-改稿,只锁业务)
-    结束时在对话里给《需求功能方案》(流程图+功能点表,dev-spec 原样收录为 spec 第一节);没看懂可以用 visual-explain 出图解
+  dev-clarify(必经;探索现实 → 口径对齐 → 功能点提案-改稿,只锁业务)
+    结束时在对话里给《需求功能方案》(口径表+功能点表;多功能点需求另写 mermaid 讨论稿;dev-spec 原样收录为 spec 第一节);没看懂可以用 visual-explain 出图解
                         │       ▲
                         │       ▼ 涉及 UI 时,可在 clarify 前后、spec 后来回迭代
                         │   dev-wireframe(低保真 HTML 线框 v1、v2…)
                         │
                         ├── 要开新会话 → dev-handoff
-                        │   (确认产出目录 + 交接文件;带功能方案原文,按功能点拆 1 到 N 个)
+                        │   (确认产出目录 + 交接文件;带功能方案或指向讨论稿,按功能点拆 1 到 N 个)
                         ▼
                     dev-spec ◄── 唯一契约(声明负责人;第一节收录功能方案,主体写怎么实现——设计决策表,🔒 难回头的人确认;引用已确认的线框版本)
                         │
@@ -48,11 +48,11 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 
 ## 设计流程
 
-- **链**:`/dev-clarify` → `/dev-spec` →(小需求可跳过 `/dev-plan`,大需求必走);涉及 UI → `/dev-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框);探索或澄清结束要开新会话 → `/dev-handoff`(交接文件带功能方案原文,拆多个会话按功能点分)
+- **链**:`/dev-clarify` → `/dev-spec` →(小需求可跳过 `/dev-plan`,大需求必走);涉及 UI → `/dev-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框);探索或澄清结束要开新会话 → `/dev-handoff`(交接文件带功能方案或指向讨论稿,拆多个会话按功能点分)
 - **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示)
-- **分工**:clarify 锁业务(探索现实 → 功能点提案-改稿,体验变体上浮);spec 是唯一契约:第一节原样收录功能方案,其余是**环节二细节方案设计**(设计决策表:机制选型/数据模型/接口契约,人挑错式评审;改变业务可观察行为 → 回跳 clarify);plan 只拆解编排,不重新选型,选型缺口回 spec 补决策
-- **人工确认点**:《需求功能方案》(对话里的流程图+功能点表,经对抗审核后人说对了才写 spec),没看懂可以出图解页;线框(涉及 UI 时),人看着界面确认布局和交互;spec 标 🔒 的难回头决策,人确认后才往下走;plan index「设计预览」的落点表,人确认后才进实现;没有 spec 和 plan 的小需求,dev-impl 动代码前确认难回头的改动。
-- **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`<前缀>-交接提示词.md`、图解页 `<前缀>-<主题>-v<N>.html`(visual-explain 出,讨论稿,不登记)、`plan/<前缀>-index.md` 加一个任务一个文件;spec / 交接文件头部声明 `> 负责人:`(也是任务负责人判定依据),会话按读写的产出目录自动关联任务;收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
+- **分工**:clarify 锁业务(探索现实 → 口径对齐 → 功能点提案-改稿,体验变体上浮);spec 是唯一契约:第一节原样收录功能方案,其余是**环节二细节方案设计**(设计决策表:机制选型/数据模型/接口契约,人挑错式评审;改变业务可观察行为 → 回跳 clarify);plan 只拆解编排,不重新选型,选型缺口回 spec 补决策
+- **人工确认点**:《需求功能方案》(对话里的口径表+功能点表,多功能点需求的流程图在讨论稿里;经对抗审核后人说对了才写 spec),没看懂可以出图解页;线框(涉及 UI 时),人看着界面确认布局和交互;spec 标 🔒 的难回头决策,人确认后才往下走;plan index「设计预览」的落点表,人确认后才进实现;没有 spec 和 plan 的小需求,dev-impl 动代码前确认难回头的改动。
+- **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`<前缀>-交接提示词.md`、功能方案讨论稿 `<前缀>-功能方案-v<N>.md`(clarify 出,多功能点需求才有,不登记)、图解页 `<前缀>-<主题>-v<N>.html`(visual-explain 出,讨论稿,不登记)、`plan/<前缀>-index.md` 加一个任务一个文件;spec / 交接文件头部声明 `> 负责人:`(也是任务负责人判定依据),会话按读写的产出目录自动关联任务;收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
 - **事后文档不在主链上**:`/doc-delivery` 发布后按需执行,写的是实际交付的行为。
 
 ## 开发流程
@@ -61,7 +61,7 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 - **前置**:spec 必有;大需求要有 plan。
 - **强制读**:规范由 plan 打「强制引用」标注(dev-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 dev-impl 只读标注,无 plan 时 dev-impl 自行识别;**缺失 → 中断,先 `/init-guides` 补齐**
 - **提交**:任务文件写提交点。大需求由 dev-impl-subagent 的主会话按提交点提交,不构建、不测试,全部做完统一验证;小需求由 dev-impl 按 plan 的提交点提交。`git-standards.md` 的提交规范结晶进 index「提交规范」节,precommit 门禁兜底;push 永远归用户。
-- **收尾**:沉淀提示(新增或变更的实体、坑、隐式约束,走 `/knowledge-write`);平台环节缺口提醒(按 `cgraphx features show`,只提醒不拦);需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录;commit 门禁由 precommit-check hook 先跑 `cgraphx features check --staged`(产物不合格必须改对),再指向 `docs/guides/git-standards.md` 自查。
+- **收尾**:沉淀提示(新增或变更的实体、新定的业务口径、坑、隐式约束,走 `/knowledge-write`);平台环节缺口提醒(按 `cgraphx features show`,只提醒不拦);需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录;commit 门禁由 precommit-check hook 先跑 `cgraphx features check --staged`(产物不合格必须改对),再指向 `docs/guides/git-standards.md` 自查。
 
 ## 接口测试流程
 
