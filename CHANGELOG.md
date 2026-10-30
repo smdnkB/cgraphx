@@ -171,6 +171,14 @@ the current branch as before.
   the terminal. `/release-start` installs it with `cgraphx release guard`
   each time it runs, restoring it if a hook manager overwrote it;
   `cgraphx install` does not install it, and `cgraphx uninstall` removes it.
+  An agent's `git commit` is checked once more before it reaches git, by the
+  `precommit-check` hook that `cgraphx install` sets up for Claude Code and
+  CodeBuddy: on a project following the version flow, a commit on
+  `dev/x.y.z` is denied unless it concludes a merge or its command carries
+  `chore(release):`. This check does not go through git's hooks directory, so
+  it holds where the commit-msg snippet cannot be installed, and
+  `--no-verify` does not get past it. It reads the message from the command,
+  so a `chore(release):` message has to be given with `-m`.
 - Requirement copies. `/dev-start <requirement>` clones the project next to
   itself as `<project>@<prefix>` with copy-on-write (`cp -cR` on APFS,
   `cp -R --reflink=always` on Linux: about a second for a 4 GB repository,

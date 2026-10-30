@@ -1,7 +1,7 @@
 # T-9: skill——新增四个
 
 > 产物: plan
-> 依据: spec@16dc4b2
+> 依据: spec@24bd37e
 
 - 目标:新增 release-start、release-review、dev-start、dev-merge 四个 skill,把 F1~F4、F7、F9、F10 的流程写成 agent 照做的指引
 - 对应 spec 编号:F1、F2、F3、F4、F7、F9、F10;K3、K5~K9;D2~D10、D13~D17、D20~D22、D35;全局约束(git 2.38 以上)

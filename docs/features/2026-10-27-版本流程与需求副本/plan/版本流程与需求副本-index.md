@@ -1,7 +1,7 @@
 # 实现计划: 版本流程与需求副本
 
 > 产物: plan
-> 依据: spec@16dc4b2
+> 依据: spec@24bd37e
 
 ## 设计预览
 
@@ -42,7 +42,7 @@
 |---|---|---|---|
 | T-1 程序:基础层——数据目录与钩子片段 | `plan/版本流程与需求副本-01-程序-基础层.md` | F8、D24、D33 | `src/core/directory.ts`、`src/core/git-hooks.ts`(新)、`src/core/db/index.ts`、`src/core/markdown/schema-bootstrap.ts`、`src/core/timeline/turn-state.ts`、`src/core/task/source.ts`、`src/core/dbquery/config.ts`、`src/core/dbquery/logging.ts`、`src/core/dbquery/init.ts` |
 | T-2 程序:replica 子系统 | `plan/版本流程与需求副本-02-程序-replica子系统.md` | F7、F9、D1、D18~D22、D26、D35;K1、K3、K9 | `src/core/replica/` 下 10 个新文件 |
-| T-3 程序:release 子系统 | `plan/版本流程与需求副本-03-程序-release子系统.md` | F2⑥、F10、D1、D5、D12 | `src/core/release/` 下 6 个新文件 |
+| T-3 程序:release 子系统 | `plan/版本流程与需求副本-03-程序-release子系统.md` | F2⑥、F10、D1、D5、D12 | `src/core/release/` 下 6 个新文件;`assets/claude-template/hooks/precommit-check/precommit-check.cjs` |
 | T-4 程序:timeline 记合并提交 | `plan/版本流程与需求副本-04-程序-timeline合并提交.md` | F8、D32、D33;全局约束(副本里拒绝清数据) | `src/core/timeline/installer.ts`、`hooks.ts`、`constants.ts`、`recorder.ts`、`cli.ts` |
 | T-5 程序:task 多根换算与副本会话归属 | `plan/版本流程与需求副本-05-程序-task归属.md` | F8、D25~D28 | `src/core/task/auto-binding.ts`、`artifacts.ts`、`feature-task.ts`、`report.ts`、`feature-link.ts`、`resolve.ts`、`index.ts` |
 | T-6 程序:sync 以主目录上报 | `plan/版本流程与需求副本-06-程序-sync上报.md` | F8、D25、D26、D28、D29 | `src/core/sync/runner.ts`、`payload.ts`、`artifacts.ts`、`paths.ts`、`git.ts`、`hooks.ts`、`lock.ts`、`cli.ts`、`constants.ts`、`references.ts` |
@@ -254,6 +254,8 @@
     if printf '%s' "$__cgx_rb" | grep -Eq '^dev/[0-9]+\.[0-9]+\.[0-9]+$' && ! git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && ! grep -v -e '^#' -e '^[[:space:]]*$' "$1" | head -n 1 | grep -q '^chore(release):'; then echo "[cgraphx] $__cgx_rb 是版本分支:需求改动到副本里做(/dev-start <需求>);整个版本的改动以 chore(release): 开头提交" >&2; exit 1; fi # cgraphx-release-guard
     ```
 
+  - agent 那一道(spec D12):模板 hook `assets/claude-template/hooks/precommit-check/precommit-check.cjs` 在「只拦 git commit」之后、「有暂存内容才拦」之前判断——`git config --bool --get cgraphx.releaseFlow` 为 `true`、`git symbolic-ref --short -q HEAD` 匹配与 `VERSION_BRANCH_PATTERN` 相同的正则、`git rev-parse -q --verify MERGE_HEAD` 失败、命令里没有 `chore(release):` → deny,理由逐字为 `【版本分支】<分支> 是版本分支:需求改动到副本里做(/dev-start <需求>);整个版本的改动以 chore(release): 开头提交,说明用 -m 写在命令里。` 换行 `这项不能跳过(带 CGRAPHX_PRECOMMIT_REVIEWED=1、--no-verify 也跳不过)。`;任何一条 git 命令失败都当不拦;脚本部署出去单独运行,只用 node 内置模块,不 import `src/`
+
 - **C-7 合并提交记录**(T-4)
   - post-merge 片段,marker 沿用 `# cgraphx-timeline-hook`,两行逐字:
 
@@ -309,7 +311,7 @@
   - 程序里逐字:
     - D31:stderr `[cgraphx] 副本关联的主项目不在 <主目录路径> 了`
     - 副本里拒绝清数据:`这是副本,数据在主目录 <主目录路径>;要清数据,到主目录执行 cgraphx timeline uninstall --purge(这次什么都没动)`,退出码非 0
-    - D12:见 C-6 的片段
+    - D12:见 C-6 的片段和 agent 那一道的理由
   - skill 里:给用户看的话照 spec 功能方案原文(各功能点行为链与边界里「」内的句子),名字和数字换成实际值;另外两句:
     - dev-start 的启动语:`在 <副本绝对路径> 开新会话，输入 /dev-clarify`(已经澄清过的换成 `/dev-spec`)
     - 开了副本的交接启动语:`在 <副本绝对路径> 开新会话，输入：先读 docs/features/<feature-id>/<文件前缀>-交接提示词.md 再继续。`
@@ -338,7 +340,7 @@
 | D9 副本里同步取主目录当前分支 | T-9(dev-merge) |
 | D10 合入带进知识文件先问再重建索引 | T-9(dev-merge) |
 | D11 实现前查版本分支 | T-10(dev-impl、dev-impl-subagent) |
-| D12 commit-msg 提交拦截 | T-3(C-6);T-8 卸载时删除 |
+| D12 提交拦截:commit-msg 片段 + agent 的 precommit-check | T-3(C-6);T-8 卸载时删除 |
 | D13 按合并说明归组,同步主干单列 | T-9(release-review,C-9) |
 | D14 越界改代码由 skill 读涉及范围 | T-9(release-review) |
 | D15 结论规则 | T-9(release-review,C-9) |
@@ -380,6 +382,8 @@
 第三轮复审后 spec 改到 spec@a8b762a,plan 随之同步:D33 ④ 被跟踪的钩子按暂存区那份区分团队提交的和本机残留、⑥ 登记记写进过的文件(按 git 判断归属,别的仓库的不碰)、补不上的在会话开始提示一次并删登记(C-2、C-6、C-7);D19 登记加 `movedFiles`、D29 据它定根(C-3、C-4、T-6);D38 需求的本机任务行收成一处规则并在全量刷新时对账(T-5);`locateFeatureRoot` 改收 roots、登记不再缓存(C-4);统一验证 9 补设计验收 26~30。
 
 第四轮复审后 spec 改到 spec@16dc4b2,plan 随之同步:D33 写明只保证高频场景(F8 细节方案末尾那段),链接、被跟踪的钩子安装时看工作区那份、不删,被跟踪的不在工作区里也不新建(C-2);D38 对账删目录任务之前先补上声明的那条任务,副本删了也补,目录没有负责人时不删(T-5);dev-merge 取主干时有 main 用 main、没有用 master(T-9);统一验证 9 补 ㉛、㉜。
+
+之后 spec 改到 spec@24bd37e,plan 随之同步:D12 加 agent 那一道——precommit-check 在 agent 的 `git commit` 交给 git 之前按同一规则拦,先看「按版本走」的记号,不经 git 的钩子目录(C-6、T-3);统一验证 9 补 ㉝(设计验收 31)。
 
 ## 适用规范
 
@@ -677,6 +681,12 @@
    printf '# 规格说明: 退款\n\n> 产物: spec\n> 负责人: t\n> 任务: T-123\n' > docs/features/2026-10-28-退款/退款-spec.md
    mkdir -p "$T/y@积分/docs/features/2026-10-28-积分" && printf '# 规格说明: 积分\n\n> 产物: spec\n> 任务: T-456\n' > "$T/y@积分/docs/features/2026-10-28-积分/积分-spec.md"
    echo "声明之后:$(tasks)"; for v in 2026-10-28-退款 2026-10-28-积分; do cgraphx task show $v --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);console.log(r.task.externalId??r.task.featureId, JSON.stringify(r.sessions.map(x=>x.binding.sessionId)))})"; done
+   # ㉝ agent 那一道:按版本走的 dev/1.0.1 上,precommit-check 拒绝普通提交(带 --no-verify 也拒绝),放行 chore(release): 和合并收尾;没按版本走不拦;不装 commit-msg 片段也拦
+   cd "$T" && git init -q z && cd z && git commit -q --allow-empty -m init && git checkout -q -b dev/1.0.1 && git config cgraphx.releaseFlow true
+   pc() { printf '{"tool_input":{"command":"%s"}}' "$1" | node "$REPO/assets/claude-template/hooks/precommit-check/precommit-check.cjs" | grep -c '版本分支'; }
+   echo "普通=$(pc 'git commit -m fix') 跳过=$(pc 'git commit --no-verify -m fix') 整版=$(pc 'git commit -m chore(release): 1.0.1')"
+   git rev-parse HEAD > .git/MERGE_HEAD && echo "合并收尾=$(pc 'git commit --no-edit')" && rm .git/MERGE_HEAD
+   git config --unset cgraphx.releaseFlow && echo "没按版本走=$(pc 'git commit -m fix') 钩子=$(ls .git/hooks | grep -c '^commit-msg$')"
    cd "$REPO" && rm -rf "$T"
    ```
 
@@ -698,8 +708,9 @@
    → ㉚ remove 输出 `"status": "removed"`;`主目录 拦截=3 提交记录=3 副本=0`;`嵌套=3 主=3`;`卸载后 嵌套=没了 主=没了`
    → ㉛ guard 输出 `"status": "present"`;`再装后=3`;`卸载后=0 status=[]`;删了之后 guard 输出 `"status": "unsupported"`、`"reason": "tracked"`;`删了之后=没建 status=[ D .husky/commit-msg]`
    → ㉜ `声明之后:A:T-123 A:T-456 F:2026-10-28-积分@-`;`T-123 ["r-退款"]`;`2026-10-28-积分 ["r-积分"]`
+   → ㉝ `普通=1 跳过=1 整版=0`;`合并收尾=0`;`没按版本走=0 钩子=0`
 
-spec「设计验收」各条的落点:1 → 统一验证 3;2 的 `rm -rf` 部分、7、8、9 → 统一验证 5;12 → 统一验证 8;13 → 统一验证 1、2;14~21、23~30 → 统一验证 9;22 → 统一验证 9 先验一遍,单元测试与 3、4、5、6、10、11(单元测试、并发写、计时)以及 2 的 `cgraphx uninstall` 部分 → 全部任务完成后由 `/unit-spec` → `/unit-code` 补。
+spec「设计验收」各条的落点:1 → 统一验证 3;2 的 `rm -rf` 部分、7、8、9 → 统一验证 5;12 → 统一验证 8;13 → 统一验证 1、2;14~21、23~31 → 统一验证 9(31 另有单元测试 `__tests__/cli/installer/precommit-check.test.ts`,统一验证 2 里跑);22 → 统一验证 9 先验一遍,单元测试与 3、4、5、6、10、11(单元测试、并发写、计时)以及 2 的 `cgraphx uninstall` 部分 → 全部任务完成后由 `/unit-spec` → `/unit-code` 补。
 
 ## 允许局部适配的范围
 

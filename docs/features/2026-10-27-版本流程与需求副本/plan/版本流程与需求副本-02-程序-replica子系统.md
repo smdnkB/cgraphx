@@ -1,7 +1,7 @@
 # T-2: 程序——replica 子系统
 
 > 产物: plan
-> 依据: spec@16dc4b2
+> 依据: spec@24bd37e
 
 - 目标:新增 replica 子系统:登记读写、主目录与副本的路径换算、开 / 列 / 删副本,以及 `cgraphx replica` 命令组
 - 对应 spec 编号:F7、F9、D1、D18、D19、D20、D21、D22、D26(换算函数)、D35;K1、K3、K9;spec「细节方案:F7」的登记文件示例、命令契约、K3 / K9 取法

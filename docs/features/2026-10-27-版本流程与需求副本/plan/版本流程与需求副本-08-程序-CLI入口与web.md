@@ -1,7 +1,7 @@
 # T-8: 程序——CLI 入口与 web
 
 > 产物: plan
-> 依据: spec@16dc4b2
+> 依据: spec@24bd37e
 
 - 目标:注册 `replica`、`release` 两组命令;副本的主目录不在时给提示;`cgraphx install` 在钩子没写入、钩子文件被跟踪(片段只在本机)时给提示;`cgraphx uninstall` 卸掉提交拦截、在副本里说清只删副本自己的数据;web 在副本里知识库用本地库,启动预检查主目录的数据
 - 对应 spec 编号:D1(注册命令)、D12(卸载时删拦截)、D24(web 的库)、D31、D33(安装时的提示);全局约束(副本里 uninstall 只删副本自己的)

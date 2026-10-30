@@ -226,6 +226,7 @@ flowchart TB
 |---|---|---|
 | replica 子系统(新) | `cgraphx replica create / list / remove`:开、列、删副本,写登记 | F7、F9;K1、K3、K9 |
 | release 子系统(新) | `cgraphx release guard`:装上 / 卸掉版本分支的提交拦截 | F2⑥、F10 |
+| precommit-check(模板 hooks) | agent 发出的 `git commit` 在版本分支上按 D12 先拦一道 | F2⑥ |
 | 钩子片段写入(基础层,新) | `src/core/git-hooks.ts`:按标记写入 / 删除钩子片段,钩子目录跟随 core.hooksPath;只写不被 git 跟踪的钩子文件(仓库外的共用目录、被跟踪的、链接、非 shell 都不写;仓库里提交了片段的算已装上),写进过哪些文件记在登记里,换了钩子目录、卸载时按登记清掉;会话开始时按登记补回缺了的片段,补不上的提示一次(D33) | F2⑥、F8 |
 | 数据目录解析(`src/core/directory.ts`) | 副本里经 `.cgraphx/shared` 找到主目录的数据目录 | F8 |
 | timeline | 记合并提交;钩子改用 git-hooks 写入,会话开始钩子按登记补回缺了的钩子片段,补不上的在会话开始提示一次(D33⑥) | F8 |
@@ -257,7 +258,7 @@ flowchart TB
 | D9 | 副本里同步 | 副本里输入 `/dev-merge`:主目录路径从 `.cgraphx/shared` 链接读出,取主目录当前所在的分支(`git -C <主目录> symbolic-ref --short HEAD`),`git fetch --no-tags <主目录> <分支>` 后 `git merge --no-ff FETCH_HEAD`;有冲突就地解决、提交 | 取登记时的起点分支——跨版本时同步不到新的版本分支(F2⑤) | F2 行为链与 ⑤ | dev-merge |
 | D10 | 合入带进知识文件 | 合入或同步的改动里有 `docs/knowledge/` 下的文件 → 合完问一句要不要在这个目录跑 `cgraphx docs index` | 自动跑——knowledge-write 规定没经确认不跑 docs index | knowledge-write 红线 3;F8「合入、同步之后才召回得到」 | dev-merge |
 | D11 | 实现前查版本分支 | dev-impl、dev-impl-subagent 开跑前看当前分支,匹配 K8(`^dev/[0-9]+\.[0-9]+\.[0-9]+$`)就停下,提示先 `/dev-start <需求>` | 只靠提交拦截——改完提交时才被拦,白改一轮 | F2⑥ | 两个 skill 的开跑前 |
-| D12 | 提交拦截 | commit-msg 钩子里一段纯 shell:当前分支匹配 K8、没有 MERGE_HEAD、提交说明第一行有内容的(跳过 `#` 开头的注释行和空行)不以 `chore(release):` 开头 → 退出 1,提示「dev/2.0.11 是版本分支:需求改动到副本里做(/dev-start <需求>);整个版本的改动以 chore(release): 开头提交」;不匹配 K8 的分支一行判断就放行 | pre-commit——这时还没有提交说明,认不出 chore(release):;片段里调 cgraphx——每次提交多起一个 node 进程,PATH 里没有 cgraphx 的图形客户端会被拦死;Claude Code 的 PreToolUse——只管 agent 发出的提交,终端和不支持 hooks 的 agent 拦不住 | 临时仓库实测:`git merge --no-ff` 会跑 commit-msg,此时有 MERGE_HEAD;冲突后用 `git commit` 收尾时也有 MERGE_HEAD;`--no-verify` 能绕过,F3 把绕过的列为疑似夹带;在编辑器里写说明时,钩子拿到的文件里注释还没去掉——用注释开头的提交模板时,第一行是注释,git 最后存的说明在注释下面(临时仓库实测) | release 子系统;`cgraphx uninstall` 一并删除 |
+| D12 | 提交拦截 | commit-msg 钩子里一段纯 shell:当前分支匹配 K8、没有 MERGE_HEAD、提交说明第一行有内容的(跳过 `#` 开头的注释行和空行)不以 `chore(release):` 开头 → 退出 1,提示「dev/2.0.11 是版本分支:需求改动到副本里做(/dev-start <需求>);整个版本的改动以 chore(release): 开头提交」;不匹配 K8 的分支一行判断就放行。agent 发出的 `git commit` 另在提交前钩子 precommit-check(PreToolUse,matcher `Bash`)里先拦一道,不经 git 的钩子目录:项目按版本走(D5 的 `cgraphx.releaseFlow` 为 true)、当前分支匹配 K8、没有 MERGE_HEAD、命令里没有 `chore(release):` → 拒绝,提示同上,带 `CGRAPHX_PRECOMMIT_REVIEWED=1`、`--no-verify` 也拒绝;说明写在 `-F` 文件或编辑器里时认不出 `chore(release):`,提示改用 `-m` 写在命令里 | pre-commit——这时还没有提交说明,认不出 chore(release):;片段里调 cgraphx——每次提交多起一个 node 进程,PATH 里没有 cgraphx 的图形客户端会被拦死;只用 Claude Code 的 PreToolUse——终端和不支持 hooks 的 agent 拦不住;只用 commit-msg——D33 不保证的场景里装不上(如 husky 5~8 团队提交了 `.husky/commit-msg`),agent 加 `--no-verify` 就跳过 | 临时仓库实测:`git merge --no-ff` 会跑 commit-msg,此时有 MERGE_HEAD;冲突后用 `git commit` 收尾时也有 MERGE_HEAD;`--no-verify` 能绕过,F3 把绕过的列为疑似夹带;在编辑器里写说明时,钩子拿到的文件里注释还没去掉——用注释开头的提交模板时,第一行是注释,git 最后存的说明在注释下面(临时仓库实测);precommit-check 已在 agent 的每条 `git commit` 前跑提交门禁和产物检查,`cgraphx install` 给 Claude Code、CodeBuddy 都装,所以要看「按版本走」的记号——没跑过 /release-start 的项目里已有的 dev/x.y.z 分支不拦(D36) | release 子系统;`cgraphx uninstall` 一并删除;模板 hooks 的 precommit-check |
 
 命令契约:
 
@@ -392,7 +393,7 @@ K3、K9 的取法:
 | D34 | /doc-report 按需求出报告 | 按需求出报告时,会话和产出取 `cgraphx task show <需求>`(路径已换算);按时间窗出报告时,副本里的绝对路径按 `cgraphx replica list` 换成项目内路径再写 | 改 timeline query / stats 的输出路径——没有副本的项目输出也会变 | F8「在主目录按需求查(任务绑定、/doc-report、平台上报)…文件显示成项目内路径」;doc-report 现在只读 timeline | doc-report |
 | D38 | 需求的本机任务行 | 「需求 → 本机任务行」只有一处规则:主 spec 头部声明了平台编号 → 接口任务(本机没有占位时补建),否则 → 目录任务;会话派生到需求时、全量刷新给在用副本的需求补行时都走它。全量刷新(task 命令、sync)时对账:登记过副本的需求(在用、已删都算),主 spec 头部现在声明了平台编号、读取侧认这个声明(目录有负责人)、它的目录任务还没有平台编号 → 按上面的规则补上声明的那条任务(副本删了也补),再删掉这条目录任务;按 feature-id 查这类需求的任务时先看头部声明。没开过副本的需求不对账、查法不变(全局约束) | 副本会话等需求目录有了 spec 才建任务行——spec 写出之前 `task show <需求>` 查不到副本里的会话和提交(D28);只改查找顺序——`task list`、web 任务页留着一条空任务;已有平台编号的也删——平台上已建的任务对不上 | 目录任务不能手动绑定,`task_sessions` 只引用 `task_items`;自动绑定按 feature-id 存在 `task_auto_sessions`,读取时按头部解析;临时仓库实测:副本会话第一轮 Stop 就建出目录任务,spec 声明 T-123 后 `task show <需求>` 落到这条空任务 | task 的派生、全量刷新、按 feature-id 查找;`task_feature_tasks` 会删行(只删没有平台编号的) |
 
-钩子片段(D33)只保证高频场景:没设 core.hooksPath(`.git/hooks`)、husky 5~8(`.husky`,团队可能跟踪着 `.husky/commit-msg`)、husky 9(`.husky/_`)、副本(各用自己的 `.git`)、从 2.0.10 升级。下面这些不保证,出了问题记作已知限制,不再为它们加机制:同一个仓库的多个 git worktree(含 Claude Code 在 `.claude/worktrees/` 下开的)之间的登记、迁移和 exclude;钩子目录在子模块里;钩子文件是链接,或 `.git/hooks` 整个是链接;钩子文件不是 UTF-8 编码,或提交时末尾没有换行;钩子文件写不进(权限);用 `chmod -x` 停用的钩子;只差大小写的 cwd;装上之后钩子才变得装不上(队友提交了同名钩子、钩子目录换到仓库外)——会话开始的提示只保证给出一次,旧位置留下的片段可能要手动删。
+钩子片段(D33)只保证高频场景:没设 core.hooksPath(`.git/hooks`)、husky 5~8(`.husky`,团队可能跟踪着 `.husky/commit-msg`)、husky 9(`.husky/_`)、副本(各用自己的 `.git`)、从 2.0.10 升级。下面这些不保证,出了问题记作已知限制,不再为它们加机制:同一个仓库的多个 git worktree(含 Claude Code 在 `.claude/worktrees/` 下开的)之间的登记、迁移和 exclude;钩子目录在子模块里;钩子文件是链接,或 `.git/hooks` 整个是链接;钩子文件不是 UTF-8 编码,或提交时末尾没有换行;钩子文件写不进(权限);用 `chmod -x` 停用的钩子;只差大小写的 cwd;装上之后钩子才变得装不上(队友提交了同名钩子、钩子目录换到仓库外)——会话开始的提示只保证给出一次,旧位置留下的片段可能要手动删。提交拦截在这些场景里装不上时,agent 发出的提交仍由 D12 的提交前钩子拦下。
 
 ### 细节方案:F9 副本清理
 
@@ -452,6 +453,7 @@ F9 列副本用 `cgraphx replica list --json` 的 K3 结果,分四种说:已合�
 | 28 | D38 | 副本会话在 spec 写出之前建出目录任务;spec 声明 `> 任务: T-123` 后,下一次全量刷新删掉这条目录任务,`task show <需求>` 落到 T-123;副本删掉以后才声明的同样补上 T-123,会话和提交落到它;目录任务已有平台编号、spec 没有负责人时不删 | 临时仓库 |
 | 29 | D29、D19 | 主目录会话写好 spec,/dev-start 移进副本,副本里提交,/dev-merge 合入主目录并推送:这个会话的产出始终是 create,带副本里那笔提交;副本删掉之后也不变 | 临时仓库 |
 | 30 | D33⑥ | 副本里 `cgraphx release guard --remove`、`cgraphx uninstall` 只删副本的片段,主目录的照旧;worktree 建在主工作区的 `.claude/worktrees/` 下时,在主目录装不迁走它的片段,在主目录卸载两边都删 | 临时仓库 |
+| 31 | D12 | agent 那一道:按版本走的项目在 dev/2.0.11 上,agent 发出的普通 `git commit` 被 precommit-check 拒绝,带 `--no-verify`、`CGRAPHX_PRECOMMIT_REVIEWED=1` 也拒绝,不用装 commit-msg 片段;命令里带 `chore(release):`、有 MERGE_HEAD 时放行;没按版本走、feat/ 分支、dev/zhangsan、detached HEAD 不拦 | 单元测试(临时仓库里跑钩子脚本) |
 
 ## 待确认项
 
