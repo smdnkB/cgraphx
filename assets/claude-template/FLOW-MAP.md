@@ -63,6 +63,16 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 - **提交**:任务文件写提交点。大需求由 dev-impl-subagent 的主会话按提交点提交,不构建、不测试,全部做完统一验证;小需求由 dev-impl 按 plan 的提交点提交。`git-standards.md` 的提交规范结晶进 index「提交规范」节,precommit 门禁兜底;push 永远归用户。
 - **收尾**:沉淀提示(新增或变更的实体、新定的业务口径、坑、隐式约束,走 `/knowledge-write`);平台环节缺口提醒(按 `cgraphx features show`,只提醒不拦);需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录;commit 门禁由 precommit-check hook 先跑 `cgraphx features check --staged`(产物不合格必须改对),再指向 `docs/guides/git-standards.md` 自查。
 
+## 版本流程(可选)
+
+- **链**:`/release-start`(主干上打 tag `v<版本号>`、拉版本分支 `dev/<下个版本号>`、装提交拦截)→ 每个需求 `/dev-start <需求>`(开副本 `<主目录名>@<文件前缀>`)→ 副本里照常 `/dev-clarify` 到 `/code-review` → 副本里 `/dev-merge`(同步版本分支,冲突就地解决)→ 主目录 `/dev-merge <需求>`(合入版本分支,说明「合入需求：<标题>」)→ 发版那天以 `chore(release): 版本号 <旧>→<新>` 改好版本号 → `/release-review`(出审核报告并提交)→ 说「发」合入主干、清理已合入的副本 → 照现有流程发布 → `/release-start` 开下一个版本
+- **副本单独用**:没开版本时 `/dev-start` 从主目录当前分支拉,`/dev-merge` 合回这个分支,合完问要不要删副本
+- **前置**:git 2.38 以上;副本只支持 macOS、Linux
+- **数据**:副本里的会话、提交、任务归属记进主目录;知识库索引和「我的需求」索引各目录各建各的(副本里新写的知识,合入、同步之后别处才召回得到)
+- **产物**:`docs/releases/v<版本号>-发版审核.md`(不登记)
+- **退出**:发完版不再跑 `/release-start`;之后在 main 上 `/dev-merge` 停下问时,回答「不再按版本走」(卸掉提交拦截,以后不再问)
+- **不用就照旧**:不跑 `/release-start`、`/dev-start` 的项目在当前分支上开发,不装提交拦截;开了版本后,版本分支上不直接做需求——`/dev-impl`、`/dev-impl-subagent` 开跑前停下提示先 `/dev-start`,直接提交会被拦下,只放行合并提交和以 `chore(release):` 开头的整版改动(改版本号、主目录里写的知识库和 DDL 知识、发版审核报告)
+
 ## 接口测试流程
 
 - **链**:`/api-case`(生成 .bru + 测试规格)→ `/api-run`(跑测试 + 核实写接口 DB 副作用 + 出报告;**写接口必查 DB 验数据,HTTP 200 ≠ 通过**)

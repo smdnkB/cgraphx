@@ -2,7 +2,7 @@
 
 本地优先的 AI agent 研发系统 · skill 流程 + 知识库 / 数据库 / 时间线
 
-最后更新:2026-07-30
+最后更新:2026-10-27
 
 每个 skill 怎么用,见同目录的 [skill 一览](skills.html):一个 skill 一行,默认折叠,可搜索。
 
@@ -110,6 +110,8 @@ knowledge-recall(自动召回)
 
 日常默认两步:**澄清 + 实现**。大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完;复杂需求按需补规格和测试;哪里没看懂,说「画个图讲讲」出一页图解。timeline 自动记录开发事件,你不需要主动跑命令。
 
+**版本发布 · 可选**:`/release-start` 开版本 → 每个需求 `/dev-start` 开副本 → `/dev-merge` 合入 → `/release-review` 审核并合入主干;副本单独也能用。不用就照旧在当前分支上开发。
+
 ---
 
 ## 各流程详解
@@ -127,6 +129,19 @@ knowledge-recall(自动召回)
 > 日常默认 2 步:澄清 + 实现。spec 是唯一契约——「没有任何业务义务存在于 spec 之外」,变更时只改 spec 一处,下游重新派生。
 
 > **交付收尾**:实现收尾会提示沉淀知识(`/knowledge-write`)和平台环节缺口;需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录。
+
+---
+
+### 版本流程(可选)
+
+按版本发版、每个需求在自己的副本里做时用;不用就照旧在当前分支上开发。
+
+- `/release-start` 开版本:在主干上打上个版本的 tag `v<版本号>`、拉出版本分支 `dev/<下个版本号>`、装上提交拦截——发完一个版本、要开发下一个时跑
+- `/dev-start` 开副本:在主目录旁边写时复制出 `<主目录名>@<文件前缀>`,拉好需求分支、建好需求目录,给出到副本开新会话的启动语——开始做一个需求时跑,开了版本时每个需求都要
+- `/dev-merge` 合入:副本里跑,先同步主目录当前分支、就地解决冲突;主目录里跑 `/dev-merge <需求>`,预演没冲突就以「合入需求：<标题>」合入当前分支——需求做完、`/code-review` 过了之后
+- `/release-review` 发版审核:出 `docs/releases/v<版本号>-发版审核.md` 并提交,你说「发」再合入主干、列出可以清理的副本——发版那天改好版本号之后
+
+> 版本分支上直接提交会被拦下,只放行合并提交和以 `chore(release):` 开头的整版改动;副本里的会话、提交、任务归属记进主目录,知识库索引和「我的需求」索引各目录各建各的。副本单独也能用:没开版本时 `/dev-start` 从主目录当前分支拉,`/dev-merge` 合回这个分支,合完问要不要删副本。需要 git 2.38 以上;副本只支持 macOS、Linux。
 
 ---
 
@@ -243,6 +258,9 @@ docs/
 ├── security/   安全审计报告(/audit-login-security,默认不落盘,要归档才写)
 │   └── <日期>-登录安全审计.md
 │
+├── releases/   发版审核报告(/release-review,开了版本才有)
+│   └── v<版本号>-发版审核.md
+│
 └── guides/   项目规范(/init-guides 生成)
     ├── coding-standards.md
     ├── interface-standards.md
@@ -251,7 +269,7 @@ docs/
     └── git-standards.md              commit 门禁指向此文件
 ```
 
-> **两个核心目录**——`docs/features/` 是单次需求工作目录(必须有 spec),`docs/knowledge/` 是跨需求共享的业务知识库。bruno/、schema-knowledge/、security/、guides/ 按需出现。
+> **两个核心目录**——`docs/features/` 是单次需求工作目录(必须有 spec),`docs/knowledge/` 是跨需求共享的业务知识库。bruno/、schema-knowledge/、security/、releases/、guides/ 按需出现。
 
 ---
 

@@ -109,6 +109,8 @@ cgraphx timeline show <id>
 - 月报:本月 1 日 00:00 到现在;上月用上月 1 日到本月 1 日
 - 最近 N 天:用 `--since=Nd`
 
+按需求出报告(阶段总结里的某个需求)时,会话和产出取 `cgraphx task show <需求> --json`,其中的路径已换成项目内路径。按时间窗出报告时,事件里落在副本目录下的绝对路径,按 `cgraphx replica list --all --json` 列出的副本路径(含已删除的副本)换成项目内路径再写进报告:`/Users/zhangsan/work/shop@订单导出/src/order/export.ts` 写成 `src/order/export.ts`。
+
 ### 3. 生成报告
 
 默认先给高层结论,再给证据。不要先贴原始表格。

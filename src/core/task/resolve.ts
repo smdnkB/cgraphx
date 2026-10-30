@@ -12,9 +12,15 @@
  */
 
 import type { SqliteDatabase } from '../db';
+import { listProjectRoots } from '../replica';
 import { resolveSessionId } from './binding';
 import { TaskArgError, TaskSourceUnavailableError } from './errors';
-import { featureTaskBindError, featureTaskName, isEligibleFeatureDir } from './feature-task';
+import {
+  featureTaskBindError,
+  featureTaskName,
+  isEligibleFeatureDir,
+  resolveFeatureTargetReadOnly,
+} from './feature-task';
 import { openTaskDb } from './schema-bootstrap';
 import { fetchRemoteTasks, loadTaskSourceConfig } from './source';
 import { TaskStore } from './store';
@@ -80,13 +86,21 @@ export function findTaskByValue(projectRoot: string, value: string): TaskItem | 
     if (!tableExists(db, 'task_feature_tasks')) return null;
     const v = value.trim();
     if (!v) return null;
+    const roots = listProjectRoots(projectRoot);
+    // 登记过副本的需求先看头部声明(spec D38):声明平台编号之前副本会话已建出目录任务,全量刷新对账删掉
+    // 它之前,按 feature-id 查也落到声明的那个任务。没开过副本的需求查法不变
+    if (roots.some(({ replica }) => replica?.featureId === v)) {
+      const declared = resolveFeatureTargetReadOnly(roots, store, v);
+      if (declared !== null) return declared;
+    }
     // 目录任务:先按 feature-id 精确匹配,再按去掉日期段的任务名称精确匹配。
     const byFeatureId = store.findFeatureTaskByFeatureId(v);
     if (byFeatureId !== null) return byFeatureId;
-    return (
-      store.listFeatureTasks().find((task) => task.featureId !== null && featureTaskName(task.featureId) === v) ??
-      null
-    );
+    const byName = store.listFeatureTasks().find((task) => task.featureId !== null && featureTaskName(task.featureId) === v);
+    if (byName !== undefined) return byName;
+    // 主 spec 头部声明了平台编号的需求目录没有目录任务:按 feature-id 查时落到它声明的那个任务(spec D28;
+    // 不是单段目录名的由 resolveFeatureTargetReadOnly 挡掉)
+    return resolveFeatureTargetReadOnly(roots, store, v);
   } finally {
     conn.close();
   }
@@ -143,7 +157,7 @@ export async function resolveTaskForUse(
     // 序 2.5:目录任务(platform_task_id / feature-id / 名称)不能手动绑定。
     // 头部声明平台编号的目录没有目录任务行,按目录资格再拦一次,避免落到手动任务新建。
     const featureTask = findFeatureTaskForUse(store, v);
-    if (featureTask !== null || isEligibleFeatureDir(projectRoot, v)) throw featureTaskBindError(v);
+    if (featureTask !== null || isEligibleFeatureDir(listProjectRoots(projectRoot), v)) throw featureTaskBindError(v);
 
     // 序 3:已配置接口 → 拉取一次并 upsert 后再找
     if (config) {

@@ -6,14 +6,25 @@
  * `refreshAutoBindings` 把结果落到 task_auto_sessions / task_feature_tasks:
  * 存量会话首轮全量重算并标记被取代的旧绑定,之后按会话最大事件 id 增量刷新。
  *
- * 只经 timeline / features / agents 门面取数,不依赖 sync。
+ * 主目录与副本(版本流程与需求副本 spec D25~D27):一律以主目录为准;路径按「主目录 + 全部
+ * 登记过的副本」换算;开在副本里的会话归副本登记的需求,不按读写的文件派生。派生只看
+ * roots 和事件本身,不看调用方的项目根(sync 的上报进程也会全量刷新)。
+ *
+ * 只经 timeline / features / agents / replica 门面取数,不依赖 sync。
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { DEFAULT_AGENT_ID, requireAgentProfile } from '../agents';
-import { readFeatureTask } from '../features';
+import {
+  listProjectRoots,
+  matchProjectRoot,
+  replicaOfCwd,
+  resolveMainRoot,
+  type ProjectRoot,
+  type ReplicaEntry,
+} from '../replica';
 import {
   extractCommandPathCandidates,
   isKillSwitchOn,
@@ -22,7 +33,7 @@ import {
   type TimelineEvent,
 } from '../timeline';
 import { AUTO_META_KEYS } from './constants';
-import { featureDatePrefix, isEligibleFeatureDir } from './feature-task';
+import { dropStaleFeatureTask, ensureFeatureTaskRow, featureDatePrefix, isEligibleFeatureDir } from './feature-task';
 import { openTaskDb } from './schema-bootstrap';
 import { TaskStore } from './store';
 import type { AutoSession, AutoStrength, TaskBinding, TaskSource } from './types';
@@ -32,9 +43,6 @@ const HISTORY_PASS_META_KEY = AUTO_META_KEYS[0]!;
 
 /** 项目相对路径中的产出目录(要求目录下至少还有一段,即指向文件)。 */
 const FEATURE_DIR_PATTERN = /^docs\/features\/([^/]+)\/.+/;
-
-/** 平台任务编号(spec §4.1);匹配时不建目录任务。 */
-const PLATFORM_TASK_PATTERN = /^T-\d+$/;
 
 /** 一次派生结果。 */
 export interface AutoDerivation {
@@ -49,7 +57,8 @@ export interface DeriveSessionAutoBindingInput {
   events: TimelineEvent[];
   /** 只看 ts < cutoffTs 的事件;null = 不截止。 */
   cutoffTs: string | null;
-  projectRoot: string;
+  /** 主目录 + 全部登记过的副本(listProjectRoots):路径换算与「会话开在哪个副本」都按它判断。 */
+  roots: readonly ProjectRoot[];
   isEligible: (featureId: string) => boolean;
 }
 
@@ -95,14 +104,11 @@ function isSuccessfulWrite(summary: string | null): boolean {
 }
 
 /**
- * 绝对 / 相对路径 → 项目相对 POSIX 路径;项目外返回 null。
+ * 绝对 / 相对路径 → 所在根(主目录或副本)下的项目相对 POSIX 路径;哪个根里都不在返回 null。
  * candidate 相对 base 解析(相对路径基于事件 cwd)。
  */
-function toProjectRelative(projectRoot: string, base: string, candidate: string): string | null {
-  const abs = path.resolve(base, candidate);
-  const rel = path.relative(path.resolve(projectRoot), abs);
-  if (rel === '' || path.isAbsolute(rel)) return null;
-  return rel.split(path.sep).join('/');
+function toProjectRelative(roots: readonly ProjectRoot[], base: string, candidate: string): string | null {
+  return matchProjectRoot(roots, path.resolve(base, candidate))?.rel ?? null;
 }
 
 /**
@@ -110,13 +116,13 @@ function toProjectRelative(projectRoot: string, base: string, candidate: string)
  * requireExisting 时还要求解析出的文件真实存在(Bash 读口径)。
  */
 function featureFromPath(
-  projectRoot: string,
+  roots: readonly ProjectRoot[],
   base: string,
   candidate: string,
   isEligible: (featureId: string) => boolean,
   requireExisting: boolean,
 ): string | null {
-  const rel = toProjectRelative(projectRoot, base, candidate);
+  const rel = toProjectRelative(roots, base, candidate);
   if (rel === null) return null;
   const featureId = FEATURE_DIR_PATTERN.exec(rel)?.[1];
   if (featureId === undefined || !isEligible(featureId)) return null;
@@ -133,7 +139,7 @@ function featureFromPath(
 /** 写事件命中的产出目录;失败调用不算。 */
 function writeFeatureId(
   e: TimelineEvent,
-  projectRoot: string,
+  roots: readonly ProjectRoot[],
   isEligible: (featureId: string) => boolean,
 ): string | null {
   if (!isSuccessfulWrite(e.tool_result_summary)) return null;
@@ -147,18 +153,18 @@ function writeFeatureId(
         ? file
         : null;
   if (candidate === null) return null;
-  return featureFromPath(projectRoot, e.cwd, candidate, isEligible, false);
+  return featureFromPath(roots, e.cwd, candidate, isEligible, false);
 }
 
 /** Read 事件命中的产出目录。 */
 function readFeatureId(
   e: TimelineEvent,
-  projectRoot: string,
+  roots: readonly ProjectRoot[],
   isEligible: (featureId: string) => boolean,
 ): string | null {
   const candidate = argString(e, 'file_path');
   if (candidate === null) return null;
-  return featureFromPath(projectRoot, e.cwd, candidate, isEligible, false);
+  return featureFromPath(roots, e.cwd, candidate, isEligible, false);
 }
 
 /**
@@ -167,14 +173,14 @@ function readFeatureId(
  */
 function bashFeatureId(
   e: TimelineEvent,
-  projectRoot: string,
+  roots: readonly ProjectRoot[],
   isEligible: (featureId: string) => boolean,
 ): string | null {
   const command = argString(e, 'command');
   if (command === null) return null;
   for (const { bases, token } of extractCommandPathCandidates(command, e.cwd)) {
     for (const base of bases) {
-      const featureId = featureFromPath(projectRoot, base, token, isEligible, true);
+      const featureId = featureFromPath(roots, base, token, isEligible, true);
       if (featureId !== null) return featureId;
     }
   }
@@ -184,22 +190,22 @@ function bashFeatureId(
 /** 单条事件对状态的贡献;不是读 / 写合格目录的事件返回 null。 */
 function classifyEvent(
   e: TimelineEvent,
-  projectRoot: string,
+  roots: readonly ProjectRoot[],
   isEligible: (featureId: string) => boolean,
 ): { featureId: string; strength: AutoStrength } | null {
   if (e.event_type !== 'post_tool_use' || e.tool_name === null) return null;
   const tool = e.tool_name;
 
   if (writeToolsFor(e.agent).has(tool)) {
-    const featureId = writeFeatureId(e, projectRoot, isEligible);
+    const featureId = writeFeatureId(e, roots, isEligible);
     return featureId === null ? null : { featureId, strength: 'write' };
   }
   if (tool === 'Read') {
-    const featureId = readFeatureId(e, projectRoot, isEligible);
+    const featureId = readFeatureId(e, roots, isEligible);
     return featureId === null ? null : { featureId, strength: 'read' };
   }
   if (tool === 'Bash') {
-    const featureId = bashFeatureId(e, projectRoot, isEligible);
+    const featureId = bashFeatureId(e, roots, isEligible);
     return featureId === null ? null : { featureId, strength: 'read' };
   }
   return null;
@@ -214,16 +220,40 @@ function isLaterFeature(featureId: string, current: string): boolean {
   return next > prev;
 }
 
+/** 会话开在哪个副本:看本会话 id 最小的一条事件的 cwd;开在主目录里 → null。 */
+function sessionReplica(events: readonly TimelineEvent[], roots: readonly ProjectRoot[]): ReplicaEntry | null {
+  let first: TimelineEvent | undefined;
+  for (const e of events) {
+    if (first === undefined || e.id < first.id) first = e;
+  }
+  return first === undefined ? null : replicaOfCwd(roots, first.cwd);
+}
+
 /**
- * 按 R1~R7 派生单个会话的自动绑定(纯函数)。
+ * 派生单个会话的自动绑定(纯函数)。
  *
- * 只看 cutoff 之前的 post_tool_use 事件;写成功 → 确定绑定,D 取最后一次
+ * 会话开在副本里(K2):归副本登记的需求,确定绑定,不按读写的文件派生,也不要求需求目录合格;
+ * cutoff 不晚于会话最早一条事件时(显式绑定在先)没有结果。
+ * 开在主目录里:按 R1~R7——只看 cutoff 之前的 post_tool_use 事件;写成功 → 确定绑定,D 取最后一次
  * 未确定的写;读 → 暂定,只有日期段更新的目录能整段改正它。
  * 有结果时 boundAt = 会话最早一条事件的 ts(任意类型,不受 cutoff 影响)。
  */
 export function deriveSessionAutoBinding(
   input: DeriveSessionAutoBindingInput,
 ): AutoDerivation | null {
+  const first = input.events[0];
+  if (first === undefined) return null;
+  let boundAt = first.ts;
+  for (const e of input.events) {
+    if (e.ts < boundAt) boundAt = e.ts;
+  }
+
+  const replica = sessionReplica(input.events, input.roots);
+  if (replica !== null) {
+    if (input.cutoffTs !== null && !(boundAt < input.cutoffTs)) return null;
+    return { featureId: replica.featureId, strength: 'write', boundAt };
+  }
+
   let state: { featureId: string; strength: AutoStrength } | null = null;
 
   for (const e of input.events) {
@@ -232,7 +262,7 @@ export function deriveSessionAutoBinding(
     // R5:确定绑定后任何事件都不再改变归属。
     if (state?.strength === 'write') break;
 
-    const hit = classifyEvent(e, input.projectRoot, input.isEligible);
+    const hit = classifyEvent(e, input.roots, input.isEligible);
     if (hit === null) continue;
 
     if (state === null) {
@@ -246,12 +276,7 @@ export function deriveSessionAutoBinding(
     }
   }
 
-  const first = input.events[0];
-  if (state === null || first === undefined) return null;
-  let boundAt = first.ts;
-  for (const e of input.events) {
-    if (e.ts < boundAt) boundAt = e.ts;
-  }
+  if (state === null) return null;
   return { featureId: state.featureId, strength: state.strength, boundAt };
 }
 
@@ -308,6 +333,7 @@ function earlier(a: string | null, b: string | null): string | null {
  * 首轮(history_pass_done 未设置)全量重算:先对「以接口任务手动绑定为 cutoff 仍能派生
  * 出结果」的会话,把旧 feature_dir 行与指向本地手动任务的 cli 行标记为被取代,
  * 再按正式 cutoff 派生。之后只重算最大事件 id 变了的会话。
+ * 在副本里调用与在主目录调用结果相同(一律换成主目录)。
  *
  * CGRAPHX_NO_TIMELINE 开启时不读不写;单会话失败写 stderr 并跳过,不中断其它会话。
  */
@@ -317,7 +343,7 @@ export async function refreshAutoBindings(
 ): Promise<RefreshAutoBindingsResult> {
   if (isKillSwitchOn()) return { recomputed: 0, historyPass: false };
 
-  const root = path.resolve(projectRoot);
+  const root = resolveMainRoot(projectRoot);
   const maxIds = await listSessionEventMaxIds(root);
   const conn = openTaskDb(root);
   try {
@@ -350,11 +376,13 @@ export async function refreshAutoBindings(
       return taskSources.get(taskId) ?? null;
     };
 
+    // 主目录 + 全部登记过的副本(含已删除):取一次,每个会话的派生、合格判断共用
+    const roots = listProjectRoots(root);
     const eligibleCache = new Map<string, boolean>();
     const isEligible = (featureId: string): boolean => {
       const cached = eligibleCache.get(featureId);
       if (cached !== undefined) return cached;
-      const value = isEligibleFeatureDir(root, featureId);
+      const value = isEligibleFeatureDir(roots, featureId);
       eligibleCache.set(featureId, value);
       return value;
     };
@@ -377,7 +405,7 @@ export async function refreshAutoBindings(
           const preliminary = deriveSessionAutoBinding({
             events,
             cutoffTs: apiCutoff,
-            projectRoot: root,
+            roots,
             isEligible,
           });
           if (preliminary !== null) {
@@ -396,20 +424,12 @@ export async function refreshAutoBindings(
           earliestBoundAt(sessionBindings, retained),
           existing?.stoppedAt ?? null,
         );
-        const auto = deriveSessionAutoBinding({ events, cutoffTs, projectRoot: root, isEligible });
+        const auto = deriveSessionAutoBinding({ events, cutoffTs, roots, isEligible });
 
         // 取代标记、目录任务与派生结果同事务落库;失败时整会话回滚并跳过。
         store.transaction(() => {
           for (const b of obsolete) store.supersedeBinding(b.id, now);
-          if (auto !== null) {
-            const declared = readFeatureTask(root, auto.featureId);
-            if (declared !== null && PLATFORM_TASK_PATTERN.test(declared)) {
-              // 头部声明平台编号:本机没有占位时补建,否则读取 / 上报解析不到任务。
-              store.ensureApiPlaceholder(declared, now);
-            } else {
-              store.ensureFeatureTask(auto.featureId, now);
-            }
-          }
+          if (auto !== null) ensureFeatureTaskRow(store, roots, auto.featureId, now);
           store.upsertAutoSession({
             sessionId,
             derivedMaxEventId: maxId,
@@ -425,6 +445,26 @@ export async function refreshAutoBindings(
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         process.stderr.write(`[task] 派生失败 ${sessionId}: ${reason}\n`);
+      }
+    }
+
+    // 登记过副本的需求(spec D28、D38):在用副本的需求没有会话派生到它(如副本里只有终端提交)也要有
+    // 本机任务,task show <需求> 才查得到副本里没对上会话的提交;主 spec 头部声明了平台编号后,补上声明的那条
+    // 任务,再删掉 spec 写出之前建出的、还没有平台编号的目录任务(在用、已删的副本都算)。只在全量刷新(task 命令、sync)里
+    // 做,Stop hook 只刷新本会话、不做
+    if (opts.sessionIds === undefined) {
+      const inUse = new Map<string, boolean>();
+      for (const { replica } of roots) {
+        if (replica !== null) inUse.set(replica.featureId, inUse.get(replica.featureId) === true || replica.removedAt === null);
+      }
+      for (const [featureId, active] of inUse) {
+        try {
+          if (active) ensureFeatureTaskRow(store, roots, featureId, now);
+          dropStaleFeatureTask(store, roots, featureId, now);
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[task] 副本需求的任务行失败 ${featureId}: ${reason}\n`);
+        }
       }
     }
 

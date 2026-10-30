@@ -138,9 +138,24 @@ interface EventRow {
   agent?: string | null;
 }
 
+/**
+ * commit_files 列:一般是路径数组;超过 COMMIT_FILES_MAX 截断时存成 `{ files, _truncated_count }`
+ * (见 insert),读的一方都按数组用,这里统一成数组。
+ */
+function parseCommitFiles(raw: string | null): string[] {
+  if (!raw) return [];
+  const parsed = tryParseJson<unknown>(raw);
+  const list = Array.isArray(parsed)
+    ? parsed
+    : parsed !== null && typeof parsed === 'object' && Array.isArray((parsed as { files?: unknown }).files)
+      ? (parsed as { files: unknown[] }).files
+      : [];
+  return list.filter((f): f is string => typeof f === 'string');
+}
+
 function rowToEvent(row: EventRow): TimelineEvent {
   const args = row.tool_args ? tryParseJson(row.tool_args) : null;
-  const files = row.commit_files ? tryParseJson<string[]>(row.commit_files) ?? [] : [];
+  const files = parseCommitFiles(row.commit_files);
   const metadata = row.metadata ? tryParseJson<Record<string, unknown>>(row.metadata) ?? {} : {};
   return {
     id: row.id,
@@ -505,18 +520,7 @@ export class TimelineStore {
             writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
           }
         }
-        if (r.commit_files) {
-          const parsed = tryParseJson<string[] | { files: string[] }>(r.commit_files);
-          if (Array.isArray(parsed)) {
-            for (const f of parsed.filter((s): s is string => typeof s === 'string')) {
-              writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
-            }
-          } else if (parsed && Array.isArray(parsed.files)) {
-            for (const f of parsed.files.filter((s): s is string => typeof s === 'string')) {
-              writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
-            }
-          }
-        }
+        for (const f of parseCommitFiles(r.commit_files)) writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
       }
 
       const topFilesRead = Array.from(readCounts.entries())

@@ -1,14 +1,17 @@
 /**
- * Directory Management
+ * 目录管理
  *
- * Manages the `.cgraphx/` directory structure that holds the shared
- * `cgraphx.db` (used by the markdown and timeline subsystems) plus per-project
- * runtime files. Directory naming honors the `CGRAPHX_DIR` env override.
+ * 管理项目的 `.cgraphx/` 目录:共用库 `cgraphx.db` 与各子系统的运行时文件。目录名
+ * 遵从 `CGRAPHX_DIR` 环境变量覆盖。
+ *
+ * 数据目录(spec D24):副本的 `.cgraphx/` 是普通目录,其中 `shared` 链接指回主目录的
+ * `.cgraphx/`;`resolveDataDir` 据此给出共用数据所在的目录。没有链接时就是项目自己的
+ * `.cgraphx/`,路径与原来逐字相同。
  */
 
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 /** The default per-project data directory name. */
 const DEFAULT_CGRAPHX_DIR = '.cgraphx';
@@ -73,6 +76,103 @@ export function isInitialized(projectRoot: string): boolean {
   // Must have cgraphx.db, not just .cgraphx folder
   const dbPath = path.join(codegraphDir, 'cgraphx.db');
   return fs.existsSync(dbPath);
+}
+
+/** 副本 `.cgraphx/` 里指回主目录 `.cgraphx/` 的符号链接名(spec D18)。 */
+export const SHARED_LINK_NAME = 'shared';
+
+/** 主目录数据目录下存放副本登记文件的子目录名(spec D19)。 */
+export const REPLICAS_DIRNAME = 'replicas';
+
+/**
+ * 数据目录状态:
+ * - own:用项目自己的 `.cgraphx/`(没有 shared 链接,或链接不作数)
+ * - replica:登记过、没删除的副本,共用数据在主目录
+ * - main-missing:shared 链接指向的主目录 `.cgraphx/` 已不在
+ */
+export type DataDirState = 'own' | 'replica' | 'main-missing';
+
+export interface DataDirInfo {
+  /** 共用数据所在目录的绝对路径 */
+  dir: string;
+  state: DataDirState;
+  /** own:项目根本身;replica / main-missing:dir 的上级目录 */
+  mainRoot: string;
+}
+
+/** realpath;失败(路径不在、没权限等)退回 path.resolve 的结果。 */
+function realpathOrResolve(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+/** 读登记文件并解析成对象;读不了、不是合法 JSON、不是对象 → null。 */
+function readRegistryObject(file: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 解析共用数据所在的目录(spec D24)。`local` 指 `getCodeGraphDir(projectRoot)`:
+ *
+ * 1. `local/shared` 不存在或不是符号链接(lstat)→ own,dir 就是 `local`(与原来逐字相同)
+ * 2. 链接目标不存在 → main-missing:写数据目录的地方据此不建目录、不写,
+ *    否则会在旧主目录位置重建 `.cgraphx/`,解析随之退成 own、数据悄悄写进副本本地
+ * 3. 目标下 `replicas/<项目根 realpath 的目录名>.json` 能解析成对象,其 `path` 的 realpath
+ *    就是项目根的 realpath,且 `removedAt` 为 null → replica,dir 为目标的 realpath
+ * 4. 其余(没登记、已删除、读不了)→ 同 1
+ *
+ * 只读登记文件的 `path`、`removedAt` 两个字段,不写登记。任何异常都按 own 处理,不抛。
+ */
+export function resolveDataDir(projectRoot: string): DataDirInfo {
+  const own = (): DataDirInfo => ({
+    dir: getCodeGraphDir(projectRoot),
+    state: 'own',
+    mainRoot: path.resolve(projectRoot),
+  });
+  try {
+    const local = getCodeGraphDir(projectRoot);
+    const link = path.join(local, SHARED_LINK_NAME);
+    // lstat 只看链接本身;不存在时返回 undefined,不走异常(没有副本的项目每次都走这条)
+    const linkStat = fs.lstatSync(link, { throwIfNoEntry: false });
+    if (linkStat === undefined || !linkStat.isSymbolicLink()) return own();
+
+    const target = path.resolve(local, fs.readlinkSync(link));
+    if (!fs.existsSync(target)) {
+      return { dir: target, state: 'main-missing', mainRoot: path.dirname(target) };
+    }
+
+    const realRoot = realpathOrResolve(projectRoot);
+    const entry = readRegistryObject(
+      path.join(target, REPLICAS_DIRNAME, `${path.basename(realRoot)}.json`),
+    );
+    if (
+      entry !== null &&
+      typeof entry.path === 'string' &&
+      realpathOrResolve(entry.path) === realRoot &&
+      entry.removedAt === null
+    ) {
+      const realTarget = realpathOrResolve(target);
+      return { dir: realTarget, state: 'replica', mainRoot: path.dirname(realTarget) };
+    }
+    return own();
+  } catch {
+    return own();
+  }
+}
+
+/** 共用数据所在的目录(= `resolveDataDir(projectRoot).dir`)。 */
+export function getDataDir(projectRoot: string): string {
+  return resolveDataDir(projectRoot).dir;
 }
 
 /**

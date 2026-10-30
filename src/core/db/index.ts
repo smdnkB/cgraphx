@@ -1,23 +1,27 @@
 /**
- * Database Base Layer
+ * 数据库基础层
  *
- * SQLite connection management over the built-in `node:sqlite`. This is the
- * shared, SCHEMA-AGNOSTIC base layer: `open()` creates (or opens) `cgraphx.db`
- * and applies connection-level PRAGMAs, but applies NO schema and runs NO
- * migrations. Subsystems that need tables (markdown, timeline) own their own
- * `ensureSchema` and apply it on top of a connection from `open()`.
+ * 基于内置 `node:sqlite` 的 SQLite 连接管理。这是共享、与 schema 无关的基础层:
+ * `open()` 创建(或打开)`cgraphx.db` 并设置连接级 PRAGMA,但不应用任何 schema、
+ * 不跑迁移。需要表的子系统(markdown、timeline 等)各自持有 `ensureSchema`,在
+ * `open()` 拿到的连接上自行应用。
  *
- * What was removed vs. the cgraphx 1.x lineage:
- *   - the graph `schema.sql` application (this layer serves non-graph subsystems)
+ * 共享 DB 放在哪:`getDatabasePath` 指向数据目录里的共用库(见 `directory.ts` 的
+ * `getDataDir`);`getLocalDatabasePath` 固定指向项目自己的 `.cgraphx/cgraphx.db`。
+ * 副本里共用库在数据目录(经 `.cgraphx/shared` 链接到主目录),知识库在本地库;
+ * 主目录里两者是同一个文件。
+ *
+ * 相对 cgraphx 1.x 去掉的:
+ *   - 图谱 `schema.sql` 的应用(本层服务非图谱子系统)
  *   - `runMigrations` / `getCurrentVersion` / `CURRENT_SCHEMA_VERSION`
- *   - the `initialize()` factory (open() now creates-or-opens) and
- *     `getSchemaVersion()` (no shared `schema_versions` table at this layer)
+ *   - `initialize()` 工厂(`open()` 现在是创建或打开)与 `getSchemaVersion()`
+ *     (本层没有共享的 `schema_versions` 表)
  */
 
 import { SqliteDatabase, SqliteBackend, createDatabase } from './sqlite-adapter';
-import * as fs from 'fs';
-import * as path from 'path';
-import { getCodeGraphDir } from '../directory';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { getCodeGraphDir, getDataDir } from '../directory';
 
 export { SqliteDatabase, SqliteBackend } from './sqlite-adapter';
 
@@ -231,8 +235,14 @@ function statInode(p: string): string | null {
 export const DATABASE_FILENAME = 'cgraphx.db';
 
 /**
- * Get the default database path for a project
+ * 共用库路径:在数据目录里(副本里即主目录的 `.cgraphx/cgraphx.db`)。
+ * 没有 `.cgraphx/shared` 链接的项目与 `getLocalDatabasePath` 相同。
  */
 export function getDatabasePath(projectRoot: string): string {
+  return path.join(getDataDir(projectRoot), DATABASE_FILENAME);
+}
+
+/** 本地库路径:固定是项目自己的 `.cgraphx/cgraphx.db`(知识库用,副本里各建各的索引)。 */
+export function getLocalDatabasePath(projectRoot: string): string {
   return path.join(getCodeGraphDir(projectRoot), DATABASE_FILENAME);
 }

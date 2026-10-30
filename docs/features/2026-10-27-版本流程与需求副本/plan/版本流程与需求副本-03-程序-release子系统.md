@@ -1,0 +1,37 @@
+# T-3: 程序——release 子系统
+
+> 产物: plan
+> 依据: spec@24bd37e
+
+- 目标:新增 release 子系统:K8 版本分支模式、commit-msg 提交拦截的装卸,以及 `cgraphx release guard` 命令;agent 的提交前钩子 precommit-check 按同一规则先拦一道
+- 对应 spec 编号:F2⑥、F10、D1、D5、D12;K8
+- 强制引用:`docs/guides/coding-standards.md`、`docs/guides/interface-standards.md`
+- 涉及范围(新建的都在 `src/core/release/` 下):`index.ts`(门面)、`cli.ts`、`types.ts`、`errors.ts`、`constants.ts`、`guard.ts`;改模板 hook `assets/claude-template/hooks/precommit-check/precommit-check.cjs`
+- 必须严格执行:
+  - 按 C-6(导出名与签名、命令、JSON 形态、`not_git_repo` 与退出码 2、`unsupported` 的退出码与提示、git config 记号、片段三行逐字、agent 那一道的判断顺序与理由逐字)
+  - 按 C-2(只经 `installHookSnippet` / `removeHookSnippet` 写钩子,marker `# cgraphx-release-guard`;写不了的四种(仓库外、非 shell、链接、被 git 跟踪)由 C-2 判定为 `unsupported`,提示经 `hookNotice` / `hookRemoveNotice`,本任务不另写判断)
+  - 依赖只许:`../git-hooks`、`node:` 内置模块、`commander`(cli.ts);不得 import 任何子系统
+- 允许局部适配:
+  - 内部辅助函数的拆分与命名
+  - 不带 `--json` 时成功提示的措辞
+- 具体要求:
+  1. `constants.ts`:`VERSION_BRANCH_PATTERN = /^dev\/[0-9]+\.[0-9]+\.[0-9]+$/`;`RELEASE_GUARD_MARKER = '# cgraphx-release-guard'`;`RELEASE_GUARD_LINES`(C-6 的三行,逐字);`RELEASE_GUARD_CONFIG_KEY = 'cgraphx.releaseGuard'`;`RELEASE_FLOW_CONFIG_KEY = 'cgraphx.releaseFlow'`。
+  2. `errors.ts`:`ReleaseError extends Error`,带 `code`(目前只有 `not_git_repo`);`exitCodeForError`:`not_git_repo` → 2,其余 → 1。
+  3. `guard.ts`:
+     - `installReleaseGuard(cwd)`:`resolveHooksDir(cwd)` 为 null → 抛 `ReleaseError('not_git_repo')`;先 `git config --local cgraphx.releaseFlow true`(按版本走的记号,装不上也写);再读记号 `git config --local --get cgraphx.releaseGuard`;再 `installHookSnippet(cwd, 'commit-msg', RELEASE_GUARD_MARKER, RELEASE_GUARD_LINES)`;C-2 返回 `unsupported` → 原样带上 `reason`、`lines`、`linkTarget`(symlink 时)返回 `{ hookPath, status: 'unsupported', … }`,不写 `cgraphx.releaseGuard`;返回 `installed` 且记号原来为 `true` → status 改成 `repaired`;不是 `unsupported` 时最后 `git config --local cgraphx.releaseGuard true`,返回 `{ hookPath, status }`
+     - `removeReleaseGuard(cwd)`:不在 git 仓库 → `{ hookPath: null, status: 'absent' }`;`removeHookSnippet(cwd, 'commit-msg', RELEASE_GUARD_MARKER)` 返回 null → `absent`(hookPath 为当前钩子文件);status 为 `unsupported`(拦截那几行提交在被跟踪的钩子文件里)→ `unsupported`、reason `tracked`、notice `hookRemoveNotice(…, '拦截那几行')`;其余照它的 status 和 hookPath;各种情况都 `git config --local --unset` 掉 `cgraphx.releaseGuard`、`cgraphx.releaseFlow`(没有这个键时忽略错误)
+  4. `cli.ts`:`export function registerReleaseCommands(program: Command): void`,注册 `release` 命令组和 `guard` 子命令(`--remove`、`--json`);在 `process.cwd()` 下执行;带 `--json` 按 C-6 输出(成功、失败都是 `JSON.stringify(x, null, 2)` 加换行,失败为 `{ "ok": false, "code", "message" }`),不带时错误走 stderr、前缀 `[release]`;status 为 `unsupported` → 退出码 0;安装没写入时结果带 notice `hookNotice(…, '没装上提交拦截')`;不带 `--json` 时,只有 `unsupported` 在 stderr 打 `[release] ` + 结果里的 notice(C-6)。
+  5. `index.ts`:按 C-6 导出。
+  6. `precommit-check.cjs`:按 C-6 的 agent 那一道,在「只拦 git commit」之后、「有暂存内容才拦」之前加判断,命中就 deny 并返回;文件头的闸门说明和步骤编号随之更新,原有几道的行为不变。
+- 完成条件:
+  - C-6 列出的导出全部存在,签名一致
+  - 片段三行与 C-6 逐字一致(含中文提示和末尾的 marker)
+  - precommit-check 的判断顺序、理由与 C-6 一致
+  - release 目录下没有 import 任何子系统的语句;每个文件 ≤ 600 行
+- 提交点:
+  1. `feat(release): 版本分支提交拦截——commit-msg 片段 + cgraphx release guard`:`src/core/release/` 下 6 个文件
+  2. `feat(release): agent 的提交前钩子也拦版本分支——precommit-check 按 D12 先拦一道`:`assets/claude-template/hooks/precommit-check/precommit-check.cjs`
+- 风险/注意事项:
+  - 片段在用户每次提交时执行:只在违规时 `exit 1`,不要加其他 `exit`,不要调 cgraphx 或 node
+  - `install` 不装拦截(spec D36),拦截只由 release-start 调本命令装上
+  - precommit-check 每个项目都装:先看 `cgraphx.releaseFlow`,没跑过 /release-start 的项目里已有的 dev/x.y.z 不拦

@@ -263,6 +263,16 @@ export class TaskStore {
     return task;
   }
 
+  /** 删掉还没有平台编号的目录任务(版本流程与需求副本 spec D38 对账);删过返回 true。 */
+  deleteUnmappedFeatureTask(featureId: string): boolean {
+    const result = this.guard('删除目录任务', () =>
+      this.db
+        .prepare('DELETE FROM task_feature_tasks WHERE feature_id = ? AND platform_task_id IS NULL')
+        .run(featureId),
+    );
+    return result.changes > 0;
+  }
+
   /** 平台回执写回;未知 feature-id 更新 0 行,忽略。 */
   setFeatureTaskPlatformId(featureId: string, platformTaskId: string, now: string): void {
     this.guard('更新目录任务平台编号', () =>

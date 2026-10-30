@@ -259,6 +259,59 @@ function findPlanIndexFile(featureDir: string): string | null {
 }
 
 /**
+ * 把 docs/features/ 下的一个子目录解析为 FeatureEntry(调用方已确认它是目录)。
+ * scanFeatures 与 scanFeature 共用,字段算法只在这里。
+ */
+function featureEntryOf(projectRoot: string, name: string): FeatureEntry {
+  const { date: dateFromName, title } = parseFeatureId(name);
+  const featureDir = path.join(projectRoot, FEATURES_DIR, name);
+  // 日期元数据文件:主 spec → plan/index(日期取值逻辑不变)。
+  const mainSpecRel = findMainSpecRel(projectRoot, name);
+  const metaFile =
+    mainSpecRel !== null
+      ? absolutePath(projectRoot, mainSpecRel)
+      : findPlanIndexFile(featureDir);
+  const meta = metaFile !== null ? readHeaderMeta(metaFile) : null;
+  return {
+    featureId: name,
+    date: meta?.date ?? dateFromName,
+    title,
+    owner: readFeatureOwner(projectRoot, name),
+    stage: deriveFeatureStage(projectRoot, name),
+    path: `${FEATURES_DIR_POSIX}/${name}`,
+  };
+}
+
+/** 条目顺序:日期倒序、标题升序(scanFeatures 与门面 listFeatures 共用)。 */
+export function compareFeatureEntries(a: FeatureEntry, b: FeatureEntry): number {
+  return (
+    (b.date ?? '').localeCompare(a.date ?? '') || a.title.localeCompare(b.title)
+  );
+}
+
+/**
+ * 只解析一个需求目录 <projectRoot>/docs/features/<featureId>,字段与 scanFeatures 列出的相同。
+ * feature-id 不是单段目录名、目录不存在或不是目录 → null;与 scanFeatures 一样不认
+ * 符号链接(lstat)。只在 features 内部用(门面 listFeatures 读副本里登记的需求),门面不导出。
+ */
+export function scanFeature(
+  projectRoot: string,
+  featureId: string,
+): FeatureEntry | null {
+  if (!isPlainFeatureId(featureId)) return null;
+  let stat: fs.Stats | undefined;
+  try {
+    stat = fs.lstatSync(path.join(projectRoot, FEATURES_DIR, featureId), {
+      throwIfNoEntry: false,
+    });
+  } catch {
+    return null;
+  }
+  if (stat === undefined || !stat.isDirectory()) return null;
+  return featureEntryOf(projectRoot, featureId);
+}
+
+/**
  * 扫描 <projectRoot>/docs/features/,每个子目录解析为一个 FeatureEntry。
  * 目录不存在或不可读 → 返回空数组(不是错误:项目可能没用 features 流程)。
  * 负责人只认主 spec → 交接文件(readFeatureOwner,与任务负责人同一口径),
@@ -266,43 +319,18 @@ function findPlanIndexFile(featureDir: string): string | null {
  * 结果按日期倒序、标题升序排好。
  */
 export function scanFeatures(projectRoot: string): FeatureEntry[] {
-  const featuresRoot = path.join(projectRoot, FEATURES_DIR);
   let dirNames: string[];
   try {
     dirNames = fs
-      .readdirSync(featuresRoot, { withFileTypes: true })
+      .readdirSync(path.join(projectRoot, FEATURES_DIR), { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name);
   } catch {
     return [];
   }
-
-  const result: FeatureEntry[] = [];
-  for (const name of dirNames) {
-    const { date: dateFromName, title } = parseFeatureId(name);
-    const featureDir = path.join(featuresRoot, name);
-    // 日期元数据文件:主 spec → plan/index(日期取值逻辑不变)。
-    const mainSpecRel = findMainSpecRel(projectRoot, name);
-    const metaFile =
-      mainSpecRel !== null
-        ? absolutePath(projectRoot, mainSpecRel)
-        : findPlanIndexFile(featureDir);
-    const meta = metaFile !== null ? readHeaderMeta(metaFile) : null;
-    result.push({
-      featureId: name,
-      date: meta?.date ?? dateFromName,
-      title,
-      owner: readFeatureOwner(projectRoot, name),
-      stage: deriveFeatureStage(projectRoot, name),
-      path: `${FEATURES_DIR_POSIX}/${name}`,
-    });
-  }
-  result.sort(
-    (a, b) =>
-      (b.date ?? '').localeCompare(a.date ?? '') ||
-      a.title.localeCompare(b.title),
-  );
-  return result;
+  return dirNames
+    .map((name) => featureEntryOf(projectRoot, name))
+    .sort(compareFeatureEntries);
 }
 
 /**

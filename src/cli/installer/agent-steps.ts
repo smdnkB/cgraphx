@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { ALL_TARGETS, getTarget, resolveTargetFlag } from './targets/registry';
 import type { AgentTarget, Location } from './targets/types';
 import { isInitialized } from '../../core/directory';
+import { hookNotice, type HookSnippetResult } from '../../core/git-hooks';
 import {
   DEFAULT_AGENT_ID,
   defaultAgentProfile,
@@ -17,6 +18,23 @@ import {
 } from '../../core/agents';
 
 type Clack = typeof import('@clack/prompts');
+
+/**
+ * timeline 安装成功那行的 git 部分:有写了盘的钩子(installed / updated)→ ` + git <钩子名用 / 连起来>`;
+ * 全是 present → `(git hook 已存在)`;不在 git 仓库 → `(非 git 仓库,跳过 git hook)`;
+ * 其余(有没写入的钩子)不写这部分,由随后的提示逐个说明原因。
+ */
+function gitHookSummary(hooks: readonly HookSnippetResult[]): string {
+  if (hooks.length === 0) return '(非 git 仓库,跳过 git hook)';
+  const written = hooks.filter((h) => h.status === 'installed' || h.status === 'updated');
+  if (written.length > 0) return ` + git ${written.map((h) => path.basename(h.hookPath)).join('/')}`;
+  return hooks.every((h) => h.status === 'present') ? '(git hook 已存在)' : '';
+}
+
+/** git 钩子的安装提示(spec D33):没写入的说原因,链接、被跟踪的还给要加的几行。 */
+function gitHookNotices(hooks: readonly HookSnippetResult[]): string[] {
+  return hooks.map((h) => hookNotice(h)).filter((n): n is string => n !== null);
+}
 
 /** 描述对应的 target(注册表由全部描述生成,必然存在)。 */
 function targetOf(profile: AgentProfile): AgentTarget {
@@ -109,8 +127,8 @@ export function installAgentTargets(
 
 /**
  * 「可选子系统」的 Developer Timeline 项:对每个选中 agent 依次接入 timeline、任务绑定与平台同步 hook。
- * git post-commit 钩子每项目一个(首个 agent 写入,其后幂等)。已初始化项目先打开库应用
- * task schema(只做一次),保证老项目重装后也有 task 表。
+ * git post-commit、post-merge 钩子每项目一份(首个 agent 写入,其后幂等),它们的安装提示同一句只打一次。
+ * 已初始化项目先打开库应用 task schema(只做一次),保证老项目重装后也有 task 表。
  */
 export async function installAgentHooks(
   clack: Clack,
@@ -125,6 +143,7 @@ export async function installAgentHooks(
   const { installTaskHooks, openTaskDb } = await import('../../core/task');
   const { installSyncHooks } = await import('../../core/sync');
   let taskSchemaReady = false;
+  const printedNotices = new Set<string>();
 
   for (const target of targets) {
     const prefix = hookLogPrefix(targets, target);
@@ -133,10 +152,13 @@ export async function installAgentHooks(
       const events = report.writtenHookEvents.length > 0
         ? report.writtenHookEvents.join('/')
         : '已存在(幂等)';
-      const git = report.gitHookWritten
-        ? ' + git post-commit'
-        : report.gitHookPath ? '(git hook 已存在)' : '(非 git 仓库,跳过 git hook)';
-      clack.log.success(`${prefix}Developer Timeline 已装:${events}${git}`);
+      clack.log.success(`${prefix}Developer Timeline 已装:${events}${gitHookSummary(report.gitHooks)}`);
+      // 多个 agent 的报告里是同一批 git 钩子:同一句提示只打一次
+      for (const notice of gitHookNotices(report.gitHooks)) {
+        if (printedNotices.has(notice)) continue;
+        printedNotices.add(notice);
+        clack.log.warn(`${prefix}${notice}`);
+      }
     } catch (err) {
       clack.log.warn(`${prefix}timeline install 失败:${errorMessage(err)}`);
     }
@@ -192,6 +214,7 @@ export async function uninstallAgentHooks(
       if (tlReport.gitHookRemoved) {
         clack.log.success(`${prefix}Developer Timeline:已移除 git post-commit hook`);
       }
+      for (const notice of tlReport.gitHookNotices) clack.log.warn(`${prefix}Developer Timeline:${notice}`);
     } catch (err) {
       clack.log.warn(`${prefix}timeline uninstall 失败:${errorMessage(err)}`);
     }

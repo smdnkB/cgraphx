@@ -4,16 +4,17 @@
  * 只读:经 openTaskDbReadOnly 打开库,不应用 schema、不写任何表、不请求外部任务接口。
  * 时长口径只在这里实现:活跃时长按 ACTIVE_GAP_MS 断点去间隔,工作时长 = 首末事件差,
  * 任务合计为各绑定段之和(并行会话重叠不扣除)。
+ * 导出函数一律以主目录为准(版本流程与需求副本 spec D25):在副本里调用与在主目录调用结果相同。
  */
 
-import { scanFeatureTasks } from '../features';
 import type { SqliteDatabase } from '../db';
+import { listProjectRoots, resolveMainRoot } from '../replica';
 import type { TimelineEvent } from '../timeline';
 import { collectOutputs, collectReferences } from './artifacts';
 import { queryBindingEvents } from './attribution';
 import { ACTIVE_GAP_MS, FEATURE_TASK_ID_BASE } from './constants';
 import { TaskArgError, TaskConfigError, TaskNotEnabledError } from './errors';
-import { resolveFeatureTargetReadOnly } from './feature-task';
+import { resolveFeatureTargetReadOnly, scanFeatureTasksAcrossRoots } from './feature-task';
 import { findTask } from './resolve';
 import { openTaskDbReadOnly } from './schema-bootstrap';
 import { TaskStore } from './store';
@@ -148,9 +149,10 @@ function collectEffectiveBindings(
       const prev = earliestBoundAt.get(binding.sessionId);
       if (prev === undefined || binding.boundAt < prev) earliestBoundAt.set(binding.sessionId, binding.boundAt);
     }
+    const roots = listProjectRoots(projectRoot);
     for (const auto of store.listAutoSessions()) {
       if (auto.featureId === null || auto.boundAt === null) continue;
-      const task = resolveFeatureTargetReadOnly(projectRoot, store, auto.featureId);
+      const task = resolveFeatureTargetReadOnly(roots, store, auto.featureId);
       if (task === null) continue;
       const unboundAt = earlier(earliestBoundAt.get(auto.sessionId) ?? null, auto.stoppedAt);
       if (unboundAt !== null && unboundAt <= auto.boundAt) continue;
@@ -183,16 +185,17 @@ export function listEffectiveBindings(
   projectRoot: string,
   opts: { includeSuperseded?: boolean } = {},
 ): EffectiveBinding[] {
+  const root = resolveMainRoot(projectRoot);
   let conn;
   try {
-    conn = openTaskDbReadOnly(projectRoot);
+    conn = openTaskDbReadOnly(root);
   } catch (err) {
     if (err instanceof TaskConfigError || err instanceof TaskNotEnabledError) return [];
     throw err;
   }
   try {
     const db = conn.getDb();
-    return collectEffectiveBindings(projectRoot, db, new TaskStore(db), opts.includeSuperseded === true);
+    return collectEffectiveBindings(root, db, new TaskStore(db), opts.includeSuperseded === true);
   } finally {
     conn.close();
   }
@@ -242,14 +245,15 @@ async function loadSegments(
  * @throws TaskConfigError 未初始化;TaskNotEnabledError 没有 task 表。
  */
 export async function listTaskSummaries(projectRoot: string): Promise<TaskSummary[]> {
+  const root = resolveMainRoot(projectRoot);
   let tasks: TaskItem[];
   let bindings: EffectiveBinding[];
-  const conn = openTaskDbReadOnly(projectRoot);
+  const conn = openTaskDbReadOnly(root);
   try {
     const db = conn.getDb();
     const store = new TaskStore(db);
     tasks = listAllTasks(store, db);
-    bindings = collectEffectiveBindings(projectRoot, db, store, false);
+    bindings = collectEffectiveBindings(root, db, store, false);
   } finally {
     conn.close();
   }
@@ -264,7 +268,7 @@ export async function listTaskSummaries(projectRoot: string): Promise<TaskSummar
   const summaries: TaskSummary[] = [];
   for (const task of tasks) {
     const own = bindingsByTask.get(task.id) ?? [];
-    const { segments, truncated } = await loadSegments(projectRoot, own);
+    const { segments, truncated } = await loadSegments(root, own);
     summaries.push({
       task,
       inProgress: own.some((entry) => entry.binding.unboundAt === null),
@@ -294,31 +298,32 @@ export async function getTaskReport(
   taskId: number,
   opts: { eventLimitPerSegment: number },
 ): Promise<TaskReport> {
+  const root = resolveMainRoot(projectRoot);
   let task: TaskItem;
   let bindings: EffectiveBinding[];
   let featureDirs: string[];
-  const conn = openTaskDbReadOnly(projectRoot);
+  const conn = openTaskDbReadOnly(root);
   try {
     const db = conn.getDb();
     const store = new TaskStore(db);
     const found = store.getTaskById(taskId);
     if (!found) throw new TaskArgError(`找不到本地任务 ${taskId}`);
     task = found;
-    bindings = collectEffectiveBindings(projectRoot, db, store, false).filter(
+    bindings = collectEffectiveBindings(root, db, store, false).filter(
       (entry) => entry.binding.taskId === taskId,
     );
-    // 目录任务的产出目录就是它自己的 feature-id;其它任务按头部声明反查。
+    // 目录任务的产出目录就是它自己的 feature-id;其它任务按头部声明反查(主目录 + 在用副本)。
     featureDirs =
       found.source === 'feature' && found.featureId !== null
         ? [`docs/features/${found.featureId}`]
-        : scanFeatureTasks(projectRoot)
+        : scanFeatureTasksAcrossRoots(root)
             .filter((e) => findTask(store, e.task)?.id === taskId)
             .map((e) => e.path);
   } finally {
     conn.close();
   }
 
-  const { segments, truncated } = await loadSegments(projectRoot, bindings);
+  const { segments, truncated } = await loadSegments(root, bindings);
 
   // 合计、统计、产出、参考基于全部归属事件(各段合并,按 id 去重)
   const byId = new Map<number, TimelineEvent>();
@@ -328,7 +333,7 @@ export async function getTaskReport(
   const eventCounts: Record<string, number> = {};
   for (const e of allEvents) eventCounts[e.event_type] = (eventCounts[e.event_type] ?? 0) + 1;
 
-  const outputs = collectOutputs(projectRoot, allEvents, featureDirs);
+  const outputs = collectOutputs(root, allEvents, featureDirs);
   const outputPaths = new Set(outputs.flatMap((g) => g.paths));
 
   const segmentReports: SegmentReport[] = segments.map(({ bindingKey, binding, events, stats }) => {
@@ -344,7 +349,7 @@ export async function getTaskReport(
     segments: segmentReports,
     eventCounts,
     outputs,
-    references: collectReferences(projectRoot, allEvents, outputPaths),
+    references: collectReferences(root, allEvents, outputPaths),
     truncated,
   };
 }

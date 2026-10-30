@@ -29,8 +29,10 @@ import {
   isInitialized,
   createDirectory,
   removeDirectory,
+  resolveDataDir,
   unsafeIndexRootReason,
 } from '../../core/directory';
+import { removeReleaseGuard } from '../../core/release';
 import { NPM_PACKAGE } from '../upgrade';
 
 // Dynamic import helper — tsc compiles import() to require() in CJS mode,
@@ -247,8 +249,8 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
 export interface RunUninstallerOptions {
   /**
    * 逗号分隔的 agent id,或 `auto` / `all` / `none`。不给 → 卸载全部 agent 并移除
-   * git post-commit 钩子与 `.cgraphx/`;给出 → 只移除指定 agent 的配置,
-   * 不动 git 钩子、不删 `.cgraphx/`(忽略 `--keep-data`)。
+   * git 钩子片段(timeline 的 post-commit / post-merge、版本分支提交拦截)与 `.cgraphx/`;
+   * 给出 → 只移除指定 agent 的配置,不动 git 钩子、不删 `.cgraphx/`(忽略 `--keep-data`)。
    */
   target?: string;
   /** Non-interactive: target=all, no prompts (also skips the data-delete confirm). */
@@ -371,6 +373,22 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
   //   (破坏性,非 --yes 时交互确认;--keep-data 保留)。
   await uninstallAgentHooks(clack, process.cwd(), targets, partial, involved);
 
+  // 彻底卸载连同版本分支提交拦截一起删(spec D12);部分卸载(-t)保留 git 钩子,也就不删拦截。
+  if (!partial) {
+    try {
+      const guard = removeReleaseGuard(process.cwd());
+      if (guard.status === 'removed') {
+        clack.log.success(`已移除版本分支提交拦截:${guard.hookPath}`);
+      } else if (guard.notice !== undefined) {
+        clack.log.warn(guard.notice);
+      }
+    } catch (err) {
+      clack.log.warn(
+        `移除版本分支提交拦截失败:${err instanceof Error ? err.message : String(err)}(可稍后执行 cgraphx release guard --remove)`,
+      );
+    }
+  }
+
   // 删除 `.cgraphx/`(折叠进来的 `uninit`);部分卸载(-t)跳过,并在已无已装 agent 时提示。
   const dataDir = getCodeGraphDir(process.cwd());
   if (partial) {
@@ -383,8 +401,12 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     } else {
       let confirmed = useDefaults;
       if (!confirmed) {
+        // 副本的 `.cgraphx/` 里只有自己的索引,共用数据经 shared 链接在主目录;removeDirectory 不跟随链接
+        const message = resolveDataDir(process.cwd()).state === 'own'
+          ? `删除 ${dataDir}?这会永久移除本项目的 cgraphx 数据(timeline / 知识库索引)。`
+          : `删除 ${dataDir}?这是副本:只删副本自己的知识库索引和「我的需求」索引,主目录的数据不受影响。`;
         const ans = await clack.confirm({
-          message: `删除 ${dataDir}?这会永久移除本项目的 cgraphx 数据(timeline / 知识库索引)。`,
+          message,
           initialValue: true,
         });
         if (clack.isCancel(ans)) {

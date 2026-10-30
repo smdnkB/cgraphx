@@ -55,14 +55,14 @@ function padEnd(s: string, width: number): string {
   return gap > 0 ? s + ' '.repeat(gap) : s;
 }
 
-/** 对齐表格输出。空字段显示 `-`。 */
+/** 对齐表格输出。空字段显示 `-`;副本里的需求在「目录」列标出副本目录名(spec D30)。 */
 function renderTable(rows: FeatureEntry[]): string {
   const cells = rows.map((r) => [
     r.date ?? '-',
     r.stage ?? '-',
     r.owner ?? '-',
     r.title,
-    r.path,
+    r.replica === undefined ? r.path : `${r.path}(在副本 ${r.replica.name})`,
   ]);
   const headers = ['日期', '阶段', '负责人', '标题', '目录'];
   const widths = headers.map((h, i) =>

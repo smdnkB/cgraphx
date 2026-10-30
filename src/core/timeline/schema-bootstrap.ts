@@ -19,6 +19,7 @@ import {
   getDatabasePath,
   type SqliteDatabase,
 } from '../db';
+import { resolveDataDir } from '../directory';
 import { TimelineSchemaError } from './errors';
 import { TIMELINE_SCHEMA_VERSION } from './constants';
 import { DEFAULT_AGENT_ID } from '../agents';
@@ -113,8 +114,14 @@ export function openTimelineDb(projectRoot: string): DatabaseConnection {
   const dbPath = getDatabasePath(resolved);
 
   if (!fs.existsSync(dbPath)) {
+    // 副本关联的主目录已不在(或调用方已换成那个不在的主目录):说不在了,不说「未初始化」(spec D31)
+    const data = resolveDataDir(resolved);
     throw new TimelineSchemaError(
-      `Cgraphx not initialized at ${resolved} — run \`cgraphx install\` first.`,
+      data.state === 'main-missing'
+        ? `副本关联的主项目不在 ${data.mainRoot} 了`
+        : !fs.existsSync(resolved)
+          ? `项目目录 ${resolved} 不在了`
+          : `Cgraphx not initialized at ${resolved} — run \`cgraphx install\` first.`,
       { projectRoot: resolved },
     );
   }

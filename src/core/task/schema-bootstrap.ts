@@ -11,7 +11,19 @@ import path from 'node:path';
 
 import { DatabaseConnection, getDatabasePath, type SqliteDatabase } from '../db';
 import { TASK_SCHEMA_VERSION } from './constants';
+import { resolveDataDir } from '../directory';
 import { TaskConfigError, TaskError, TaskNotEnabledError, TaskStoreError } from './errors';
+
+/**
+ * 库文件不在时的提示:副本关联的主目录已不在(或调用方已换成那个不在的主目录)→ 说不在了,
+ * 其余照旧(spec D31)。
+ */
+function missingDbMessage(resolved: string): string {
+  const data = resolveDataDir(resolved);
+  if (data.state === 'main-missing') return `副本关联的主项目不在 ${data.mainRoot} 了`;
+  if (!fs.existsSync(resolved)) return `项目目录 ${resolved} 不在了`;
+  return `cgraphx 未在 ${resolved} 初始化,请先运行 \`cgraphx install\``;
+}
 
 /** schema.sql 与编译后的模块同目录(dist 镜像 src)。 */
 function resolveSchemaPath(): string {
@@ -66,7 +78,7 @@ export function openTaskDb(projectRoot: string): DatabaseConnection {
   const dbPath = getDatabasePath(resolved);
 
   if (!fs.existsSync(dbPath)) {
-    throw new TaskConfigError(`cgraphx 未在 ${resolved} 初始化,请先运行 \`cgraphx install\``);
+    throw new TaskConfigError(missingDbMessage(resolved));
   }
 
   const connection = DatabaseConnection.open(dbPath);
@@ -93,7 +105,7 @@ export function openTaskDbReadOnly(projectRoot: string): DatabaseConnection {
   const dbPath = getDatabasePath(resolved);
 
   if (!fs.existsSync(dbPath)) {
-    throw new TaskConfigError(`cgraphx 未在 ${resolved} 初始化,请先运行 \`cgraphx install\``);
+    throw new TaskConfigError(missingDbMessage(resolved));
   }
 
   const connection = DatabaseConnection.open(dbPath);

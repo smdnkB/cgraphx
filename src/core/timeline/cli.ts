@@ -11,7 +11,7 @@
  *
  * 隐藏 hook 入口(spec §3.3):Claude Code hook 子命令按 HOOK_EVENTS_TO_COMMANDS
  * 逐项注册(user-prompt / pre-tool-use / post-tool-use / stop / session-start /
- * session-end),另加 git post-commit 用的 timeline-git-commit-hook。
+ * session-end),另加 git post-commit、post-merge 共用的 timeline-git-commit-hook。
  *
  * Exit codes (spec §5.5):
  *   0  success (incl. "no matching events")
@@ -20,13 +20,12 @@
  *   4  DB error (schema / query failure)
  */
 
-import path from 'node:path';
-
 import type { Command } from 'commander';
 
 import { queryEvents, getEventById, getEventStats } from './indexer';
-import { installTimelineHooks, uninstallTimelineHooks } from './installer';
+import { installTimelineHooks, uninstallTimelineHooks, type InstallReport } from './installer';
 import { resolveProjectRoot } from '../directory';
+import { hookNotice } from '../git-hooks';
 import { TimelineSchemaError, StoreQueryError } from './errors';
 import { assertEventType } from './payload';
 import { HOOK_EVENTS_TO_COMMANDS, GIT_COMMIT_SUBCOMMAND, type HookEventName } from './constants';
@@ -331,7 +330,7 @@ export function registerTimelineCommands(program: Command): void {
 
   timeline
     .command('install')
-    .description('Install timeline hooks into this project\'s .claude/settings.json and .git/hooks/')
+    .description('Install timeline hooks into this project\'s .claude/settings.json and git 钩子目录')
     .option('--purge-first', 'Remove existing timeline hooks before installing (clean slate)')
     .option('-t, --target <ids>', `Comma-separated agent ids, or all / none (default: installed agents, else ${DEFAULT_AGENT_ID})`)
     .action(async (opts: { purgeFirst?: boolean; target?: string }) => {
@@ -343,6 +342,7 @@ export function registerTimelineCommands(program: Command): void {
           installTimelineHooks(projectRoot, { purgeFirst: opts.purgeFirst === true, agent: p.id }),
         );
         writeReports(reports);
+        writeGitHookNotices(reports);
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
@@ -365,6 +365,7 @@ export function registerTimelineCommands(program: Command): void {
           uninstallTimelineHooks(projectRoot, { purgeData: opts.purge === true, agent: p.id, keepGitHook }),
         );
         writeReports(reports);
+        for (const line of new Set(reports.flatMap((r) => r.gitHookNotices))) process.stderr.write(`[timeline] ${line}\n`);
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
@@ -410,13 +411,28 @@ function writeReports(reports: readonly unknown[]): void {
   process.stdout.write(JSON.stringify(out, null, 2) + '\n');
 }
 
+/**
+ * git 钩子的安装提示往 stderr 打:没写入的说原因,链接、被跟踪的还给要加的几行(hookNotice)。
+ * 多个 agent 的报告里是同一批钩子,同一句话只打一次。
+ */
+function writeGitHookNotices(reports: readonly InstallReport[]): void {
+  const printed = new Set<string>();
+  const notice = (line: string): void => {
+    if (printed.has(line)) return;
+    printed.add(line);
+    process.stderr.write(`[timeline] ${line}\n`);
+  };
+  for (const report of reports) {
+    for (const hook of report.gitHooks) {
+      const text = hookNotice(hook);
+      if (text !== null) notice(text);
+    }
+  }
+}
+
 function parseType(s: string | undefined): EventType | undefined {
   if (!s) return undefined;
   const t = assertEventType(s);
   if (!t) throw new ArgError(`Invalid --type: ${s}. Must be one of ${EVENT_TYPES_HELP.split(' | ').join(', ')}`);
   return t;
 }
-
-// `path" is used by installer.ts (project-local paths); kept imported here so
-// the module compiles cleanly without an unused-imports linter firing.
-void path;
