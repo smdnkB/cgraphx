@@ -161,6 +161,7 @@ knowledge-recall(自动召回)
 - `/knowledge-write` 把有价值的知识沉淀到 `docs/knowledge/`(开发收尾自动提示,也可随时手动触发)
 - `knowledge-recall` 做需求前自动召回相关概念、对齐术语,精确查询也走它——agent 自动触发,你不用管
 - `/init-knowledge` 接手陌生项目时批量探索建档——可选,只跑一次
+- `/knowledge-migrate` 用过 Claude Code 自动记忆的项目,每人跑一次:记忆按去向迁进知识库、项目根目录 `CLAUDE.md` 或本人 `~/.claude/CLAUDE.md`,再关掉本人的自动记忆——之后你说「以后都这样做」,agent 先问记到哪
 
 > 产物落在 `docs/knowledge/*.md`。写文件前必须过 `cgraphx docs validate` 校验,非法文件会被索引跳过。闭环:沉淀 → 召回 → 新概念再沉淀,知识库越厚,agent 越懂你的项目。
 
@@ -226,7 +227,7 @@ docs/
 │       └── <前缀>-发布记录.md         /dev-end              可选  已上线时
 │
 ├── knowledge/   业务知识库(跨需求共享)
-│   └── *.md                          /knowledge-write 沉淀  /init-knowledge 批量建档
+│   └── *.md                          /knowledge-write 沉淀  /init-knowledge 批量建档  /knowledge-migrate 迁入记忆
 │
 ├── bruno/   接口测试(bruno app 可直接打开)
 │   ├── bruno.json
@@ -254,4 +255,4 @@ docs/
 
 ---
 
-cgraphx 使用说明 · 2026-10-24
+cgraphx 使用说明 · 2026-10-27

@@ -527,6 +527,7 @@ footer p { margin: 0; }
       <li><code>/knowledge-write</code> 把有价值的知识沉淀到 <code>docs/knowledge/</code><em>(开发收尾自动提示,也可随时手动触发)</em></li>
       <li><code>knowledge-recall</code> 做需求前自动召回相关概念、对齐术语,精确查询也走它 <em>—— agent 自动触发</em></li>
       <li><code>/init-knowledge</code> 接手陌生项目时批量探索建档 <em>—— 可选,只跑一次</em></li>
+      <li><code>/knowledge-migrate</code> 把 Claude Code 自动记忆按去向迁进知识库、项目根目录 <code>CLAUDE.md</code> 或本人 <code>~/.claude/CLAUDE.md</code>,再关掉本人的自动记忆 <em>—— 用过自动记忆的项目,每人跑一次</em></li>
     </ul>
 
     <p style="font-weight:600;font-size:14.5px;margin:16px 0 8px;">数据模型(导出 → 探索 → 回写)</p>
@@ -609,7 +610,7 @@ footer p { margin: 0; }
 │       └── &lt;前缀&gt;-发布记录.md         <span class="skill">/dev-end</span>              <span class="opt">可选</span>  <span class="ann">已上线时</span>
 │
 ├── <b>knowledge/</b>   业务知识库(跨需求共享)
-│   └── *.md                          <span class="skill">/knowledge-write</span> <span class="ann">沉淀</span>  <span class="skill">/init-knowledge</span> <span class="ann">批量建档</span>
+│   └── *.md                          <span class="skill">/knowledge-write</span> <span class="ann">沉淀</span>  <span class="skill">/init-knowledge</span> <span class="ann">批量建档</span>  <span class="skill">/knowledge-migrate</span> <span class="ann">迁入记忆</span>
 │
 ├── <b>bruno/</b>   接口测试(bruno app 可直接打开)
 │   ├── bruno.json
@@ -639,7 +640,7 @@ footer p { margin: 0; }
 </section>
 
 <footer>
-  <p>cgraphx 使用说明 · 2026-10-24</p>
+  <p>cgraphx 使用说明 · 2026-10-27</p>
 </footer>
 
 </div>

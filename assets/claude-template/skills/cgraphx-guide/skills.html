@@ -413,6 +413,17 @@ footer p { margin: 0 0 6px; }
 </dl></div>
 </details>
 
+<details class="skill" id="knowledge-migrate">
+<summary><span class="name">/knowledge-migrate</span><span class="oneline">把 Claude Code 自动记忆迁进项目,再关掉自动记忆</span><span class="how how-cmd">敲命令</span></summary>
+<div class="body"><dl>
+<dt>什么时候用</dt><dd>这个项目用 Claude Code 攒过自动记忆,想让它们进知识库、跟着仓库走;每人每个项目跑一次,主目录、副本里都行。</dd>
+<dt>怎么用</dt><dd>敲 <code>/knowledge-migrate</code>,看迁移清单,改去向或划掉某条,说「迁」。</dd>
+<dt>要你拍板</dt><dd>每条记忆去哪:知识库、项目根目录 <code>CLAUDE.md</code>、你自己的 <code>~/.claude/CLAUDE.md</code>;和知识库说法矛盾的以哪个为准。</dd>
+<dt>产出</dt><dd>知识库条目、两处 <code>CLAUDE.md</code> 里新加的行;本人 <code>.claude/settings.local.json</code> 里关掉自动记忆。原来的记忆文件留在原处。</dd>
+<dt>前后</dt><dd>关掉以后,你说「以后都这样做」,agent 会先问记到哪。</dd>
+</dl></div>
+</details>
+
 <details class="skill" id="db-query">
 <summary><span class="name">db-query</span><span class="oneline">查数据、看表结构,优先读本地 DDL</span><span class="how how-auto">自动</span></summary>
 <div class="body"><dl>

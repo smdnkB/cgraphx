@@ -32,7 +32,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | 阶段 | 命令 / skill |
 |---|---|
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
-| **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/init-guides`(立项目规范)、`/init-knowledge`(接手陌生项目时建业务知识库) |
+| **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/init-guides`(立项目规范)、`/init-knowledge`(接手陌生项目时建业务知识库)、`/knowledge-migrate`(用过 Claude Code 自动记忆的,每人跑一次:迁进项目,再关掉自动记忆) |
 | **日常做需求 · 必经两步** | `/dev-clarify` 澄清(先定业务口径,再出功能点提案,人审稿式改稿,结束时给《需求功能方案》),然后 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完,最后 `/code-review`;哪里没看懂,说「画个图讲讲」出一页图解 |
 | **日常做需求 · 复杂按需** | `/dev-wireframe`(涉及界面时画线框)、`/dev-handoff`(探索或澄清结束、要开新会话继续时)、`/dev-spec`(写技术规格)、`/dev-plan`(大需求拆执行计划)、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
 | **测试按需 · 三条线** | 接口:`/api-case` → `/api-run`;单元:`/unit-spec` → `/unit-code`;UI:`/ui-case` → `/ui-run` |
@@ -64,6 +64,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/audit-login-security` | 登录/认证安全审计:枚举全部认证入口,再沿认证链路五段查绕过、越权、凭据、会话、爆破,给 file:line 证据链的 bug/风险清单;只报告不修、默认不落盘 |
 | `/knowledge-write` | 把业务决策、概念、坑沉淀到 `docs/knowledge/` |
 | `/init-knowledge` | 接手陌生项目,派子 agent 批量探索、建业务知识库 |
+| `/knowledge-migrate` | 用过 Claude Code 自动记忆的项目跑一次:记忆按去向迁进知识库、项目根目录 `CLAUDE.md`、本人 `~/.claude/CLAUDE.md`,再关掉本人的自动记忆 |
 | `/init-ddl` | 按工程批量导出 DDL 基线(一表一文件) |
 | `/init-guides` | 生成 `docs/guides/` 五份项目规范 |
 | `/doc-delivery` | 发布后按需写需求文档、设计文档、接口文档(运行时选) |
