@@ -50,7 +50,7 @@ description: 在 api-case 生成 .bru 后,跑接口测试 + 核实写接口 DB �
 
 ## feature-id 与文件前缀规则
 
-文件前缀 = feature-id 去掉开头的日期 `YYYY-MM-DD-`。
+文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`。
 
 产物文件名(归用户指定的 feature 目录):
 - Markdown 报告:`docs/features/<feature-id>/<文件前缀>-接口测试报告.md`

@@ -205,7 +205,7 @@ function classifyEvent(
   return null;
 }
 
-/** D2 的日期前缀是否晚于 D1;取不到日期视为最早。 */
+/** D2 的日期段是否晚于 D1;取不到日期视为最早。 */
 function isLaterFeature(featureId: string, current: string): boolean {
   const next = featureDatePrefix(featureId);
   const prev = featureDatePrefix(current);
@@ -218,7 +218,7 @@ function isLaterFeature(featureId: string, current: string): boolean {
  * 按 R1~R7 派生单个会话的自动绑定(纯函数)。
  *
  * 只看 cutoff 之前的 post_tool_use 事件;写成功 → 确定绑定,D 取最后一次
- * 未确定的写;读 → 暂定,只有日期前缀更新的目录能整段改正它。
+ * 未确定的写;读 → 暂定,只有日期段更新的目录能整段改正它。
  * 有结果时 boundAt = 会话最早一条事件的 ts(任意类型,不受 cutoff 影响)。
  */
 export function deriveSessionAutoBinding(

@@ -29,7 +29,7 @@ cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是
 
 **`docs/` 目录约定(skill 与程序的契约,目标项目内):**
 
-- `docs/features/<日期>-<编号>-<前缀>/` —— 单次需求工作目录,`<前缀>-spec.md` 必有(头部声明 `> 负责人:`),其余产物(plan/、单元测试规格与报告、api 测试规格与报告、设计文档)由各 skill 按流程写入。按人找需求:`cgraphx features list --mine`(本地个人索引由 `features sync` 生成于 `.cgraphx/my-features.md`)。
+- `docs/features/<feature-id>/`(命名见 `docs/guides/feature-standards.md`,没有就按 `YYYY-MM-DD-[业务ID-]<标题>`) —— 单次需求工作目录,`<前缀>-spec.md` 必有(头部声明 `> 负责人:`),其余产物(plan/、单元测试规格与报告、api 测试规格与报告、设计文档)由各 skill 按流程写入。按人找需求:`cgraphx features list --mine`(本地个人索引由 `features sync` 生成于 `.cgraphx/my-features.md`)。
 - `docs/knowledge/*.md` —— 跨需求共享的业务知识库,**`cgraphx docs` 的索引对象**;写文件前必须过 `cgraphx docs validate`,非法文件会被索引跳过。
 - `docs/bruno/` —— 接口测试产物(api-case + api-run 维护,bruno app 可直接打开)。
 - `docs/schema-knowledge/<工程>/` —— DDL 快照(INDEX.md + ddl/*.sql + pending-comments.sql);`db-query` 首选读本地 DDL,文件不存在才连 DB 兜底,探索发现 append 到对应表的 DISCOVERED 块(重 dump 时保留)。

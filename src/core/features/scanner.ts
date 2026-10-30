@@ -33,13 +33,11 @@ import {
   readArtifactHeader,
   stageMilestoneOf,
 } from '../artifact-registry';
+import { parseFeatureId } from './feature-id';
 import type { FeatureEntry, FeatureStage } from './types';
 
 /** 扫描目录(仓库相对,按当前平台分隔符)。 */
 export const FEATURES_DIR = path.join(...FEATURES_DIR_POSIX.split('/'));
-
-/** feature-id 目录名:日期前缀 + 标题(标题可能含 [业务ID-] 段,不强行拆)。 */
-const FEATURE_ID_PATTERN = /^(\d{4}-\d{2}-\d{2})-(.+)$/;
 
 interface HeaderMeta {
   owner: string | null;
@@ -281,9 +279,7 @@ export function scanFeatures(projectRoot: string): FeatureEntry[] {
 
   const result: FeatureEntry[] = [];
   for (const name of dirNames) {
-    const m = FEATURE_ID_PATTERN.exec(name);
-    const dateFromName = m?.[1] ?? null;
-    const title = m?.[2] ?? name;
+    const { date: dateFromName, title } = parseFeatureId(name);
     const featureDir = path.join(featuresRoot, name);
     // 日期元数据文件:主 spec → plan/index(日期取值逻辑不变)。
     const mainSpecRel = findMainSpecRel(projectRoot, name);

@@ -153,7 +153,7 @@ docs/guides/ 存在时(init-guides 产出),写 plan 前按下表读规范、落�
 
 ## 产物位置与命名
 
-- 路径:`docs/features/<feature-id>/plan/<文件前缀>-index.md`,任务文件见「任务文件」;文件前缀 = feature-id 去掉开头的日期。需求目录不存在时按 dev-spec「产物位置与命名」建。
+- 路径:`docs/features/<feature-id>/plan/<文件前缀>-index.md`,任务文件见「任务文件」;文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`。需求目录不存在时按 dev-spec「产物位置与命名」建。
 - 无可写项目上下文时,在回复里直接输出同等结构的正文。
 
 ## 收尾

@@ -2,7 +2,7 @@
 
 本项目开发流程的总索引:只放定位、顺序、依赖、指针——各 skill 的内部规则读 skill 本身。
 
-**阶段判断**:看需求目录 `docs/features/<日期>-<编号>-<前缀>/` 已有产物(有无 spec / plan / 实现)+ 对话上下文,决定现在哪一步、下一步做什么。
+**阶段判断**:看需求目录 `docs/features/<feature-id>/`(命名见 `docs/guides/feature-standards.md`,没有就按 `YYYY-MM-DD-[业务ID-]<标题>`)已有产物(有无 spec / plan / 实现)+ 对话上下文,决定现在哪一步、下一步做什么。
 
 ## 依赖总览
 

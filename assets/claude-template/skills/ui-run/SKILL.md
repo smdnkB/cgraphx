@@ -51,7 +51,7 @@ description: 在 ui-case 生成用例规格后,通过 Playwright MCP 驱动浏�
 
 ## feature-id 与文件前缀规则
 
-文件前缀 = feature-id 去掉开头的日期 `YYYY-MM-DD-`。
+文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`。
 
 产物文件名(归用户指定的 feature 目录):
 
