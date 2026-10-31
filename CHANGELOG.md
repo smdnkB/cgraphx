@@ -2,13 +2,98 @@
 
 ## 2.0.11 - 2026-10-31
 
+### Added — `/dev-migrate` rewrites a system on a new stack without losing behavior
+
+`/dev-migrate` moves an existing system into a new project on a new stack —
+MyBatis to JPA, for example — while restructuring modules, dropping dead code
+and redesigning tables. The old system is the reference answer. Entry points
+are enumerated by category with commands — HTTP endpoints, scheduled jobs,
+message and event listeners, workflow callbacks, interceptors, database
+triggers — and each one becomes a row of the behavior list with its rule
+branches, tables, side effects and `file:line`; the count per category must
+match the rows. A row is deleted only with hard evidence — not packaged into
+anything deployed, no live call in any caller repository, an empty
+implementation — and only after a person approves its batch. The tech stack
+is settled with `/init-tech-stack`; the ADR, the module and table mappings and
+the global decisions (API compatibility, IDs, data migration, cutover,
+rollback) are confirmed by a person before slicing starts.
+
+Each slice — one module's rows, tables and data migration — gets a functional
+plan generated from its rows, runs through `/dev-spec` → `/dev-plan` →
+`/dev-impl-subagent`, and is accepted by running the same bruno requests
+against old and new (`scripts/compare-runs.mjs` diffs the two
+`bru run --reporter-json` reports, skipping listed paths and sorting unordered
+arrays) and by reconciliation SQL on the migrated data. Differences are fixed
+in the new system unless a person accepts them. Before each slice and before
+cutover, every new commit in the old repositories is mapped onto the list.
+The skill ends with a cutover checklist: data migration and cutover are run
+by people, and production databases are only read. Everything lives in the
+new project — the ADR in `docs/adr/`, `docs/features/<date>-<system>迁移/`
+with the overview, behavior list, table mapping and `sql/`, and one
+requirement directory per slice. The first recipe covers MyBatis → JPA
+(`references/配方-mybatis-to-jpa.md`); `FLOW-MAP.md` lists the skill as an
+on-demand flow.
+
+### Changed — clarification draws each feature point instead of describing it
+
+`/dev-clarify` feature cards used to spell out behavior in text, which made
+the checks inside an endpoint and the order of calls across endpoints hard to
+follow. Each feature point now gets a diagram of the kind that fits what it
+is about: logic inside an endpoint, orchestration across endpoints, a state
+diagram, a decision table, data flow, a sequence diagram, or a swimlane for
+the user's path through pages. Page layout still goes to `/dev-wireframe`,
+and a one-line copy change stays a sentence. An endpoint diagram has a lane
+for the trigger (a page, another system, a scheduled job, a message) and one
+for the service, the checks in order, failure branches with the prompt text
+and boundary numbers, changed steps in yellow and the normal path in green.
+An orchestration diagram has one box per endpoint and shows whether later
+calls still run after a failure and what gets undone. A point uses at most
+two kinds; a diagram over 25 boxes is split, and timelines stay tables or
+numbered steps. The rules and samples are in
+`skills/dev-clarify/references/功能点配图.md`.
+
+Diagrams go into the draft during card review and are corrected there. In
+the conversation a card's first line says where its diagram is and the text
+chain is gone; boundaries, evidence, relations and experience variants stay,
+and when the diagram and the boundaries disagree, the boundaries win. A
+structural change is drawn under the old diagram as a candidate before it
+replaces it. Each drawn point has a 「Fx 怎么走」 section in the draft, which
+the spec's first section copies and handoffs split by feature point.
+Single-point requirements and bug fixes keep a draft too once a card has a
+diagram; a bug draws only the fixed behavior. An existing draft continues
+from its latest version: one marked 「审卡中」 in place, a converged one after
+copying it to the next version. The review pass also checks that diagrams
+match the card boundaries and that every point that needs a diagram has one.
+`/unit-spec` turns each branch, state transition and decision-table row in
+「Fx 怎么走」 into a scenario, and `/ui-case` writes its steps from the
+diagram's steps and branches.
+
+### Changed — flow diagrams move from mermaid to PlantUML
+
+Diagrams in clarification drafts, in the spec's first section, and in the
+design and requirement docs from `/doc-delivery` are now PlantUML, kept in
+`plantuml` code blocks in the markdown, so a user's path is drawn as real
+swimlanes. Open them in a markdown preview with PlantUML enabled — in
+IntelliJ IDEA, Settings → Languages & Frameworks → Markdown, enable PlantUML;
+each draft says so at the top. The repository gets no generated SVG or PNG
+files, and no PlantUML server is needed; when a design or requirement doc goes
+outside the team, the sender provides a rendered preview or a PDF. Diagrams a
+spec draws on its own default to PlantUML, and timelines, which PlantUML has
+no native form for, become tables or numbered steps. A multi-feature draft
+with three or more feature points and non-trivial relations also gets a
+relationship diagram of up to 8 nodes — what supports what, what stands
+alone, what is out of scope — next to the feature table, which stays
+authoritative. Plans still draw no diagrams; existing specs, drafts and docs
+keep their mermaid; code maps, design maps and the `cgraphx web` system map
+stay on mermaid.
+
 ### Removed — the separate `visual-explain` explainer skill is gone
 
 `/visual-explain` turned whatever the conversation had just covered into a
 one-page HTML explainer. The same need is served by the conversation itself,
-the mermaid diagram in a multi-feature functional plan, and `/dev-wireframe`
-for UI work, so the skill is retired. The template no longer ships
-`skills/visual-explain`, and `skills/visual-explain` is now on the
+the diagrams clarification now draws for each feature point, and
+`/dev-wireframe` for UI work, so the skill is retired. The template no
+longer ships `skills/visual-explain`, and `skills/visual-explain` is now on the
 `deprecated-assets.json` list — `cgraphx install` / `uninstall` deletes a copy
 deployed by an older release. References were dropped from `FLOW-MAP.md`, the
 template and root `CLAUDE.md`, the `cgraphx-guide` pages, the closing prompts
@@ -54,7 +139,7 @@ wraps up. `/unit-spec` and `/ui-case` turn every in/out example into a
 boundary case: what counts must appear, what doesn't must not.
 
 For requirements with several feature points, clarification also writes the
-feature plan to a draft, `<prefix>-功能方案-v<N>.md`, with a mermaid swimlane
+feature plan to a draft, `<prefix>-功能方案-v<N>.md`, with a PlantUML swimlane
 diagram of how users go through it. The diagrams follow the design document's
 style, and the drawing rules now live in one shared file. The conversation
 still shows the tables, plus the draft's path. `/dev-spec` copies the confirmed
@@ -143,12 +228,11 @@ reordered or triggered at a different time). Then each step whose internal
 logic changed gets its own section: a swimlane diagram of caller and service
 drawn from the code, changed steps in yellow and the normal path in green.
 It still opens with 30 秒看懂 and closes with data changes, key decisions and
-risk. Diagrams are mermaid styled after PlantUML activity diagrams
-(right-angle edges, grey boxes, white lanes), so they render in GitLab and in
-IntelliJ's markdown preview. The design doc is markdown only: the HTML
-option is dropped, since its template never loaded mermaid and diagrams did
-not render. The first-screen heading that `features check` requires for new
-design docs changes from 架构总览 to 30 秒看懂.
+risk. Diagrams are PlantUML activity diagrams (grey boxes, white lanes),
+drawn with the same rules as clarification drafts. The design doc is
+markdown only; the HTML option is dropped. The first-screen heading that
+`features check` requires for new design docs changes from 架构总览 to
+30 秒看懂.
 
 ### Added — release flow and requirement copies
 
