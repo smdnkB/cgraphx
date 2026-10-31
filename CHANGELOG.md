@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.11 - 2026-10-31
 
 ### Removed — the separate `visual-explain` explainer skill is gone
 
