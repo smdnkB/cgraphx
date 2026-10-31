@@ -209,8 +209,8 @@ footer p { margin: 0 0 6px; }
 <dt>什么时候用</dt><dd>接到需求、想法、bug、重构请求,在写任何文档和代码之前;也能拿现成方案让它拷问。</dd>
 <dt>怎么用</dt><dd>直接说需求,如「想给订单列表加个导出」;要拷问就说「拷问一下这个方案」。</dd>
 <dt>要你拍板</dt><dd>功能点清单增删;业务口径(哪些数据算、按哪个时间、怎么算)改具体值;每张功能点卡片采纳或改具体值;体验变体二选一;整份《需求功能方案》你说「对了」才算完。</dd>
-<dt>产出</dt><dd>对话里的《需求功能方案》:口径表(K1、K2…)加功能点表(F1、F2…);多功能点需求另写一份带 mermaid 流程图的讨论稿 <code>&lt;前缀&gt;-功能方案-v&lt;N&gt;.md</code>;spec 会原样收录。</dd>
-<dt>前后</dt><dd>之前可以先用 knowledge-recall 对齐概念;之后 <code>/dev-spec</code>,要换会话用 <code>/dev-handoff</code>,没看懂用 <code>/visual-explain</code>。</dd>
+<dt>产出</dt><dd>对话里的《需求功能方案》:口径表(K1、K2…)加功能点表(F1、F2…);每个功能点按场景配图,写进 PlantUML 讨论稿 <code>&lt;前缀&gt;-功能方案-v&lt;N&gt;.md</code>;spec 会原样收录。</dd>
+<dt>前后</dt><dd>之前可以先用 knowledge-recall 对齐概念;之后 <code>/dev-spec</code>,要换会话用 <code>/dev-handoff</code>。</dd>
 </dl></div>
 </details>
 
@@ -222,16 +222,6 @@ footer p { margin: 0 0 6px; }
 <dt>要你拍板</dt><dd>先确认要画哪些页面和状态;看着线框定下版本,或发现业务问题回去改澄清。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-线框-v&lt;N&gt;.html</code>,浏览器直接打开,能点击跳转、切换正常/空态/异常;改一次出一版。</dd>
 <dt>前后</dt><dd>和 <code>/dev-clarify</code> 来回迭代;你确认的版本由 spec 引用后才算数。</dd>
-</dl></div>
-</details>
-
-<details class="skill" id="visual-explain">
-<summary><span class="name">/visual-explain</span><span class="oneline">没看懂就画一页图解</span><span class="how how-say">说话就行</span></summary>
-<div class="body"><dl>
-<dt>什么时候用</dt><dd>对话里的方案、某个文件或话题没看懂时;你不说,它不主动出。</dd>
-<dt>怎么用</dt><dd>说「没看懂」「画个图讲讲」。</dd>
-<dt>产出</dt><dd>一个 HTML 页:先一张总图,再展开关键节点,每个结论配例子。和需求有关的放 <code>docs/features/&lt;需求目录&gt;/</code>,其余放 <code>.cgraphx/visual/</code>;是讨论稿,不当契约。</dd>
-<dt>前后</dt><dd>随时可用,常跟在澄清结果、spec、plan 之后。</dd>
 </dl></div>
 </details>
 
@@ -291,6 +281,17 @@ footer p { margin: 0 0 6px; }
 <dt>要你拍板</dt><dd>在版本分支(<code>dev/&lt;版本号&gt;</code>)上会先停下,提示先 <code>/dev-start</code> 开副本;子 agent 报冲突或卡住时停下问你。</dd>
 <dt>产出</dt><dd>按提交点逐笔提交的代码、统一验证结果和收尾汇报;不 push。</dd>
 <dt>前后</dt><dd>之前 <code>/dev-plan</code>;之后 <code>/code-review</code>。</dd>
+</dl></div>
+</details>
+
+<details class="skill" id="dev-migrate">
+<summary><span class="name">/dev-migrate</span><span class="oneline">业务一条不丢,把旧系统搬进新技术栈的新工程</span><span class="how how-say">说话就行</span></summary>
+<div class="body"><dl>
+<dt>什么时候用</dt><dd>换技术栈重写整个系统(如 MyBatis 换 JPA),顺带重整结构、去冗余、重设计表。</dd>
+<dt>怎么用</dt><dd>说「把这个系统迁到新工程」「MyBatis 换成 JPA」,告诉它旧工程(含各前端仓库)在哪、新栈已定了哪些层。</dd>
+<dt>要你拍板</dt><dd>候选删除逐行定删留;技术栈 ADR、模块映射、表映射、全局决策(接口是否兼容、ID、迁移和切换、回滚方式)逐项确认;每片的功能方案;对拍里判为旧系统 bug 的差异;切换由你执行。</dd>
+<dt>产出</dt><dd>新工程 <code>docs/features/&lt;日期&gt;-&lt;系统名&gt;迁移/</code> 下的迁移总图、行为清单、表映射、数据迁移与对账 SQL;每片一个需求目录,含功能方案、spec、plan、对拍报告。</dd>
+<dt>前后</dt><dd>技术栈用 <code>/init-tech-stack</code> 定;每片走 <code>/dev-spec</code> → <code>/dev-plan</code> → <code>/dev-impl-subagent</code>,对拍用例由 <code>/api-case</code> 生成;切换后 <code>/init-ddl</code>、<code>/knowledge-write</code>。</dd>
 </dl></div>
 </details>
 </section>
@@ -594,7 +595,7 @@ footer p { margin: 0 0 6px; }
 
 <footer>
   <p>「敲命令」只能自己敲 <code>/名字</code> 触发;「说话就行」用自然语言说就会触发,也可以敲命令;「自动」由 agent 按需调用。按 <code>/</code> 跳到搜索框,<code>Esc</code> 清空。</p>
-  <p>cgraphx skill 一览 · 2026-10-27</p>
+  <p>cgraphx skill 一览 · 2026-10-31</p>
 </footer>
 
 </div>

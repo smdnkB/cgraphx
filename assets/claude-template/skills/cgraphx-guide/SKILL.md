@@ -33,7 +33,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 |---|---|
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
 | **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/init-guides`(立项目规范)、`/init-knowledge`(接手陌生项目时建业务知识库)、`/knowledge-migrate`(用过 Claude Code 自动记忆的,每人跑一次:迁进项目,再关掉自动记忆) |
-| **日常做需求 · 必经两步** | `/dev-clarify` 澄清(先定业务口径,再出功能点提案,人审稿式改稿,结束时给《需求功能方案》),然后 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完,最后 `/code-review`;哪里没看懂,说「画个图讲讲」出一页图解 |
+| **日常做需求 · 必经两步** | `/dev-clarify` 澄清(先定业务口径,再出功能点提案,人审稿式改稿,结束时给《需求功能方案》),然后 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完,最后 `/code-review` |
 | **日常做需求 · 复杂按需** | `/dev-wireframe`(涉及界面时画线框)、`/dev-handoff`(探索或澄清结束、要开新会话继续时)、`/dev-spec`(写技术规格)、`/dev-plan`(大需求拆执行计划)、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
 | **版本发布 · 可选** | `/release-start` 开版本 → 每个需求 `/dev-start` 开副本 → `/dev-merge` 合入 → `/release-review` 审核并合入主干;副本单独也能用 |
 | **测试按需 · 三条线** | 接口:`/api-case` → `/api-run`;单元:`/unit-spec` → `/unit-code`;UI:`/ui-case` → `/ui-run` |
@@ -49,13 +49,14 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 
 | skill | 何时建议用户调 |
 |---|---|
-| `/dev-clarify` | 接到模糊需求,先探索项目现实、定业务口径,再以功能点为单位给行为链提案、人审稿式改稿,结束时给《需求功能方案》(经对抗审核;多功能点需求另写一份带 mermaid 流程图的讨论稿) |
+| `/dev-clarify` | 接到模糊需求,先探索项目现实、定业务口径,再以功能点为单位给行为链提案、人审稿式改稿,结束时给《需求功能方案》(经对抗审核;每个功能点按场景配图,写进 PlantUML 讨论稿) |
 | `/dev-wireframe` | 需求涉及界面时画低保真 HTML 线框,看着界面确认布局交互或发现业务问题 |
 | `/dev-handoff` | 探索或澄清结束、要开新会话继续时,确认产出目录、写交接文件(带功能方案或指向讨论稿,拆多个会话按功能点分)、给出启动语 |
 | `/dev-spec` | 环节二:第一节原样收录功能方案,主体写怎么实现——每个功能点出设计决策表(机制选型/数据模型/接口契约)供人评审,🔒 难回头的等确认 |
 | `/dev-plan` | 大需求拆执行计划:index 加一个任务一个文件,给一句 `/dev-impl-subagent` 启动语 |
 | `/dev-impl` | 小需求按 plan 或当前上下文实现代码 |
 | `/dev-impl-subagent` | 大需求按 plan 执行:一个会话按任务派子 agent,主会话提交、统一验证和修复,最后提示 `/code-review` |
+| `/dev-migrate` | 换技术栈重写整个系统(如 MyBatis → JPA):旧系统当标准答案,盘点行为清单、定目标与表映射,按切片走主链,每片新旧对拍 + 数据对账,最后出切换清单 |
 | `/release-start` | 发完一个版本、要按版本开发下一个时,在主干上打上个版本的 tag `v<版本号>`、拉出版本分支 `dev/<下个版本号>` 并装上提交拦截(版本分支上只收合并提交和 `chore(release):` 开头的整版改动) |
 | `/dev-start` | 开始做一个需求时(开了版本时每个需求都要),在主目录旁边写时复制出副本 `<主目录名>@<文件前缀>`、拉好需求分支、建好需求目录,给出到副本开新会话的启动语;副本里的会话和提交记进主目录 |
 | `/dev-merge` | 副本里的需求做完、`/code-review` 过了:副本里跑,先同步主目录当前分支、就地解决冲突;主目录里跑 `/dev-merge <需求>`,预演没冲突就以「合入需求：<标题>」合入当前分支 |
@@ -76,7 +77,6 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/doc-backfill` | 老需求补头部、补单测产物和收口档案 |
 | `/doc-report` | 生成日报、周报、月报、阶段总结、使用习惯分析 |
 | `/doc-workload` | 产出需求工作量汇报,按功能点 × 工作内容拆工时(内部对账、甲方结款依据) |
-| `/visual-explain` | 哪里没看懂,把对话内容或指定的文件、话题画成一页图解 |
 
 ### 命令
 
