@@ -21,11 +21,11 @@
 
 cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是一个单纯的 CLI 工具。skill(markdown 指引)是主体,定义研发流程;程序(cgraphx CLI)为流程提供不可替代的能力支撑(知识库检索、数据库查询、时间线)。**agent 读 skill → 按流程调程序能力**,改任何一侧前先理解这个分工(spec §1.2)。
 
-**skill 主线**(`assets/claude-template/skills/` 下共 31 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
+**skill 主线**(`assets/claude-template/skills/` 下共 30 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
 
-- 需求主线:`/dev-clarify`(必经,澄清意图/业务边界/技术边界)→ `/dev-spec`(核心,技术规格契约)→ `/dev-plan`(大需求必走:index 加一个任务一个文件)→ `/dev-impl`(小需求)或 `/dev-impl-subagent`(大需求:一个会话按任务派子 agent,全部做完统一验证,最后 `/code-review`;判据是需求规模——≥10 文件且 ≥3 独立模块,不是任务量)。日常默认两步:澄清 + 实现;哪里没看懂,`/visual-explain` 出一页图解。可选的版本流程:`/release-start` 开版本(打 tag、拉版本分支 `dev/<版本号>`、装提交拦截)→ 每个需求 `/dev-start` 开写时复制副本 `<主目录名>@<文件前缀>`、在副本里做 → `/dev-merge` 合入版本分支 → 发版前 `/release-review` 出审核报告,说「发」合入主干;不跑就照旧在当前分支上开发。
+- 需求主线:`/dev-clarify`(必经,澄清意图/业务边界/技术边界)→ `/dev-spec`(核心,技术规格契约)→ `/dev-plan`(大需求必走:index 加一个任务一个文件)→ `/dev-impl`(小需求)或 `/dev-impl-subagent`(大需求:一个会话按任务派子 agent,全部做完统一验证,最后 `/code-review`;判据是需求规模——≥10 文件且 ≥3 独立模块,不是任务量)。日常默认两步:澄清 + 实现。可选的版本流程:`/release-start` 开版本(打 tag、拉版本分支 `dev/<版本号>`、装提交拦截)→ 每个需求 `/dev-start` 开写时复制副本 `<主目录名>@<文件前缀>`、在副本里做 → `/dev-merge` 合入版本分支 → 发版前 `/release-review` 出审核报告,说「发」合入主干;不跑就照旧在当前分支上开发。
 - 平行支线:接口测试(`/api-case` → `/api-run`,写接口必须查 DB 验数据)、单元测试(`/unit-spec` → `/unit-code`)、知识沉淀(`/knowledge-write` 触发,`knowledge-recall` 由 agent 自动召回,`/knowledge-migrate` 把 Claude Code 自动记忆迁进来)、DB schema 知识(`/init-ddl` 导出 + `db-query` 探索回写)、认证安全审计(`/audit-login-security`,白盒为主、只报告不修)。
-- 命名:skill 名按使用阶段加前缀——`init-` 项目接入、`dev-` 做需求主线、`release-` 发版流程、`api-` / `ui-` / `unit-` 三条测试线、`doc-` 事后文档与汇报;每个阶段都会用的(knowledge-*、db-query、visual-explain、audit-*、cgraphx-guide)不加。新增 skill 照此命名;改名时旧路径登记进 `deprecated-assets.json`。
+- 命名:skill 名按使用阶段加前缀——`init-` 项目接入、`dev-` 做需求主线、`release-` 发版流程、`api-` / `ui-` / `unit-` 三条测试线、`doc-` 事后文档与汇报;每个阶段都会用的(knowledge-*、db-query、audit-*、cgraphx-guide)不加。新增 skill 照此命名;改名时旧路径登记进 `deprecated-assets.json`。
 
 **`docs/` 目录约定(skill 与程序的契约,目标项目内):**
 

@@ -66,7 +66,7 @@ knowledge-recall (auto)
 /audit-login-security (login/auth audit, report only)
 ```
 
-Everyday default: **clarify + implement**. Large work goes through `/dev-plan`, then `/dev-impl-subagent` runs every task in one session; add spec and tests as complexity grows. When something is unclear, ask for a picture and `/visual-explain` draws a one-page explainer.
+Everyday default: **clarify + implement**. Large work goes through `/dev-plan`, then `/dev-impl-subagent` runs every task in one session; add spec and tests as complexity grows.
 
 ## Install
 

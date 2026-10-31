@@ -64,7 +64,7 @@ knowledge-recall(自动召回)
 /audit-login-security(登录/认证安全审计,只报告不修)
 ```
 
-日常默认两步:**澄清 + 实现**。大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完;复杂需求按需补规格和测试;哪里没看懂,说「画个图讲讲」,`/visual-explain` 出一页图解。
+日常默认两步:**澄清 + 实现**。大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完;复杂需求按需补规格和测试。
 
 ## 安装
 
