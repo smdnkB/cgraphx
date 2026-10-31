@@ -12,6 +12,7 @@
 
 import { runHook, isKillSwitchOn } from './hook-runner';
 import { extractHookPayload, type HookPayload } from './payload';
+import { classifyAutoMessage } from './auto-message';
 import { resolveProjectRoot } from '../directory';
 import { hookNotice, repairHookSnippets } from '../git-hooks';
 import { summarizeToolResponse } from './post-tool-summary';
@@ -60,13 +61,17 @@ export async function userPromptHook(agent: AgentId = DEFAULT_AGENT_ID): Promise
       turn_id,
       session_id: payload.session_id ?? null,
     });
+    // 后台任务通知 / 子 agent 交回也经这里进来:照旧开新一轮(写 turn 状态),
+    // 只是不再记成用户提问,来源写进 metadata.source(spec 2026-10-31)。
+    const autoSource = classifyAutoMessage(payload.prompt);
     return {
-      event_type: 'user_prompt',
+      event_type: autoSource !== null ? 'auto_message' : 'user_prompt',
       session_id: payload.session_id ?? null,
       prompt_text: payload.prompt,
       turn_id,
       cwd: payload.cwd,
       agent,
+      metadata: autoSource !== null ? { source: autoSource } : undefined,
     } satisfies TimelineEventInput;
   });
 }

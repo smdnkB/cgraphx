@@ -219,8 +219,16 @@ function skillNameOf(e: TimelineEvent, skillDirs: string[]): string | undefined 
   return undefined;
 }
 
+/**
+ * 平台协议固定 7 种事件类型(spec §5.2);本地新增的 auto_message 仍按 user_prompt
+ * 上报,平台看到的和以前一样(spec 2026-10-31 锁定)。
+ */
+function reportedEventType(e: TimelineEvent): string {
+  return e.event_type === 'auto_message' ? 'user_prompt' : e.event_type;
+}
+
 function toIngestEvent(e: TimelineEvent, skillDirs: string[]): IngestEvent {
-  const event: IngestEvent = { eventId: String(e.id), ts: e.ts, type: e.event_type };
+  const event: IngestEvent = { eventId: String(e.id), ts: e.ts, type: reportedEventType(e) };
   if (e.tool_name !== null) event.toolName = e.tool_name;
   const skillName = skillNameOf(e, skillDirs);
   if (skillName !== undefined) event.skillName = skillName;

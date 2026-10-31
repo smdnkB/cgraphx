@@ -22,6 +22,7 @@ import {
 import { resolveDataDir } from '../directory';
 import { TimelineSchemaError } from './errors';
 import { TIMELINE_SCHEMA_VERSION } from './constants';
+import { classifyAutoMessage, type AutoMessageSource } from './auto-message';
 import { DEFAULT_AGENT_ID } from '../agents';
 
 /** Resolve schema.sql path — works in both dist/ and src/ layouts. */
@@ -52,6 +53,14 @@ export function ensureTimelineSchema(db: SqliteDatabase): void {
   const sql = fs.readFileSync(schemaPath, 'utf-8');
   db.exec(sql);
   ensureAgentColumn(db);
+  try {
+    ensureAutoMessageMigration(db);
+  } catch (err) {
+    // 存量改记是增强项:失败不阻塞事件记录;水位没动,下次打开再扫。
+    process.stderr.write(
+      `[timeline] auto_message 迁移失败:${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
 
   const current = getCurrentTimelineSchemaVersion(db);
   if (current > TIMELINE_SCHEMA_VERSION) {
@@ -94,6 +103,114 @@ function ensureAgentColumn(db: SqliteDatabase): void {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('duplicate column name')) return;
     throw err;
+  }
+}
+
+// ─── 存量自动消息改记(2026-10-31)────────────────────────────────────────
+
+/** timeline_meta 里记扫描水位的键。 */
+const AUTO_MESSAGE_SCAN_KEY = 'auto_message_scan_id';
+
+/** 一批扫描的行数:一行 prompt_text 最大 64KB,分批读,不一次拉全表。 */
+const AUTO_MESSAGE_SCAN_BATCH = 500;
+
+interface AutoMessageScanRow {
+  id: number;
+  prompt_text: string | null;
+  metadata: string | null;
+}
+
+/** 库里最大的事件 id;空表为 0。 */
+function maxTimelineEventId(db: SqliteDatabase): number {
+  const row = db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM timeline_events').get() as { id: number | bigint };
+  return Number(row.id);
+}
+
+/** 已扫描到的水位;没记过为 0(从头扫)。 */
+function readAutoMessageScanId(db: SqliteDatabase): number {
+  const row = db
+    .prepare('SELECT value FROM timeline_meta WHERE key = ?')
+    .get(AUTO_MESSAGE_SCAN_KEY) as { value: string } | undefined;
+  const n = row === undefined ? 0 : Number(row.value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function writeAutoMessageScanId(db: SqliteDatabase, id: number): void {
+  db.prepare('INSERT OR REPLACE INTO timeline_meta (key, value) VALUES (?, ?)')
+    .run(AUTO_MESSAGE_SCAN_KEY, String(id));
+}
+
+/** 原 metadata 的其它键保留,补上 source;旧行的 metadata 一般为空。 */
+function metadataWithSource(raw: string | null, source: AutoMessageSource): string {
+  let meta: Record<string, unknown> = {};
+  if (raw !== null) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        meta = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // 坏 JSON 当空的处理,不影响改记
+    }
+  }
+  meta.source = source;
+  return JSON.stringify(meta);
+}
+
+/**
+ * 把旧版本记成 user_prompt 的自动消息改记为 auto_message(spec 2026-10-31)。
+ *
+ * 每次打开库都会调用,所以按 timeline_meta 里的水位只扫新出现的行:本机全局 cgraphx
+ * 若比本构建旧,它写进来的自动消息仍是 user_prompt,等新版打开库时再改。水位到表尾后
+ * 只剩一条 MAX(id) 查询。不升 schema 版本号——升了旧版全局 cgraphx 打开库会报错,
+ * hook 就不再记录(这是本需求锁定的取舍)。
+ *
+ * BEGIN IMMEDIATE:多个 hook 进程并发打开时只有一个真正扫描,另一个拿到锁后重读水位
+ * 直接跳过(写法同 ensureAgentColumn)。扫描期间持写锁,其它写入排队,拿到的是稳定快照。
+ */
+function ensureAutoMessageMigration(db: SqliteDatabase): void {
+  if (maxTimelineEventId(db) === readAutoMessageScanId(db)) return;
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const stored = readAutoMessageScanId(db);
+    const maxId = maxTimelineEventId(db);
+    if (maxId === stored) {
+      // 并发的另一个进程拿到锁前已扫完
+      db.exec('COMMIT');
+      return;
+    }
+    // 水位比表尾还大:旧版 `timeline uninstall --purge` 删了 events 表、不认识 timeline_meta,
+    // id 从头开始 —— 从头重扫。
+    const scanId = stored > maxId ? 0 : stored;
+    if (maxId > scanId) reclassifyAutoMessages(db, scanId);
+    writeAutoMessageScanId(db, maxId);
+    db.exec('COMMIT');
+  } catch (err) {
+    try { db.exec('ROLLBACK'); } catch { /* 事务可能已结束 */ }
+    throw err;
+  }
+}
+
+/** 从 scanId 往后逐批扫 user_prompt 行,文本开头命中的改成 auto_message。 */
+function reclassifyAutoMessages(db: SqliteDatabase, scanId: number): void {
+  const select = db.prepare(
+    `SELECT id, prompt_text, metadata FROM timeline_events
+     WHERE id > ? AND event_type = 'user_prompt'
+     ORDER BY id LIMIT ?`,
+  );
+  const update = db.prepare(
+    "UPDATE timeline_events SET event_type = 'auto_message', metadata = ? WHERE id = ?",
+  );
+  let cursor = scanId;
+  for (;;) {
+    const rows = select.all(cursor, AUTO_MESSAGE_SCAN_BATCH) as AutoMessageScanRow[];
+    const last = rows[rows.length - 1];
+    if (last === undefined) return;
+    for (const row of rows) {
+      const source = row.prompt_text !== null ? classifyAutoMessage(row.prompt_text) : null;
+      if (source !== null) update.run(metadataWithSource(row.metadata, source), row.id);
+    }
+    cursor = last.id;
   }
 }
 
