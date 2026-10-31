@@ -24,6 +24,7 @@ related_code:
   - assets/claude-template/skills/doc-workload/SKILL.md
   - assets/claude-template/skills/init-ddl/SKILL.md
   - assets/claude-template/skills/init-guides/SKILL.md
+  - assets/claude-template/skills/init-tech-stack/SKILL.md
   - assets/claude-template/skills/doc-report/SKILL.md
   - assets/claude-template/skills/init-knowledge/SKILL.md
   - assets/claude-template/skills/dev-impl-subagent/SKILL.md
@@ -118,3 +119,12 @@ doc-delivery 沿用 write-prd、write-design-doc、write-api-doc 三个旧 skill
 - user-invoked 8 个:不变。
 
 新增的 4 个 skill 都属于版本流程与需求副本:dev-start(开需求副本)、dev-merge(副本合入/同步)、release-start(开版本)、release-review(发版审核),都按自然语言触发,保留 description。
+
+## 2026-10-31 更新(新增 init-tech-stack,补记 dev-migrate)
+
+新增 init-tech-stack:新项目启动技术选型,12 层决策树,产出 docs/adr/ 下的 ADR。skill 共 32 个。
+
+- model-invoked 23 个:上一版 22 个 + dev-migrate(2.0.11 新增,前次更新未计入;按自然语言「把这个系统迁到新工程」触发)。
+- user-invoked 9 个:上一版 8 个 + init-tech-stack。
+
+判据:init-tech-stack 只有人敲 `/init-tech-stack` 才跑(新项目一次性选型);`dev-migrate` 第 2 步写成「提示用户跑」,是文字推荐不是调用,故保持 user-invoked。
