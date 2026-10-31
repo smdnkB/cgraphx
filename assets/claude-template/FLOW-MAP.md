@@ -11,7 +11,7 @@
                         │
                         ▼
   dev-clarify(必经;探索现实 → 口径对齐 → 功能点提案-改稿,只锁业务)
-    结束时在对话里给《需求功能方案》(口径表+功能点表;多功能点需求另写 mermaid 讨论稿;dev-spec 原样收录为 spec 第一节);没看懂可以用 visual-explain 出图解
+    结束时在对话里给《需求功能方案》(口径表+功能点表;多功能点需求另写 PlantUML 讨论稿;dev-spec 原样收录为 spec 第一节);没看懂可以用 visual-explain 出图解
                         │       ▲
                         │       ▼ 涉及 UI 时,可在 clarify 前后、spec 后来回迭代
                         │   dev-wireframe(低保真 HTML 线框 v1、v2…)
