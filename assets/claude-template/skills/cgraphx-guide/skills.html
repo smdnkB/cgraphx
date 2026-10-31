@@ -192,7 +192,7 @@ footer p { margin: 0 0 6px; }
     <button class="chip" type="button" data-group="test" aria-pressed="false">测试</button>
     <button class="chip" type="button" data-group="security" aria-pressed="false">安全审计</button>
     <button class="chip" type="button" data-group="knowledge" aria-pressed="false">知识与数据库</button>
-    <button class="chip" type="button" data-group="wrap" aria-pressed="false">规范与收尾</button>
+    <button class="chip" type="button" data-group="wrap" aria-pressed="false">项目启动与收尾</button>
     <button class="chip" type="button" data-group="review" aria-pressed="false">回顾与工具</button>
     <span class="count" id="count"></span>
   </div>
@@ -498,7 +498,18 @@ footer p { margin: 0 0 6px; }
 </section>
 
 <section class="group" data-group="wrap">
-<div class="group-title">规范与收尾</div>
+<div class="group-title">项目启动与收尾</div>
+
+<details class="skill" id="init-tech-stack">
+<summary><span class="name">/init-tech-stack</span><span class="oneline">新项目先定技术栈,产出 ADR</span><span class="how how-cmd">敲命令</span></summary>
+<div class="body"><dl>
+<dt>什么时候用</dt><dd>新项目起步;需求里要引入新技术栈;系统迁移定目标时由 <code>/dev-migrate</code> 提示你跑。</dd>
+<dt>怎么用</dt><dd>敲 <code>/init-tech-stack</code>,按 12 层逐层看推荐和备选,逐组拍板。</dd>
+<dt>要你拍板</dt><dd>每一层选哪个;已拍板的层不重开,只敲定剩下的。</dd>
+<dt>产出</dt><dd><code>docs/adr/&lt;NNN&gt;-技术栈选型.md</code>;后续 <code>/init-guides</code> 按它生成规范。</dd>
+<dt>前后</dt><dd>新项目在 <code>/init-guides</code> 前;需求引入新栈在 <code>/dev-spec</code> 前;迁移时由 <code>/dev-migrate</code> 提示。</dd>
+</dl></div>
+</details>
 
 <details class="skill" id="init-guides">
 <summary><span class="name">/init-guides</span><span class="oneline">生成项目规范,开发时按任务自动送达</span><span class="how how-cmd">敲命令</span></summary>
