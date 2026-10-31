@@ -402,9 +402,13 @@ footer p { margin: 0; }
 
 <section>
   <h2>最佳起步实践</h2>
-  <p>接入只是第一步。推荐这个顺序——<strong>先立规范、再聊业务、然后做需求</strong>:</p>
+  <p>接入只是第一步。推荐这个顺序——<strong>先定选型与规范、再聊业务、然后做需求</strong>:</p>
 
   <div class="pipeline">
+    <div class="step">
+      <h4>定技术栈 · <code>/init-tech-stack</code></h4>
+      <p>新项目先定技术栈:按 12 层决策树逐层看推荐和备选,产出 <code>docs/adr/</code> 下的技术栈选型 ADR;已有技术栈的项目跳过。后续规范、spec、plan 都以它为准,不重开选型。系统迁移时由 <code>/dev-migrate</code> 提示你跑。</p>
+    </div>
     <div class="step">
       <h4>立规范 · <code>/init-guides</code></h4>
       <p>生成 <code>docs/guides/</code> 五份规范(编码/接口/数据/测试/Git)。规范 = 项目对默认做法的<strong>有意偏离</strong>——「SQL 禁止 ORDER BY」「金额一律 decimal(12,2)」这类最容易偏离又没有工具兜底的约定。这些 guide 是后续任务的<strong>强制读点</strong>:编码/接口/数据三份会被 <code>/dev-plan</code> 结晶成契约(测试规范不走 plan,由 <code>unit-code</code> 执行前自读,内容全是单测向,接口测试规范由 <code>api-case</code> 读 <code>interface-standards.md</code> 送达;Git 结晶进 plan 提交规范节)。</p>
@@ -437,14 +441,17 @@ footer p { margin: 0; }
   </div>
 
   <div class="highlight">
-    <p>先有规范(agent 懂「规矩」),再对齐业务(agent 懂「黑话」),然后做需求才事半功倍。</p>
+    <p>先定选型与规范(agent 懂「栈」和「规矩」),再对齐业务(agent 懂「黑话」),然后做需求才事半功倍。</p>
   </div>
 </section>
 
 <section>
   <h2>工作流全景</h2>
 
-  <div class="flow-diagram">knowledge-recall(自动召回)
+  <div class="flow-diagram">新项目启动 · /init-tech-stack → /init-guides
+        │
+        ▼
+knowledge-recall(自动召回)
         │
         ▼
 /dev-clarify ───────────→ /dev-spec ────→ /dev-plan(大需求必走)
@@ -644,16 +651,18 @@ footer p { margin: 0; }
 ├── <b>releases/</b>   发版审核报告(<span class="skill">/release-review</span> <span class="ann">开了版本才有</span>)
 │   └── v&lt;版本号&gt;-发版审核.md
 │
-└── <b>guides/</b>   项目规范(<span class="skill">/init-guides</span> <span class="ann">生成</span>)
-    ├── coding-standards.md
-    ├── interface-standards.md
-    ├── data-standards.md
-    ├── testing-standards.md
-    └── git-standards.md              <span class="ann">commit 门禁指向此文件</span>
+├── <b>guides/</b>   项目规范(<span class="skill">/init-guides</span> <span class="ann">生成</span>)
+│   ├── coding-standards.md
+│   ├── interface-standards.md
+│   ├── data-standards.md
+│   ├── testing-standards.md
+│   └── git-standards.md              <span class="ann">commit 门禁指向此文件</span>
+│
+└── <b>adr/</b>   技术栈选型(<span class="skill">/init-tech-stack</span> <span class="ann">新项目/换栈时</span> <span class="ann">不登记</span>)
   </pre>
 
   <div class="highlight">
-    <p><strong>两个核心目录</strong>——<code>docs/features/</code> 是单次需求工作目录(必须有 spec),<code>docs/knowledge/</code> 是跨需求共享的业务知识库。bruno/、schema-knowledge/、security/、releases/、guides/ 按需出现。</p>
+    <p><strong>两个核心目录</strong>——<code>docs/features/</code> 是单次需求工作目录(必须有 spec),<code>docs/knowledge/</code> 是跨需求共享的业务知识库。bruno/、schema-knowledge/、security/、releases/、guides/、adr/ 按需出现。</p>
   </div>
 </section>
 

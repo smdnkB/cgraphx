@@ -24,6 +24,8 @@ related_code:
   - assets/claude-template/skills/doc-workload/SKILL.md
   - assets/claude-template/skills/init-ddl/SKILL.md
   - assets/claude-template/skills/init-guides/SKILL.md
+  - assets/claude-template/skills/init-tech-stack/SKILL.md
+  - assets/claude-template/skills/doc-monthly-report/SKILL.md
   - assets/claude-template/skills/doc-report/SKILL.md
   - assets/claude-template/skills/init-knowledge/SKILL.md
   - assets/claude-template/skills/dev-impl-subagent/SKILL.md
@@ -119,11 +121,14 @@ doc-delivery 沿用 write-prd、write-design-doc、write-api-doc 三个旧 skill
 
 新增的 4 个 skill 都属于版本流程与需求副本:dev-start(开需求副本)、dev-merge(副本合入/同步)、release-start(开版本)、release-review(发版审核),都按自然语言触发,保留 description。
 
-## 2026-10-31 更新(新增 doc-monthly-report)
+## 2026-10-31 更新(init-tech-stack、doc-monthly-report 同日合入,补记 dev-migrate)
 
-2026-10-31 新增 doc-monthly-report(月底日报汇总):从工作台日报接口拉全月记录,按日浓缩成月底日报表单;结果只在会话里输出,不归档。skill 共 32 个。
+2026-10-31 合入两个 skill,skill 共 33 个:
 
-- model-invoked 23 个:不变。
-- user-invoked 9 个:上一版 8 个 + doc-monthly-report。
+- init-tech-stack:新项目启动技术选型,12 层决策树,产出 `docs/adr/` 下的 ADR。
+- doc-monthly-report:月底日报汇总,从工作台日报接口拉全月记录,按日浓缩成月底日报表单;结果只在会话里输出,不归档。
 
-判据:只有人敲 `/doc-monthly-report` 才跑,每月一次;它不调用别的 skill,也没有别的 skill 调用它。此前条目记 30 个,实际为 31(漏了 dev-migrate);本次按实际目录校正:model-invoked 23、user-invoked 9,共 32。
+- model-invoked 23 个:上一版 22 个 + dev-migrate(2.0.11 新增,前次更新未计入;按自然语言「把这个系统迁到新工程」触发)。
+- user-invoked 10 个:上一版 8 个 + init-tech-stack + doc-monthly-report。
+
+判据:init-tech-stack 只有人敲 `/init-tech-stack` 才跑(新项目一次性选型);doc-monthly-report 只有人敲 `/doc-monthly-report` 才跑(每月一次);两者都不调用别的 skill,也没有别的 skill 调用它们。dev-migrate 是 model-invoked,第 2 步「提示用户跑 /init-tech-stack」是文字推荐,不是调用。

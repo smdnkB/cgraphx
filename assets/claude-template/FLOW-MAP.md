@@ -7,6 +7,9 @@
 ## 依赖总览
 
 ```text
+新项目启动(按需):/init-tech-stack(定技术栈,ADR)→ /init-guides(规范)→ /init-ddl / /init-knowledge
+                        │
+                        ▼
                 knowledge-recall(先聊概念,实体条目优先)
                         │
                         ▼
@@ -46,10 +49,17 @@
 guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执行标注,没有 plan 时自己识别)· api-case 独立读接口规范 · unit-code 独立读测试规范 · commit 门禁指向 git-standards;缺失时先 init-guides 补齐(中断)
 ```
 
+## 新项目启动流程(按需)
+
+- **链**:`cgraphx install` → `/init-tech-stack`(定技术栈,ADR 落 `docs/adr/`)→ `/init-guides`(按 ADR 生成 `docs/guides/` 五份规范)→ 按需 `/init-ddl` / `/init-knowledge` → 进入设计流程
+- **前置**:无;需求里引入新技术栈时,在 `/dev-spec` 前跑,ADR 作为 spec 输入;系统迁移由 `/dev-migrate` 提示用户跑
+- **产物**:`docs/adr/<NNN>-技术栈选型.md`;后续 `docs/guides/`、`docs/schema-knowledge/`、`docs/knowledge/`
+- **边界**:只定选型,不搭脚手架、不写代码;plan 不重开选型;已有技术栈的项目不强制跑
+
 ## 设计流程
 
 - **链**:`/dev-clarify` → `/dev-spec` →(小需求可跳过 `/dev-plan`,大需求必走);涉及 UI → `/dev-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框);探索或澄清结束要开新会话 → `/dev-handoff`(交接文件带功能方案或指向讨论稿,拆多个会话按功能点分)
-- **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示)
+- **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示);新项目先走「新项目启动流程」(技术栈、规范),已有技术栈的项目跳过 `/init-tech-stack`
 - **分工**:clarify 锁业务(探索现实 → 口径对齐 → 功能点提案-改稿,体验变体上浮);spec 是唯一契约:第一节原样收录功能方案,其余是**环节二细节方案设计**(设计决策表:机制选型/数据模型/接口契约,人挑错式评审;改变业务可观察行为 → 回跳 clarify);plan 只拆解编排,不重新选型,选型缺口回 spec 补决策
 - **人工确认点**:《需求功能方案》(对话里的口径表+功能点表,各功能点的图和全景图在讨论稿里;经对抗审核后人说对了才写 spec);线框(涉及 UI 时),人看着界面确认布局和交互;spec 标 🔒 的难回头决策,人确认后才往下走;plan index「设计预览」的落点表,人确认后才进实现;没有 spec 和 plan 的小需求,dev-impl 动代码前确认难回头的改动。
 - **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`<前缀>-交接提示词.md`、功能方案讨论稿 `<前缀>-功能方案-v<N>.md`(clarify 出,画了图的需求才有,不登记)、`plan/<前缀>-index.md` 加一个任务一个文件;spec / 交接文件头部声明 `> 负责人:`(也是任务负责人判定依据),会话按读写的产出目录自动关联任务;收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
@@ -75,7 +85,7 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 
 ## 系统迁移流程(按需)
 
-- **链**:`/dev-migrate` 立项 → 盘点行为清单(机械枚举入口、冗余凭证据删、人逐行拍板)→ 定目标(`/init-tech-stack` 出 ADR、模块映射、表映射、全局决策,🔒 人确认)→ 切片路线图 → 每片:功能方案(从清单生成)→ `/dev-spec` → `/dev-plan` → `/dev-impl-subagent` → 对拍(`/api-case` 出用例,新旧两边跑)+ 数据对账 → 追平旧工程新提交 → 切换清单(人执行)
+- **链**:`/dev-migrate` 立项 → 盘点行为清单(机械枚举入口、冗余凭证据删、人逐行拍板)→ 定目标(提示用户跑 `/init-tech-stack` 出 ADR;模块映射、表映射、全局决策由 dev-migrate 出,🔒 人确认)→ 切片路线图 → 每片:功能方案(从清单生成)→ `/dev-spec` → `/dev-plan` → `/dev-impl-subagent` → 对拍(`/api-case` 出用例,新旧两边跑)+ 数据对账 → 追平旧工程新提交 → 切换清单(人执行)
 - **前置**:旧工程可读、能起测试环境;新工程 `cgraphx install`,新栈的 `docs/guides/` 由 `/init-guides` 生成后再进切片
 - **强制读**:`references/产物范例.md`;盘点派子 agent 时照 `references/盘点子agent说明.md` 写说明;第 2 步读对应配方 `references/配方-<旧栈>-to-<新栈>.md`;每片验收读 `references/对拍与对账.md`
 - **产物**:新工程 `docs/adr/`;迁移总目录 `docs/features/<日期>-<系统名>迁移/`(迁移总图、行为清单、表映射、`sql/`);每片一个需求目录(功能方案、spec、plan、对拍报告)
