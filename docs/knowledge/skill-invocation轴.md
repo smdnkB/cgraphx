@@ -118,3 +118,12 @@ doc-delivery 沿用 write-prd、write-design-doc、write-api-doc 三个旧 skill
 - user-invoked 8 个:不变。
 
 新增的 4 个 skill 都属于版本流程与需求副本:dev-start(开需求副本)、dev-merge(副本合入/同步)、release-start(开版本)、release-review(发版审核),都按自然语言触发,保留 description。
+
+## 2026-10-31 更新(新增 doc-monthly-report)
+
+2026-10-31 新增 doc-monthly-report(月底日报汇总):从工作台日报接口拉全月记录,按日浓缩成月底日报表单;结果只在会话里输出,不归档。skill 共 32 个。
+
+- model-invoked 23 个:不变。
+- user-invoked 9 个:上一版 8 个 + doc-monthly-report。
+
+判据:只有人敲 `/doc-monthly-report` 才跑,每月一次;它不调用别的 skill,也没有别的 skill 调用它。此前条目记 30 个,实际为 31(漏了 dev-migrate);本次按实际目录校正:model-invoked 23、user-invoked 9,共 32。

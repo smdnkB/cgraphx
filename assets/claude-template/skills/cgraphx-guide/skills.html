@@ -570,6 +570,17 @@ footer p { margin: 0 0 6px; }
 </dl></div>
 </details>
 
+<details class="skill" id="doc-monthly-report">
+<summary><span class="name">/doc-monthly-report</span><span class="oneline">月底把工作台日报汇总成填报表</span><span class="how how-cmd">敲命令</span></summary>
+<div class="body"><dl>
+<dt>什么时候用</dt><dd>月底要填「月底日报」表单,每天一行。</dd>
+<dt>怎么用</dt><dd>敲 <code>/doc-monthly-report</code>,按提示给月份、工作台地址和账号。</dd>
+<dt>要你拍板</dt><dd>月份(默认当月)、工作台地址、登录账号;密码在终端隐藏输入或环境变量,不要贴在对话里。</dd>
+<dt>产出</dt><dd>会话里的 Markdown 表(日期 + 每日工作内容,≤100 字)和「未列入」说明;不写文件。</dd>
+<dt>前后</dt><dd>数据来自工作台日报接口,不是 cgraphx 时间线;日常汇报走 <code>/doc-report</code>。</dd>
+</dl></div>
+</details>
+
 <details class="skill" id="cgraphx-guide">
 <summary><span class="name">/cgraphx-guide</span><span class="oneline">cgraphx 怎么装、怎么接入、日常怎么用</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>

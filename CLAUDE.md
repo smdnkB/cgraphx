@@ -21,7 +21,7 @@
 
 cgraphx 的本质是一套**面向 AI agent 的通用辅助研发系统**,不是一个单纯的 CLI 工具。skill(markdown 指引)是主体,定义研发流程;程序(cgraphx CLI)为流程提供不可替代的能力支撑(知识库检索、数据库查询、时间线)。**agent 读 skill → 按流程调程序能力**,改任何一侧前先理解这个分工(spec §1.2)。
 
-**skill 主线**(`assets/claude-template/skills/` 下共 31 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
+**skill 主线**(`assets/claude-template/skills/` 下共 32 个 skill,流程全景见 `cgraphx-guide` skill 的 `how-to-use.html`):
 
 - 需求主线:`/dev-clarify`(必经,澄清意图/业务边界/技术边界)→ `/dev-spec`(核心,技术规格契约)→ `/dev-plan`(大需求必走:index 加一个任务一个文件)→ `/dev-impl`(小需求)或 `/dev-impl-subagent`(大需求:一个会话按任务派子 agent,全部做完统一验证,最后 `/code-review`;判据是需求规模——≥10 文件且 ≥3 独立模块,不是任务量)。日常默认两步:澄清 + 实现。可选的版本流程:`/release-start` 开版本(打 tag、拉版本分支 `dev/<版本号>`、装提交拦截)→ 每个需求 `/dev-start` 开写时复制副本 `<主目录名>@<文件前缀>`、在副本里做 → `/dev-merge` 合入版本分支 → 发版前 `/release-review` 出审核报告,说「发」合入主干;不跑就照旧在当前分支上开发。
 - 系统迁移(按需):`/dev-migrate`(换技术栈重写整个系统:旧系统当标准答案,盘点行为清单 → 定目标与表映射 → 按切片走需求主线 → 新旧对拍 + 数据对账 → 切换清单;配方按 `references/配方-<旧栈>-to-<新栈>.md` 积累)。
