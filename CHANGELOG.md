@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Removed — the separate `visual-explain` explainer skill is gone
+
+`/visual-explain` turned whatever the conversation had just covered into a
+one-page HTML explainer. The same need is served by the conversation itself,
+the mermaid diagram in a multi-feature functional plan, and `/dev-wireframe`
+for UI work, so the skill is retired. The template no longer ships
+`skills/visual-explain`, and `skills/visual-explain` is now on the
+`deprecated-assets.json` list — `cgraphx install` / `uninstall` deletes a copy
+deployed by an older release. References were dropped from `FLOW-MAP.md`, the
+template and root `CLAUDE.md`, the `cgraphx-guide` pages, the closing prompts
+of `/dev-clarify`, `/dev-spec` and `/dev-plan`, both READMEs, and the skill
+roster in `docs/knowledge/skill-invocation轴.md`. Explainer pages already
+written into a requirement directory or `.cgraphx/visual/` are left alone.
+
 ### Added — `/knowledge-migrate` moves Claude Code auto memory into the project
 
 Claude Code keeps its auto memory outside the project, under
@@ -101,7 +115,8 @@ and new names never trigger side by side.
 | | `doc-backfill` | `iboc-check` |
 
 Unchanged: `knowledge-recall`, `knowledge-write`, `db-query`,
-`visual-explain`, `audit-login-security`, `cgraphx-guide`.
+`audit-login-security`, `cgraphx-guide`. (`visual-explain` also kept its
+name at the rename, and is retired later in this release — see above.)
 
 Platform reporting sends the new names in `skillName` from now on, so
 per-skill statistics on the platform break at the rename unless the platform
