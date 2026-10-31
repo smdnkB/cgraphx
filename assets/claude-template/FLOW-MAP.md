@@ -159,4 +159,5 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 ## 其他能力
 
 - `/doc-report` 开发事件流与日报/周报/月报 | `/doc-workload` 交付工作量汇报(按 spec 功能点 × 工作内容拆工时)
+- `/doc-monthly-report` 月底日报汇总(登录工作台拉全月日报,按日浓缩成月底填报表)
 - `/doc-backfill` 老需求补头部、补单测产物和收口档案
