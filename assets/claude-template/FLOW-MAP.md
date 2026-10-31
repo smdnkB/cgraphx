@@ -73,6 +73,14 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 - **退出**:发完版不再跑 `/release-start`;之后在 main 上 `/dev-merge` 停下问时,回答「不再按版本走」(卸掉提交拦截,以后不再问)
 - **不用就照旧**:不跑 `/release-start`、`/dev-start` 的项目在当前分支上开发,不装提交拦截;开了版本后,版本分支上不直接做需求——`/dev-impl`、`/dev-impl-subagent` 开跑前停下提示先 `/dev-start`,直接提交会被拦下,只放行合并提交和以 `chore(release):` 开头的整版改动(改版本号、主目录里写的知识库和 DDL 知识、发版审核报告)
 
+## 系统迁移流程(按需)
+
+- **链**:`/dev-migrate` 立项 → 盘点行为清单(机械枚举入口、冗余凭证据删、人逐行拍板)→ 定目标(`/init-tech-stack` 出 ADR、模块映射、表映射、全局决策,🔒 人确认)→ 切片路线图 → 每片:功能方案(从清单生成)→ `/dev-spec` → `/dev-plan` → `/dev-impl-subagent` → 对拍(`/api-case` 出用例,新旧两边跑)+ 数据对账 → 追平旧工程新提交 → 切换清单(人执行)
+- **前置**:旧工程可读、能起测试环境;新工程 `cgraphx install`,新栈的 `docs/guides/` 由 `/init-guides` 生成后再进切片
+- **强制读**:`references/产物范例.md`;盘点派子 agent 时照 `references/盘点子agent说明.md` 写说明;第 2 步读对应配方 `references/配方-<旧栈>-to-<新栈>.md`;每片验收读 `references/对拍与对账.md`
+- **产物**:新工程 `docs/adr/`;迁移总目录 `docs/features/<日期>-<系统名>迁移/`(迁移总图、行为清单、表映射、`sql/`);每片一个需求目录(功能方案、spec、plan、对拍报告)
+- **边界**:行为以旧代码为准,清单之外不删不改;旧工程不为迁移改代码;生产操作归人
+
 ## 接口测试流程
 
 - **链**:`/api-case`(生成 .bru + 测试规格)→ `/api-run`(跑测试 + 核实写接口 DB 副作用 + 出报告;**写接口必查 DB 验数据,HTTP 200 ≠ 通过**)
