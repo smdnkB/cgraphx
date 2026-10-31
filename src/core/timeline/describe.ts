@@ -10,6 +10,7 @@ import type { TimelineEvent } from './types';
 export function describeEvent(e: TimelineEvent): string {
   switch (e.event_type) {
     case 'user_prompt':
+    case 'auto_message':
       return truncate(e.prompt_text ?? '', 120);
     case 'pre_tool_use':
     case 'post_tool_use':

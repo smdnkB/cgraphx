@@ -218,6 +218,7 @@ cgraphx timeline show <id>
 Developer Timeline 记录项目本地事件流:
 
 - `user_prompt`:用户提出的任务
+- `auto_message`:自动消息(后台任务通知、子 agent 交回结果)—— 不是用户提的,统计提问时不算
 - `pre_tool_use` / `post_tool_use`:工具调用、文件、命令
 - `stop`:会话结束
 - `git_commit`:提交记录

@@ -69,7 +69,7 @@ const HOOK_HANDLERS: Record<HookEventName, (agent: AgentId) => Promise<void>> = 
 };
 
 /** `--type` 可接受的事件类型(帮助文本与报错共用)。 */
-const EVENT_TYPES_HELP = 'user_prompt | pre_tool_use | post_tool_use | stop | git_commit | session_start | session_end';
+const EVENT_TYPES_HELP = 'user_prompt | auto_message | pre_tool_use | post_tool_use | stop | git_commit | session_start | session_end';
 
 class ArgError extends Error {}
 

@@ -9,6 +9,7 @@ import type { AgentId } from '../agents';
 
 export type EventType =
   | 'user_prompt'
+  | 'auto_message'
   | 'pre_tool_use'
   | 'post_tool_use'
   | 'stop'
