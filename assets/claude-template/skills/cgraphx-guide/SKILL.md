@@ -40,7 +40,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | **安全审计按需** | `/audit-login-security`(登录/认证安全审计:枚举全部认证入口 + 画认证链路,查绕过、越权、凭据、会话、爆破;只报告不修代码,默认不落盘) |
 | **收尾按需** | `/dev-end`(写收口档案,已上线时写发布记录)、`/doc-backfill`(老需求补头部、补单测产物和收口档案) |
 | **发布后按需** | `/doc-delivery`(需求文档、设计文档、接口文档,运行时选) |
-| **工作回顾按需** | `/doc-report`(日/周/月报)、`/doc-workload`(工作量汇报) |
+| **工作回顾按需** | `/doc-report`(日/周/月报)、`/doc-workload`(工作量汇报)、`/doc-monthly-report`(月底填报表) |
 | **卸载 · 可选** | `cgraphx uninstall`(按清单清 `.claude/` 内包自带 skills 和配置 + 删 `.cgraphx/`,`--keep-data` 保留数据)、`npm uninstall -g cgraphx` |
 
 ## 各 skill 导航
@@ -78,6 +78,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/doc-backfill` | 老需求补头部、补单测产物和收口档案 |
 | `/doc-report` | 生成日报、周报、月报、阶段总结、使用习惯分析 |
 | `/doc-workload` | 产出需求工作量汇报,按功能点 × 工作内容拆工时(内部对账、甲方结款依据) |
+| `/doc-monthly-report` | 月底汇总工作台日报,按日浓缩成月底日报表单(每行 ≤100 字) |
 
 ### 命令
 
