@@ -27,17 +27,20 @@ related_code:
   - assets/claude-template/skills/doc-report/SKILL.md
   - assets/claude-template/skills/init-knowledge/SKILL.md
   - assets/claude-template/skills/dev-impl-subagent/SKILL.md
-  - assets/claude-template/skills/visual-explain/SKILL.md
   - assets/claude-template/skills/knowledge-migrate/SKILL.md
+  - assets/claude-template/skills/dev-start/SKILL.md
+  - assets/claude-template/skills/dev-merge/SKILL.md
+  - assets/claude-template/skills/release-start/SKILL.md
+  - assets/claude-template/skills/release-review/SKILL.md
 created: 2026-08-01
-updated: 2026-10-27
+updated: 2026-10-31
 ---
 
 # skill invocation 轴
 
 ## Summary
 
-一个 skill 该 model-invoked 还是 user-invoked,判据是 writing-great-skills 的 invocation 轴:**agent 需要在自己判断下触发它、或别的 skill 需要调用它 → model-invoked**(保留 description,付每轮 context load);**只有人手敲名字才跑 → user-invoked**(`disable-model-invocation: true`,零 context load,付 cognitive load)。两个硬信号强制 model-invoked:① 设计上由 agent 自动触发;② 被另一个 skill 在正文里**调用**(文字推荐不算)。2026-08-01 据此把 10 个"用户决定才跑"的工具型 skill 转 user-invoked,常驻 description 25→15。user-invoked skill 多了靠 **router**(cgraphx-guide / FLOW-MAP)治 cognitive load——它们仍被列在索引里,agent 仍能文字推荐,用户敲名字即可,推荐链不断。2026-10-27 新增 knowledge-migrate 后为 27 个:19 个 model-invoked、8 个 user-invoked,见文末更新。
+一个 skill 该 model-invoked 还是 user-invoked,判据是 writing-great-skills 的 invocation 轴:**agent 需要在自己判断下触发它、或别的 skill 需要调用它 → model-invoked**(保留 description,付每轮 context load);**只有人手敲名字才跑 → user-invoked**(`disable-model-invocation: true`,零 context load,付 cognitive load)。两个硬信号强制 model-invoked:① 设计上由 agent 自动触发;② 被另一个 skill 在正文里**调用**(文字推荐不算)。2026-08-01 据此把 10 个"用户决定才跑"的工具型 skill 转 user-invoked,常驻 description 25→15。user-invoked skill 多了靠 **router**(cgraphx-guide / FLOW-MAP)治 cognitive load——它们仍被列在索引里,agent 仍能文字推荐,用户敲名字即可,推荐链不断。2026-10-31 移除 visual-explain 后为 30 个:22 个 model-invoked、8 个 user-invoked,见文末更新。
 
 ## 决策与背景
 
@@ -106,3 +109,12 @@ doc-delivery 沿用 write-prd、write-design-doc、write-api-doc 三个旧 skill
 - user-invoked 8 个:上一版 7 个 + knowledge-migrate。
 
 判据:只有人敲 `/knowledge-migrate` 才跑,每人每个项目一次;它按 knowledge-write 的规则写知识库是文字引用、不是调用,也没有别的 skill 调它。关掉记忆后「以后都这样做」的去向提问由 task 的 SessionStart 注入,不靠它的 description 触发。旧名已从 `deprecated-assets.json` 撤下:清理在部署之后跑,留着会把新 skill 一装上就删掉。
+
+## 2026-10-31 更新(移除 visual-explain,补记 10-27 更新后新增的 4 个 skill)
+
+2026-10-31 移除 visual-explain(独立的图解页 skill):讲解回归对话、多功能点需求的功能方案讨论稿 mermaid 图、以及涉及 UI 的线框;skill 剩 30 个。`skills/visual-explain` 已登记进 `deprecated-assets.json`,`cgraphx install` / `uninstall` 升级时清掉。
+
+- model-invoked 22 个:上一版 19 个 − visual-explain + 2026-10-27 更新之后新增的 dev-start、dev-merge、release-start、release-review(均为 model-invoked)。
+- user-invoked 8 个:不变。
+
+新增的 4 个 skill 都属于版本流程与需求副本:dev-start(开需求副本)、dev-merge(副本合入/同步)、release-start(开版本)、release-review(发版审核),都按自然语言触发,保留 description。
