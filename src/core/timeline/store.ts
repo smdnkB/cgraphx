@@ -454,6 +454,7 @@ export class TimelineStore {
         .all(...baseParams) as Array<{ event_type: string; c: number }>;
       const byType: Record<EventType, number> = {
         user_prompt: 0,
+        auto_message: 0,
         pre_tool_use: 0,
         post_tool_use: 0,
         stop: 0,

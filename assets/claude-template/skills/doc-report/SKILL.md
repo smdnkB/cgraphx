@@ -26,6 +26,8 @@ description: 基于 Developer Timeline 事件流生成日报、周报、月报�
 | 交付汇报 | 面向领导/团队的价值、结果、风险和下一步 |
 | 历史查询 | 某文件/commit/会话最近发生了什么,可直接回答或轻量总结 |
 
+> 要填公司「月底日报」表单(每天一行、来自工作台日报)不是这里的月报,走 `/doc-monthly-report`。
+
 如果用户没有指定报告类型,根据措辞判断:
 
 - "今天/昨天" → 日报
@@ -218,6 +220,7 @@ cgraphx timeline show <id>
 Developer Timeline 记录项目本地事件流:
 
 - `user_prompt`:用户提出的任务
+- `auto_message`:自动消息(后台任务通知、子 agent 交回结果)—— 不是用户提的,统计提问时不算
 - `pre_tool_use` / `post_tool_use`:工具调用、文件、命令
 - `stop`:会话结束
 - `git_commit`:提交记录

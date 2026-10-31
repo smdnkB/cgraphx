@@ -87,6 +87,7 @@ export function extractHookPayload(raw: unknown): HookPayload {
 export function assertEventType(s: string): EventType | null {
   const valid: EventType[] = [
     'user_prompt',
+    'auto_message',
     'pre_tool_use',
     'post_tool_use',
     'stop',

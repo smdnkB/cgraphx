@@ -58,11 +58,13 @@ export const TYPE_TONES: Record<DocumentType, TypeTone> = {
 // ----- 时间线页显示常量(spec §3.2 / §3.3 / §9 #4)--------------------------
 
 /**
- * 5 种 timeline 事件类型的有序列表(spec §3.2 标签顺序,与设计稿 v2 chip 顺序一致)。
+ * timeline 事件类型的有序列表(spec §3.2 标签顺序,与设计稿 v2 chip 顺序一致;
+ * auto_message 排在 user_prompt 之后,2026-10-31 新增)。
  * core/timeline 只导出 EventType 联合类型,无运行时有序数组——本数组为 web 层展示口径。
  */
 export const TIMELINE_EVENT_TYPES = [
   'user_prompt',
+  'auto_message',
   'pre_tool_use',
   'post_tool_use',
   'stop',
@@ -72,6 +74,7 @@ export const TIMELINE_EVENT_TYPES = [
 /** 时间线事件类型中文显示标签(spec §3.2 逐字)。 */
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   user_prompt: 'Prompt',
+  auto_message: '自动消息',
   pre_tool_use: '工具调用',
   post_tool_use: '工具完成',
   stop: 'Stop',
@@ -82,12 +85,14 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
 
 /**
  * 事件类型对应的 chip 色调(对齐设计稿 v2 的 `.chip--prompt/pre/post/stop/git`)。
- * 同时用于事件行 evbadge 与 chip。
+ * 同时用于事件行 evbadge 与 chip。auto_message 用中性灰(同 stop 色调),
+ * 与用户提问的蓝色区分开。
  */
 export type EventTone = 'prompt' | 'pre' | 'post' | 'stop' | 'git';
 
 export const EVENT_TYPE_CHIP_TONE: Record<EventType, EventTone> = {
   user_prompt: 'prompt',
+  auto_message: 'stop',
   pre_tool_use: 'pre',
   post_tool_use: 'post',
   stop: 'stop',

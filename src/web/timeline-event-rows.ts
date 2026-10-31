@@ -53,6 +53,11 @@ function buildPayload(e: TimelineEvent): { payload: Payload; isSubagent: boolean
       set('prompt_text', e.prompt_text);
       set('turn_id', e.turn_id);
       break;
+    case 'auto_message':
+      set('source', typeof e.metadata.source === 'string' ? e.metadata.source : null);
+      set('prompt_text', e.prompt_text);
+      set('turn_id', e.turn_id);
+      break;
     case 'pre_tool_use':
       set('tool_name', e.tool_name);
       set('tool_args', e.tool_args);
@@ -110,6 +115,7 @@ function extractPath(e: TimelineEvent): string | null {
 function buildSummary(e: TimelineEvent): string | null {
   switch (e.event_type) {
     case 'user_prompt':
+    case 'auto_message':
       return e.prompt_text !== null ? truncate(e.prompt_text, 80) : null;
     case 'pre_tool_use':
       return null;

@@ -1,5 +1,69 @@
 # Changelog
 
+## 2.0.12 - 2026-10-31
+
+### Fixed — background notifications are no longer recorded as your questions
+
+Claude Code delivers background-task notifications (`<task-notification>`)
+and sub-agent results (`<agent-message …>`) through the same hook as a typed
+prompt, so the timeline recorded them as `user_prompt`. They are now recorded
+as a new event type, `auto_message`, with `metadata.source` set to
+`task_notification` or `agent_message`; the text is classified by how it
+starts after leading whitespace, and a prompt starting with
+`<system-reminder>` still counts as a question. An automatic message still
+opens a new turn and still counts toward active and working time — the agent
+works on it — but events of type `user_prompt` are now only what a person
+typed. Records already in the local database are reclassified when this
+version opens it, including ones an older global cgraphx keeps writing as
+`user_prompt`: a new `timeline_meta` table remembers how far the scan got, and
+the timeline schema version is unchanged, so older versions keep recording.
+`cgraphx timeline query --type auto_message` works, the web view shows them as
+自动消息 in grey with a filter chip and a count of their own, and
+`/doc-report` leaves them out when counting questions. Platform reporting
+still sends them as `user_prompt`, so the platform sees the same events as
+before.
+
+### Added — `/doc-monthly-report` fills the month-end daily report form
+
+`/doc-monthly-report` signs in to the work-report workbench, pulls the
+month's daily report records — your own by default, someone else's with
+`--filler` — and condenses each day into one line of at most 100 characters
+for the month-end form: main deliverables and key numbers kept, duplicates
+merged, nothing invented. Records are grouped by their own `date`, not by
+when they were submitted. It prints a Markdown table plus a 未列入 note:
+weekends without records are 周末休息, workdays without records 未填报, and
+an unfilled last day of the month 待填; public holidays are not recognized,
+so a holiday without records shows up as 未填报. When fewer records come back
+than the endpoint's `total`, the bundled `scripts/fetch-reports.mjs` exits
+with code 2 instead of printing a partial table. The password never goes on
+the command line, into a file or into the local timeline database: it is read
+from `WORK_REPORT_PASS`, from `--password-stdin`, or typed at a hidden prompt,
+and there is no `--password` option. The skill only produces the table;
+submitting the form stays manual. `/doc-report` now points month-end daily
+reports to it.
+
+### Added — `/init-tech-stack` ships with cgraphx and opens a new project
+
+`/init-tech-stack` now ships in the template, and `cgraphx install` deploys
+it. It walks 12 layers, from product form and language ecosystem through
+framework, database, ORM, cache, deployment and front end to project
+structure, gives a recommendation with two to four alternatives and their
+trade-offs for each, settles them group by group with you, writes
+`docs/adr/<NNN>-技术栈选型.md` and stops — it does not go on into a spec, plan
+or code. ADR numbers continue after existing ones, layers already decided are
+not reopened, a single layer can be asked about on its own, and no spec is
+needed. It runs only when you type it. A new project now starts with
+`cgraphx install` → `/init-tech-stack` → `/init-guides` → `/init-ddl` and
+`/init-knowledge` as needed → the requirement main line; a requirement that
+brings in a new stack runs it before `/dev-spec` and feeds the ADR into the
+spec. Projects that already have a stack are not asked to run it.
+`/dev-migrate` stops at its target step and asks you to run it, and suggests
+`cgraphx upgrade` when the skill is missing. `FLOW-MAP.md` has a new
+「新项目启动流程(按需)」 section, and the guide pages, the README and the docs
+tree list the skill and `docs/adr/`. If you kept a copy in
+`~/.claude/skills/init-tech-stack`, it is left alone; delete it yourself once
+the project copy is deployed.
+
 ## 2.0.11 - 2026-10-31
 
 ### Added — `/dev-migrate` rewrites a system on a new stack without losing behavior

@@ -39,3 +39,10 @@ CREATE INDEX IF NOT EXISTS timeline_events_type_idx ON timeline_events(event_typ
 CREATE INDEX IF NOT EXISTS timeline_events_tool_name_idx ON timeline_events(tool_name);
 CREATE INDEX IF NOT EXISTS timeline_events_session_idx ON timeline_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_turn_id ON timeline_events(turn_id);
+
+-- 迁移水位等内部状态(如 auto_message 存量改记的扫描进度)。键值表,不占版本号:
+-- 升版本号会让比它旧的全局 cgraphx 打开库时报错、hook 不再记录(spec 2026-10-31)。
+CREATE TABLE IF NOT EXISTS timeline_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

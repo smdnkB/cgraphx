@@ -312,6 +312,7 @@ export function uninstallTimelineHooks(
         const conn = DatabaseConnection.open(dbPath);
         conn.getDb().exec('DROP TABLE IF EXISTS timeline_events');
         conn.getDb().exec('DROP TABLE IF EXISTS timeline_schema_versions');
+        conn.getDb().exec('DROP TABLE IF EXISTS timeline_meta');
         conn.close();
         dataDropped = true;
       }
