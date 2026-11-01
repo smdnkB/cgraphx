@@ -1,5 +1,53 @@
 # Changelog
 
+## 2.0.13 - 2026-11-01
+
+### Changed — clarification drops feature cards and writes straight into the draft
+
+`/dev-clarify` no longer posts feature cards in the conversation. Cards
+repeated what the draft's diagrams said and soon drifted from them, and a
+business definition that only came up while drawing a step had nowhere to
+go. The proposal is now written straight into the draft,
+`<prefix>-功能方案-v<N>.md`, which exists from step ④ on whether or not
+anything is drawn: a one-line summary, a feature list with 「从哪进 → 到哪去」
+for each point (items not being done are listed too), and one section per
+feature point — a short description, the diagram (or a behavior chain and
+boundaries when no diagram fits), a definition table under it, and the
+experience decision. The conversation only says which sections were written
+and what needs your call; anything you don't change is accepted, and changes
+are given by number (F1②, K2).
+
+Business definitions (口径) now sit under the step that uses them. Each step
+that fetches, judges or computes data has a row: the step, the rule, in/out
+examples and the basis down to `table.column` — data that doesn't exist yet
+is written as 「新数据,存哪由 spec 定」, without a table name — and its box in
+the diagram carries the K number. K numbers are unique across the draft, and
+a shared definition is written out once and referenced as 「见 Fx」 elsewhere.
+The global definition table is gone: step ③ is now 口径分歧 and only asks
+about definitions that differ from an existing report or already have two
+meanings in the system, with real counts for both when the database can be
+queried; a conflict found while writing is drafted with the default, marked
+(待你定), and listed with that batch's decisions. The overview swimlane and
+the feature relationship diagram are dropped; the feature list and each
+diagram's entry and exit show how the points connect. The review pass checks
+that every fetching, judging or computing box has its row.
+
+Below the draft's `---` are the five items the spec uses: questions that
+must be settled before the spec, locked technical constraints, details left
+to the spec, impact and risk, and the facts found while exploring.
+`/dev-spec` copies everything above `---` from the confirmed version; when
+the open questions are not 「无」, it lists them first and continues once
+they are settled in `/dev-clarify`. A draft in progress is now marked
+「写稿中」 instead of 「审卡中」; a draft with the old marker is in the old
+format and is brought up to date before writing continues. `/dev-start` no
+longer opens a copy while this session's clarification is unfinished and
+suggests `/dev-handoff`, whose handoff file carries the definitions already
+settled but not yet written into the draft. `/unit-spec`, `/ui-case`,
+`/doc-delivery` and the implementation skills read each feature point's
+section, `/dev-migrate` writes slice plans in the same format, and
+`/ui-case` and `/doc-workload` still accept the old feature table in
+existing specs.
+
 ## 2.0.12 - 2026-10-31
 
 ### Fixed — background notifications are no longer recorded as your questions
