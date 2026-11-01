@@ -33,7 +33,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 |---|---|
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
 | **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/init-tech-stack`(新项目先定技术栈,产出 ADR)、`/init-guides`(立项目规范)、`/init-knowledge`(接手陌生项目时建业务知识库)、`/knowledge-migrate`(用过 Claude Code 自动记忆的,每人跑一次:迁进项目,再关掉自动记忆) |
-| **日常做需求 · 必经两步** | `/dev-clarify` 澄清(先定业务口径,再出功能点提案,人审稿式改稿,结束时给《需求功能方案》),然后 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完,最后 `/code-review` |
+| **日常做需求 · 必经两步** | `/dev-clarify` 澄清(有分歧的口径先拍板,再把功能点提案写进讨论稿——功能清单 + 每个功能点一张图 + 图下口径,人审稿式改稿,终确认的就是《需求功能方案》),然后 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完,最后 `/code-review` |
 | **日常做需求 · 复杂按需** | `/dev-wireframe`(涉及界面时画线框)、`/dev-handoff`(探索或澄清结束、要开新会话继续时)、`/dev-spec`(写技术规格)、`/dev-plan`(大需求拆执行计划)、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
 | **版本发布 · 可选** | `/release-start` 开版本 → 每个需求 `/dev-start` 开副本 → `/dev-merge` 合入 → `/release-review` 审核并合入主干;副本单独也能用 |
 | **测试按需 · 三条线** | 接口:`/api-case` → `/api-run`;单元:`/unit-spec` → `/unit-code`;UI:`/ui-case` → `/ui-run` |
@@ -49,7 +49,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 
 | skill | 何时建议用户调 |
 |---|---|
-| `/dev-clarify` | 接到模糊需求,先探索项目现实、定业务口径,再以功能点为单位给行为链提案、人审稿式改稿,结束时给《需求功能方案》(经对抗审核;每个功能点按场景配图,写进 PlantUML 讨论稿) |
+| `/dev-clarify` | 接到模糊需求,先探索项目现实、有分歧的口径先拍板,再以功能点为单位把提案写进 PlantUML 讨论稿(功能清单 + 每个功能点按场景配一张图 + 图下每一步的口径表),人审稿式改稿;经对抗审核、人终确认的讨论稿就是《需求功能方案》 |
 | `/dev-wireframe` | 需求涉及界面时画低保真 HTML 线框,看着界面确认布局交互或发现业务问题 |
 | `/dev-handoff` | 探索或澄清结束、要开新会话继续时,确认产出目录、写交接文件(带功能方案或指向讨论稿,拆多个会话按功能点分)、给出启动语 |
 | `/dev-spec` | 环节二:第一节原样收录功能方案,主体写怎么实现——每个功能点出设计决策表(机制选型/数据模型/接口契约)供人评审,🔒 难回头的等确认 |
