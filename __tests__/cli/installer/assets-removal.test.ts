@@ -16,6 +16,7 @@ import * as os from 'node:os';
 
 import { removeClaudeAssets, cleanDeprecatedAssets, deployClaudeAssets } from '../../../src/cli/installer/claude-assets';
 import { ensureProjectInitialized } from '../../../src/cli/installer/index';
+import { DatabaseConnection } from '../../../src/core/db';
 
 function tmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -87,10 +88,22 @@ describe('ensureProjectInitialized (init folded into install)', () => {
   beforeEach(() => { project = tmpDir('cg-proj-'); });
   afterEach(() => { fs.rmSync(project, { recursive: true, force: true }); });
 
-  it('creates .cgraphx/cgraphx.db on first run', async () => {
+  it('creates .cgraphx/cgraphx.db on first run, with only the knowledge-base (markdown) schema', async () => {
     const outcome = await ensureProjectInitialized(project);
     expect(outcome).toBe('initialized');
-    expect(fs.existsSync(path.join(project, '.cgraphx', 'cgraphx.db'))).toBe(true);
+    const dbPath = path.join(project, '.cgraphx', 'cgraphx.db');
+    expect(fs.existsSync(dbPath)).toBe(true);
+
+    // timeline、task、sync 的表建在项目库;本地库里有了会被当成没并过的旧库
+    const conn = DatabaseConnection.open(dbPath);
+    try {
+      const tables = (conn.getDb().prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[])
+        .map((r) => r.name);
+      expect(tables).toContain('markdown_schema_versions');
+      expect(tables.filter((t) => /^(timeline|task|sync)_/.test(t))).toEqual([]);
+    } finally {
+      conn.close();
+    }
   });
 
   it('is a no-op (no throw) when already initialized', async () => {

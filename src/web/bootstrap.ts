@@ -6,21 +6,20 @@
  *
  * 只读契约(spec §4.1 / §11 #3):web 进程不创建、不迁移、不写入 DB。
  * 因此:
- *   - 存在性检查(第 1 步)必须先于 `DatabaseConnection.open` —— open 会
- *     创建 DB 文件,顺序颠倒即违反只读契约;
+ *   - 存在性检查必须先于 `DatabaseConnection.open` —— open 会创建 DB 文件
+ *     (目录不在时连目录一起建),顺序颠倒即违反只读契约;
  *   - 绝不 `ensureMarkdownSchema` / `ensureTimelineSchema`(那是 cgraphx
  *     install 的职责),schema 存在性走 sqlite_master 直查。
  *
- * 副本(spec D24):返回的连接只给知识库查询用(ctx.db),用副本自己的本地库;时间线、
- * 任务数据在主目录的共用库里,由各页面经 timeline、task 门面自己开。所以副本里分两个库预检:
- * 共用库先查存在再开(open 会在目录不在时建目录,主目录挪走后会在旧位置建出 `.cgraphx/`),
- * 只查 timeline schema,查完关掉;本地库查 markdown schema。
+ * 知识库读本地库;时间线、任务读项目库(旧库模式下两者是同一个文件)。项目库还不在时不报错,
+ * 时间线、任务页按没有数据显示(spec:2026-11-05-数据按项目放用户目录 D16)。
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { isInitialized, resolveDataDir } from '../core/directory';
+import { isInitialized } from '../core/directory';
+import { locateData } from '../core/data-location';
 import { DatabaseConnection, getDatabasePath, getLocalDatabasePath } from '../core/db';
 import { WebStartupError } from './errors';
 
@@ -55,16 +54,45 @@ function findMissingSchemas(
 }
 
 /**
- * 执行启动预检第 1–3 步并返回已打开的进程级单连接(知识库连接)。
+ * 时间线、任务所在的库(旧库模式是本地库,其余是项目库)在不在:路径拿不到或文件不在 → false。
+ * 只读,不建目录。页面据此决定调不调 timeline、task 门面(门面在库不在时抛错)。
+ */
+export function hasDataDatabase(projectRoot: string): boolean {
+  const dbPath = getDatabasePath(projectRoot);
+  return dbPath !== null && fs.existsSync(dbPath);
+}
+
+/**
+ * 时间线 schema 缺在哪个库:缺 → 那份库所在的目录;不缺、不查 → null。旧库模式本地库就是数据库,在同一个
+ * 连接里查;项目库在 → 先查存在再开,查完关掉;项目库不在 → 不查。
+ */
+function timelineSchemaGap(localConnection: DatabaseConnection, root: string): string | null {
+  if (locateData(root).mode === 'legacy') {
+    return findMissingSchemas(localConnection, ['timeline']).length > 0 ? root : null;
+  }
+  const dataDbPath = getDatabasePath(root);
+  if (dataDbPath === null || !fs.existsSync(dataDbPath)) return null;
+  const dataConnection = DatabaseConnection.open(dataDbPath);
+  try {
+    return findMissingSchemas(dataConnection, ['timeline']).length > 0 ? path.dirname(dataDbPath) : null;
+  } finally {
+    dataConnection.close();
+  }
+}
+
+/** 缺的 schema 怎么补:知识库表由 docs index 建在本地库,时间线表由 install 建进项目库。 */
+function schemaFix(schema: SchemaName, root: string): string {
+  return schema === 'markdown' ? `\`cgraphx docs index ${root}\`` : '`cgraphx install`';
+}
+
+/**
+ * 执行启动预检第 1–3 步并返回已打开的进程级单连接(知识库连接,即本地库)。
  *
  * 1. `isInitialized` 存在性检查(先于 open,只读契约;看本地库);
- * 2. `DatabaseConnection.open` 打开进程级单连接(DB 已确保存在,不创建文件);
- * 3. sqlite_master 直查 `markdown_schema_versions` / `timeline_schema_versions`,
- *    缺失集合非空 → 抛 `WebStartupError { kind: 'schema-missing', missing }`。
- *
- * 主目录里共用库就是本地库,开这一个库、一条 SELECT 查两套 schema。副本里共用库不在
- * → 抛 `WebStartupError { kind: 'uninitialized' }`(主目录不在了,spec D31),不 open;
- * 在 → 开它只查 timeline schema,查完关掉,再开本地库查 markdown schema 并返回。
+ * 2. 开本地库,sqlite_master 直查 `markdown_schema_versions`;
+ * 3. 查 `timeline_schema_versions`:旧库模式在同一个连接里查;项目库在 → 开它查完关掉;项目库不在 → 不查。
+ *    缺失集合非空 → 抛 `WebStartupError { kind: 'schema-missing', missing }`(知识库缺 → `cgraphx docs index <根>`,
+ *    时间线缺 → `cgraphx install`)。
  *
  * 任一预检失败都不泄漏连接(失败前已打开的会在抛出前关闭)。
  */
@@ -79,46 +107,29 @@ export function openVerifiedConnection(projectRoot: string): DatabaseConnection 
     );
   }
 
-  const dataDbPath = getDatabasePath(resolved);
-  const localDbPath = getLocalDatabasePath(resolved);
+  // 第 2 步:进程级单连接 = 本地库(第 1 步已确认存在,open 不创建文件);查知识库 schema。
+  const connection = DatabaseConnection.open(getLocalDatabasePath(resolved));
+  const missing: Array<{ schema: SchemaName; at: string }> = findMissingSchemas(connection, ['markdown']).map(
+    (schema) => ({ schema, at: resolved }),
+  );
 
-  if (localDbPath === dataDbPath) {
-    // 第 2 步:进程级单连接(DB 必存在,open 不创建文件)。
-    const connection = DatabaseConnection.open(dataDbPath);
-    // 第 3 步:schema 存在性检查(sqlite_master 直查,只读 SELECT)。
-    const missing = findMissingSchemas(connection, ['markdown', 'timeline']);
-    if (missing.length > 0) {
-      connection.close();
-      throw new WebStartupError(
-        'schema-missing',
-        `schema missing at ${resolved}: ${missing.join(', ')} — run \`cgraphx install\` to apply schemas`,
-        { missing },
-      );
-    }
-    return connection;
+  // 第 3 步:时间线 schema(旧库模式查本地库,项目库模式查项目库)。
+  let timelineAt: string | null;
+  try {
+    timelineAt = timelineSchemaGap(connection, resolved);
+  } catch (err) {
+    connection.close();
+    throw err;
   }
+  if (timelineAt !== null) missing.push({ schema: 'timeline', at: timelineAt });
 
-  // 副本:共用库先查存在再开 —— 不在就是主目录挪走了,open 会在旧位置建出 `.cgraphx/`。
-  const { mainRoot } = resolveDataDir(resolved);
-  if (!fs.existsSync(dataDbPath)) {
-    throw new WebStartupError('uninitialized', `副本关联的主项目不在 ${mainRoot} 了`);
-  }
-  const dataConnection = DatabaseConnection.open(dataDbPath);
-  const timelineMissing = findMissingSchemas(dataConnection, ['timeline']);
-  dataConnection.close();
-
-  // 知识库连接:本地库(第 1 步已确认存在)。
-  const connection = DatabaseConnection.open(localDbPath);
-  const missing = [...findMissingSchemas(connection, ['markdown']), ...timelineMissing];
   if (missing.length > 0) {
     connection.close();
-    const where = (s: SchemaName): string => (s === 'timeline' ? mainRoot : resolved);
-    // 副本已初始化,install 什么都不做;知识库的 schema 由 docs index 建
-    const fix = missing.includes('markdown') ? `\`cgraphx docs index ${resolved}\`` : `\`cgraphx install\``;
+    const fixes = missing.map((m) => schemaFix(m.schema, resolved)).join(' and ');
     throw new WebStartupError(
       'schema-missing',
-      `schema missing: ${missing.map((s) => `${s} at ${where(s)}`).join(', ')} — run ${fix} to apply schemas`,
-      { missing },
+      `schema missing: ${missing.map((m) => `${m.schema} at ${m.at}`).join(', ')} — run ${fixes} to apply schemas`,
+      { missing: missing.map((m) => m.schema) },
     );
   }
   return connection;

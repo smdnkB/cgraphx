@@ -149,7 +149,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
    - `merged` 是 null → 「判断不了 cgraphx@订单导出 合没合入」,不删;请用户先在副本里看一眼 `git log`,确认提交都已合入再说删
    - `state` 是 `missing` → 「cgraphx@订单导出 已不在」,问要不要把登记标成已删
 2. 用户说删 → `cgraphx replica remove cgraphx@订单导出 --json`:
-   - `"state": "removed"` → 回「已删 cgraphx@订单导出,登记和数据都留着」
+   - `"state": "removed"` → 回「已删 cgraphx@订单导出,登记留着,副本里记下的会话和提交在项目的数据里」
    - `"state": "missing"` → 回「cgraphx@订单导出 已不在,登记已标成已删」
    - `"code": "dirty"` → 不删,报「cgraphx@订单导出 有 2 个文件没提交」并列出 `files`
    - 其余 `code` → 把 `message` 原样告诉用户

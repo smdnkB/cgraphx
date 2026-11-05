@@ -2,8 +2,9 @@
  * 上报产出(spec §11.1–§11.3、§11.5):类型识别经产物注册表 + 本会话产出收集。
  *
  * 口径只服务平台上报;类型标识与路径规则唯一定义在 `src/core/artifact-registry/`。
- * 路径按「主目录 + 全部登记过的副本」换算(spec D26):读文件头、判断文件在不在、查跟踪状态
- * 都在路径所在的根里做;提交相关的 git 查询先用主目录,主目录还没有的副本提交改到副本仓库查(D29)。
+ * 路径按「timeline 记下的根 + 当前根 + 副本登记」换算(spec:2026-11-05-数据按项目放用户目录 D11):读文件头、
+ * 判断文件在不在、查跟踪状态都在路径所在的根里做,那个根已不在退回当前根;提交在哪个根做的按提交事件的 cwd 认。
+ * 提交相关的 git 查询先在当前根的仓库查,查不到再到提交事件 cwd 所在的仓库查。
  */
 
 import fs from 'node:fs';
@@ -15,9 +16,10 @@ import {
   reportableTypeKeys,
   type ReportTier,
 } from '../artifact-registry';
+import { matchProjectRoot } from '../replica';
 import type { TimelineEvent } from '../timeline';
 import type { GitCache } from './git';
-import { createPathResolver, rootOrMain, type RelPaths } from './paths';
+import { createPathResolver, isDirectory, rootOrCurrent, type RelPaths } from './paths';
 import type { SyncContext } from './payload';
 import type { IngestArtifact, IngestCommit, UnreportedArtifact } from './types';
 import type { ServerTier } from './version';
@@ -65,27 +67,73 @@ function laterTs(a: string, b: string): string {
   return Date.parse(b) > Date.parse(a) ? b : a;
 }
 
-/**
- * 提交 hash → 提交所在副本的根(绝对路径);在主目录里做的提交不放。同一 hash 以第一条提交事件为准
- * (与 payload 里 commit 去重保留首条一致)。没有副本里的提交时为空表。
- */
-function commitRootsOf(ctx: SyncContext): Map<string, string> {
-  const roots = new Map<string, string>();
-  if (ctx.commitReplicas.size === 0) return roots;
-  const seen = new Set<string>();
-  for (const e of ctx.commitEvents) {
-    if (e.commit_hash === null || seen.has(e.commit_hash)) continue;
-    seen.add(e.commit_hash);
-    const root = commitRootOf(ctx, e);
-    if (root !== ctx.projectRoot) roots.set(e.commit_hash, root);
-  }
-  return roots;
+/** 提交所在的根;在当前根里做的不放。 */
+interface CommitRoots {
+  /** 提交事件 id → 根 */
+  byEvent: Map<number, string>;
+  /** 提交 hash → 根;同一 hash 以第一条提交事件为准(与 payload 里 commit 去重保留首条一致) */
+  byHash: Map<string, string>;
 }
 
-/** 提交事件在哪个根里做的:副本里做的 → 副本根;其余 → 主目录。 */
-function commitRootOf(ctx: SyncContext, e: TimelineEvent): string {
-  const replica = ctx.commitReplicas.get(e.id);
-  return replica === undefined ? ctx.projectRoot : path.resolve(replica.path);
+/**
+ * 各提交在哪个根里做的(rootOfCommitCwd);`projectInRepo` 是项目根在仓库内的相对位置(PathResolver 的同名字段)。
+ * 项目只有当前根一个根时都是空表。
+ */
+function commitRootsOf(ctx: SyncContext, projectInRepo: string): CommitRoots {
+  const byEvent = new Map<number, string>();
+  const byHash = new Map<string, string>();
+  if (ctx.roots.every((r) => r.root === ctx.projectRoot)) return { byEvent, byHash };
+  // 提交事件的 cwd 是工作区根,一轮里只有少数几个:每个 cwd 只认一次根
+  const byCwd = new Map<string, string>();
+  const seen = new Set<string>();
+  for (const e of ctx.commitEvents) {
+    let root = byCwd.get(e.cwd);
+    if (root === undefined) {
+      root = rootOfCommitCwd(ctx, e.cwd, projectInRepo);
+      byCwd.set(e.cwd, root);
+    }
+    if (root !== ctx.projectRoot) byEvent.set(e.id, root);
+    if (e.commit_hash === null || seen.has(e.commit_hash)) continue;
+    seen.add(e.commit_hash);
+    if (root !== ctx.projectRoot) byHash.set(e.commit_hash, root);
+  }
+  return { byEvent, byHash };
+}
+
+/**
+ * 提交在哪个根里做的,不只看副本;认出的根和哪个根跑这一轮无关(spec:2026-11-05-数据按项目放用户目录 D13)。
+ * 提交事件的 cwd(记的是工作区根)落在 ctx.roots 的哪个根里(matchProjectRoot,取最长的根),不中再看 cwd 等于哪个根;
+ * 还不中、项目根不是工作区根(子目录项目)时,再看 cwd 拼上项目根在仓库内的相对位置等于哪个根——别的 worktree、
+ * clone 里同一子目录项目的提交也认得出。都不是、cwd 为空 → 当前根。
+ */
+function rootOfCommitCwd(ctx: SyncContext, cwd: string, projectInRepo: string): string {
+  if (cwd === '') return ctx.projectRoot;
+  const hit = matchProjectRoot(ctx.roots, cwd);
+  if (hit !== null) return hit.root.root;
+  return (
+    rootAt(ctx, cwd) ??
+    (projectInRepo === '' ? null : rootAt(ctx, path.join(cwd, ...projectInRepo.split('/')))) ??
+    ctx.projectRoot
+  );
+}
+
+/** dir 等于 ctx.roots 里哪个根(原样路径相同,或 realpath 与根的 realpath 相同);都不是 → null。 */
+function rootAt(ctx: SyncContext, dir: string): string | null {
+  const resolved = path.resolve(dir);
+  const same = ctx.roots.find((r) => r.root === resolved);
+  if (same !== undefined) return same.root;
+  const real = realDirOf(resolved);
+  return ctx.roots.find((r) => r.realRoot === real)?.root ?? null;
+}
+
+/** 目录的 realpath;目录不在时取最近一级在的上级的 realpath 拼回(和 replica 给根算 realRoot 同一口径)。 */
+function realDirOf(dir: string): string {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    const parent = path.dirname(dir);
+    return parent === dir ? dir : path.join(realDirOf(parent), path.basename(dir));
+  }
 }
 
 /**
@@ -102,13 +150,26 @@ function movedToReplica(ctx: SyncContext, projectRel: string): string | null {
   return null;
 }
 
+/** 这个根是副本登记的根(ctx.roots 里这条根的 replica 不为 null);当前根、timeline 记下的根不算。 */
+function isReplicaRoot(ctx: SyncContext, root: string): boolean {
+  return ctx.roots.some((r) => r.root === root && r.replica !== null);
+}
+
 /**
- * /dev-start 把主目录里没提交的需求文件移进副本(spec D21⑥、D29):在主目录改的文件,列在副本登记的
- * movedFiles 里、最后一次改早于开副本 → 那个副本的根(改过之后最早开的那个;副本删了也算),不看文件此刻
- * 在不在主目录——合入后文件回到主目录,归属不变。以前的登记没有 movedFiles:文件此刻不在主目录时按
- * movedToReplica 推断。都不是 → null。这些产出读文件头、找提交都按副本算。
+ * /dev-start 把主目录里没提交的需求文件移进副本(版本流程与需求副本 spec D21⑥、D29)。调用方只对改它的根不是副本
+ * 的文件调(sync 认不出哪个是主目录,不是副本的根都算):列在副本登记的 movedFiles 里、最后一次改早于开副本 → 那个
+ * 副本的根(改过之后最早开的那个;副本删了也算),不看文件此刻在不在——合入后文件回到主目录,归属不变。以前的登记
+ * 没有 movedFiles:文件此刻不在改它的根(editedRoot)时按 movedToReplica 推断。都不是 → null。这些产出读文件头、
+ * 找提交都按副本算。只看改它的根、不看当前根,哪个根跑这一轮都一样(spec:2026-11-05-数据按项目放用户目录 D13);
+ * 只有主目录加副本时,结果和原来按主目录跑的一样。
  */
-function movedRootOf(ctx: SyncContext, repoRel: string, projectRel: string, lastChangeTs: string): string | null {
+function movedRootOf(
+  ctx: SyncContext,
+  editedRoot: string,
+  repoRel: string,
+  projectRel: string,
+  lastChangeTs: string,
+): string | null {
   const changeMs = Date.parse(lastChangeTs);
   let hit: { root: string; createdMs: number } | null = null;
   for (const { root, replica } of ctx.roots) {
@@ -117,30 +178,34 @@ function movedRootOf(ctx: SyncContext, repoRel: string, projectRel: string, last
     if (createdMs > changeMs && (hit === null || createdMs < hit.createdMs)) hit = { root, createdMs };
   }
   if (hit !== null) return hit.root;
-  return fileExistsIn(ctx, ctx.projectRoot, repoRel, projectRel) ? null : movedToReplica(ctx, projectRel);
+  return fileExistsIn(ctx, editedRoot, repoRel, projectRel) ? null : movedToReplica(ctx, projectRel);
+}
+
+/** 提交事件 cwd 所在仓库的查询缓存;cwd 为空或目录已不在 → null。 */
+function commitCwdGit(ctx: SyncContext, cwd: string): GitCache | null {
+  return cwd !== '' && isDirectory(cwd) ? ctx.gitFor(cwd) : null;
 }
 
 /**
- * 提交相关的查询用哪个仓库:先用主目录;提交在副本里做、主目录里还没有(没合入),
- * 且副本目录还在 → 用副本仓库。
+ * 提交相关的查询用哪个仓库:当前根的仓库有这个提交 → 当前根;否则这条提交事件的 cwd 目录还在 → cwd 所在的
+ * 仓库(别的 clone、副本里做的、当前根的仓库还没取回的提交);否则当前根。
  */
-function gitForCommit(ctx: SyncContext, hash: string, commitRoot: string | undefined): GitCache {
-  if (commitRoot === undefined || ctx.git.hasCommit(hash)) return ctx.git;
-  return ctx.gitFor(rootOrMain(commitRoot, ctx.projectRoot));
+function gitForCommit(ctx: SyncContext, hash: string, cwd: string): GitCache {
+  if (ctx.git.hasCommit(hash)) return ctx.git;
+  return commitCwdGit(ctx, cwd) ?? ctx.git;
 }
 
 /**
- * 提交推送过没有:主目录的远程跟踪分支里有就算;副本里做的提交再到副本仓库查一次——列副本时主目录
- * 已取回这个提交的对象,但副本推送出去的远程分支,主目录要等自己 fetch 之后才知道。
+ * 提交推送过没有:当前根仓库的远程跟踪分支里有就算;没有再到提交事件 cwd 所在的仓库查一次——别的 clone、
+ * 副本推送出去的远程分支,当前根的仓库要等自己 fetch 之后才知道。
  */
-function isPushed(ctx: SyncContext, hash: string, commitRoot: string | undefined): boolean {
+function isPushed(ctx: SyncContext, hash: string, cwd: string): boolean {
   if (ctx.git.isOnRemote(hash)) return true;
-  if (commitRoot === undefined) return false;
-  const root = rootOrMain(commitRoot, ctx.projectRoot);
-  return root !== ctx.projectRoot && ctx.gitFor(root).isOnRemote(hash);
+  const git = commitCwdGit(ctx, cwd);
+  return git !== null && git !== ctx.git && git.isOnRemote(hash);
 }
 
-/** 文件在不在:主目录照原来按仓库根拼仓库相对路径;副本按副本根拼项目内路径。 */
+/** 文件在不在:当前根照原来按仓库根拼仓库相对路径;别的根按那个根拼项目内路径。 */
 function fileExistsIn(ctx: SyncContext, base: string, repoRel: string, projectRel: string): boolean {
   return fs.existsSync(base === ctx.projectRoot ? path.join(ctx.repoRoot, repoRel) : path.join(base, projectRel));
 }
@@ -160,7 +225,8 @@ export function collectSessionArtifacts(
   sessionCommits: IngestCommit[],
 ): { artifacts: IngestArtifact[]; outputPaths: Set<string>; unreported: UnreportedArtifact[] } {
   const resolver = createPathResolver(ctx.projectRoot, ctx.repoRoot, ctx.roots);
-  const commitRoots = commitRootsOf(ctx);
+  const commitRoots = commitRootsOf(ctx, resolver.projectInRepo);
+  const commitRootOf = (e: TimelineEvent): string => commitRoots.byEvent.get(e.id) ?? ctx.projectRoot;
   // repoRel → { projectRel, root, lastChangeTs }
   const candidates = new Map<string, { projectRel: string; root: string; lastChangeTs: string }>();
   const addCandidate = (rel: RelPaths | null, ts: string): void => {
@@ -181,8 +247,8 @@ export function collectSessionArtifacts(
     addCandidate(resolver.fromAbs(p, e.cwd), e.ts);
   }
   for (const c of sessionCommits) {
-    // 提交里的文件落在提交所在的根(副本里做的提交 → 副本)
-    const root = commitRoots.get(c.hash);
+    // 提交里的文件落在提交所在的根(别的根里做的提交 → 那个根)
+    const root = commitRoots.byHash.get(c.hash);
     for (const f of c.files) addCandidate(resolver.fromRepoRel(f, root), c.ts);
   }
 
@@ -192,22 +258,23 @@ export function collectSessionArtifacts(
   const artifacts: IngestArtifact[] = [];
   const unreported: UnreportedArtifact[] = [];
   for (const [repoRel, { projectRel, root: editedRoot, lastChangeTs }] of candidates) {
-    // 文件所在的根:一般就是改它时所在的根;在主目录写、/dev-start 时移进副本的需求文件算那个副本
-    const root =
-      editedRoot === ctx.projectRoot ? (movedRootOf(ctx, repoRel, projectRel, lastChangeTs) ?? editedRoot) : editedRoot;
-    // 读文件头、判断文件在不在都在文件所在的根里做;那个副本已不在就退回主目录
-    const base = rootOrMain(root, ctx.projectRoot);
+    // 文件所在的根:一般就是改它时所在的根;在不是副本的根里写、/dev-start 时移进副本的需求文件算那个副本
+    const root = isReplicaRoot(ctx, editedRoot)
+      ? editedRoot
+      : (movedRootOf(ctx, editedRoot, repoRel, projectRel, lastChangeTs) ?? editedRoot);
+    // 读文件头、判断文件在不在都在文件所在的根里做;那个根已不在就退回当前根
+    const base = rootOrCurrent(root, ctx.projectRoot);
     const identity = identifyArtifact(base, projectRel);
     if (identity === null || identity.localOnly) continue;
 
     const changeMs = Date.parse(lastChangeTs);
-    // 提交要和产出在同一个根里:主目录和各副本的仓库相对路径相同,只比路径会对上别的根里的提交
+    // 提交要和产出在同一个根里:同一项目各根的仓库相对路径相同,只比路径会对上别的根里的提交
     const commit = ctx.commitEvents.find(
       (ce) =>
         ce.commit_hash !== null &&
         Date.parse(ce.ts) >= changeMs &&
         ce.commit_files.includes(repoRel) &&
-        commitRootOf(ctx, ce) === root,
+        commitRootOf(ce) === root,
     );
     const hasCommit = commit !== undefined && commit.commit_hash !== null;
 
@@ -223,13 +290,12 @@ export function collectSessionArtifacts(
     let artifact: IngestArtifact;
     if (commit !== undefined && commit.commit_hash !== null) {
       const hash = commit.commit_hash;
-      const commitRoot = commitRoots.get(hash);
-      const git = gitForCommit(ctx, hash, commitRoot);
+      const git = gitForCommit(ctx, hash, commit.cwd);
       artifact = {
         type: identity.type,
         path: repoRel,
         action: git.fileAddedIn(hash, repoRel) ? 'create' : 'modify',
-        commitHash: isPushed(ctx, hash, commitRoot) ? hash : null,
+        commitHash: isPushed(ctx, hash, commit.cwd) ? hash : null,
         branch: typeof commit.metadata.branch === 'string' ? commit.metadata.branch : null,
         ts: lastChangeTs,
       };

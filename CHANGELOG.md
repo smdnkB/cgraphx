@@ -1,5 +1,77 @@
 # Changelog
 
+## Unreleased
+
+### Changed — data lives per project under the user directory
+
+Until now every directory recorded into its own `.cgraphx/cgraphx.db`. Only
+a copy opened by `/dev-start` recorded into the main directory, through its
+`shared` link; another clone, a git worktree or a directory copied by hand
+kept separate records of the same project. Events were filed under the
+directory they happened in, so a session that also worked in an additional
+directory was split across two projects.
+
+Data now lives per project in `~/.cgraphx/projects/<dir>/`. A session
+belongs to the project of the directory it started in — worked out once at
+session start and kept in `~/.cgraphx/sessions/` — and stays there wherever
+it goes; a commit belongs to the project of its work tree. A project is
+recognized by its normalized origin (`git@github.com:smdnkB/cgraphx.git`
+and `https://github.com/smdnkB/cgraphx/` are both
+`github.com/smdnkB/cgraphx`, kept in `github.com-smdnkB-cgraphx/`), by a
+project name in the local git config (`cgraphx.projectName`) when the
+repository has no origin, or by both for a project in a subdirectory
+(`github.com/org/platform#server`). `cgraphx install` asks for that name;
+with `-y` it takes the directory's name. Clones, worktrees and copies of a
+project therefore record into the same data, including directories where
+cgraphx was never installed, once the project has data on this machine.
+When one repository holds several projects — cgraphx installed in its
+subdirectories — a commit is split between them by the files it changed.
+The knowledge-base index and `my-features.md` stay in each directory's
+`.cgraphx/`, and a `/dev-start` copy's `shared` link no longer decides
+where data goes. `CGRAPHX_DIR` moves only that per-directory `.cgraphx/`;
+the user directory is always `~/.cgraphx/`.
+
+`cgraphx install` moves the directory's old data over. It first backs up
+the old database and files into the project's `backups/`, then merges
+events, task bindings, sync state and the db-query connection file and log.
+Events the project already has — from a directory copied by hand, for
+instance — are kept once, and sync's reporting progress carries over, so
+reporting picks up where it left off. A db-query connection file or
+platform connection that differs from the project's is not merged; it
+stays in the backup and install says so. Afterwards the local database
+holds only the knowledge-base index, and installing again reports that the
+directory was already merged. Until `cgraphx install` runs in a directory,
+it keeps recording into its local database as before; this version only
+adds the `timeline_roots` table there, so older versions can still open it.
+
+New `cgraphx project show | name | list | remove`. `show` prints which
+project this directory belongs to and how it is recognized, where the data
+is, whether the directory still has old data to merge, and every directory
+the project was seen in on this machine with its last activity. `name`
+renames the project for this repository: new records go under the new
+name, existing ones stay under the old name, and a name that already has
+data is joined. A clone recognized by its origin becomes a project of its
+own when renamed; the other clones keep recording under the origin.
+Renaming is refused while the directory still has old data to merge.
+`list` shows every project in `~/.cgraphx/projects/` with its size, last
+activity, backups and directories; `show` and `list` take `--json`.
+`remove <dir>` deletes a project's data — or only its backups, with
+`--backups` — after listing what goes and asking for confirmation; without
+a terminal it needs `--yes`. It deletes nothing but a real directory right
+under `~/.cgraphx/projects/`, and names the directories that still have
+cgraphx installed, since they record again once worked in.
+
+`cgraphx uninstall` now uninstalls only the directory it runs in. The
+project's data stays in `~/.cgraphx/projects/<dir>/`, and the git hooks
+stay while another directory of the same repository still has cgraphx
+installed, so its commits keep being recorded. `timeline uninstall --purge`
+no longer deletes data; it points to `cgraphx project remove`. Sync now
+reports under the origin saved by `sync connect` — a connection made by an
+earlier version saves the current one on its next run — so every directory
+of a project reports as the same repository. Running `sync connect` where
+the origin differs says so, and `--force` switches to that origin, clearing
+the reporting progress so everything is reported again.
+
 ## 2.0.13 - 2026-11-01
 
 ### Changed — clarification drops feature cards and writes straight into the draft

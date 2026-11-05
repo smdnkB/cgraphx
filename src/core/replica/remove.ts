@@ -3,7 +3,7 @@
  *
  * 删除不可恢复,登记文件的 path 被改错就可能删到别处,所以逐条核对全过才删:登记过且没删;
  * 副本目录(按 D22 在主目录的上级、名为登记的副本目录名)就是登记的 path;它不是主目录、也不是
- * 主目录的上级;目录名以 `<主目录名>@` 开头;目录里的 `.cgraphx/shared` 指回本主目录的数据目录;
+ * 主目录的上级;目录名以 `<主目录名>@` 开头;目录里的 `.cgraphx/shared` 指回本主目录的 `.cgraphx/`;
  * K9 没有改动。删除只用 fs.rmSync(不跟随符号链接,不调 shell);删完只在登记里填 removedAt,
  * 登记文件和主目录里的数据都留着。目录已经没了 → 只填 removedAt。
  */
@@ -11,9 +11,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { codeGraphDirName, getDataDir, resolveDataDir, SHARED_LINK_NAME } from '../directory';
+import { codeGraphDirName, getCodeGraphDir, SHARED_LINK_NAME } from '../directory';
 import { REPLICA_NAME_SEPARATOR } from './constants';
 import { formatFileList, ReplicaError } from './errors';
+import { replicaLinkOf } from './main-dir';
 import { entryFilePath, markRemoved } from './registry';
 import { isDirectory, listReplicas, realpathOr, relativeInside } from './roots';
 import { uncommittedFiles } from './status';
@@ -64,11 +65,11 @@ function verifyTarget(mainRoot: string, entry: ReplicaEntry): string {
   if (!dirName.startsWith(namePrefix) || dirName.length === namePrefix.length) {
     throw unsafeTarget(mainRoot, entry, `目录名 ${dirName} 不是以「${namePrefix}」开头,不是本主目录的副本`);
   }
-  // 4. 目录里的 .cgraphx/shared 是符号链接,且指回本主目录的数据目录
+  // 4. 目录里的 .cgraphx/shared 是符号链接,且指回本主目录的 .cgraphx/
   const link = path.join(realDir, codeGraphDirName(), SHARED_LINK_NAME);
-  const mainData = realpathOr(getDataDir(mainRoot));
-  if (lstatOrUndefined(link)?.isSymbolicLink() !== true || realpathOr(link) !== mainData) {
-    throw unsafeTarget(mainRoot, entry, `${link} 不是指回本主目录数据目录 ${mainData} 的链接`);
+  const mainLocalDir = realpathOr(getCodeGraphDir(mainRoot));
+  if (lstatOrUndefined(link)?.isSymbolicLink() !== true || realpathOr(link) !== mainLocalDir) {
+    throw unsafeTarget(mainRoot, entry, `${link} 不是指回本主目录 ${mainLocalDir} 的链接`);
   }
   return realDir;
 }
@@ -76,7 +77,7 @@ function verifyTarget(mainRoot: string, entry: ReplicaEntry): string {
 /** 按副本目录名或 feature-id 删一个在用的副本(只在主目录执行)。 */
 export function removeReplica(projectRoot: string, nameOrFeatureId: string): RemoveReplicaResult {
   const root = path.resolve(projectRoot);
-  const info = resolveDataDir(root);
+  const info = replicaLinkOf(root);
   if (info.state === 'replica') {
     throw new ReplicaError(
       'not_main_dir',

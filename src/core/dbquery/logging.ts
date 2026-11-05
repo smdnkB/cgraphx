@@ -1,9 +1,8 @@
 /**
  * Query history log for the db-query subsystem (spec §2.6).
  *
- * Each query (success, failure, safety-rejection, timeout, disabled) appends
- * one JSONL record to .cgraphx/db-query.log. The file rotates at 10 MB,
- * keeping 5 historical files.
+ * 每次查询(成功、失败、安全拒绝、超时、禁用)往数据位置里的 db-query.log 追加一行 JSONL;
+ * 文件到 10 MB 轮转,留 5 个历史文件。拿不到数据位置或目录不在时不记。
  *
  * Write failures NEVER block the query — they emit one stderr warning and
  * continue (spec §2.6 写入语义).
@@ -14,13 +13,22 @@ import * as path from 'node:path';
 
 import { LOG_FILENAME, LOG_MAX_BYTES, LOG_KEEP_FILES } from './constants';
 import type { QueryLogRecord } from './types';
-import { getDataDir, resolveDataDir } from '../directory';
+import { getDataDir } from '../data-location';
 
 const POSIX = process.platform !== 'win32';
 
-/** 查询日志在数据目录里,副本里的查询记进主目录那份。 */
-function logPath(projectRoot: string): string {
-  return path.join(getDataDir(projectRoot), LOG_FILENAME);
+/** 查询日志在数据位置里;拿不到数据位置 → null。只读:不建目录、不写并过记号。 */
+function logPath(projectRoot: string): string | null {
+  const dataDir = getDataDir(projectRoot);
+  return dataDir === null ? null : path.join(dataDir, LOG_FILENAME);
+}
+
+function isDirectory(dir: string): boolean {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -65,23 +73,15 @@ function rotateIfNeeded(filePath: string): void {
  * Append a single record as one JSON line.
  *
  * Spec §2.6:
- *   - file path: <projectRoot>/.cgraphx/db-query.log
+ *   - file path: 数据位置里的 db-query.log
  *   - format: JSONL (one record per line)
  *   - file mode: 0600 (POSIX only)
  *   - failures do not throw; one stderr warning per failure
  */
 export function logQuery(projectRoot: string, record: QueryLogRecord): void {
-  // 副本关联的主目录已不在:不建目录、不写、不报错,否则会在旧位置重建 .cgraphx/(spec D24)
-  if (resolveDataDir(projectRoot).state === 'main-missing') return;
-
+  // 拿不到数据位置或目录不在:不建目录、不写、不报错(项目目录只由写数据的入口建,记日志不另建)
   const filePath = logPath(projectRoot);
-  const dir = path.dirname(filePath);
-
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-  } catch {
-    /* directory may already exist or be unwritable; let appendSync fail below */
-  }
+  if (filePath === null || !isDirectory(path.dirname(filePath))) return;
 
   rotateIfNeeded(filePath);
 

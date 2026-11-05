@@ -2,9 +2,10 @@
  * cgraphx 交互式安装器(2.0)
  *
  * 按 agent 描述为每个选中的 agent(Claude Code / CodeBuddy …)部署模板资产、
- * cgraphx hook 与 statusLine、指引块;项目级 `.cgraphx/` 初始化与 docs / db 子系统
- * 每个项目只做一次,timeline 与任务绑定 hook 对每个选中 agent 接入。
- * 安装对象选择见 `agent-steps.ts`(spec §4.1),卸载规则见 `runUninstaller`(spec §5)。
+ * cgraphx hook 与 statusLine、指引块;项目级的事每个目录只做一次:本地 `.cgraphx/`(知识库)
+ * 初始化、docs / db 子系统、问项目名称并把本地旧库并进用户目录(spec:2026-11-05-数据按项目放
+ * 用户目录 D25);timeline 与任务绑定 hook 对每个选中 agent 接入。
+ * 安装对象选择见 `agent-steps.ts`(spec §4.1),卸载规则见 `runUninstaller`(spec §5、D31)。
  *
  * Uses @clack/prompts for the interactive UI; `runInstallerWithOptions`
  * is the non-interactive entry point used by the `--target` flag.
@@ -25,21 +26,25 @@ import {
   uninstallAgentHooks,
 } from './agent-steps';
 import {
+  removeLocalDir,
+  removeReleaseGuardIfAlone,
+  reportProjectDataKept,
+  settleProjectData,
+  type Clack,
+} from './project-steps';
+import {
   getCodeGraphDir,
   isInitialized,
   createDirectory,
-  removeDirectory,
-  resolveDataDir,
   unsafeIndexRootReason,
 } from '../../core/directory';
-import { removeReleaseGuard } from '../../core/release';
 import { NPM_PACKAGE } from '../upgrade';
 
 // Dynamic import helper — tsc compiles import() to require() in CJS mode,
 // which fails for ESM-only packages. This bypasses the transformation.
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
 const importESM = new Function('specifier', 'return import(specifier)') as
-  (specifier: string) => Promise<typeof import('@clack/prompts')>;
+  (specifier: string) => Promise<Clack>;
 
 function getVersion(): string {
   try {
@@ -126,25 +131,23 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 4:逐 agent 写配置;单个 agent 失败只 warn,继续其他 agent 与后续步骤。
+  // 顺序固定(D25):① agent 配置 ② 本地 .cgraphx/ ③ 1.x 遗留表 ④ 选子系统 ⑤ docs 索引 ⑥ timeline 等 hook
+  //   ⑦ 问名字、并旧数据 ⑧ db-query 模板。
+  // ① 逐 agent 写配置;单个 agent 失败只 warn,继续其他 agent 与后续步骤。
   installAgentTargets(clack, targets, location);
 
-  // Step 4¼: ensure the project's `.cgraphx/` data dir exists — the work the
-  // removed `cgraphx init` did, folded into install. Idempotent; an unsafe root
-  // ($HOME / filesystem root) is skipped with a warning so we never auto-create
-  // a data dir somewhere unintended. The `.claude` config above is unaffected.
+  // ② 本地 `.cgraphx/`(被折叠进 install 的 `cgraphx init`),本地库只建知识库表。幂等;危险根($HOME /
+  //   文件系统根)跳过并提示,不在那里建数据目录;上面写的 agent 配置不受影响。
   const projectRoot = process.cwd();
   const initOutcome = await ensureProjectInitialized(projectRoot);
   if (initOutcome === 'initialized') {
-    clack.log.success(`已初始化 ${getCodeGraphDir(projectRoot)}(markdown + timeline + task schema)`);
+    clack.log.success(`已初始化 ${getCodeGraphDir(projectRoot)}(知识库)`);
   } else if (initOutcome === 'skipped-unsafe') {
     clack.log.warn('跳过 .cgraphx/ 初始化:当前目录看起来不是项目根($HOME / 文件系统根)。在真实项目内重跑 cgraphx install 以启用知识库 / 时间线。');
   }
   // (initOutcome === 'already' → quiet no-op)
 
-  // Drop orphaned 1.x code-graph tables (the 2.0 rebuild removed the graph
-  // layer). Runs for new AND upgrading projects; idempotent no-op once gone or
-  // for 2.0-native projects. Skipped for unsafe roots (no data dir there).
+  // ③ 清掉本地库里 1.x 代码图谱的遗留表(新装、升级都跑,没有就什么都不做);危险根没有数据目录,跳过。
   if (initOutcome !== 'skipped-unsafe') {
     const { dropLegacyGraphTables } = await import('../../core/db/migrate');
     const cleanup = dropLegacyGraphTables(projectRoot);
@@ -153,10 +156,8 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // Step 4½: optional subsystem setup — docs / db / timeline.
-  // Each is independent and runs only if the user keeps it checked.
-  // Skipped silently under --yes if their preconditions aren't met
-  // (e.g. docs needs docs/knowledge/ with .md files).
+  // ④ 可选子系统 docs / db / timeline:各自独立,只跑勾选的;--yes 下前置条件不满足的静默跳过
+  //   (如 docs 要 docs/knowledge/ 下有 .md)。
   const cgraphxExists = fs.existsSync(getCodeGraphDir(projectRoot));
   const docsDir = path.join(projectRoot, 'docs', 'knowledge');
   const docsHasMd = fs.existsSync(docsDir) &&
@@ -171,7 +172,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
       message: '配置可选子系统(回车确认默认全选)',
       options: [
         { value: 'docs' as const,     label: '文档知识库',     hint: docsHasMd ? '扫描 docs/knowledge/' : 'docs/knowledge/ 不存在 — 跳过' },
-        { value: 'db' as const,       label: '数据库查询',     hint: cgraphxExists ? '生成 .cgraphx/db-profiles.json 模板' : '.cgraphx/ 不存在 — 跳过' },
+        { value: 'db' as const,       label: '数据库查询',     hint: cgraphxExists ? '生成 db-profiles.json 模板(在项目数据目录)' : '.cgraphx/ 不存在 — 跳过' },
         {
           value: 'timeline' as const,
           label: 'Developer Timeline',
@@ -190,6 +191,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     chosen = sel as Subsystem[];
   }
 
+  // ⑤ docs 索引
   if (chosen.includes('docs')) {
     if (!cgraphxExists) {
       clack.log.info('.cgraphx/ 不存在 — 文档子系统跳过(在真实项目目录内重跑 `cgraphx install`,再 `cgraphx docs index`)');
@@ -209,6 +211,18 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
+  // ⑥ 对本次选中的每个 agent 接入 timeline + 任务绑定 hook;git post-commit 每项目一个
+  if (chosen.includes('timeline')) {
+    await installAgentHooks(clack, projectRoot, targets);
+  }
+
+  // ⑦ 问项目名称、把本地旧库并进用户目录(D25、D30),不受子系统勾选影响。必须在 ⑧ 之前:db-query 模板写进
+  //   数据位置时会先写上并过记号,之后再并就成了「已经并过」。
+  if (initOutcome !== 'skipped-unsafe') {
+    await settleProjectData(clack, projectRoot, useDefaults);
+  }
+
+  // ⑧ db-query 模板(写进数据位置)
   if (chosen.includes('db')) {
     if (cgraphxExists) {
       try {
@@ -227,11 +241,6 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  if (chosen.includes('timeline')) {
-    // 对本次选中的每个 agent 接入 timeline + 任务绑定 hook;git post-commit 每项目一个
-    await installAgentHooks(clack, projectRoot, targets);
-  }
-
   // Step 5: next steps. install now initializes the data dir itself (the
   // removed `cgraphx init` is folded in), so the only thing left is to restart
   // the agent and, optionally, index an existing knowledge base.
@@ -248,14 +257,14 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
 
 export interface RunUninstallerOptions {
   /**
-   * 逗号分隔的 agent id,或 `auto` / `all` / `none`。不给 → 卸载全部 agent 并移除
-   * git 钩子片段(timeline 的 post-commit / post-merge、版本分支提交拦截)与 `.cgraphx/`;
+   * 逗号分隔的 agent id,或 `auto` / `all` / `none`。不给 → 卸载全部 agent,移除 git 钩子片段(timeline 的
+   * post-commit / post-merge、版本分支提交拦截;同一仓库还有装着的目录时留着)与本地 `.cgraphx/`;
    * 给出 → 只移除指定 agent 的配置,不动 git 钩子、不删 `.cgraphx/`(忽略 `--keep-data`)。
    */
   target?: string;
   /** Non-interactive: target=all, no prompts (also skips the data-delete confirm). */
   yes?: boolean;
-  /** Keep the project's `.cgraphx/` data dir (default: remove it). */
+  /** 保留这个目录的 `.cgraphx/`(知识库索引和「我的需求」);用户目录里的项目数据卸载一律不删。 */
   keepData?: boolean;
 }
 
@@ -315,17 +324,12 @@ export function uninstallTargets(
 }
 
 /**
- * Interactive uninstaller — the inverse of `runInstallerWithOptions`.
- * Project-local only (no global uninstall). Sweeps every agent target (or the
- * `--target` subset) and prints one block per agent so the user sees exactly
- * which providers it hit.
- *
- * Removes what install wrote: the agent targets' hooks / statusLine /
- * instructions block AND the package-owned `.claude/` assets (by manifest),
- * plus the Developer Timeline hooks and any dead-hook leftovers (pre-0.8
- * auto-sync / the 2.0-removed prompt-hook). Also removes the `.cgraphx/`
- * data dir (the folded `uninit`) unless `--keep-data` — that's destructive,
- * so it's confirmed interactively unless `--yes`.
+ * 交互式卸载(`runInstallerWithOptions` 的逆过程),只卸这个目录(spec D31)。清扫全部 agent(或 `--target`
+ * 指定的),每个 agent 打一段反馈:移除 agent 配置(hook / statusLine / 指引块)、包内 `.claude/` 资产(按清单)、
+ * timeline 等 hook 与死 hook 残留(pre-0.8 auto-sync、2.0 移除的 prompt-hook)。彻底卸载时再:同一仓库没有别的
+ * 装着的目录才删 git 钩子与版本分支提交拦截;删本地 `.cgraphx/`(被折叠进来的 `uninit`)前先把没并过的旧数据
+ * 并进用户目录,并不过去就留着;删除要确认(`--yes` 不问,`--keep-data` 保留)。用户目录里的项目数据不删,
+ * 收尾说明它在哪、怎么删。
  */
 export async function runUninstaller(opts: RunUninstallerOptions): Promise<void> {
   const clack = await importESM('@clack/prompts');
@@ -368,60 +372,20 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     }
   }
 
-  // Step 4:撤销 install 在 agent target 之外做的事——逐 agent 移除 timeline / 任务绑定 hook
-  //   (部分卸载保留 git post-commit 钩子);彻底卸载再按规则删除 `.cgraphx/`
-  //   (破坏性,非 --yes 时交互确认;--keep-data 保留)。
-  await uninstallAgentHooks(clack, process.cwd(), targets, partial, involved);
+  // Step 4:撤销 install 在 agent target 之外做的事。① 逐 agent 移除 timeline / 任务绑定 hook(部分卸载保留
+  //   git 钩子;同一仓库还有装着的目录时也留着,gitHookKeptFor 列出那些目录)。
+  const cwd = process.cwd();
+  const { gitHookKeptFor } = await uninstallAgentHooks(clack, cwd, targets, partial, involved);
 
-  // 彻底卸载连同版本分支提交拦截一起删(spec D12);部分卸载(-t)保留 git 钩子,也就不删拦截。
-  if (!partial) {
-    try {
-      const guard = removeReleaseGuard(process.cwd());
-      if (guard.status === 'removed') {
-        clack.log.success(`已移除版本分支提交拦截:${guard.hookPath}`);
-      } else if (guard.notice !== undefined) {
-        clack.log.warn(guard.notice);
-      }
-    } catch (err) {
-      clack.log.warn(
-        `移除版本分支提交拦截失败:${err instanceof Error ? err.message : String(err)}(可稍后执行 cgraphx release guard --remove)`,
-      );
-    }
-  }
-
-  // 删除 `.cgraphx/`(折叠进来的 `uninit`);部分卸载(-t)跳过,并在已无已装 agent 时提示。
-  const dataDir = getCodeGraphDir(process.cwd());
   if (partial) {
+    // 部分卸载(-t)不动 git 钩子与 `.cgraphx/`;已无已装 agent 时提示
     if (!anyAgentInstalled(location)) {
       clack.log.info('项目中已没有已装 cgraphx 的 agent。如需彻底卸载请执行不带 -t 的 cgraphx uninstall');
     }
-  } else if (fs.existsSync(dataDir)) {
-    if (opts.keepData === true) {
-      clack.log.info(`保留 ${dataDir}(--keep-data)。如需删除:rm -rf ${dataDir}`);
-    } else {
-      let confirmed = useDefaults;
-      if (!confirmed) {
-        // 副本的 `.cgraphx/` 里只有自己的索引,共用数据经 shared 链接在主目录;removeDirectory 不跟随链接
-        const message = resolveDataDir(process.cwd()).state === 'own'
-          ? `删除 ${dataDir}?这会永久移除本项目的 cgraphx 数据(timeline / 知识库索引)。`
-          : `删除 ${dataDir}?这是副本:只删副本自己的知识库索引和「我的需求」索引,主目录的数据不受影响。`;
-        const ans = await clack.confirm({
-          message,
-          initialValue: true,
-        });
-        if (clack.isCancel(ans)) {
-          clack.cancel('卸载已取消。');
-          process.exit(0);
-        }
-        confirmed = ans;
-      }
-      if (confirmed) {
-        removeDirectory(process.cwd());
-        clack.log.success(`已删除 ${dataDir}`);
-      } else {
-        clack.log.info(`保留 ${dataDir}。如需删除:rm -rf ${dataDir}`);
-      }
-    }
+  } else {
+    removeReleaseGuardIfAlone(clack, cwd);
+    const project = await removeLocalDir(clack, cwd, { keepData: opts.keepData === true, useDefaults });
+    reportProjectDataKept(clack, project, gitHookKeptFor);
   }
 
   // Step 5: summary.
@@ -437,13 +401,10 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
 }
 
 /**
- * Ensure the project's `.cgraphx/` data dir exists and the markdown + timeline + task
- * schemas are applied — the work the removed `cgraphx init` command did, folded
- * into install. Idempotent: an already-initialized project is a no-op.
+ * 本地 `.cgraphx/` 初始化(被折叠进 install 的 `cgraphx init`):建目录,本地库只建知识库(markdown)表——
+ * timeline、task、sync 的表建在项目库(spec D8),本地库里有了它们会被当成没并过的旧库。幂等:装过的什么都不做。
  *
- * @returns `initialized` (created + schemas applied), `already` (nothing to
- *          do), or `skipped-unsafe` (the root looks like $HOME / a filesystem
- *          root, so we refuse to auto-create a data dir there).
+ * @returns `initialized`(新建)、`already`(已装过)、`skipped-unsafe`(根像 $HOME / 文件系统根,不在那里建数据目录)。
  */
 export async function ensureProjectInitialized(
   projectRoot: string,
@@ -452,16 +413,11 @@ export async function ensureProjectInitialized(
   if (unsafeIndexRootReason(projectRoot)) return 'skipped-unsafe';
 
   createDirectory(projectRoot);
-  const { DatabaseConnection, getDatabasePath } = await import('../../core/db');
+  const { DatabaseConnection, getLocalDatabasePath } = await import('../../core/db');
   const { ensureMarkdownSchema } = await import('../../core/markdown/schema-bootstrap');
-  const { ensureTimelineSchema } = await import('../../core/timeline/schema-bootstrap');
-  const { ensureTaskSchema } = await import('../../core/task');
-  const conn = DatabaseConnection.open(getDatabasePath(projectRoot));
+  const conn = DatabaseConnection.open(getLocalDatabasePath(projectRoot));
   try {
-    const db = conn.getDb();
-    ensureMarkdownSchema(db);
-    ensureTimelineSchema(db);
-    ensureTaskSchema(db);
+    ensureMarkdownSchema(conn.getDb());
   } finally {
     conn.close();
   }

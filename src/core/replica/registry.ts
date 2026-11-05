@@ -1,23 +1,23 @@
 /**
  * 副本登记的读写(spec D19、plan C-3)。
  *
- * 登记存主目录数据目录下的 `replicas/<副本目录名>.json`,一个副本一个文件:两个会话同时开副本
- * 各写各的文件,不会互相覆盖。写入走同目录临时文件 + rename,读的一方不会读到写了一半的文件;
- * 删副本只填 removedAt,文件保留(副本删了,旧记录照样换算、照样归属)。读到不认识的字段,
- * 写回时原样保留。directory.ts 的 resolveDataDir 只读其中的 path、removedAt。
+ * 登记存主目录本地 `.cgraphx/` 下的 `replicas/<副本目录名>.json`(不随 timeline、task、sync 的数据搬进用户目录),
+ * 一个副本一个文件:两个会话同时开副本各写各的文件,不会互相覆盖。写入走同目录临时文件 + rename,读的一方
+ * 不会读到写了一半的文件;删副本只填 removedAt,文件保留(副本删了,旧记录照样换算、照样归属)。读到不认识
+ * 的字段,写回时原样保留。`main-dir.ts` 的 `replicaLinkOf` 只读其中的 path、removedAt。
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { getDataDir, REPLICAS_DIRNAME } from '../directory';
+import { getCodeGraphDir, REPLICAS_DIRNAME } from '../directory';
 import type { ReplicaEntry } from './types';
 
 const ENTRY_EXT = '.json';
 
-/** 登记目录:主目录数据目录下的 `replicas/`。 */
+/** 登记目录:主目录本地 `.cgraphx/` 下的 `replicas/`。 */
 export function registryDir(mainRoot: string): string {
-  return path.join(getDataDir(mainRoot), REPLICAS_DIRNAME);
+  return path.join(getCodeGraphDir(mainRoot), REPLICAS_DIRNAME);
 }
 
 /** 一个副本的登记文件路径。 */
@@ -72,12 +72,24 @@ function toEntry(raw: Record<string, unknown>): ReplicaEntry | null {
 }
 
 /**
- * 全部登记(含已删除),按文件名排序;登记目录不在 → [],解析失败的文件跳过。每次都读文件:登记可能被
- * 原地改写(编辑器保存),长驻进程(web、sync worker)要读到改过的;一轮里要多次用的,调用方取一次
- * listProjectRoots 复用。
+ * 登记目录 dir 里副本 name 的登记,只解析成对象、不校验字段;读不了、不是合法 JSON、不是对象 → null。
+ * 给 main-dir.ts 按 shared 链接目标找登记用。
  */
+export function readRawEntryIn(dir: string, name: string): Record<string, unknown> | null {
+  return readRaw(path.join(dir, `${name}${ENTRY_EXT}`));
+}
+
+/** 主目录的全部登记(含已删除),同 readEntriesIn(registryDir(mainRoot))。 */
 export function readEntries(mainRoot: string): ReplicaEntry[] {
-  const dir = registryDir(mainRoot);
+  return readEntriesIn(registryDir(mainRoot));
+}
+
+/**
+ * 登记目录 dir 下的全部登记(含已删除),按文件名排序;目录不在 → [],解析失败的文件跳过。每次都读文件:
+ * 登记可能被原地改写(编辑器保存),长驻进程(web、sync worker)要读到改过的;一轮里要多次用的,调用方取一次
+ * listProjectRoots 复用。listProjectRoots 也用它读根的 shared 链接目标下的 `replicas/`。
+ */
+export function readEntriesIn(dir: string): ReplicaEntry[] {
   let files: string[];
   try {
     files = fs.readdirSync(dir);
@@ -95,14 +107,14 @@ export function readEntries(mainRoot: string): ReplicaEntry[] {
 }
 
 /**
- * 同目录先写临时文件再 rename。`replicas/` 不在时只建这一层:数据目录本身不在说明主目录
+ * 同目录先写临时文件再 rename。`replicas/` 不在时只建这一层:本地 `.cgraphx/` 本身不在说明主目录
  * 不对,不能顺手把它建出来(spec D24)。临时文件不以 .json 结尾,读的一方不会把它当登记。
  */
 function writeJsonAtomic(file: string, value: Record<string, unknown>): void {
   try {
     fs.mkdirSync(path.dirname(file));
   } catch (err) {
-    // 已经在(含两个会话同时开第一个副本)照常写;其余(如数据目录不在)照常抛出
+    // 已经在(含两个会话同时开第一个副本)照常写;其余(如 .cgraphx/ 不在)照常抛出
     if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
   }
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;

@@ -18,7 +18,6 @@ import {
   createDirectory,
   getCodeGraphDir,
   isInitialized,
-  resolveDataDir,
   SHARED_LINK_NAME,
 } from '../directory';
 import { appendGitInfoLines, gitPathPattern } from '../git-hooks';
@@ -29,6 +28,7 @@ import {
   SUPPORTED_PLATFORMS,
 } from './constants';
 import { formatFileList, ReplicaError } from './errors';
+import { replicaLinkOf } from './main-dir';
 import { writeEntry } from './registry';
 import { featureDirOf, isDirectory, listReplicas, realpathOr, relativeInside } from './roots';
 import { firstLine, gitValue, runCommand, runGit, trackedChanges, untrackedFiles } from './status';
@@ -114,7 +114,7 @@ function notMainDir(message: string): ReplicaError {
  */
 function assertMainDir(projectRoot: string): { realRoot: string; baseBranch: string } {
   const root = path.resolve(projectRoot);
-  const info = resolveDataDir(root);
+  const info = replicaLinkOf(root);
   if (info.state === 'replica') {
     throw notMainDir(`${root} 是副本,不能在副本里开副本;到主目录 ${info.mainRoot} 的会话里开`);
   }
@@ -337,8 +337,9 @@ function dropUntracked(replicaRoot: string, featureId: string): string[] {
 }
 
 /**
- * ② 清空副本数据目录里除 `.gitignore` 以外的内容(克隆带过来的是主目录的数据),`.gitignore` 原样
- * 保留;建空的本地库和指回主目录数据目录的 `shared` 链接(目标写 realpath,两边打开同一个库文件)。
+ * ② 清空副本 `.cgraphx/` 里除 `.gitignore` 以外的内容(克隆带过来的是主目录的),`.gitignore` 原样
+ * 保留;建空的本地库和指回主目录 `.cgraphx/` 的 `shared` 链接(目标写 realpath;版本流程据它和主目录的登记
+ * 认出副本、找到主目录)。
  */
 function resetDataDir(replicaRoot: string, mainRoot: string): void {
   const local = getCodeGraphDir(replicaRoot);

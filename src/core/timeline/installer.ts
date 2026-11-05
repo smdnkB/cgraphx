@@ -6,6 +6,9 @@
  * 全局的 `~/.claude/`(spec §0.2 #4、§7.3、D33)。
  *
  * 幂等:重复安装每个事件只留一条 hook。可逆:卸载只删安装写入的内容,用户自己的 hook 原样保留。
+ *
+ * 卸载只卸这个目录(spec:2026-11-05-数据按项目放用户目录 D31):不删数据(项目的数据用 `cgraphx project remove`
+ * 删);git 钩子目录是同一仓库各个工作区共用的,同一仓库还有装着 cgraphx 的目录时 git 钩子片段留着,提交照样记。
  */
 
 import * as fs from 'node:fs';
@@ -14,9 +17,8 @@ import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 
 import { agentSettingsPath, DEFAULT_AGENT_ID, hookCommand, requireAgentProfile, type AgentId } from '../agents';
-import { DatabaseConnection, getDatabasePath } from '../db';
-import { resolveDataDir } from '../directory';
 import { hookRemoveNotice, installHookSnippet, removeHookSnippet, resolveHooksDir, type HookSnippetResult } from '../git-hooks';
+import { listOtherInstalledDirs } from '../repo-projects';
 import {
   COMMIT_BRANCH_ENV,
   COMMIT_HOOK_ENV,
@@ -57,7 +59,11 @@ export interface UninstallReport {
   mergeHookRemoved: boolean;
   /** 片段是提交在被跟踪的钩子文件里的、没删时给人看的提示(spec D33④)。 */
   gitHookNotices: string[];
-  dataDropped: boolean;
+  /**
+   * 同一仓库还装着 cgraphx 的别的目录(spec D31,C-2 listOtherInstalledDirs 的结果):非空时 git 钩子片段留着没动;
+   * 删了钩子、或按 keepGitHook 没碰钩子时为 []。
+   */
+  gitHookKeptFor: string[];
 }
 
 interface HookEntry {
@@ -154,7 +160,7 @@ export function installTimelineHooks(
   const gitRoot = findGitRoot(resolvedRoot);
 
   if (opts.purgeFirst) {
-    uninstallTimelineHooks(resolvedRoot, { purgeData: false, agent });
+    uninstallTimelineHooks(resolvedRoot, { agent });
   }
 
   const settings = readSettings(settingsPath);
@@ -238,19 +244,10 @@ export function installTimelineHooks(
 
 export function uninstallTimelineHooks(
   projectRoot: string,
-  opts: { purgeData?: boolean; agent?: AgentId; keepGitHook?: boolean } = {},
+  opts: { agent?: AgentId; keepGitHook?: boolean } = {},
 ): UninstallReport {
   const profile = requireAgentProfile(opts.agent ?? DEFAULT_AGENT_ID);
   const resolvedRoot = path.resolve(projectRoot);
-  // 副本里共用库在主目录,会删共用数据的操作直接拒绝:先判断,什么都不动(spec 全局约束)
-  if (opts.purgeData) {
-    const dataDir = resolveDataDir(resolvedRoot);
-    if (dataDir.state !== 'own') {
-      throw new Error(
-        `这是副本,数据在主目录 ${dataDir.mainRoot};要清数据,到主目录执行 cgraphx timeline uninstall --purge(这次什么都没动)`,
-      );
-    }
-  }
   const settingsPath = agentSettingsPath(resolvedRoot, profile);
   const gitRoot = findGitRoot(resolvedRoot);
   const hooksDir = gitRoot ? resolveHooksDir(gitRoot) : null;
@@ -288,11 +285,13 @@ export function uninstallTimelineHooks(
     writeSettings(settingsPath, settings);
   }
 
-  // git 钩子:keepGitHook(只卸指定 agent)时保留;post-commit 连同旧版不带标记的调用行一起删
+  // git 钩子:keepGitHook(只卸指定 agent)时保留;同一仓库还有装着 cgraphx 的目录时也保留——钩子目录是各个
+  // 工作区共用的,删了那些目录的提交就记不上了(spec D31)。其余情况 post-commit 连同旧版不带标记的调用行一起删
+  const gitHookKeptFor = opts.keepGitHook ? [] : listOtherInstalledDirs(resolvedRoot);
   let gitHookRemoved = false;
   let mergeHookRemoved = false;
   const gitHookNotices: string[] = [];
-  if (!opts.keepGitHook && gitRoot) {
+  if (!opts.keepGitHook && gitHookKeptFor.length === 0 && gitRoot) {
     const commit = removeHookSnippet(gitRoot, 'post-commit', GIT_HOOK_MARKER, { legacyMatch: GIT_COMMIT_SUBCOMMAND });
     const merge = removeHookSnippet(gitRoot, 'post-merge', GIT_HOOK_MARKER);
     gitHookRemoved = commit?.status === 'removed';
@@ -300,26 +299,6 @@ export function uninstallTimelineHooks(
     for (const r of [commit, merge]) {
       const notice = r === null ? null : hookRemoveNotice(r, '提交记录片段');
       if (notice !== null) gitHookNotices.push(notice);
-    }
-  }
-
-  // 可选:删 timeline 数据(在副本里已在开头拒绝)
-  let dataDropped = false;
-  if (opts.purgeData) {
-    try {
-      const dbPath = getDatabasePath(resolvedRoot);
-      if (fs.existsSync(dbPath)) {
-        const conn = DatabaseConnection.open(dbPath);
-        conn.getDb().exec('DROP TABLE IF EXISTS timeline_events');
-        conn.getDb().exec('DROP TABLE IF EXISTS timeline_schema_versions');
-        conn.getDb().exec('DROP TABLE IF EXISTS timeline_meta');
-        conn.close();
-        dataDropped = true;
-      }
-    } catch (err) {
-      process.stderr.write(
-        `[timeline] --purge failed: ${err instanceof Error ? err.message : String(err)}\n`,
-      );
     }
   }
 
@@ -331,6 +310,6 @@ export function uninstallTimelineHooks(
     gitHookRemoved,
     mergeHookRemoved,
     gitHookNotices,
-    dataDropped,
+    gitHookKeptFor,
   };
 }

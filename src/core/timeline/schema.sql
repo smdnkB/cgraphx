@@ -46,3 +46,11 @@ CREATE TABLE IF NOT EXISTS timeline_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- 项目在本机出现过的根(K4)和各自最近一次活动(K16):hook 每记一条事件 upsert 一次。
+-- 只加表、不升版本号:旧库模式下新版也会给旧库建这张表,退回旧版时旧库仍要能打开。
+CREATE TABLE IF NOT EXISTS timeline_roots (
+  root TEXT PRIMARY KEY,   -- 装过的目录或工作区根的绝对路径,不放会话 cd 进去的子目录
+  first_ts TEXT NOT NULL,
+  last_ts TEXT NOT NULL
+);

@@ -1,6 +1,6 @@
 # 数据与模型规范
 
-> 本仓库无业务数据库;数据 = 包内 SQLite(`.cgraphx/cgraphx.db`,markdown / timeline 两子系统共用)。
+> 本仓库无业务数据库;数据 = 包内 SQLite:知识库(`markdown_*`)在各目录本地的 `.cgraphx/cgraphx.db`,timeline / task / sync 在用户目录里这个项目的 `~/.cgraphx/projects/<目录名>/cgraphx.db`;升级后还没 install 过的目录照旧全在本地库。
 
 ## 模型层
 
@@ -9,7 +9,7 @@
 
 ## DDL 层
 
-- 表命名空间:每子系统拥有前缀表(`markdown_*` / `timeline_*` / `task_*`),共用一个 `.cgraphx/cgraphx.db`
+- 表命名空间:每子系统拥有前缀表(`markdown_*` / `timeline_*` / `task_*` / `sync_*`),按数据位置分在本地库和项目库里,同一个库里各子系统只碰自己的前缀表
 - `schema.sql` 必须全幂等(一律 `CREATE ... IF NOT EXISTS`),由 schema-bootstrap 重复应用
 - 每子系统自有版本表(`<prefix>_schema_versions`,每版本一条 `INSERT OR IGNORE`);表结构变更 = schema.sql 追加 + 加版本号,不改旧版本记录
 

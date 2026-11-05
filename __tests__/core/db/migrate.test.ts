@@ -9,7 +9,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-import { DatabaseConnection, getDatabasePath } from '../../../src/core/db';
+import { DatabaseConnection, getLocalDatabasePath } from '../../../src/core/db';
 import { dropLegacyGraphTables } from '../../../src/core/db/migrate';
 
 function tmpProject(): string {
@@ -17,7 +17,7 @@ function tmpProject(): string {
 }
 
 function tableExists(project: string, table: string): boolean {
-  const conn = DatabaseConnection.open(getDatabasePath(project));
+  const conn = DatabaseConnection.open(getLocalDatabasePath(project));
   try {
     const row = conn.getDb().prepare(
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${table}'`,
@@ -36,7 +36,7 @@ describe('dropLegacyGraphTables', () => {
   it('drops all 1.x graph tables (incl. FTS5 + shadow tables), preserves 2.0 data', () => {
     // Simulate an upgrading 1.x project: the full graph-layer schema (from the
     // removed src/db/schema.sql) + a populated 2.0 markdown table.
-    const conn = DatabaseConnection.open(getDatabasePath(project));
+    const conn = DatabaseConnection.open(getLocalDatabasePath(project));
     conn.getDb().exec(`
       CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at INTEGER, description TEXT);
       CREATE TABLE nodes (id INTEGER PRIMARY KEY, name TEXT);
@@ -60,7 +60,7 @@ describe('dropLegacyGraphTables', () => {
       expect(tableExists(project, t), `${t} should be dropped`).toBe(false);
     }
     // The FTS5 virtual-table drop cascades to its shadow tables.
-    const shadowConn = DatabaseConnection.open(getDatabasePath(project));
+    const shadowConn = DatabaseConnection.open(getLocalDatabasePath(project));
     const shadows = shadowConn.getDb().prepare(
       `SELECT name FROM sqlite_master WHERE name LIKE 'nodes_fts_%'`,
     ).all() as Array<{ name: string }>;
@@ -69,14 +69,14 @@ describe('dropLegacyGraphTables', () => {
 
     // The 2.0 table and its rows survive.
     expect(tableExists(project, 'markdown_documents')).toBe(true);
-    const conn2 = DatabaseConnection.open(getDatabasePath(project));
+    const conn2 = DatabaseConnection.open(getLocalDatabasePath(project));
     const rows = conn2.getDb().prepare('SELECT path FROM markdown_documents').all() as Array<{ path: string }>;
     conn2.close();
     expect(rows.map((r) => r.path)).toEqual(['docs/a.md']);
   });
 
   it('is idempotent: a second run drops nothing', () => {
-    const conn = DatabaseConnection.open(getDatabasePath(project));
+    const conn = DatabaseConnection.open(getLocalDatabasePath(project));
     conn.getDb().exec('CREATE TABLE nodes (id INTEGER);');
     conn.close();
 
@@ -85,7 +85,7 @@ describe('dropLegacyGraphTables', () => {
   });
 
   it('is a no-op for a 2.0-native project (no graph tables)', () => {
-    const conn = DatabaseConnection.open(getDatabasePath(project));
+    const conn = DatabaseConnection.open(getLocalDatabasePath(project));
     conn.getDb().exec('CREATE TABLE markdown_documents (id INTEGER);');
     conn.close();
     expect(dropLegacyGraphTables(project).dropped).toEqual([]);

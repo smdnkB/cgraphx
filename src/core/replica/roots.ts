@@ -1,22 +1,23 @@
 /**
- * 主目录与副本的路径换算(spec D25、D26,plan C-4)。
+ * 根汇总与路径换算(spec:2026-11-05-数据按项目放用户目录 D11;版本流程与需求副本 spec D25、D26)。
  *
- * timeline 原样记绝对路径和 cwd;读取方(task、sync、features)经这里按「主目录 + 全部登记过的
- * 副本(含已删除)」换算:取包含该路径的最长根,得出项目内路径。各函数入口先把项目根换成主目录,
- * 在主目录、副本里调用结果相同。没有登记任何副本时,只有主目录一个根。
+ * timeline 原样记绝对路径和 cwd,并记下项目在本机出现过的根;读取方(task、sync)把这些根和当前根传进来,
+ * 这里挂上各根上的副本登记(在用、已删都算),按「取包含该路径的最长根」换算出项目内路径。主目录在哪
+ * (resolveMainRoot)只给版本流程用。
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { resolveDataDir } from '../directory';
+import { REPLICAS_DIRNAME } from '../directory';
 import { FEATURES_DIR_POSIX } from './constants';
-import { readEntries } from './registry';
+import { replicaLinkOf, sharedLinkTarget } from './main-dir';
+import { readEntries, readEntriesIn, registryDir } from './registry';
 import type { ProjectRoot, ReplicaEntry } from './types';
 
-/** 主目录(= resolveDataDir(projectRoot).mainRoot):在副本里是链接目标的上级目录,否则是项目根本身。 */
+/** 主目录(= replicaLinkOf(projectRoot).mainRoot):在副本里是链接目标的上级目录,否则是项目根本身。 */
 export function resolveMainRoot(projectRoot: string): string {
-  return resolveDataDir(projectRoot).mainRoot;
+  return replicaLinkOf(projectRoot).mainRoot;
 }
 
 /** createdAt 升序;同一时刻按副本目录名。 */
@@ -50,20 +51,76 @@ export function realpathOr(p: string): string {
   }
 }
 
-/**
- * 主目录加全部登记(含已删除),按 root 路径长度降序(嵌套的根里更深的在前;按顺序遍历的读者靠它)。
- * 同一路径取哪条由查找表定(preferRoot)。每个根的 realpath 在这里算一次(走目录缓存,已删副本的目录
- * 不在也不抛错),matchProjectRoot、replicaOfCwd 不再给根算。
- */
-export function listProjectRoots(projectRoot: string): ProjectRoot[] {
-  const mainRoot = resolveMainRoot(projectRoot);
-  const roots: ProjectRoot[] = [{ root: mainRoot, realRoot: realDir(mainRoot), replica: null }];
-  for (const entry of entriesOf(mainRoot, true)) {
-    const root = path.resolve(entry.path);
-    roots.push({ root, realRoot: realDir(root), replica: entry });
+/** 根 r 上的登记目录:r 自己的 `.cgraphx/replicas/`,r 的 `.cgraphx/shared` 是符号链接时再加链接目标下的 `replicas/`。 */
+function registryDirsOf(r: string): string[] {
+  const dirs = [registryDir(r)];
+  try {
+    const target = sharedLinkTarget(r);
+    if (target !== null) dirs.push(path.join(target, REPLICAS_DIRNAME));
+  } catch {
+    // 读不了链接:只看根自己的登记
   }
-  // 稳定排序:长度相同时主目录在前、副本按 createdAt
-  return roots.sort((a, b) => b.root.length - a.root.length);
+  return dirs;
+}
+
+/** 两个时间里晚的那个;null 算没有。 */
+function laterOf(a: string | null, b: string | null): string | null {
+  if (a === null) return b;
+  return b === null || a > b ? a : b;
+}
+
+/** root 长度降序;同长时不是登记的根在前、登记按 createdAt。 */
+function byRootLength(a: ProjectRoot, b: ProjectRoot): number {
+  if (a.root.length !== b.root.length) return b.root.length - a.root.length;
+  if (a.replica === null) return b.replica === null ? 0 : -1;
+  if (b.replica === null) return 1;
+  return byCreatedAt(a.replica, b.replica);
+}
+
+/**
+ * 项目的全部根(spec:2026-11-05-数据按项目放用户目录 D11):baseRoots(timeline 记下的根)、currentRoot,加上
+ * 这些根上的副本登记(根自己的 `.cgraphx/replicas/`,根的 shared 链接指向的目录下的 `replicas/`;在用、已删
+ * 都算;同一个登记 name + path 相同只算一次),每个登记一条。baseRoots、currentRoot 的路径(path.resolve 后)
+ * 和某个登记的 path 相同时只留登记那条——否则已删副本的路径会命中 replica 为 null 的那条,replicaOfCwd 认不出
+ * 副本;其余各出一条 replica 为 null 的。lastActiveAt 按路径取 baseRoots 的(登记那条同样按它的路径取),没有
+ * 为 null。按 root 长度降序(嵌套的根里更深的在前;按顺序遍历的读者靠它),同长时不是登记的在前、登记按
+ * createdAt。每个根的 realpath 在这里算一次(走目录缓存,已删副本的目录不在也不抛错),matchProjectRoot、
+ * replicaOfCwd 不再给根算。
+ */
+export function listProjectRoots(
+  baseRoots: readonly { root: string; lastActiveAt: string | null }[],
+  currentRoot: string,
+): ProjectRoot[] {
+  const activeAt = new Map<string, string | null>();
+  for (const { root, lastActiveAt } of baseRoots) {
+    const key = path.resolve(root);
+    activeAt.set(key, laterOf(activeAt.get(key) ?? null, lastActiveAt));
+  }
+  const rootPaths = new Set([...activeAt.keys(), path.resolve(currentRoot)]);
+
+  // 主目录和它的副本都在 rootPaths 里时,两边读到的是同一个登记目录:目录只读一次,登记只算一次
+  const dirs = new Set<string>();
+  for (const r of rootPaths) for (const dir of registryDirsOf(r)) dirs.add(path.resolve(dir));
+  const entries = new Map<string, ReplicaEntry>();
+  for (const dir of dirs) {
+    for (const entry of readEntriesIn(dir)) {
+      const key = `${entry.name}\0${path.resolve(entry.path)}`;
+      if (!entries.has(key)) entries.set(key, entry);
+    }
+  }
+
+  const roots: ProjectRoot[] = [];
+  const registered = new Set<string>();
+  for (const entry of entries.values()) {
+    const root = path.resolve(entry.path);
+    registered.add(root);
+    roots.push({ root, realRoot: realDir(root), replica: entry, lastActiveAt: activeAt.get(root) ?? null });
+  }
+  for (const root of rootPaths) {
+    if (registered.has(root)) continue;
+    roots.push({ root, realRoot: realDir(root), replica: null, lastActiveAt: activeAt.get(root) ?? null });
+  }
+  return roots.sort(byRootLength);
 }
 
 /** p 在 root 之内时返回相对路径;allowSelf 为真时 p 等于 root 也算(返回 '')。replica 内部共用。 */
@@ -185,7 +242,7 @@ export function matchProjectRoot(
   return hit === null ? null : { root: hit.root, rel: toPosix(hit.rel) };
 }
 
-/** cwd 所在的副本(cwd 等于副本根也算);在主目录里或都不在 → null。 */
+/** cwd 所在的副本(cwd 等于副本根也算);落在不是副本登记的根里或都不在 → null。 */
 export function replicaOfCwd(roots: readonly ProjectRoot[], cwd: string): ReplicaEntry | null {
   return findRoot(roots, cwd, true)?.root.replica ?? null;
 }
@@ -204,19 +261,46 @@ export function featureDirOf(root: string, featureId: string): string {
   return path.join(root, ...FEATURES_DIR_POSIX.split('/'), featureId);
 }
 
+/** lastActiveAt 降序,null 在后。 */
+function byLastActiveDesc(a: ProjectRoot, b: ProjectRoot): number {
+  if (a.lastActiveAt === b.lastActiveAt) return 0;
+  if (a.lastActiveAt === null) return 1;
+  if (b.lastActiveAt === null) return -1;
+  return a.lastActiveAt > b.lastActiveAt ? -1 : 1;
+}
+
 /**
- * 需求目录在哪个根里(spec D26):先找没删、featureId 相同、目录里有这个需求目录的副本(按 createdAt
- * 升序取第一个)——副本里那份是正在改的,和 features list 取副本那份(D30)同一口径;开副本后主目录
- * 留下的空壳(被忽略的文件、空子目录)也就不影响查找。没有再找主目录;都没有 → null。
- * roots 是 listProjectRoots 的返回,调用方整轮复用,不再每次读登记。
+ * 需求目录在哪个根里(spec:2026-11-05-数据按项目放用户目录 D11):
+ * ① 登记了这个需求、没删、目录里有这个需求目录的副本,按 createdAt 升序取第一个——副本里那份是正在改的,和
+ *   features list 取副本那份(版本流程与需求副本 spec D30)同一口径;开副本后主目录留下的空壳(被忽略的文件、
+ *   空子目录)也就不影响查找
+ * ② currentRoot 有这个需求目录 → 它
+ * ③ 其余的根(去掉已经看过的),按 lastActiveAt 降序(null 在后)取第一个有这个需求目录的;有需求目录的根
+ *   必然还在,不另查根在不在
+ * 都没有 → null。roots 是 listProjectRoots 的返回,调用方整轮复用,不再每次读登记。
  */
-export function locateFeatureRoot(roots: readonly ProjectRoot[], featureId: string): string | null {
+export function locateFeatureRoot(
+  roots: readonly ProjectRoot[],
+  featureId: string,
+  currentRoot: string,
+): string | null {
+  const hasFeature = (root: string): boolean => isDirectory(featureDirOf(root, featureId));
+  const seen = new Set<string>();
   const replicas = roots
     .flatMap(({ replica }) => (replica !== null && replica.removedAt === null && replica.featureId === featureId ? [replica] : []))
     .sort(byCreatedAt);
   for (const entry of replicas) {
-    if (isDirectory(featureDirOf(entry.path, featureId))) return path.resolve(entry.path);
+    const root = path.resolve(entry.path);
+    if (hasFeature(root)) return root;
+    seen.add(root);
   }
-  const main = roots.find(({ replica }) => replica === null)?.root;
-  return main !== undefined && isDirectory(featureDirOf(main, featureId)) ? main : null;
+  const current = path.resolve(currentRoot);
+  if (hasFeature(current)) return current;
+  seen.add(current);
+  for (const { root } of roots.filter((r) => !seen.has(r.root)).sort(byLastActiveDesc)) {
+    if (seen.has(root)) continue;
+    seen.add(root);
+    if (hasFeature(root)) return root;
+  }
+  return null;
 }

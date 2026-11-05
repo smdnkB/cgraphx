@@ -1,7 +1,7 @@
 /**
  * sync 子系统公共门面(接入研发管理平台:接入 / 断开 / 上报)。
  *
- * 外部调用方(cli、docs、hooks、installer)只通过本模块调用,不得直接伸手进内部模块。
+ * 外部调用方(cli、docs、hooks、installer、project)只通过本模块调用,不得直接伸手进内部模块。
  * sync 只经 task / timeline / agents 的门面取数据;它们不依赖 sync。
  */
 
@@ -14,6 +14,8 @@ export { readCachedProjectArtifactTypes } from './platform-spec';
 export { getClientVersion, serverTier, type ServerTier } from './version';
 export { syncSessionStartHook, syncStopHook } from './hooks';
 export { installSyncHooks, uninstallSyncHooks } from './installer';
+// 并旧库的 sync 表与平台连接(spec D29):project 子系统并旧数据时调用
+export { mergeSyncTables, type SyncMergeInput } from './merge';
 export {
   SYNC_SCHEMA_VERSION,
   CLIENT_NAME,

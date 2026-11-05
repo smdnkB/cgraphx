@@ -3,7 +3,8 @@
  *
  * 命令原文只在本模块内部用于推断,返回值只含沉淀目录文件路径与概念名,不出本机。
  * 口径与 `src/core/task/artifacts.ts` 的 collectReferences(本地 web)相互独立,不得互相引用。
- * 路径按「主目录 + 全部登记过的副本」换算(spec D26),文件在不在到路径所在的根里看。
+ * 路径按「timeline 记下的根 + 当前根 + 副本登记」换算(spec:2026-11-05-数据按项目放用户目录 D11),
+ * 文件在不在到路径所在的根里看,那个根已不在就退回当前根。
  */
 
 import fs from 'node:fs';
@@ -11,7 +12,7 @@ import path from 'node:path';
 
 import { extractCommandPathCandidates, type TimelineEvent } from '../timeline';
 import { SEDIMENT_DIRS } from './constants';
-import { createPathResolver, isSafeRelPath, rootOrMain, type PathResolver } from './paths';
+import { createPathResolver, isSafeRelPath, rootOrCurrent, type PathResolver } from './paths';
 import type { SyncContext } from './payload';
 import type { IngestReference } from './types';
 
@@ -54,8 +55,8 @@ function inferWithResolver(ctx: SyncContext, events: TimelineEvent[], resolver: 
     const rel = resolver.fromAbs(raw, base);
     if (rel === null || !isSedimentPath(rel.projectRel)) return false;
     if (reads.has(rel.projectRel)) return true;
-    // 在路径所在的根里看文件在不在;那个副本已不在就退回主目录
-    if (!isExistingFile(path.join(rootOrMain(rel.root, ctx.projectRoot), rel.projectRel))) return false;
+    // 在路径所在的根里看文件在不在;那个根已不在就退回当前根
+    if (!isExistingFile(path.join(rootOrCurrent(rel.root, ctx.projectRoot), rel.projectRel))) return false;
     reads.set(rel.projectRel, ts);
     return true;
   };

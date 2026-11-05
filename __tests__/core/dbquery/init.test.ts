@@ -9,12 +9,19 @@ import * as os from 'node:os';
 
 import { initDbProfiles, templateProfilesContent } from '../../../src/core/dbquery/init';
 import { PROFILES_FILENAME } from '../../../src/core/dbquery/constants';
+import { DatabaseConnection, getLocalDatabasePath } from '../../../src/core/db';
 
 const POSIX = process.platform !== 'win32';
 
+/** 临时项目:装过、有旧库(本地库里有 timeline_meta 表),数据位置就是本地 .cgraphx/,模板写在那里。 */
 function makeTmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dbq-init-'));
-  fs.mkdirSync(path.join(dir, '.cgraphx'), { recursive: true });
+  const conn = DatabaseConnection.open(getLocalDatabasePath(dir));
+  try {
+    conn.getDb().exec('CREATE TABLE IF NOT EXISTS timeline_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  } finally {
+    conn.close();
+  }
   return dir;
 }
 
@@ -53,10 +60,11 @@ describe('initDbProfiles', () => {
     expect(parsed['user-wrote-this']).toBeUndefined();
   });
 
-  it('throws if .cgraphx/ does not exist', () => {
+  it('throws when there is no data location (not installed, not in git)', () => {
     const noInit = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dbq-noinit-'));
     try {
-      expect(() => initDbProfiles(noInit)).toThrow(/not initialized/);
+      // 报错带修复提示:先在项目根运行 cgraphx install
+      expect(() => initDbProfiles(noInit)).toThrow(/在项目根运行 cgraphx install/);
     } finally {
       fs.rmSync(noInit, { recursive: true, force: true });
     }

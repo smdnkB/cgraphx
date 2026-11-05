@@ -49,7 +49,7 @@ export interface AutoSession {
   derivedAt: string;
 }
 
-/** `.cgraphx/task-source.json` 的内容(headers 缺省为空对象)。 */
+/** 数据目录里 `task-source.json` 的内容(headers 缺省为空对象)。 */
 export interface TaskSourceConfig {
   url: string;
   headers: Record<string, string>;

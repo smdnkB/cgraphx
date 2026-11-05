@@ -7,8 +7,7 @@
  * 登记的需求(spec D30,副本登记只经 replica 门面读)。
  */
 
-import { resolveDataDir } from '../directory';
-import { listReplicas } from '../replica';
+import { listReplicas, replicaLinkOf } from '../replica';
 import { compareFeatureEntries, scanFeature, scanFeatures } from './scanner';
 import type { FeatureEntry, FeatureFilter } from './types';
 
@@ -98,8 +97,8 @@ function withReplicaFeatures(
 }
 
 /**
- * 扫描 + 过滤一步到位。在主目录(数据目录是项目自己的)另外列出在用副本里登记的需求;
- * 在副本里只列副本自己的目录树,条目都不带 replica(spec D30)。
+ * 扫描 + 过滤一步到位。在主目录(不是副本,replica 门面 replicaLinkOf 判断)另外列出在用副本里
+ * 登记的需求;在副本里只列副本自己的目录树,条目都不带 replica(spec D30)。
  */
 export function listFeatures(
   projectRoot: string,
@@ -107,7 +106,7 @@ export function listFeatures(
 ): FeatureEntry[] {
   const own = scanFeatures(projectRoot);
   const entries =
-    resolveDataDir(projectRoot).state === 'own'
+    replicaLinkOf(projectRoot).state === 'own'
       ? withReplicaFeatures(projectRoot, own)
       : own;
   return filterFeatures(entries, filter);

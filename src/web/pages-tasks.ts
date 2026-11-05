@@ -3,7 +3,8 @@
  *
  * 只读:数据只经 task 门面的 listTaskSummaries / getTaskReport(不建表、不写库、不请求外部接口);
  * 口径(时长、合计、排序、产出、参考)全部由 core 算好,本模块只做格式化与链接解析。
- * 项目没有 task 表 → 启用提示页(200);任务不存在 → 404。
+ * 项目没有 task 表 → 启用提示页(200);任务不存在 → 404。项目库还不在(spec:2026-11-05-数据按项目放
+ * 用户目录 D16)→ 不调门面,列表按 0 个任务、详情按任务不存在。
  */
 
 import type { SqliteDatabase } from '../core/db';
@@ -16,8 +17,10 @@ import {
   type ArtifactGroup,
   type SegmentReport,
   type TaskReport,
+  type TaskSummary,
 } from '../core/task';
 import type { TimelineEvent } from '../core/timeline';
+import { hasDataDatabase } from './bootstrap';
 import { isSafeCodemapName } from './codemap-reader';
 import {
   ARTIFACT_CATEGORY_LABELS,
@@ -99,9 +102,10 @@ function toGroupModels(query: MarkdownQuery, groups: ArtifactGroup[]): ArtifactG
 // ----- 列表页(spec §4)------------------------------------------------------
 
 export async function renderTasksListPage(ctx: TaskPageCtx): Promise<string> {
-  let summaries;
+  let summaries: TaskSummary[];
   try {
-    summaries = await listTaskSummaries(ctx.projectRoot);
+    // 项目库还不在:按 0 个任务显示(门面在库不在时抛错)
+    summaries = hasDataDatabase(ctx.projectRoot) ? await listTaskSummaries(ctx.projectRoot) : [];
   } catch (err) {
     if (err instanceof TaskNotEnabledError) return shell('开发任务', renderTaskNotEnabledContent(), ctx);
     throw err;
@@ -188,6 +192,8 @@ export async function renderTaskDetailPage(
   taskId: number,
   ctx: TaskPageCtx,
 ): Promise<{ status: 200; html: string } | { status: 404 }> {
+  // 项目库还不在:和查不到任务一样按 404
+  if (!hasDataDatabase(ctx.projectRoot)) return { status: 404 };
   let report: TaskReport;
   try {
     report = await getTaskReport(ctx.projectRoot, taskId, { eventLimitPerSegment: TASK_SEGMENT_EVENT_LIMIT });

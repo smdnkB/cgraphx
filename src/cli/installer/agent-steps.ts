@@ -7,7 +7,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { ALL_TARGETS, getTarget, resolveTargetFlag } from './targets/registry';
 import type { AgentTarget, Location } from './targets/types';
-import { isInitialized } from '../../core/directory';
 import { hookNotice, type HookSnippetResult } from '../../core/git-hooks';
 import {
   DEFAULT_AGENT_ID,
@@ -128,7 +127,7 @@ export function installAgentTargets(
 /**
  * 「可选子系统」的 Developer Timeline 项:对每个选中 agent 依次接入 timeline、任务绑定与平台同步 hook。
  * git post-commit、post-merge 钩子每项目一份(首个 agent 写入,其后幂等),它们的安装提示同一句只打一次。
- * 已初始化项目先打开库应用 task schema(只做一次),保证老项目重装后也有 task 表。
+ * 只接 hook、不开库:项目库的 timeline、task、sync 三套 schema 由 install 并旧数据那一步建(spec D8、D25)。
  */
 export async function installAgentHooks(
   clack: Clack,
@@ -140,9 +139,8 @@ export async function installAgentHooks(
     return;
   }
   const { installTimelineHooks } = await import('../../core/timeline');
-  const { installTaskHooks, openTaskDb } = await import('../../core/task');
+  const { installTaskHooks } = await import('../../core/task');
   const { installSyncHooks } = await import('../../core/sync');
-  let taskSchemaReady = false;
   const printedNotices = new Set<string>();
 
   for (const target of targets) {
@@ -165,10 +163,6 @@ export async function installAgentHooks(
 
     // 失败只 warn,不中断安装
     try {
-      if (!taskSchemaReady) {
-        if (isInitialized(projectRoot)) openTaskDb(projectRoot).close();
-        taskSchemaReady = true;
-      }
       const report = installTaskHooks(projectRoot, { agent: target.id });
       const events = report.written.length > 0 ? report.written.join('/') : '已存在(幂等)';
       clack.log.success(`${prefix}开发任务绑定已装:${events}`);
@@ -188,8 +182,9 @@ export async function installAgentHooks(
 
 /**
  * 逐 agent 移除 timeline、任务绑定与平台同步 hook。`keepGitHook` 为真(`uninstall -t`)时不动
- * git post-commit 钩子;否则随首个 agent 一并移除。`involved` 是日志前缀计算所依据的
- * 「本次涉及的 agent」(彻底卸载时为清扫前已装的 agent),缺省即 `targets`。
+ * git post-commit 钩子;否则随首个 agent 一并移除——同一仓库还有装着 cgraphx 的目录时留着(spec D31)。
+ * 返回的 `gitHookKeptFor` 是各 agent 的 timeline 报告里第一个非空的「还装着的目录」(删了钩子、没碰钩子时为 [])。
+ * `involved` 是日志前缀计算所依据的「本次涉及的 agent」(彻底卸载时为清扫前已装的 agent),缺省即 `targets`。
  */
 export async function uninstallAgentHooks(
   clack: Clack,
@@ -197,21 +192,24 @@ export async function uninstallAgentHooks(
   targets: readonly AgentTarget[],
   keepGitHook: boolean,
   involved: readonly AgentTarget[] = targets,
-): Promise<void> {
+): Promise<{ gitHookKeptFor: string[] }> {
   const { uninstallTimelineHooks } = await import('../../core/timeline');
   const { uninstallTaskHooks } = await import('../../core/task');
   const { uninstallSyncHooks } = await import('../../core/sync');
+  let gitHookKeptFor: string[] = [];
 
   for (const target of targets) {
     const prefix = hookLogPrefix(involved, target);
     try {
       const tlReport = uninstallTimelineHooks(projectRoot, { agent: target.id, keepGitHook });
+      if (gitHookKeptFor.length === 0) gitHookKeptFor = tlReport.gitHookKeptFor;
       if (tlReport.removedHookEvents.length > 0) {
         clack.log.success(
           `${prefix}Developer Timeline:已移除 hooks(${tlReport.removedHookEvents.join(', ')})`,
         );
       }
-      if (tlReport.gitHookRemoved) {
+      // 还有装着的目录时钩子留着,不打「已移除」
+      if (tlReport.gitHookRemoved && tlReport.gitHookKeptFor.length === 0) {
         clack.log.success(`${prefix}Developer Timeline:已移除 git post-commit hook`);
       }
       for (const notice of tlReport.gitHookNotices) clack.log.warn(`${prefix}Developer Timeline:${notice}`);
@@ -235,6 +233,7 @@ export async function uninstallAgentHooks(
       clack.log.warn(`${prefix}sync hook uninstall 失败:${errorMessage(err)}`);
     }
   }
+  return { gitHookKeptFor };
 }
 
 /** 项目中是否还有任一 agent 处于「已装」状态。 */

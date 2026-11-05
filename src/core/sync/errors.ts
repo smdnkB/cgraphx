@@ -22,7 +22,7 @@ export class SyncArgError extends SyncError {
   }
 }
 
-/** 项目未初始化(`.cgraphx/cgraphx.db` 不存在)。 */
+/** 项目未初始化(拿不到数据位置,或库文件、sync 表不在)。 */
 export class SyncNotInitializedError extends SyncError {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);

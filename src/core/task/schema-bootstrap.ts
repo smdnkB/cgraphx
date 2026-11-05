@@ -1,28 +1,29 @@
 /**
- * task 子系统 schema 应用。
+ * task 子系统 schema 应用与开库。
  *
  * 与 timeline 同一模式:读取与编译产物同目录的 `schema.sql` 幂等应用,
  * 在 `task_schema_versions` 记录版本;库里记录的版本比本构建新时拒绝继续。
- * 共用 `.cgraphx/cgraphx.db`,只碰 `task_*` 表。
+ * 库在数据位置(data-location.ts):旧库模式是本地 `.cgraphx/cgraphx.db`,其余是用户目录里这个项目的
+ * `cgraphx.db`;和 timeline、sync 共用一份,只碰 `task_*` 表。
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { DatabaseConnection, getDatabasePath, type SqliteDatabase } from '../db';
+import { ensureDataDir, locateData, missingDataMessage } from '../data-location';
+import { DATABASE_FILENAME, DatabaseConnection, getDatabasePath, type SqliteDatabase } from '../db';
 import { TASK_SCHEMA_VERSION } from './constants';
-import { resolveDataDir } from '../directory';
 import { TaskConfigError, TaskError, TaskNotEnabledError, TaskStoreError } from './errors';
 
 /**
- * 库文件不在时的提示:副本关联的主目录已不在(或调用方已换成那个不在的主目录)→ 说不在了,
- * 其余照旧(spec D31)。
+ * 拿不到库时的提示:数据位置拿不到(没有根、认不出项目、git 跑不起来、项目在本机还没有数据)→ 按
+ * missingDataMessage 说原因和修法;数据目录在、库文件不在时照旧:起点不在了 → 说不在了,其余提示先 install。
  */
-function missingDbMessage(resolved: string): string {
-  const data = resolveDataDir(resolved);
-  if (data.state === 'main-missing') return `副本关联的主项目不在 ${data.mainRoot} 了`;
-  if (!fs.existsSync(resolved)) return `项目目录 ${resolved} 不在了`;
-  return `cgraphx 未在 ${resolved} 初始化,请先运行 \`cgraphx install\``;
+function missingDbMessage(start: string): string {
+  const loc = locateData(start);
+  if (loc.unavailable !== null) return missingDataMessage(loc);
+  if (!fs.existsSync(loc.start)) return `项目目录 ${loc.start} 不在了`;
+  return `cgraphx 未在 ${loc.root ?? loc.start} 初始化,请先运行 \`cgraphx install\``;
 }
 
 /** schema.sql 与编译后的模块同目录(dist 镜像 src)。 */
@@ -54,7 +55,7 @@ export function ensureTaskSchema(db: SqliteDatabase): void {
     if (err instanceof TaskError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
     throw new TaskStoreError(
-      `task schema 应用失败:${msg}。检查 .cgraphx/cgraphx.db 是否可写、未损坏,` +
+      `task schema 应用失败:${msg}。检查库文件是否可写、未损坏,` +
         '或运行 `cgraphx install` 重新初始化',
       { cause: err },
     );
@@ -69,19 +70,18 @@ export function ensureTaskSchema(db: SqliteDatabase): void {
 }
 
 /**
- * 打开项目共享库并确保 task schema 已应用。调用方负责 `close()`。
+ * 打开数据位置那份库(写数据的入口:ensureDataDir,根装过的项目库模式下项目目录不在就建)并确保 task schema
+ * 已应用。start 是起点,当前目录、项目根都行。调用方负责 `close()`。
  *
- * @throws TaskConfigError 项目未初始化(`.cgraphx/cgraphx.db` 不存在)。
+ * @throws TaskConfigError 拿不到数据位置(没有根、认不出项目、git 跑不起来、没装过的目录项目在本机还没有数据)。
  */
-export function openTaskDb(projectRoot: string): DatabaseConnection {
-  const resolved = path.resolve(projectRoot);
-  const dbPath = getDatabasePath(resolved);
-
-  if (!fs.existsSync(dbPath)) {
-    throw new TaskConfigError(missingDbMessage(resolved));
+export function openTaskDb(start: string): DatabaseConnection {
+  const dir = ensureDataDir(start);
+  if (dir === null) {
+    throw new TaskConfigError(missingDbMessage(start));
   }
 
-  const connection = DatabaseConnection.open(dbPath);
+  const connection = DatabaseConnection.open(path.join(dir, DATABASE_FILENAME));
   try {
     ensureTaskSchema(connection.getDb());
   } catch (err) {
@@ -92,20 +92,19 @@ export function openTaskDb(projectRoot: string): DatabaseConnection {
 }
 
 /**
- * 只读打开项目共享库:不应用 schema、不建表(供 web 等只读调用方使用)。调用方负责 `close()`。
+ * 只读打开数据位置那份库:不应用 schema、不建表、不建目录(供 web 等只读调用方使用)。调用方负责 `close()`。
  *
  * 存在性检查必须先于 `DatabaseConnection.open`——open 会在 DB 不存在时创建文件。
  *
- * @throws TaskConfigError 项目未初始化(`.cgraphx/cgraphx.db` 不存在)。
+ * @throws TaskConfigError 拿不到数据位置,或那里没有库文件。
  * @throws TaskNotEnabledError 库中没有 `task_schema_versions` 表。
  * @throws TaskStoreError 查询 sqlite_master 失败。
  */
-export function openTaskDbReadOnly(projectRoot: string): DatabaseConnection {
-  const resolved = path.resolve(projectRoot);
-  const dbPath = getDatabasePath(resolved);
+export function openTaskDbReadOnly(start: string): DatabaseConnection {
+  const dbPath = getDatabasePath(start);
 
-  if (!fs.existsSync(dbPath)) {
-    throw new TaskConfigError(missingDbMessage(resolved));
+  if (dbPath === null || !fs.existsSync(dbPath)) {
+    throw new TaskConfigError(missingDbMessage(start));
   }
 
   const connection = DatabaseConnection.open(dbPath);
@@ -119,7 +118,7 @@ export function openTaskDbReadOnly(projectRoot: string): DatabaseConnection {
   } catch (err) {
     connection.close();
     const msg = err instanceof Error ? err.message : String(err);
-    throw new TaskStoreError(`读取 task 表信息失败:${msg}。检查 .cgraphx/cgraphx.db 是否损坏`, { cause: err });
+    throw new TaskStoreError(`读取 task 表信息失败:${msg}。检查 ${dbPath} 是否损坏`, { cause: err });
   }
   if (!present) {
     connection.close();

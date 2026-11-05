@@ -24,7 +24,7 @@ cgraphx db <subcommand> [options]
 
 ## 配置位置
 
-- 项目级:`.cgraphx/db-profiles.json`(优先)
+- 项目级:项目数据目录里的 `db-profiles.json`(优先;位置看 `cgraphx project show` 的「数据」那行:并过旧数据的目录在 `~/.cgraphx/projects/<目录名>/`,还没并过的在 `.cgraphx/`)
 - 用户级:`~/.cgraphx/db-profiles.json`
 - 禁用整个子系统:`CGRAPHX_DB_QUERY_DISABLED=1` 或 profiles 文件里 `"enabled": false`(禁用时所有命令输出 "数据库无法连接,请以代码中查询为准" 到 stderr,exit code 4,不实际连库)
 - 退出码:0 成功 / 2 配置错误 / 3 安全拦截(写操作) / 4 连接/超时/禁用 / 5 参数错误
@@ -195,7 +195,7 @@ docs/schema-knowledge/
 | 退出码 | 含义 | 处理 |
 |---|---|---|
 | 0 | 成功 | — |
-| 2 | 配置错误(profiles 文件缺失/无效) | 创建 `.cgraphx/db-profiles.json` |
+| 2 | 配置错误(profiles 文件缺失/无效) | 运行 `cgraphx db init` 生成项目级 `db-profiles.json`(在项目数据目录) |
 | 3 | 安全拦截(SQL 含写操作) | 只读 SELECT,改 SQL |
 | 4 | 连接失败/查询超时/子系统禁用 | 检查 profile 连接参数,或 `CGRAPHX_DB_QUERY_DISABLED` 是否设置 |
 | 5 | 参数错误(缺 --sql / 缺 --table) | 补全必填参数 |

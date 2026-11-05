@@ -52,7 +52,7 @@ export const QUERY_TIMEOUT_MS = 30_000;
 /** Connect timeout (milliseconds). TCP / auth must complete within this. */
 export const CONNECT_TIMEOUT_MS = 5_000;
 
-/** Config file name (placed under .cgraphx/ or ~/.cgraphx/). */
+/** 配置文件名(项目级在数据目录,用户级在 ~/.cgraphx/)。 */
 export const PROFILES_FILENAME = 'db-profiles.json';
 
 /** Environment variable to override the config file path entirely. */
@@ -61,7 +61,7 @@ export const PROFILES_PATH_ENV = 'CGRAPHX_DB_PROFILES_PATH';
 /** Environment variable that disables the entire db-query subsystem. */
 export const DISABLED_ENV = 'CGRAPHX_DB_QUERY_DISABLED';
 
-/** Log file name (placed under .cgraphx/). */
+/** 日志文件名(在数据目录)。 */
 export const LOG_FILENAME = 'db-query.log';
 
 /** Log file size threshold that triggers rotation, in bytes. */

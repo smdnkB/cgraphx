@@ -316,7 +316,7 @@ footer p { margin: 0 0 6px; }
 <dt>什么时候用</dt><dd>开始做一个需求,不想和别的需求挤在同一个分支上;开了版本时每个需求都先开副本,没开版本也能单独用。</dd>
 <dt>怎么用</dt><dd>在主目录的会话里敲 <code>/dev-start 订单导出</code>,再照给出的启动语到副本目录开新会话。</dd>
 <dt>要你拍板</dt><dd>需求目录名(业务 ID、标题);这块盘不能写时复制时,要不要整份复制;主目录有改了没提交的文件时会停下,先提交或收好。</dd>
-<dt>产出</dt><dd>主目录旁边的副本 <code>&lt;主目录名&gt;@&lt;文件前缀&gt;</code>:从主目录当前分支拉好 <code>feat/&lt;文件前缀&gt;</code>(bug 修复用 <code>fix/</code>)、建好需求目录,这个需求还没提交的讨论稿移进去;外加一句启动语「在 &lt;副本路径&gt; 开新会话，输入 /dev-clarify」(已经澄清过的输入 /dev-spec)。副本里的会话和提交记进主目录。</dd>
+<dt>产出</dt><dd>主目录旁边的副本 <code>&lt;主目录名&gt;@&lt;文件前缀&gt;</code>:从主目录当前分支拉好 <code>feat/&lt;文件前缀&gt;</code>(bug 修复用 <code>fix/</code>)、建好需求目录,这个需求还没提交的讨论稿移进去;外加一句启动语「在 &lt;副本路径&gt; 开新会话，输入 /dev-clarify」(已经澄清过的输入 /dev-spec)。副本里的会话和提交和主目录记进同一个项目的数据。</dd>
 <dt>前后</dt><dd>开了版本时在 <code>/release-start</code> 之后;副本里照常 <code>/dev-clarify</code> 到 <code>/code-review</code>,做完 <code>/dev-merge</code>。</dd>
 </dl></div>
 </details>
@@ -478,7 +478,7 @@ footer p { margin: 0 0 6px; }
 <summary><span class="name">db-query</span><span class="oneline">查数据、看表结构,优先读本地 DDL</span><span class="how how-auto">自动</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>要验证数据假设、找测试数据、看表结构。</dd>
-<dt>怎么用</dt><dd>agent 自己调;连库配置在 <code>.cgraphx/db-profiles.json</code>,支持 MySQL、PostgreSQL 直连,或经 HTTP 只读接口。</dd>
+<dt>怎么用</dt><dd>agent 自己调;连库配置在项目数据目录的 <code>db-profiles.json</code>(<code>cgraphx project show</code> 可看),支持 MySQL、PostgreSQL 直连,或经 HTTP 只读接口。</dd>
 <dt>要你拍板</dt><dd>连哪个库不确定时问你;表关系弄不清先问你,不瞎试。</dd>
 <dt>产出</dt><dd>只读查询结果;探索出的字段含义、隐式关系写回 <code>docs/schema-knowledge/&lt;工程&gt;/ddl/&lt;表&gt;.sql</code> 的 DISCOVERED 块。</dd>
 <dt>前后</dt><dd>先跑 <code>/init-ddl</code> 建好本地 DDL,大部分查结构不用连库。</dd>

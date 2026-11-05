@@ -23,14 +23,14 @@ related_code:
 related_documents:
   - docs/knowledge/开发任务浏览.md
 created: 2026-10-15
-updated: 2026-10-15
+updated: 2026-11-05
 ---
 
 # cgraphx 库副本须带 WAL 文件
 
 ## Summary
 
-`.cgraphx/cgraphx.db` 以 WAL 模式打开,最近的写入(如刚执行的 `cgraphx task use`、刚记录的 timeline 事件)可能还在 `cgraphx.db-wal` 里,没有写回主文件。验证时只复制 `cgraphx.db` 做 DB 副本,会悄悄丢掉这些数据。复制库副本要连同 `-wal`(和 `-shm`)一起复制,或先让占用库的进程退出。
+cgraphx 的库都以 WAL 模式打开(本地 `.cgraphx/cgraphx.db`,以及 2026-11-05 起用户目录里的项目库 `~/.cgraphx/projects/<目录名>/cgraphx.db`),最近的写入(如刚执行的 `cgraphx task use`、刚记录的 timeline 事件)可能还在 `cgraphx.db-wal` 里,没有写回主文件。验证时只复制 `cgraphx.db` 做 DB 副本,会悄悄丢掉这些数据。复制库副本要连同 `-wal`(和 `-shm`)一起复制,或先让占用库的进程退出。
 
 ## Context
 

@@ -4,11 +4,11 @@
  * 只读:经 openTaskDbReadOnly 打开库,不应用 schema、不写任何表、不请求外部任务接口。
  * 时长口径只在这里实现:活跃时长按 ACTIVE_GAP_MS 断点去间隔,工作时长 = 首末事件差,
  * 任务合计为各绑定段之和(并行会话重叠不扣除)。
- * 导出函数一律以主目录为准(版本流程与需求副本 spec D25):在副本里调用与在主目录调用结果相同。
+ * 导出函数把传入的项目根当当前根(不再换成主目录,spec:2026-11-05-数据按项目放用户目录 D11):库在它的数据位置,
+ * 路径与需求目录按 timeline 记下的根 + 当前根 + 副本登记(collectProjectRoots)换算,一轮只取一次。
  */
 
 import type { SqliteDatabase } from '../db';
-import { listProjectRoots, resolveMainRoot } from '../replica';
 import type { TimelineEvent } from '../timeline';
 import { collectOutputs, collectReferences } from './artifacts';
 import { queryBindingEvents } from './attribution';
@@ -16,6 +16,7 @@ import { ACTIVE_GAP_MS, FEATURE_TASK_ID_BASE } from './constants';
 import { TaskArgError, TaskConfigError, TaskNotEnabledError } from './errors';
 import { resolveFeatureTargetReadOnly, scanFeatureTasksAcrossRoots } from './feature-task';
 import { findTask } from './resolve';
+import { collectProjectRoots, type ProjectRootSet } from './roots';
 import { openTaskDbReadOnly } from './schema-bootstrap';
 import { TaskStore } from './store';
 import type {
@@ -113,7 +114,7 @@ function listAllTasks(store: TaskStore, db: SqliteDatabase): TaskItem[] {
  *    最早 bound_at 与 stopped_at 的较早者,结束点 ≤ 起点时整段不出现。
  */
 function collectEffectiveBindings(
-  projectRoot: string,
+  rootSet: ProjectRootSet,
   db: SqliteDatabase,
   store: TaskStore,
   includeSuperseded: boolean,
@@ -149,10 +150,9 @@ function collectEffectiveBindings(
       const prev = earliestBoundAt.get(binding.sessionId);
       if (prev === undefined || binding.boundAt < prev) earliestBoundAt.set(binding.sessionId, binding.boundAt);
     }
-    const roots = listProjectRoots(projectRoot);
     for (const auto of store.listAutoSessions()) {
       if (auto.featureId === null || auto.boundAt === null) continue;
-      const task = resolveFeatureTargetReadOnly(roots, store, auto.featureId);
+      const task = resolveFeatureTargetReadOnly(rootSet, store, auto.featureId);
       if (task === null) continue;
       const unboundAt = earlier(earliestBoundAt.get(auto.sessionId) ?? null, auto.stoppedAt);
       if (unboundAt !== null && unboundAt <= auto.boundAt) continue;
@@ -178,24 +178,31 @@ function collectEffectiveBindings(
 }
 
 /**
- * 全部有效绑定(只读)。项目未初始化或没有 task 表时返回空数组。
+ * 全部有效绑定(只读)。拿不到库(项目未初始化、认不出项目等)或没有 task 表时返回空数组。
  * 旧库缺少 task_feature_tasks / task_auto_sessions 等新表时按现有表降级读取。
  */
 export function listEffectiveBindings(
   projectRoot: string,
   opts: { includeSuperseded?: boolean } = {},
 ): EffectiveBinding[] {
-  const root = resolveMainRoot(projectRoot);
+  return listEffectiveBindingsIn(collectProjectRoots(projectRoot), opts);
+}
+
+/** listEffectiveBindings 的已取根汇总版(同一轮里根汇总只取一次):库按 rootSet.currentRoot 开。 */
+export function listEffectiveBindingsIn(
+  rootSet: ProjectRootSet,
+  opts: { includeSuperseded?: boolean } = {},
+): EffectiveBinding[] {
   let conn;
   try {
-    conn = openTaskDbReadOnly(root);
+    conn = openTaskDbReadOnly(rootSet.currentRoot);
   } catch (err) {
     if (err instanceof TaskConfigError || err instanceof TaskNotEnabledError) return [];
     throw err;
   }
   try {
     const db = conn.getDb();
-    return collectEffectiveBindings(root, db, new TaskStore(db), opts.includeSuperseded === true);
+    return collectEffectiveBindings(rootSet, db, new TaskStore(db), opts.includeSuperseded === true);
   } finally {
     conn.close();
   }
@@ -245,7 +252,8 @@ async function loadSegments(
  * @throws TaskConfigError 未初始化;TaskNotEnabledError 没有 task 表。
  */
 export async function listTaskSummaries(projectRoot: string): Promise<TaskSummary[]> {
-  const root = resolveMainRoot(projectRoot);
+  const rootSet = collectProjectRoots(projectRoot);
+  const root = rootSet.currentRoot;
   let tasks: TaskItem[];
   let bindings: EffectiveBinding[];
   const conn = openTaskDbReadOnly(root);
@@ -253,7 +261,7 @@ export async function listTaskSummaries(projectRoot: string): Promise<TaskSummar
     const db = conn.getDb();
     const store = new TaskStore(db);
     tasks = listAllTasks(store, db);
-    bindings = collectEffectiveBindings(root, db, store, false);
+    bindings = collectEffectiveBindings(rootSet, db, store, false);
   } finally {
     conn.close();
   }
@@ -298,7 +306,8 @@ export async function getTaskReport(
   taskId: number,
   opts: { eventLimitPerSegment: number },
 ): Promise<TaskReport> {
-  const root = resolveMainRoot(projectRoot);
+  const rootSet = collectProjectRoots(projectRoot);
+  const root = rootSet.currentRoot;
   let task: TaskItem;
   let bindings: EffectiveBinding[];
   let featureDirs: string[];
@@ -309,14 +318,14 @@ export async function getTaskReport(
     const found = store.getTaskById(taskId);
     if (!found) throw new TaskArgError(`找不到本地任务 ${taskId}`);
     task = found;
-    bindings = collectEffectiveBindings(root, db, store, false).filter(
+    bindings = collectEffectiveBindings(rootSet, db, store, false).filter(
       (entry) => entry.binding.taskId === taskId,
     );
-    // 目录任务的产出目录就是它自己的 feature-id;其它任务按头部声明反查(主目录 + 在用副本)。
+    // 目录任务的产出目录就是它自己的 feature-id;其它任务按头部声明反查(各根里找到的需求目录)。
     featureDirs =
       found.source === 'feature' && found.featureId !== null
         ? [`docs/features/${found.featureId}`]
-        : scanFeatureTasksAcrossRoots(root)
+        : scanFeatureTasksAcrossRoots(rootSet)
             .filter((e) => findTask(store, e.task)?.id === taskId)
             .map((e) => e.path);
   } finally {
@@ -333,7 +342,7 @@ export async function getTaskReport(
   const eventCounts: Record<string, number> = {};
   for (const e of allEvents) eventCounts[e.event_type] = (eventCounts[e.event_type] ?? 0) + 1;
 
-  const outputs = collectOutputs(root, allEvents, featureDirs);
+  const outputs = collectOutputs(rootSet, allEvents, featureDirs);
   const outputPaths = new Set(outputs.flatMap((g) => g.paths));
 
   const segmentReports: SegmentReport[] = segments.map(({ bindingKey, binding, events, stats }) => {
@@ -349,7 +358,7 @@ export async function getTaskReport(
     segments: segmentReports,
     eventCounts,
     outputs,
-    references: collectReferences(root, allEvents, outputPaths),
+    references: collectReferences(rootSet, allEvents, outputPaths),
     truncated,
   };
 }
