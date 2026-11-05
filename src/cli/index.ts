@@ -38,6 +38,7 @@ import { registerSyncCommands } from '../core/sync/cli';
 import { registerReportCommands } from '../core/report/cli';
 import { registerReplicaCommands } from '../core/replica/cli';
 import { registerReleaseCommands } from '../core/release/cli';
+import { registerProjectCommands } from '../core/project/cli';
 // 组合根例外(仅此一处):cli/index.ts 作为组装入口可经 web 门面接入
 // `cgraphx web`;src/web/ 自身只依赖 src/core/,不反向依赖 cli。
 import { registerWebCommand } from '../web';
@@ -46,8 +47,6 @@ import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
 import {
   getCodeGraphDir,
-  resolveDataDir,
-  resolveProjectRoot,
   unsafeIndexRootReason,
 } from '../core/directory';
 
@@ -116,27 +115,6 @@ async function confirmProjectInstall(message: string): Promise<boolean> {
   }
 }
 
-/**
- * 副本关联的主目录不在了(spec D31):stderr 提示一句,命令照常执行。只看带子命令的调用;
- * hook(`*-hook`)和后台的 `sync-worker` 输出没人看,只带选项的(`--help`、`--version`)
- * 不碰数据,都不提示。
- */
-function warnIfMainRootMissing(subcommand: string | undefined): void {
-  if (subcommand === undefined || subcommand.startsWith('-')) return;
-  if (subcommand.endsWith('-hook') || subcommand === 'sync-worker') return;
-  let cwd: string;
-  try {
-    cwd = process.cwd();
-  } catch {
-    // 当前目录已被删掉:没有可提示的项目,命令照常执行(version、help 这类不碰数据的命令不该因此崩)
-    return;
-  }
-  const dataDir = resolveDataDir(resolveProjectRoot(cwd));
-  if (dataDir.state === 'main-missing') {
-    process.stderr.write(`[cgraphx] 副本关联的主项目不在 ${dataDir.mainRoot} 了\n`);
-  }
-}
-
 function main(): void {
   const program = new Command();
 
@@ -200,6 +178,7 @@ function main(): void {
   registerReportCommands(program);
   registerReplicaCommands(program);
   registerReleaseCommands(program);
+  registerProjectCommands(program);
 
   // web — 本地只读浏览服务(顶层命令,经 web 门面注册;组合根例外见上方 import)。
   registerWebCommand(program);
@@ -312,7 +291,10 @@ function main(): void {
     .description('Remove cgraphx from the current project (skills, config, .cgraphx/)')
     .option('-t, --target <ids>', 'Target agent id(s), comma-separated (e.g. claude-code), or all / none')
     .option('-y, --yes', 'Non-interactive: no prompts (also deletes .cgraphx/ without confirming)')
-    .option('--keep-data', 'Keep the .cgraphx/ data directory (default: remove it)')
+    .option(
+      '--keep-data',
+      "Keep this directory's .cgraphx/ (knowledge index and my-features); project data in ~/.cgraphx/projects/ is never removed by uninstall",
+    )
     .action(
       async (opts: {
         target?: string;
@@ -334,9 +316,6 @@ function main(): void {
         }
       },
     );
-
-  // 解析命令前:副本的主目录不在了先提示(不带参数的交互安装器入口不走 main,不做这个判断)
-  warnIfMainRootMissing(firstArg);
 
   program.parse();
 }
