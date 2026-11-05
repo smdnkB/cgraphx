@@ -126,10 +126,6 @@ function mergeLabel(s: ReplicaStatus): string {
 }
 
 function printCreate(r: CreateReplicaResult): void {
-  if (!r.created) {
-    writeOut(`需求 ${r.featureId} 的副本已经有了:${r.path}(分支 ${r.branch}),没重建`);
-    return;
-  }
   writeOut(`已开副本 ${r.name}:${r.path}`);
   writeOut(`  需求 ${r.featureId},分支 ${r.branch}(从 ${r.baseBranch} 拉出)`);
   if (r.movedFiles.length > 0) {
