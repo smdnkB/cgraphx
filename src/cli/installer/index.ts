@@ -132,7 +132,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   }
 
   // 顺序固定(D25):① agent 配置 ② 本地 .cgraphx/ ③ 1.x 遗留表 ④ 选子系统 ⑤ docs 索引 ⑥ timeline 等 hook
-  //   ⑦ 问名字、并旧数据 ⑧ db-query 模板。
+  //   ⑦ 问名字、并旧数据、清掉已下掉功能的数据 ⑧ db-query 模板。
   // ① 逐 agent 写配置;单个 agent 失败只 warn,继续其他 agent 与后续步骤。
   installAgentTargets(clack, targets, location);
 
@@ -220,6 +220,20 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   //   数据位置时会先写上并过记号,之后再并就成了「已经并过」。
   if (initOutcome !== 'skipped-unsafe') {
     await settleProjectData(clack, projectRoot, useDefaults);
+    // ⑦.5 清掉已下掉功能的数据(spec:2026-11-05-下掉web与平台同步 F3 D6):并旧数据之后收尾——timeline 的表
+    //   并走了,剩下的 sync/task 表和运行文件在这里删。删了东西才出 success;什么都没有不出声;失败只警告,
+    //   安装继续。幂等:第二次 install 什么都不删、什么都不出。
+    try {
+      const { cleanupRemovedFeatureData } = await import('../../core/project');
+      const cleanup = cleanupRemovedFeatureData(projectRoot);
+      if (cleanup.kind === 'cleaned') {
+        clack.log.success('平台同步、开发任务的数据已清掉');
+      } else if (cleanup.kind === 'failed') {
+        clack.log.warn(`清理已下掉的功能失败:${cleanup.reason}`);
+      }
+    } catch (err) {
+      clack.log.warn(`清理已下掉的功能失败:${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   // ⑧ db-query 模板(写进数据位置)
@@ -364,6 +378,11 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     if (r.status === 'removed') {
       for (const p of r.removedPaths) {
         clack.log.success(`${r.displayName}:已移除 ${tildify(p)}`);
+      }
+      // target 回传的 notes 原样打(与 install 路径同一渠道,如死 hook 清理的「已下掉」提示);
+      // unsupported 的 notes 已是上一行「已跳过」的理由,不重复打
+      for (const note of r.notes) {
+        clack.log.info(`${r.displayName}: ${note}`);
       }
     } else if (r.status === 'not-configured') {
       clack.log.info(`${r.displayName}:未配置 —— 无需移除`);

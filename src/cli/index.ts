@@ -36,6 +36,7 @@ import { registerReportCommands } from '../core/report/cli';
 import { registerReplicaCommands } from '../core/replica/cli';
 import { registerReleaseCommands } from '../core/release/cli';
 import { registerProjectCommands } from '../core/project/cli';
+import { registerLegacyHookCommands } from './legacy-hook-commands';
 
 import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
@@ -169,6 +170,8 @@ function main(): void {
   registerReplicaCommands(program);
   registerReleaseCommands(program);
   registerProjectCommands(program);
+  // 已下掉功能的五个兼容空命令(隐藏,读完 stdin 不做任何事)
+  registerLegacyHookCommands(program);
 
   // ===========================================================================
   // (init / status / uninit were folded into install / uninstall — see the
