@@ -21,6 +21,7 @@ import {
   PROFILES_PATH_ENV,
   DISABLED_ENV,
 } from '../../../src/core/dbquery/constants';
+import { DatabaseConnection, getLocalDatabasePath } from '../../../src/core/db';
 
 // 2.0 bin layout: dist/cli/index.js (was dist/bin/codegraph.js in 1.x).
 // Test dir is __tests__/core/dbquery/, so three `..` to reach the repo root.
@@ -31,8 +32,18 @@ function makeTmpProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dbq-cli-'));
 }
 
+/** 让临时目录成为装过、有旧库的目录(本地库里有 timeline_meta 表):数据位置就是本地 .cgraphx/。 */
+function markLegacyInstalled(dir: string): void {
+  const conn = DatabaseConnection.open(getLocalDatabasePath(dir));
+  try {
+    conn.getDb().exec('CREATE TABLE IF NOT EXISTS timeline_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  } finally {
+    conn.close();
+  }
+}
+
 function writeProfiles(dir: string, content: unknown): void {
-  fs.mkdirSync(path.join(dir, '.cgraphx'), { recursive: true });
+  markLegacyInstalled(dir);
   fs.writeFileSync(
     path.join(dir, '.cgraphx', PROFILES_FILENAME),
     typeof content === 'string' ? content : JSON.stringify(content),

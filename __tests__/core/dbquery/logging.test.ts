@@ -10,11 +10,20 @@ import * as os from 'node:os';
 import { logQuery } from '../../../src/core/dbquery/logging';
 import { LOG_FILENAME, LOG_MAX_BYTES } from '../../../src/core/dbquery/constants';
 import type { QueryLogRecord } from '../../../src/core/dbquery/types';
+import { DatabaseConnection, getLocalDatabasePath } from '../../../src/core/db';
 
 const POSIX = process.platform !== 'win32';
 
+/** 临时项目:装过、有旧库(本地库里有 timeline_meta 表),数据位置就是本地 .cgraphx/,日志记在那里。 */
 function makeTmpProject(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dbq-log-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dbq-log-'));
+  const conn = DatabaseConnection.open(getLocalDatabasePath(dir));
+  try {
+    conn.getDb().exec('CREATE TABLE IF NOT EXISTS timeline_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  } finally {
+    conn.close();
+  }
+  return dir;
 }
 
 function baseRecord(overrides: Partial<QueryLogRecord> = {}): QueryLogRecord {
