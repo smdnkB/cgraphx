@@ -42,21 +42,21 @@ updated: 2026-10-16
 
 - 实测(Claude Code desktop,2026-10-16):命令 `cd docs/knowledge; …` 的 pre_tool_use 事件 cwd 为项目根,post_tool_use 事件 cwd 为 `<项目根>/docs/knowledge`。
 - 宿主的 Bash 会话保留了 cd 之后的工作目录,hook payload 的 `cwd` 取的是 hook 触发那一刻的值,所以 post 事件拿到的是 cd 之后的目录。
-- 平台上报的推断只看 post_tool_use 事件,所以先按"cwd + cd 目录"解析,失败后退回 e.cwd。改完后 5 篇知识库都能识别出来。
+- 平台上报的推断只看 post_tool_use 事件,所以先按"cwd + cd 目录"解析,失败后退回 e.cwd,改完后 5 篇知识库都能识别出来(这套推断已随平台上报下掉,见 `docs/features/2026-11-05-下掉web与平台同步/`)。
 
 ## Evidence
 
 - 事件对:同一会话中相邻的 pre / post 两条 Bash 事件,`tool_args.command` 相同,`cwd` 分别是项目根和 `docs/knowledge`。
-- 修复:`src/core/sync/references.ts`(Bash 命令的候选基准目录依次为"cwd + cd 目录"、cwd)。
+- 修复:`src/core/sync/references.ts`(Bash 命令的候选基准目录依次为"cwd + cd 目录"、cwd;该文件已随平台上报下掉)。
 
 ## Impact For Future Changes
 
-- 任何从 timeline 命令文本里解析相对路径的逻辑,都要考虑 cwd 可能是执行后的目录。本地 web 的 `src/core/task/artifacts.ts` 推断参考时按项目根解析相对路径,cd 进子目录后读取的文件同样会漏掉;本次没改它,本地 web 保持不变。
+- 任何从 timeline 命令文本里解析相对路径的逻辑,都要考虑 cwd 可能是执行后的目录。当时本地 web 的 `src/core/task/artifacts.ts` 按项目根解析相对路径,cd 进子目录后读取的文件同样会漏;本地 web 与开发任务已下掉,见 `docs/features/2026-11-05-下掉web与平台同步/`。
 - 后续 cd 会持续生效:同一会话里,cd 之后的每一条事件 cwd 都是子目录。按项目根解析相对路径的逻辑,对这些事件全部失效。
 
 ## Reuse Guidance
 
-排查"任务参考 / 产出漏了文件""推断出的路径多了一层目录"时,先读这里。修改 timeline hook 的 cwd 取值,或者修改基于命令文本的推断逻辑之前,也先读这里。
+排查"推断出的路径多了一层目录"之类的问题时,先读这里。修改 timeline hook 的 cwd 取值,或者修改基于命令文本的推断逻辑之前,也先读这里。
 
 ## Open Questions
 
