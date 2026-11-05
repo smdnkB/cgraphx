@@ -1,7 +1,7 @@
 /**
  * TaskStore —— task 子系统的持久化层。
  *
- * 包装一个 SqliteDatabase(共享的 .cgraphx/cgraphx.db),只碰 `task_*` 表。
+ * 包装一个 SqliteDatabase(数据位置的库,和 timeline、sync 共用),只碰 `task_*` 表。
  * 连接归调用方所有,由调用方关闭。行类型(XxxRow)到领域类型的映射在这里完成,
  * 原始行不外泄;SQL 全部参数化;DB 异常统一包成 TaskStoreError。
  */

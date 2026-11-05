@@ -1,4 +1,4 @@
--- task 子系统 schema(与 timeline / markdown 共用 .cgraphx/cgraphx.db,表前缀 task_)。
+-- task 子系统 schema(建在数据位置的库里,和 timeline / sync 共用:项目库 ~/.cgraphx/projects/<目录名>/cgraphx.db,旧库模式下是本地 .cgraphx/cgraphx.db;表前缀 task_)。
 -- spec §3.1。全部 IF NOT EXISTS,可重复应用。
 -- 只加表不升版本:旧版全局 cgraphx 兼容(旧二进制只跑自己的 schema.sql,新表不影响)。
 

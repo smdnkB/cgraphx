@@ -52,7 +52,7 @@ export class TaskSourceUnavailableError extends TaskError {
     options?: { cause?: unknown },
   ) {
     super(
-      `任务接口不可用:${reason}。检查 .cgraphx/task-source.json 的 url / headers 与接口服务状态,` +
+      `任务接口不可用:${reason}。检查数据目录里 task-source.json 的 url / headers(位置看 cgraphx project show)与接口服务状态,` +
         '或改用本地数据(task list --local;task use 本地已有的任务 / --manual)',
       options,
     );

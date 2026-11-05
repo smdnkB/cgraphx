@@ -1,4 +1,4 @@
--- sync 子系统 schema(与 timeline / task / markdown 共用 .cgraphx/cgraphx.db,表前缀 sync_)。
+-- sync 子系统 schema(建在数据位置的库里,和 timeline / task 共用:项目库 ~/.cgraphx/projects/<目录名>/cgraphx.db,旧库模式下是本地 .cgraphx/cgraphx.db;表前缀 sync_)。
 -- 全部 IF NOT EXISTS,可重复应用。回滚:删除 sync_* 五张表。
 
 -- 1. 版本表

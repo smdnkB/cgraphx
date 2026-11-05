@@ -32,7 +32,7 @@ export const REPLICA_SESSION_PREFIX = 'cgraphx-replica-';
 /** 沉淀目录(项目根相对 POSIX 路径前缀;唯一定义处是产物注册表)。 */
 export const SEDIMENT_DIRS = SEDIMENT_DIR_PREFIXES;
 
-/** 一次 runSync 期间持有的互斥锁文件名(位于数据目录,即主目录的 `.cgraphx/`)。 */
+/** 一次 runSync 期间持有的互斥锁文件名(位于数据目录:并过旧数据的在项目目录,旧库模式在本地 `.cgraphx/`)。 */
 export const LOCK_FILENAME = 'sync.lock';
 
 /** 拉起节流用的触发文件名(位于数据目录)。 */
