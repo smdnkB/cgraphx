@@ -6,10 +6,9 @@
  * 不跑迁移。需要表的子系统(markdown、timeline 等)各自持有 `ensureSchema`,在
  * `open()` 拿到的连接上自行应用。
  *
- * 共享 DB 放在哪:`getDatabasePath` 指向数据目录里的共用库(见 `directory.ts` 的
- * `getDataDir`);`getLocalDatabasePath` 固定指向项目自己的 `.cgraphx/cgraphx.db`。
- * 副本里共用库在数据目录(经 `.cgraphx/shared` 链接到主目录),知识库在本地库;
- * 主目录里两者是同一个文件。
+ * 库路径按数据位置(见 `data-location.ts`):旧库模式是本地 `.cgraphx/cgraphx.db`,其余是用户目录里的
+ * 项目目录(`~/.cgraphx/projects/<目录名>/cgraphx.db`),timeline、task、sync 的表在这里,由
+ * `getDatabasePath` 给出;知识库固定本地,用 `getLocalDatabasePath`。
  *
  * 相对 cgraphx 1.x 去掉的:
  *   - 图谱 `schema.sql` 的应用(本层服务非图谱子系统)
@@ -21,7 +20,8 @@
 import { SqliteDatabase, SqliteBackend, createDatabase } from './sqlite-adapter';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getCodeGraphDir, getDataDir } from '../directory';
+import { getDataDir } from '../data-location';
+import { getCodeGraphDir } from '../directory';
 
 export { SqliteDatabase, SqliteBackend } from './sqlite-adapter';
 
@@ -235,11 +235,12 @@ function statInode(p: string): string | null {
 export const DATABASE_FILENAME = 'cgraphx.db';
 
 /**
- * 共用库路径:在数据目录里(副本里即主目录的 `.cgraphx/cgraphx.db`)。
- * 没有 `.cgraphx/shared` 链接的项目与 `getLocalDatabasePath` 相同。
+ * timeline、task、sync 的库路径:数据位置(`data-location.ts` 的 getDataDir)下的 `cgraphx.db`。start 是起点
+ * (当前目录、项目根都行)。数据位置拿不到(没有根、认不出项目、项目目录还没建)→ null。
  */
-export function getDatabasePath(projectRoot: string): string {
-  return path.join(getDataDir(projectRoot), DATABASE_FILENAME);
+export function getDatabasePath(start: string): string | null {
+  const dir = getDataDir(start);
+  return dir === null ? null : path.join(dir, DATABASE_FILENAME);
 }
 
 /** 本地库路径:固定是项目自己的 `.cgraphx/cgraphx.db`(知识库用,副本里各建各的索引)。 */
