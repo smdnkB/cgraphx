@@ -1,7 +1,7 @@
 # 实现计划: 下掉web与平台同步
 
 > 产物: plan
-> 依据: spec@1fedd36
+> 依据: spec@a4ca0fa
 
 ## 设计预览
 

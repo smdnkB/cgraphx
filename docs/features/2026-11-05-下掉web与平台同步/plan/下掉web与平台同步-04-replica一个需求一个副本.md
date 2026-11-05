@@ -1,7 +1,7 @@
 ### T-4: replica 一个需求只开一个副本
 
 > 产物: plan
-> 依据: spec@1fedd36
+> 依据: spec@a4ca0fa
 
 - 目标: 同一个 feature-id 已有在用副本(present)时,`cgraphx replica create` 换个 `--prefix` 也开不出第二个,返回新错误码 `feature_has_replica` 并转告 F5③ 原文;副本已删(removed)或目录已不在(missing)的不拦。
 - 对应 spec 编号: F5③、D13、边界 ③。(执行者据此读 spec 原文,不凭任务转述猜)

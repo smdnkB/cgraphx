@@ -1,7 +1,7 @@
 ### T-5: skill 与命令模板收口(dev-handoff、task-history 下掉,澄清进度改写进讨论稿)
 
 > 产物: plan
-> 依据: spec@1fedd36
+> 依据: spec@a4ca0fa
 
 - 目标: 模板里不再有 `/dev-handoff`、task-history;澄清中途换会话改成把进度写进讨论稿;`/dev-start` 不再讲任务归属、一个需求只开一个副本;`/dev-end` 历时只留起止;`/dev-impl` 两兄弟与 FLOW-MAP 的「平台环节」改「需求环节」;cgraphx-guide 不再介绍 web、上报、开发任务。
 - 对应 spec 编号: F2(环节提醒、FLOW-MAP、cgraphx-guide)、F4(dev-spec 的 `> 任务:`、dev-start 的任务归属)、F5(D12、dev-handoff 删除、dev-start 换会话说法、F5③)、F6(D14、doc-report、task-history 删除)。(执行者据此读 spec 原文,不凭任务转述猜)

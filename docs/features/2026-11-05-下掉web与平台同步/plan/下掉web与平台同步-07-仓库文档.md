@@ -1,7 +1,7 @@
 ### T-7: 仓库文档(CLAUDE.md、CHANGELOG.md)
 
 > 产物: plan
-> 依据: spec@1fedd36
+> 依据: spec@a4ca0fa
 
 - 目标: 本仓库 CLAUDE.md 的自我描述与终态一致(无 web、sync、task 子系统);CHANGELOG 在 Unreleased 下记 2.0.14 去掉的能力。
 - 对应 spec 编号: D1、D2、D9 影响面里的「CLAUDE.md 跟着改」;全局约束「CHANGELOG 写明去掉的命令和 skill」。(执行者据此读 spec 原文,不凭任务转述猜)

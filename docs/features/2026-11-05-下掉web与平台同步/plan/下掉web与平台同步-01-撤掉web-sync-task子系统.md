@@ -1,7 +1,7 @@
 ### T-1: 撤掉 web、sync、task 三个子系统与依赖处
 
 > 产物: plan
-> 依据: spec@1fedd36
+> 依据: spec@a4ca0fa
 
 - 目标: `cgraphx web` / `sync` / `task` 都变成 `error: unknown command`;`src/core/` 与 `src/cli/` 里不再有任何对 web、sync、task 的引用;构建与既有测试通过。并旧数据不再并 task/sync 表,会话开始的提示由时间线 hook 独自出。
 - 对应 spec 编号: F1、D1;F2、D2、D7;F4、D9、D10;全局约束「`src/core/` 里不再有任何对 sync、task、web 的引用」。(执行者据此读 spec 原文,不凭任务转述猜)
