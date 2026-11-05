@@ -1,60 +1,63 @@
 /**
- * turn 状态文件:把 user_prompt hook 生成的 turn_id 传给同一轮里的
- * pre / post / stop hook。
+ * 轮次记录:把 user_prompt hook 生成的 turn_id 传给同一轮里的 pre / post / stop hook。
  *
- * 每个 Claude Code hook 都是独立的短生命周期进程,没有共享内存,所以借文件传递。
- * 文件按会话隔离:`<数据目录>/turns/<安全会话名>.json`,并行会话各写各的,互不
- * 覆盖。数据目录见 `directory.ts` 的 `getDataDir`:一般就是 `<projectRoot>/.cgraphx/`,
- * 副本里是主目录的 `.cgraphx/`。内容格式为 `{turn_id, session_id, ts}`。
+ * 每个 hook 都是独立的短生命周期进程,没有共享内存,所以借文件传递。文件按会话隔离:
+ * `<数据目录>/turns/<安全会话名>.json`,并行会话各写各的,互不覆盖;内容为 `{turn_id, session_id, ts}`。
+ * 数据目录按会话的根定(基础层 data-location.ts 的 locateDataAtRoot):旧库模式是根的本地 `.cgraphx/`,其余是
+ * 用户目录里这个项目的目录。会话中途 cd 到别处也用会话的根,轮次记录不跟着换地方。
  *
- * 读取方容忍文件缺失 / 损坏(返回 null,duration_ms enricher 随之空转),
+ * 只在已在的数据目录里建 `turns/`,不建数据目录本身(项目目录只经基础层建目录的入口建)。数据位置拿不到或目录
+ * 不在时,读返回 null,写和删什么都不做。读取方容忍文件缺失 / 损坏(返回 null,duration_ms enricher 随之空转),
  * 写入 / 删除失败只写 stderr —— 任何情况都不阻塞 hook。
  */
 
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { getDataDir, resolveDataDir } from '../directory';
+import { locateDataAtRoot } from '../data-location';
+import { safeSessionName } from '../session-registry';
+
+export { safeSessionName } from '../session-registry';
 
 /** 旧版全项目共享的 turn 状态文件名。新逻辑不再读写,只由 install 清理。 */
 export const LEGACY_TURN_STATE_FILENAME = 'timeline-current-turn.json';
 
-/** turn 状态目录(相对数据目录)。 */
-const TURNS_DIRNAME = 'turns';
+/** 轮次记录目录(相对数据目录)。 */
+export const TURNS_DIRNAME = 'turns';
 
-/** session_id 为 null 时使用的文件名。 */
-const NO_SESSION_NAME = '_nosession';
-
-const SAFE_SESSION_NAME_RE = /^[A-Za-z0-9_-]+$/;
-
-/**
- * 会话 id → 可安全用作文件名的会话名。
- * 只含 `[A-Za-z0-9_-]` 时原样使用;否则取 sha1 hex 前 16 位;null 用 `_nosession`。
- */
-export function safeSessionName(session_id: string | null): string {
-  if (session_id === null) return NO_SESSION_NAME;
-  if (SAFE_SESSION_NAME_RE.test(session_id)) return session_id;
-  return createHash('sha1').update(session_id).digest('hex').slice(0, 16);
+/** 会话的根的数据目录;拿不到 → null。 */
+function dataDirOf(root: string): string | null {
+  return locateDataAtRoot(root).dataDir;
 }
 
-/** 本会话 turn 状态文件的路径;读、写、删都经这里取。 */
-export function turnStateFilePath(projectRoot: string, session_id: string | null): string {
-  return path.join(getDataDir(projectRoot), TURNS_DIRNAME, `${safeSessionName(session_id)}.json`);
+/** 本会话轮次记录的路径;数据位置拿不到 → null。读、写、删都经这里取。 */
+export function turnStateFilePath(root: string, session_id: string | null): string | null {
+  const dataDir = dataDirOf(root);
+  return dataDir === null ? null : path.join(dataDir, TURNS_DIRNAME, `${safeSessionName(session_id)}.json`);
+}
+
+function isDirectory(dir: string): boolean {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
- * 读取指定会话当前的 turn_id。
+ * 读取指定会话当前的 turn_id。root 是会话的根(已知根)。
  *
- * 文件缺失、JSON 损坏、或文件里记录的 session_id 与调用方不一致(安全会话名
+ * 数据位置拿不到、文件缺失、JSON 损坏、或文件里记录的 session_id 与调用方不一致(安全会话名
  * 哈希撞车等极端情况)时返回 null。调用方 session_id 为 null 时接受文件内容。
  */
 export async function readCurrentTurnId(
   session_id: string | null,
-  projectRoot: string,
+  root: string,
 ): Promise<string | null> {
   try {
-    const content = await fs.promises.readFile(turnStateFilePath(projectRoot, session_id), 'utf8');
+    const filePath = turnStateFilePath(root, session_id);
+    if (filePath === null) return null;
+    const content = await fs.promises.readFile(filePath, 'utf8');
     const data = JSON.parse(content) as {
       turn_id?: string;
       session_id?: string | null;
@@ -69,11 +72,12 @@ export async function readCurrentTurnId(
 }
 
 /**
- * 写入本会话当前的 turn 状态(整文件覆盖)。
- * 失败只写 stderr:turn 文件丢了只影响 duration_ms 与 turn 归属,user_prompt 事件照常记录。
+ * 写入本会话当前的 turn 状态(整文件覆盖)。root 是会话的根(已知根)。
+ * 数据目录拿不到或不在时不写;失败只写 stderr:turn 文件丢了只影响 duration_ms 与 turn 归属,user_prompt
+ * 事件照常记录。
  */
 export function writeCurrentTurn(
-  projectRoot: string,
+  root: string,
   turn: { turn_id: string; session_id: string | null; ts?: string },
 ): void {
   const payload = {
@@ -82,21 +86,28 @@ export function writeCurrentTurn(
     ts: turn.ts ?? new Date().toISOString(),
   };
   try {
-    // 副本关联的主目录已不在:不建目录、不写,否则会在旧位置重建 .cgraphx/(spec D24)
-    if (resolveDataDir(projectRoot).state === 'main-missing') return;
-    const filePath = turnStateFilePath(projectRoot, turn.session_id);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(payload), { flag: 'w' });
+    const dataDir = dataDirOf(root);
+    if (dataDir === null || !isDirectory(dataDir)) return;
+    const turnsDir = path.join(dataDir, TURNS_DIRNAME);
+    try {
+      // 不带 recursive:数据目录这时被删掉也只会失败,不会把它建回来
+      fs.mkdirSync(turnsDir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+    }
+    fs.writeFileSync(path.join(turnsDir, `${safeSessionName(turn.session_id)}.json`), JSON.stringify(payload), { flag: 'w' });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[timeline] turn-state write failed: ${msg}\n`);
   }
 }
 
-/** 删除本会话的 turn 状态文件。不存在就忽略,其它失败只写 stderr。 */
-export function removeTurnState(projectRoot: string, session_id: string | null): void {
+/** 删除本会话的 turn 状态文件。数据位置拿不到、文件不存在就忽略,其它失败只写 stderr。 */
+export function removeTurnState(root: string, session_id: string | null): void {
   try {
-    fs.rmSync(turnStateFilePath(projectRoot, session_id), { force: true });
+    const filePath = turnStateFilePath(root, session_id);
+    if (filePath === null) return;
+    fs.rmSync(filePath, { force: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[timeline] turn-state remove failed: ${msg}\n`);

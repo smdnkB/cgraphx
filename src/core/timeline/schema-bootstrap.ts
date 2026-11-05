@@ -1,14 +1,15 @@
 /**
- * Timeline subsystem schema bootstrap.
+ * timeline 子系统的 schema 应用与库的打开。
  *
- * Pattern mirrors src/markdown/schema-bootstrap.ts:
- *   1. Read `schema.sql` shipped alongside the compiled JS.
- *   2. Apply it (idempotent — every statement uses IF NOT EXISTS).
- *   3. Track applied version in `timeline_schema_versions`.
+ * 写法同 markdown 的 schema-bootstrap:
+ *   1. 读与编译产物放在一起的 `schema.sql`
+ *   2. 应用它(幂等,每条语句都是 IF NOT EXISTS)
+ *   3. 版本记在 `timeline_schema_versions`
  *
- * The shared `.cgraphx/cgraphx.db` file is reused (no separate DB file),
- * but tables are strictly isolated by the `timeline_` prefix and never read
- * or written by the (now-removed) code-graph layer.
+ * 库放在数据位置(基础层 data-location.ts):还没并过的旧库是项目本地的 `.cgraphx/cgraphx.db`,其余是用户目录里
+ * 这个项目的目录(`~/.cgraphx/projects/<目录名>/cgraphx.db`)。和 task、sync 共用一个库文件,各自只碰自己的前缀表。
+ * 写的一方(openTimelineDb、recorder)经 ensureDataDir 定位置,要建就建;读的一方(openTimelineDbForRead)只读,
+ * 库不在就报错,不建目录、不应用 schema。
  */
 
 import fs from 'node:fs';
@@ -16,10 +17,11 @@ import path from 'node:path';
 
 import {
   DatabaseConnection,
+  DATABASE_FILENAME,
   getDatabasePath,
   type SqliteDatabase,
 } from '../db';
-import { resolveDataDir } from '../directory';
+import { ensureDataDir, locateData, missingDataMessage } from '../data-location';
 import { TimelineSchemaError } from './errors';
 import { TIMELINE_SCHEMA_VERSION } from './constants';
 import { classifyAutoMessage, type AutoMessageSource } from './auto-message';
@@ -215,37 +217,46 @@ function reclassifyAutoMessages(db: SqliteDatabase, scanId: number): void {
 }
 
 /**
- * Open the shared cgraphx DB for timeline-subsystem use and ensure the
- * timeline schema is applied.
- *
- * Re-uses `DatabaseConnection.open` so WAL / busy_timeout from the main DB
- * layer apply. The returned connection is the caller's responsibility — close
- * it when done with `connection.close()`.
- *
- * @throws TimelineSchemaError if `<projectRoot>/.cgraphx/cgraphx.db` does
- *   not exist (project not initialized) — the caller (hook layer) catches
- *   and exits 0 so Claude is never blocked.
+ * 拿不到库时的错误:原因和修法取自数据位置(missingDataMessage)。数据目录在而库文件还没建(项目目录建好、还没
+ * 记过事件)时数据位置不报原因,按「还没有数据」说。
  */
-export function openTimelineDb(projectRoot: string): DatabaseConnection {
-  const resolved = path.resolve(projectRoot);
-  const dbPath = getDatabasePath(resolved);
+function missingDatabaseError(start: string): TimelineSchemaError {
+  const loc = locateData(start);
+  const message = missingDataMessage(loc.unavailable === null ? { ...loc, unavailable: 'not-created' as const } : loc);
+  return new TimelineSchemaError(message, { projectRoot: path.resolve(start) });
+}
 
-  if (!fs.existsSync(dbPath)) {
-    // 副本关联的主目录已不在(或调用方已换成那个不在的主目录):说不在了,不说「未初始化」(spec D31)
-    const data = resolveDataDir(resolved);
-    throw new TimelineSchemaError(
-      data.state === 'main-missing'
-        ? `副本关联的主项目不在 ${data.mainRoot} 了`
-        : !fs.existsSync(resolved)
-          ? `项目目录 ${resolved} 不在了`
-          : `Cgraphx not initialized at ${resolved} — run \`cgraphx install\` first.`,
-      { projectRoot: resolved },
-    );
+/**
+ * 写的一方打开 timeline 库:按起点经 ensureDataDir 定数据位置(要建就建),打开那里的 `cgraphx.db` 并应用 schema。
+ *
+ * 用 `DatabaseConnection.open`,沿用基础层的 WAL、busy_timeout。返回的连接由调用方关闭。
+ *
+ * @throws TimelineSchemaError 拿不到数据位置(没有根、认不出项目、git 跑不起来、没装过而项目库不在),或 schema
+ *   版本比本构建新;hook 层捕获后以 0 退出,不阻塞宿主。
+ */
+export function openTimelineDb(start: string): DatabaseConnection {
+  const dir = ensureDataDir(start);
+  if (dir === null) throw missingDatabaseError(start);
+  const connection = DatabaseConnection.open(path.join(dir, DATABASE_FILENAME));
+  try {
+    ensureTimelineSchema(connection.getDb());
+  } catch (err) {
+    connection.close();
+    throw err;
   }
-
-  const connection = DatabaseConnection.open(dbPath);
-  ensureTimelineSchema(connection.getDb());
   return connection;
+}
+
+/**
+ * 读的一方打开 timeline 库:按起点取数据位置的库(getDatabasePath),库文件不在就报错。只读:不建目录、不应用
+ * schema、不写表。返回的连接由调用方关闭。
+ *
+ * @throws TimelineSchemaError 数据位置拿不到,或那里还没有库文件
+ */
+export function openTimelineDbForRead(start: string): DatabaseConnection {
+  const dbPath = getDatabasePath(start);
+  if (dbPath === null || !fs.existsSync(dbPath)) throw missingDatabaseError(start);
+  return DatabaseConnection.open(dbPath);
 }
 
 export { TIMELINE_SCHEMA_VERSION };
