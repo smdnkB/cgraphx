@@ -4,18 +4,20 @@
  * 关联只以需求目录主 spec 头部的 `> 任务:` 声明为准,实时扫描派生,不另外存储。
  * 事件归属按 spec §3.2 在查询时派生:事件落在某条绑定段的 [bound_at, unbound_at) 区间内;
  * 段以 bindingKey 区分(派生段共享 id = 0)。
- * 以主目录为准(版本流程与需求副本 spec D25);副本里没对上会话的提交归副本登记的需求(D28)。
+ * 传入的项目根当当前根(不再换成主目录),根汇总按 timeline 记下的根 + 当前根 + 副本登记
+ * (spec:2026-11-05-数据按项目放用户目录 D11);副本里没对上会话的提交归副本登记的需求(版本流程与需求副本 spec D28)。
  */
 
 import * as path from 'node:path';
 
-import { listProjectRoots, replicaOfCwd, resolveMainRoot } from '../replica';
+import { replicaOfCwd } from '../replica';
 import { listCommitEvents, type TimelineEvent } from '../timeline';
 import { queryBindingEvents } from './attribution';
 import { TaskArgError } from './errors';
 import { scanFeatureTasksAcrossRoots } from './feature-task';
-import { listEffectiveBindings } from './report';
+import { listEffectiveBindingsIn } from './report';
 import { findTask } from './resolve';
+import { collectProjectRoots, type ProjectRootSet } from './roots';
 import { openTaskDb } from './schema-bootstrap';
 import { TaskStore } from './store';
 import type { TaskDetail } from './types';
@@ -28,12 +30,15 @@ const DEFAULT_DETAIL_EVENT_LIMIT = 100;
  * 需求目录的副本里(含已删除的副本)。需求目录取任务详情里的 featureDirs:目录任务是它自己,
  * 接口任务是头部声明了它的需求目录(sync 上报时副本会话也绑到这个任务)。没有这样的副本时不查时间线。
  */
-async function unmatchedReplicaCommits(root: string, featureDirs: readonly string[]): Promise<TimelineEvent[]> {
+async function unmatchedReplicaCommits(
+  rootSet: ProjectRootSet,
+  featureDirs: readonly string[],
+): Promise<TimelineEvent[]> {
   const featureIds = new Set(featureDirs.map((dir) => path.posix.basename(dir)));
   if (featureIds.size === 0) return [];
-  const roots = listProjectRoots(root);
+  const { roots } = rootSet;
   if (!roots.some((r) => r.replica !== null && featureIds.has(r.replica.featureId))) return [];
-  return (await listCommitEvents(root)).filter((e) => {
+  return (await listCommitEvents(rootSet.currentRoot)).filter((e) => {
     if (e.session_id !== null) return false;
     const replica = replicaOfCwd(roots, e.cwd);
     return replica !== null && featureIds.has(replica.featureId);
@@ -52,18 +57,19 @@ export async function getTaskDetail(
   taskId: number,
   opts: { events?: boolean; limit?: number } = {},
 ): Promise<TaskDetail> {
-  const root = resolveMainRoot(projectRoot);
+  const rootSet = collectProjectRoots(projectRoot);
+  const root = rootSet.currentRoot;
   let detail: Pick<TaskDetail, 'task' | 'featureDirs'>;
   const conn = openTaskDb(root);
   try {
     const store = new TaskStore(conn.getDb());
     const task = store.getTaskById(taskId);
     if (!task) throw new TaskArgError(`找不到本地任务 ${taskId};用 cgraphx task list 查看可用任务`);
-    // 目录任务的产出目录就是它自己的 feature-id;其它任务按头部声明反查(主目录 + 在用副本)。
+    // 目录任务的产出目录就是它自己的 feature-id;其它任务按头部声明反查(各根里找到的需求目录)。
     const featureDirs =
       task.source === 'feature' && task.featureId !== null
         ? [`docs/features/${task.featureId}`]
-        : scanFeatureTasksAcrossRoots(root)
+        : scanFeatureTasksAcrossRoots(rootSet)
             .filter((e) => findTask(store, e.task)?.id === taskId)
             .map((e) => e.path);
     detail = { task, featureDirs };
@@ -71,7 +77,7 @@ export async function getTaskDetail(
     conn.close();
   }
 
-  const sessions = listEffectiveBindings(root)
+  const sessions = listEffectiveBindingsIn(rootSet)
     .filter((entry) => entry.binding.taskId === taskId)
     .map(({ bindingKey, binding }) => ({ bindingKey, binding }));
 
@@ -81,7 +87,7 @@ export async function getTaskDetail(
     const { events } = await queryBindingEvents(root, binding);
     for (const e of events) byId.set(e.id, e);
   }
-  for (const e of await unmatchedReplicaCommits(root, detail.featureDirs)) byId.set(e.id, e);
+  for (const e of await unmatchedReplicaCommits(rootSet, detail.featureDirs)) byId.set(e.id, e);
   const attributed = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts) || a.id - b.id);
 
   const eventCounts: Record<string, number> = {};

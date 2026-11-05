@@ -4,25 +4,19 @@
  * 全部从归属事件与需求目录在查询时派生,不存储;只判断文件是否存在,不读内容。
  * 路径一律归一为项目相对 POSIX 路径,只保留项目内、当前存在的普通文件。
  *
- * 「项目内」按主目录 + 全部登记过的副本换算(版本流程与需求副本 spec D26):绝对路径取所在的根;
- * 相对路径按主目录解析,提交里的文件按提交所在的根解析;文件先在所在的根里找,
- * 根已不在(副本删了)再到主目录里找。没有登记副本时只有主目录一个根。
+ * 「项目内」按 timeline 记下的根 + 当前根 + 副本登记换算(spec:2026-11-05-数据按项目放用户目录 D11):
+ * 绝对路径取所在的根;相对路径按当前根解析,提交里的文件按提交所在的根解析;文件先在所在的根里找,
+ * 根已不在(副本删了、目录挪走了)再到当前根里找。
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { FEATURES_DIR_POSIX, SEDIMENT_TYPE_ROOTS } from '../artifact-registry';
-import {
-  listProjectRoots,
-  locateFeatureRoot,
-  matchProjectRoot,
-  replicaOfCwd,
-  resolveMainRoot,
-  type ProjectRoot,
-} from '../replica';
+import { locateFeatureRoot, matchProjectRoot, replicaOfCwd, type ProjectRoot } from '../replica';
 import type { TimelineEvent } from '../timeline';
 import { ARTIFACT_CATEGORIES, REFERENCE_CATEGORIES } from './constants';
+import type { ProjectRootSet } from './roots';
 import type { ArtifactCategory, ArtifactGroup, ReferenceReport } from './types';
 
 /** 写类工具(产出来源 ②)。 */
@@ -57,17 +51,17 @@ export function classifyArtifactPath(relPath: string): ArtifactCategory {
   return 'code';
 }
 
-/** 一次收集用的根:每次收集取一次,不按文件取。 */
+/** 一次收集用的根:调用方一轮取一次根汇总传进来,不按文件取。 */
 interface RootContext {
-  mainRoot: string;
-  /** 主目录 + 全部登记过的副本(含已删除),listProjectRoots 的结果。 */
+  currentRoot: string;
+  /** timeline 记下的根 + 当前根 + 副本登记(含已删除),collectProjectRoots 的结果。 */
   roots: readonly ProjectRoot[];
-  /** 副本根目录还在不在,按根缓存。 */
+  /** 根目录还在不在,按根缓存。 */
   present: Map<string, boolean>;
 }
 
-function rootContext(projectRoot: string): RootContext {
-  return { mainRoot: resolveMainRoot(projectRoot), roots: listProjectRoots(projectRoot), present: new Map() };
+function rootContext(rootSet: ProjectRootSet): RootContext {
+  return { currentRoot: path.resolve(rootSet.currentRoot), roots: rootSet.roots, present: new Map() };
 }
 
 /** p 是目录(跟随链接);不在、读不了 → false。 */
@@ -79,15 +73,15 @@ function isDirectory(p: string): boolean {
   }
 }
 
-/** 判断文件存在用的根:主目录或还在的副本 → 它自己;副本已不在 → 主目录。 */
+/** 判断文件存在用的根:当前根或还在的根 → 它自己;根已不在 → 当前根。 */
 function existenceRoot(ctx: RootContext, root: string): string {
-  if (root === ctx.mainRoot) return root;
+  if (root === ctx.currentRoot) return root;
   let present = ctx.present.get(root);
   if (present === undefined) {
     present = isDirectory(root);
     ctx.present.set(root, present);
   }
-  return present ? root : ctx.mainRoot;
+  return present ? root : ctx.currentRoot;
 }
 
 /** POSIX 分隔。 */
@@ -102,12 +96,12 @@ function hasUnsafeSegment(posixPath: string): boolean {
 
 /**
  * 候选路径 → 项目相对 POSIX 路径;不在任何根内、含 `..` 或空段、不存在或不是普通文件 → null。
- * 绝对路径按所在的根(主目录或副本)换算;相对路径按 relativeRoot 解析(缺省主目录)。
+ * 绝对路径按所在的根换算;相对路径按 relativeRoot 解析(缺省当前根)。
  */
 function normalizeProjectFile(
   ctx: RootContext,
   candidate: string,
-  relativeRoot: string = ctx.mainRoot,
+  relativeRoot: string = ctx.currentRoot,
 ): string | null {
   if (candidate === '') return null;
   let root: string;
@@ -131,17 +125,17 @@ function normalizeProjectFile(
   }
 }
 
-/** 提交所在的根:cwd 落在副本里 → 副本目录,否则主目录。 */
+/** 提交所在的根:cwd 落在副本里 → 副本目录,否则当前根。 */
 function commitRootOf(ctx: RootContext, e: TimelineEvent): string {
   const replica = replicaOfCwd(ctx.roots, e.cwd);
-  return replica === null ? ctx.mainRoot : path.resolve(replica.path);
+  return replica === null ? ctx.currentRoot : path.resolve(replica.path);
 }
 
-/** 需求目录 `docs/features/<id>` 所在的根(locateFeatureRoot);不是需求目录或哪里都没有 → 主目录。 */
+/** 需求目录 `docs/features/<id>` 所在的根(locateFeatureRoot,带当前根);不是需求目录或哪里都没有 → 当前根。 */
 function featureRootOf(ctx: RootContext, dir: string): string {
   const prefix = `${FEATURES_DIR_POSIX}/`;
-  if (!dir.startsWith(prefix)) return ctx.mainRoot;
-  return locateFeatureRoot(ctx.roots, dir.slice(prefix.length)) ?? ctx.mainRoot;
+  if (!dir.startsWith(prefix)) return ctx.currentRoot;
+  return locateFeatureRoot(ctx.roots, dir.slice(prefix.length), ctx.currentRoot) ?? ctx.currentRoot;
 }
 
 /** 取 tool_args 中的字符串字段。 */
@@ -187,9 +181,10 @@ function groupPaths(paths: Iterable<string>, allowed: readonly ArtifactCategory[
 /**
  * spec §5.1:commit 文件 + 写类工具目标文件 + 关联需求目录下的文件,合并去重。
  * commit 文件按提交所在的根解析(副本里还没合入的文件也算产出);需求目录在它所在的根里列。
+ * rootSet 是调用方这一轮取的根汇总(collectProjectRoots)。
  */
-export function collectOutputs(projectRoot: string, events: TimelineEvent[], featureDirs: string[]): ArtifactGroup[] {
-  const ctx = rootContext(projectRoot);
+export function collectOutputs(rootSet: ProjectRootSet, events: TimelineEvent[], featureDirs: string[]): ArtifactGroup[] {
+  const ctx = rootContext(rootSet);
   const found = new Set<string>();
   const add = (candidate: string | null, relativeRoot?: string): void => {
     if (candidate === null) return;
@@ -212,13 +207,16 @@ export function collectOutputs(projectRoot: string, events: TimelineEvent[], fea
   return groupPaths(found, ARTIFACT_CATEGORIES);
 }
 
-/** spec §6.1、§6.2:工具读取路径 + Bash 命令文本中的路径 + docs 概念查询;outputPaths 为产出中的全部路径。 */
+/**
+ * spec §6.1、§6.2:工具读取路径 + Bash 命令文本中的路径 + docs 概念查询;outputPaths 为产出中的全部路径。
+ * rootSet 是调用方这一轮取的根汇总(collectProjectRoots)。
+ */
 export function collectReferences(
-  projectRoot: string,
+  rootSet: ProjectRootSet,
   events: TimelineEvent[],
   outputPaths: ReadonlySet<string>,
 ): ReferenceReport {
-  const ctx = rootContext(projectRoot);
+  const ctx = rootContext(rootSet);
   const found = new Set<string>();
   const concepts: string[] = [];
   const add = (candidate: string | null): void => {
