@@ -10,8 +10,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { execSync } from 'node:child_process';
+import { Command } from 'commander';
 
 import { installTimelineHooks, uninstallTimelineHooks } from '../../../src/core/timeline/installer';
+import { registerTimelineCommands } from '../../../src/core/timeline/cli';
 import { DatabaseConnection } from '../../../src/core/db';
 import { createDirectory } from '../../../src/core/directory';
 import { ensureTimelineSchema } from '../../../src/core/timeline/schema-bootstrap';
@@ -20,6 +22,32 @@ function makeTmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-tl-inst-'));
   execSync('git init -q', { cwd: dir });
   return dir;
+}
+
+/** 在 cwd 里跑 `cgraphx timeline <args>`(进程内注册命令),收下 stdout、stderr。 */
+async function runTimelineCli(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  const program = new Command();
+  program.exitOverride();
+  registerTimelineCommands(program);
+  const out: string[] = [];
+  const err: string[] = [];
+  const text = (chunk: string | Uint8Array): string => (typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString());
+  const originalOut = process.stdout.write.bind(process.stdout);
+  const originalErr = process.stderr.write.bind(process.stderr);
+  const prevCwd = process.cwd();
+  const prevExitCode = process.exitCode;
+  process.stdout.write = ((chunk: string | Uint8Array) => { out.push(text(chunk)); return true; }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => { err.push(text(chunk)); return true; }) as typeof process.stderr.write;
+  try {
+    process.chdir(cwd);
+    await program.parseAsync(['node', 'cgraphx', 'timeline', ...args]);
+  } finally {
+    process.chdir(prevCwd);
+    process.stdout.write = originalOut;
+    process.stderr.write = originalErr;
+    process.exitCode = prevExitCode;
+  }
+  return { stdout: out.join(''), stderr: err.join('') };
 }
 
 function readSettings(projectRoot: string): Record<string, unknown> {
@@ -154,8 +182,7 @@ describe('uninstallTimelineHooks', () => {
     expect(commands.some(c => c.includes('timeline-'))).toBe(false);
   });
 
-  it('--purge drops timeline_* tables from the DB', () => {
-    // init cgraphx + populate one event first
+  it('--purge 不再删数据:timeline 表还在,stderr 提示用 cgraphx project remove 删(spec D31,M14)', async () => {
     execSync('git config user.email test@test', { cwd: project });
     execSync('git config user.name test', { cwd: project });
     // `cgraphx init` was folded into `install`; initialize the data dir directly
@@ -169,14 +196,17 @@ describe('uninstallTimelineHooks', () => {
       initConn.close();
     }
 
-    // Insert one event
     const dbPath = path.join(project, '.cgraphx', 'cgraphx.db');
     expect(fs.existsSync(dbPath)).toBe(true);
 
     installTimelineHooks(project);
-    uninstallTimelineHooks(project, { purgeData: true });
+    const { stdout, stderr } = await runTimelineCli(project, ['uninstall', '--purge']);
 
-    expect(reportTablesExist(project)).toBe(false);
+    expect(reportTablesExist(project)).toBe(true);
+    // stdout 照旧只有 JSON 报告
+    expect(() => JSON.parse(stdout)).not.toThrow();
+    // 本地库还有旧表(没并过),项目目录不在:提示不写路径
+    expect(stderr).toContain('[timeline] 项目的数据要删用 cgraphx project remove');
   });
 });
 

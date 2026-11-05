@@ -24,6 +24,7 @@ import type { Command } from 'commander';
 
 import { queryEvents, getEventById, getEventStats } from './indexer';
 import { installTimelineHooks, uninstallTimelineHooks, type InstallReport } from './installer';
+import { locateData } from '../data-location';
 import { resolveProjectRoot } from '../directory';
 import { hookNotice } from '../git-hooks';
 import { TimelineSchemaError, StoreQueryError } from './errors';
@@ -352,7 +353,8 @@ export function registerTimelineCommands(program: Command): void {
   timeline
     .command('uninstall')
     .description('Remove timeline hooks from this project')
-    .option('--purge', 'Also DROP all timeline_* tables (data loss)')
+    // 保留选项,旧脚本带着它不报错(spec D31)
+    .option('--purge', '已不再删数据;项目的数据用 cgraphx project remove 删')
     .option('-t, --target <ids>', `Comma-separated agent ids, or all / none (default: installed agents, else ${DEFAULT_AGENT_ID})`)
     .action(async (opts: { purge?: boolean; target?: string }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
@@ -362,10 +364,14 @@ export function registerTimelineCommands(program: Command): void {
         // 给了 -t 只卸指定 agent 的配置,不动 git post-commit 钩子(spec §5)
         const keepGitHook = opts.target !== undefined;
         const reports = profiles.map((p) =>
-          uninstallTimelineHooks(projectRoot, { purgeData: opts.purge === true, agent: p.id, keepGitHook }),
+          uninstallTimelineHooks(projectRoot, { agent: p.id, keepGitHook }),
         );
+        // stdout 照旧只有 JSON 报告,提示一律打在 stderr
         writeReports(reports);
         for (const line of new Set(reports.flatMap((r) => r.gitHookNotices))) process.stderr.write(`[timeline] ${line}\n`);
+        const keptFor = [...new Set(reports.flatMap((r) => r.gitHookKeptFor))];
+        if (keptFor.length > 0) process.stderr.write(`[timeline] ${keptFor.join('、')} 还装着 cgraphx,git 钩子留着\n`);
+        if (opts.purge === true) process.stderr.write(`[timeline] ${purgeNotice(projectRoot)}\n`);
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
@@ -403,6 +409,22 @@ function selectAgents(projectRoot: string, target: string | undefined): AgentPro
     throw new ArgError(err instanceof Error ? err.message : String(err));
   }
   return parsed === 'none' ? [] : parsed;
+}
+
+/**
+ * `--purge` 不再删数据(spec D31,M14):告诉人项目的数据在哪、用什么删。目录名取这个目录数据位置的项目目录名;
+ * 项目目录还不在(含没并过的旧库)时不写路径。
+ */
+function purgeNotice(projectRoot: string): string {
+  let dirName: string | null = null;
+  try {
+    dirName = locateData(projectRoot).projectDirName;
+  } catch {
+    // 认不出数据位置只影响提示里写不写路径
+  }
+  return dirName !== null
+    ? `项目的数据在 ~/.cgraphx/projects/${dirName}/,要删用 cgraphx project remove`
+    : '项目的数据要删用 cgraphx project remove';
 }
 
 /** 单个 agent 输出单个报告对象(与改造前一致);多个输出报告数组。 */
