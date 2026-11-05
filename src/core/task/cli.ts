@@ -9,6 +9,8 @@
  *   - cgraphx task show    <编号或名称> [--events] [--limit <n>] [--json]
  *
  * 「task」指开发任务绑定,与 Claude Code 的 Task 工具无关。
+ * 按会话办的 use / current / clear 先定会话,再按会话登记认项目(会话开始的那个根,
+ * spec:2026-11-05-数据按项目放用户目录 D14);其余命令按当前目录往上认项目根。
  *
  * 退出码(exitCodeForError):0 成功(含无结果)/ 1 其它(含任务接口不可用)/
  * 2 TaskConfigError / 3 TaskArgError / 4 TaskStoreError。
@@ -18,6 +20,7 @@ import type { Command } from 'commander';
 
 import { AGENT_OPTION_FLAG, resolveHookAgent } from '../agents';
 import { resolveProjectRoot } from '../directory';
+import { readSessionRegistration } from '../session-registry';
 import { describeEvent, type TimelineEvent } from '../timeline';
 import {
   bindSession,
@@ -74,6 +77,14 @@ function requireSessionId(explicit: string | undefined): string {
     );
   }
   return sessionId;
+}
+
+/**
+ * spec D14:按会话办的命令的项目根 = 会话登记里的根(会话开始的那个项目,会话 cd 到别处也不变);
+ * 登记读不到、里面没有根 → 当前目录往上认。
+ */
+function sessionProjectRoot(sessionId: string): string {
+  return readSessionRegistration(sessionId)?.root ?? resolveProjectRoot(process.cwd());
 }
 
 function writeJson(value: unknown): void {
@@ -368,8 +379,8 @@ export function registerTaskCommands(program: Command): void {
     .option('--json', '输出机器可读 JSON')
     .action(async (value: string, opts: { manual?: boolean; session?: string; json?: boolean }) => {
       try {
-        const projectRoot = resolveProjectRoot(process.cwd());
         const sessionId = requireSessionId(opts.session);
+        const projectRoot = sessionProjectRoot(sessionId);
         const target = await resolveTaskForUse(projectRoot, value, { manual: opts.manual === true });
         const result = await bindSession(projectRoot, sessionId, target.id, 'cli');
         if (opts.json) writeJson(result);
@@ -387,8 +398,8 @@ export function registerTaskCommands(program: Command): void {
     .option('--json', '输出机器可读 JSON')
     .action(async (opts: { session?: string; json?: boolean }) => {
       try {
-        const projectRoot = resolveProjectRoot(process.cwd());
         const sessionId = requireSessionId(opts.session);
+        const projectRoot = sessionProjectRoot(sessionId);
         await refreshAutoBindingsForRead(projectRoot);
         const current = getCurrentEffectiveBinding(projectRoot, sessionId);
         if (opts.json) writeJson(current === null ? null : { binding: current.binding, task: current.task });
@@ -406,8 +417,8 @@ export function registerTaskCommands(program: Command): void {
     .option('--json', '输出机器可读 JSON')
     .action(async (opts: { session?: string; json?: boolean }) => {
       try {
-        const projectRoot = resolveProjectRoot(process.cwd());
         const sessionId = requireSessionId(opts.session);
+        const projectRoot = sessionProjectRoot(sessionId);
         // 先刷新派生,避免「有读写事件但尚未落行」时 clear 看不到自动绑定。
         await refreshAutoBindingsForRead(projectRoot);
         const current = getCurrentEffectiveBinding(projectRoot, sessionId);

@@ -4,11 +4,12 @@
  * `deriveSessionAutoBinding` 是 R1~R7 的唯一实现(纯函数,不碰 DB):
  * 读 = 暂定、写 = 确定;暂定只在读到日期更新的目录时整段改正;确定后不再切换。
  * `refreshAutoBindings` 把结果落到 task_auto_sessions / task_feature_tasks:
- * 存量会话首轮全量重算并标记被取代的旧绑定,之后按会话最大事件 id 增量刷新。
+ * 存量会话首轮全量重算并标记被取代的旧绑定,之后按会话最大事件 id 增量刷新;只刷新指定会话时
+ * 只查这几个会话的水位(spec:2026-11-05-数据按项目放用户目录 D15)。
  *
- * 主目录与副本(版本流程与需求副本 spec D25~D27):一律以主目录为准;路径按「主目录 + 全部
- * 登记过的副本」换算;开在副本里的会话归副本登记的需求,不按读写的文件派生。派生只看
- * roots 和事件本身,不看调用方的项目根(sync 的上报进程也会全量刷新)。
+ * 当前根与副本(spec D11):以当前根为准,路径按 timeline 记下的根 + 当前根 + 副本登记换算;开在副本里的
+ * 会话归副本登记的需求,不按读写的文件派生。会话事件按 ts 升序读(D28:并过来的旧事件 id 不按时间排)。
+ * 派生只看根汇总和事件本身(sync 的上报进程也会全量刷新)。
  *
  * 只经 timeline / features / agents / replica 门面取数,不依赖 sync。
  */
@@ -17,23 +18,18 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { DEFAULT_AGENT_ID, requireAgentProfile } from '../agents';
-import {
-  listProjectRoots,
-  matchProjectRoot,
-  replicaOfCwd,
-  resolveMainRoot,
-  type ProjectRoot,
-  type ReplicaEntry,
-} from '../replica';
+import { matchProjectRoot, replicaOfCwd, type ProjectRoot, type ReplicaEntry } from '../replica';
 import {
   extractCommandPathCandidates,
   isKillSwitchOn,
   listSessionEventMaxIds,
-  listSessionEventsAfter,
+  listSessionEventMaxIdsFor,
+  listSessionEventsByTs,
   type TimelineEvent,
 } from '../timeline';
 import { AUTO_META_KEYS } from './constants';
 import { dropStaleFeatureTask, ensureFeatureTaskRow, featureDatePrefix, isEligibleFeatureDir } from './feature-task';
+import { collectProjectRoots } from './roots';
 import { openTaskDb } from './schema-bootstrap';
 import { TaskStore } from './store';
 import type { AutoSession, AutoStrength, TaskBinding, TaskSource } from './types';
@@ -53,11 +49,11 @@ export interface AutoDerivation {
 }
 
 export interface DeriveSessionAutoBindingInput {
-  /** 本会话全部事件,id 升序。 */
+  /** 本会话全部事件,ts 升序、同 ts 按 id 升序(listSessionEventsByTs)。 */
   events: TimelineEvent[];
   /** 只看 ts < cutoffTs 的事件;null = 不截止。 */
   cutoffTs: string | null;
-  /** 主目录 + 全部登记过的副本(listProjectRoots):路径换算与「会话开在哪个副本」都按它判断。 */
+  /** timeline 记下的根 + 当前根 + 副本登记(collectProjectRoots 的 roots):路径换算与「会话开在哪个副本」都按它判断。 */
   roots: readonly ProjectRoot[];
   isEligible: (featureId: string) => boolean;
 }
@@ -104,7 +100,7 @@ function isSuccessfulWrite(summary: string | null): boolean {
 }
 
 /**
- * 绝对 / 相对路径 → 所在根(主目录或副本)下的项目相对 POSIX 路径;哪个根里都不在返回 null。
+ * 绝对 / 相对路径 → 所在根下的项目相对 POSIX 路径;哪个根里都不在返回 null。
  * candidate 相对 base 解析(相对路径基于事件 cwd)。
  */
 function toProjectRelative(roots: readonly ProjectRoot[], base: string, candidate: string): string | null {
@@ -220,33 +216,27 @@ function isLaterFeature(featureId: string, current: string): boolean {
   return next > prev;
 }
 
-/** 会话开在哪个副本:看本会话 id 最小的一条事件的 cwd;开在主目录里 → null。 */
+/** 会话开在哪个副本:看本会话 ts 最早的一条事件(events[0])的 cwd;不在副本里 → null。 */
 function sessionReplica(events: readonly TimelineEvent[], roots: readonly ProjectRoot[]): ReplicaEntry | null {
-  let first: TimelineEvent | undefined;
-  for (const e of events) {
-    if (first === undefined || e.id < first.id) first = e;
-  }
+  const first = events[0];
   return first === undefined ? null : replicaOfCwd(roots, first.cwd);
 }
 
 /**
- * 派生单个会话的自动绑定(纯函数)。
+ * 派生单个会话的自动绑定(纯函数)。入参事件 ts 升序、同 ts 按 id 升序。
  *
  * 会话开在副本里(K2):归副本登记的需求,确定绑定,不按读写的文件派生,也不要求需求目录合格;
  * cutoff 不晚于会话最早一条事件时(显式绑定在先)没有结果。
- * 开在主目录里:按 R1~R7——只看 cutoff 之前的 post_tool_use 事件;写成功 → 确定绑定,D 取最后一次
+ * 不开在副本里:按 R1~R7——只看 cutoff 之前的 post_tool_use 事件;写成功 → 确定绑定,D 取最后一次
  * 未确定的写;读 → 暂定,只有日期段更新的目录能整段改正它。
- * 有结果时 boundAt = 会话最早一条事件的 ts(任意类型,不受 cutoff 影响)。
+ * 有结果时 boundAt = 会话最早一条事件(events[0])的 ts(任意类型,不受 cutoff 影响)。
  */
 export function deriveSessionAutoBinding(
   input: DeriveSessionAutoBindingInput,
 ): AutoDerivation | null {
   const first = input.events[0];
   if (first === undefined) return null;
-  let boundAt = first.ts;
-  for (const e of input.events) {
-    if (e.ts < boundAt) boundAt = e.ts;
-  }
+  const boundAt = first.ts;
 
   const replica = sessionReplica(input.events, input.roots);
   if (replica !== null) {
@@ -333,7 +323,7 @@ function earlier(a: string | null, b: string | null): string | null {
  * 首轮(history_pass_done 未设置)全量重算:先对「以接口任务手动绑定为 cutoff 仍能派生
  * 出结果」的会话,把旧 feature_dir 行与指向本地手动任务的 cli 行标记为被取代,
  * 再按正式 cutoff 派生。之后只重算最大事件 id 变了的会话。
- * 在副本里调用与在主目录调用结果相同(一律换成主目录)。
+ * 传入的项目根当当前根(不再换成主目录);给了 sessionIds 时水位只查这几个会话(D15)。
  *
  * CGRAPHX_NO_TIMELINE 开启时不读不写;单会话失败写 stderr 并跳过,不中断其它会话。
  */
@@ -343,8 +333,13 @@ export async function refreshAutoBindings(
 ): Promise<RefreshAutoBindingsResult> {
   if (isKillSwitchOn()) return { recomputed: 0, historyPass: false };
 
-  const root = resolveMainRoot(projectRoot);
-  const maxIds = await listSessionEventMaxIds(root);
+  // 根汇总取一次,每个会话的派生、合格判断、目录任务行共用
+  const rootSet = collectProjectRoots(projectRoot);
+  const root = rootSet.currentRoot;
+  const maxIds =
+    opts.sessionIds === undefined
+      ? await listSessionEventMaxIds(root)
+      : await listSessionEventMaxIdsFor(root, opts.sessionIds);
   const conn = openTaskDb(root);
   try {
     const store = new TaskStore(conn.getDb());
@@ -376,13 +371,12 @@ export async function refreshAutoBindings(
       return taskSources.get(taskId) ?? null;
     };
 
-    // 主目录 + 全部登记过的副本(含已删除):取一次,每个会话的派生、合格判断共用
-    const roots = listProjectRoots(root);
+    const { roots } = rootSet;
     const eligibleCache = new Map<string, boolean>();
     const isEligible = (featureId: string): boolean => {
       const cached = eligibleCache.get(featureId);
       if (cached !== undefined) return cached;
-      const value = isEligibleFeatureDir(roots, featureId);
+      const value = isEligibleFeatureDir(rootSet, featureId);
       eligibleCache.set(featureId, value);
       return value;
     };
@@ -390,7 +384,7 @@ export async function refreshAutoBindings(
     let recomputed = 0;
     for (const { sessionId, maxId } of targets) {
       try {
-        const events = await listSessionEventsAfter(root, sessionId, 0);
+        const events = await listSessionEventsByTs(root, sessionId);
         const sessionBindings = bindingsBySession.get(sessionId);
         const existing = autoBySession.get(sessionId);
 
@@ -429,7 +423,7 @@ export async function refreshAutoBindings(
         // 取代标记、目录任务与派生结果同事务落库;失败时整会话回滚并跳过。
         store.transaction(() => {
           for (const b of obsolete) store.supersedeBinding(b.id, now);
-          if (auto !== null) ensureFeatureTaskRow(store, roots, auto.featureId, now);
+          if (auto !== null) ensureFeatureTaskRow(store, rootSet, auto.featureId, now);
           store.upsertAutoSession({
             sessionId,
             derivedMaxEventId: maxId,
@@ -459,8 +453,8 @@ export async function refreshAutoBindings(
       }
       for (const [featureId, active] of inUse) {
         try {
-          if (active) ensureFeatureTaskRow(store, roots, featureId, now);
-          dropStaleFeatureTask(store, roots, featureId, now);
+          if (active) ensureFeatureTaskRow(store, rootSet, featureId, now);
+          dropStaleFeatureTask(store, rootSet, featureId, now);
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
           process.stderr.write(`[task] 副本需求的任务行失败 ${featureId}: ${reason}\n`);

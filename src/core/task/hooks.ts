@@ -18,7 +18,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { agentConfigDir, DEFAULT_AGENT_ID, type AgentProfile } from '../agents';
+import { getDataDir } from '../data-location';
 import { resolveProjectRoot } from '../directory';
+import { sessionRootOf } from '../session-registry';
 import { skillVersionNotice } from '../skill-version';
 import { isKillSwitchOn } from '../timeline';
 import { isHistoryPassDone, refreshAutoBindings } from './auto-binding';
@@ -54,19 +56,31 @@ export async function taskSessionStartHook(profile: AgentProfile): Promise<void>
 }
 
 /**
- * Stop:每轮结束刷新本会话的自动绑定派生;首轮历史派生未完成时改为全量。
+ * Stop:每轮结束按会话的根(会话登记,spec:2026-11-05-数据按项目放用户目录 D6、D14)刷新本会话的自动绑定派生;
+ * 首轮历史派生未完成时改为全量。认不出根、这个根拿不到数据位置时直接返回,不写 stderr。
  * B-2 实测本仓库首轮全量约 0.36~0.43 秒(60 会话),在 hook 预算内;
  * 之后只刷新当前会话(约 3~4ms)。stdout 不输出任何内容。
  */
-export async function taskStopHook(_profile: AgentProfile): Promise<void> {
+export async function taskStopHook(profile: AgentProfile): Promise<void> {
   await runTaskHook(async (payload) => {
-    const projectRoot = resolveProjectRoot(payload.cwd ?? process.cwd());
-    if (isHistoryPassDone(projectRoot)) {
-      await refreshAutoBindings(projectRoot, { sessionIds: [payload.sessionId] });
+    const root = sessionRootOf(payload.sessionId, registrationStart(payload, profile))?.root ?? null;
+    if (root === null || getDataDir(root) === null) return;
+    if (isHistoryPassDone(root)) {
+      await refreshAutoBindings(root, { sessionIds: [payload.sessionId] });
     } else {
-      await refreshAutoBindings(projectRoot);
+      await refreshAutoBindings(root);
     }
   });
+}
+
+/**
+ * 会话登记读不到时认根的起点(spec D6):agent 给的项目目录环境变量(agents 描述的 projectDirEnv),
+ * 没有再用 payload.cwd、当前目录。
+ */
+function registrationStart(payload: TaskHookPayload, profile: AgentProfile): string {
+  const fromEnv = process.env[profile.projectDirEnv]?.trim();
+  if (fromEnv !== undefined && fromEnv !== '') return fromEnv;
+  return payload.cwd ?? process.cwd();
 }
 
 /**
