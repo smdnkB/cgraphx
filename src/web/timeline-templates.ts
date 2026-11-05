@@ -436,7 +436,7 @@ function renderTlEmpty(kind: 'timeline-empty' | 'today-empty' | 'no-match', clea
     <div class="empty">
       <span class="empty__glyph">≡</span>
       <h3 class="empty__title">尚未记录任何事件</h3>
-      <p class="empty__text">在目标项目接入 timeline hooks,事件将自动落入 .cgraphx/cgraphx.db:</p>
+      <p class="empty__text">在目标项目接入 timeline hooks,事件将自动记进这个项目的数据(位置看 cgraphx project show):</p>
       <p class="empty__hint"><code>cgraphx timeline install</code></p>
     </div>`;
   }

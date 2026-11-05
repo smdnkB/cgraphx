@@ -159,7 +159,7 @@ function printList(rows: readonly ReplicaStatus[], all: boolean): void {
 function printRemove(r: RemoveReplicaResult): void {
   writeOut(
     r.state === 'removed'
-      ? `已删除副本 ${r.name};登记和副本里的会话、提交记录都留在主目录`
+      ? `已删除副本 ${r.name};登记留在主目录,副本里记下的会话和提交在项目的数据里`
       : `副本 ${r.name} 的目录已经不在了,已在登记里记为删除`,
   );
 }
