@@ -72,6 +72,46 @@ of a project reports as the same repository. Running `sync connect` where
 the origin differs says so, and `--force` switches to that origin, clearing
 the reporting progress so everything is reported again.
 
+### Removed — local web viewer, platform sync, and dev-task tracking
+
+cgraphx no longer has the parts that existed only to report to an R&D
+management platform or to browse data in a browser. The `cgraphx web` local
+read-only viewer, the `cgraphx sync` reporting subsystem with its hidden
+`sync-worker` command, and the `cgraphx task` binding of sessions to
+development tasks are deleted; typing those commands now prints
+`error: unknown command` and exits 1. The `/dev-handoff` session-handoff
+skill and the `task-history` agent are retired with them, and both joined
+the `deprecated-assets.json` list, so `cgraphx install` deletes a copy an
+earlier release deployed. What cgraphx records now stays on this machine —
+nothing is reported to any platform.
+
+`cgraphx install` also cleans up after the removal, on install and
+uninstall alike. The dead reporting and task hooks an earlier release wrote
+into agent configurations — `sync-session-start-hook`, `sync-stop-hook`,
+`task-session-start-hook`, `task-stop-hook`, `task-post-tool-use-hook` —
+are removed whatever subsystems were ticked, and hooks that are not
+cgraphx's are left alone. The thirteen `sync_*` and `task_*` tables are
+dropped and the four run files (`sync.lock`, `sync-trigger`,
+`sync-worker.pid`, `task-source.json`) deleted from the project's data
+directory and the local `.cgraphx/`; the backup taken while merging old
+data is kept. Five hidden no-op commands named after the dead hooks stay
+registered, so a project that upgraded the package but has not re-run
+`cgraphx install` sees no errors from old hook entries: they read stdin,
+print nothing and exit 0.
+
+`features check` accepts only the built-in artifact types — the platform's
+type table went with sync — and its `unknown_type` warning now says to use
+a built-in type. `features show` renames its 「平台环节」 heading to
+「需求环节(按默认类型表)」 and closes with 「实现、知识经验:由提交和
+会话承载,不按产物算」. A spec's `> 任务:` header line is no longer read,
+shown or checked; the line in an old spec is left alone and raises no new
+warning. `cgraphx replica create` refuses to open a second copy of a
+requirement that already has one (`feature_has_replica`: split the
+requirement into several requirement directories to parallelize). The
+`/dev-end` closing record keeps a single 历时 line — 立项 · 完成 · 日历跨度,
+taken from the first and last commit of the range — instead of dispatching
+`task-history` for the per-task actual effort.
+
 ## 2.0.13 - 2026-11-01
 
 ### Changed — clarification drops feature cards and writes straight into the draft
