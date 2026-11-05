@@ -492,7 +492,7 @@
    grep -rn "resolveDataDir\|warnIfMainRootMissing\|DataDirInfo" src
    grep -rn "main-missing" src --exclude-dir=replica                                          # replica 的 ReplicaLinkState 保留这个值,别处不再出现
    grep -rn "resolveMainRoot" src/core/task src/core/sync
-   grep -n "from '\./\(timeline\|task\|sync\|replica\|project\|markdown\|dbquery\|features\|agents\|release\|report\|skill-version\|artifact-registry\)" src/core/project-identity.ts src/core/repo-projects.ts src/core/user-data-dir.ts src/core/session-registry.ts src/core/data-location.ts src/core/root-match.ts
+   grep -n "from '\./\(timeline\|task\|sync\|replica\|project\|markdown\|dbquery\|features\|agents\|release\|report\|skill-version\|artifact-registry\)['/]" src/core/project-identity.ts src/core/repo-projects.ts src/core/user-data-dir.ts src/core/session-registry.ts src/core/data-location.ts src/core/root-match.ts
    grep -rn "from '\.\./\(timeline\|task\|sync\|replica\)/" src/core/project
    grep -rn "from '\.\./\.\./\(cli\|web\)\|from '\.\./\(cli\|web\)" src/core
    grep -rln "getOriginUrl" src/core/sync --include='*.ts' | grep -v "^src/core/sync/git.ts$"   # 期望只列出 connection.ts(接入)、runner.ts(补存上报地址)、merge.ts(并旧连接时补上报地址)
@@ -500,7 +500,7 @@
    for f in $(git diff --name-only "$BASE" -- 'src/*.ts'); do [ -f "$f" ] || continue; n=$(wc -l < "$f" | tr -d ' '); [ "$n" -gt 600 ] && echo "$f $n"; done   # 期望无输出
    ```
 
-4. 端到端(临时 HOME;每段跑完都确认 `test ! -e "$HOME/.cgraphx/cgraphx.db"`):
+4. 端到端(临时 HOME;用 bash 跑——zsh 不会按空格拆开 `$OLD` / `$NEW`;每段跑完都确认 `test ! -e "$HOME/.cgraphx/cgraphx.db"`):
 
    ```bash
    REPO="$PWD"; OLD="node $REPO/.cgraphx/baseline/数据按项目/old/dist/cli/index.js"; NEW="node $REPO/dist/cli/index.js"
