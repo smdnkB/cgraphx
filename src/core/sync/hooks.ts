@@ -3,12 +3,14 @@
  *
  * 两个隐藏命令共用的规则:
  *   - CGRAPHX_NO_TIMELINE 生效时直接返回:不读 stdin、不输出、不拉起进程;
- *   - 项目根一律换成主目录(spec D25):副本里的会话也按主目录判断、拉起主目录的 worker;
- *   - stdin 非 JSON 对象、项目未初始化、未接入平台时静默返回;
+ *   - 项目根按会话登记认(spec D6):整个会话按开始的那个项目判断,中途 cd 到别处也不换;登记读不到时以
+ *     agent 给的项目目录环境变量(没有再用 payload.cwd)为起点现认一次;
+ *   - stdin 非 JSON 对象、认不出根、数据位置拿不到、未接入平台时静默返回;
+ *   - 拉起的 worker 按这个根跑;锁、存活标记、触发文件在数据位置,同一项目的各个目录共用一个 worker;
  *   - 不发网络请求、不等待子进程:拉起 detached worker 后立即返回;
  *   - 任何异常吞掉,只写 stderr `[sync] …`,退出码恒为 0。
  *
- * Stop / SessionEnd(`sync-stop-hook`):stdout 恒空,不打开数据库,只做文件检查。
+ * Stop / SessionEnd(`sync-stop-hook`):stdout 恒空,不打开 sync 的库,只做文件检查。
  * SessionStart(`sync-session-start-hook`):读一次 `sync_state.status`,暂停 / 连续失败时
  * 向 stdout 输出一行 `hookSpecificOutput` 提示,随后同样尝试拉起 worker。
  */
@@ -17,41 +19,45 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { AgentProfile } from '../agents';
-import { getDataDir, isInitialized, resolveProjectRoot } from '../directory';
-import { resolveMainRoot } from '../replica';
+import { getDataDir } from '../data-location';
+import { sessionRootOf } from '../session-registry';
 import { isKillSwitchOn } from '../timeline';
 import { readConnection } from './connection';
 import { FAIL_NOTICE_MS, HOOK_PERF_WARN_MS, PAUSE_NOTICES, TRIGGER_FILENAME, TRIGGER_THROTTLE_MS } from './constants';
+import { SyncNotInitializedError } from './errors';
 import { isWorkerAlive } from './lock';
-import { openSyncDb } from './schema-bootstrap';
+import { openSyncDbForRead } from './schema-bootstrap';
 import { spawnSyncWorker } from './spawn';
-import { getStatus } from './store';
+import { emptyStatus, getStatus } from './store';
 import type { SyncStatusState } from './types';
 
 /** Stop / SessionEnd 共用:节流通过且无存活 worker 时拉起后台同步。 */
-export async function syncStopHook(_profile: AgentProfile): Promise<void> {
-  await runSyncHook((projectRoot) => {
-    triggerWorker(projectRoot);
+export async function syncStopHook(profile: AgentProfile): Promise<void> {
+  await runSyncHook(profile, (projectRoot, dataDir) => {
+    triggerWorker(projectRoot, dataDir);
   });
 }
 
 /** SessionStart:暂停 / 连续失败超时时注入一行提示,然后同 Stop hook 尝试拉起后台同步。 */
-export async function syncSessionStartHook(_profile: AgentProfile): Promise<void> {
-  await runSyncHook((projectRoot) => {
+export async function syncSessionStartHook(profile: AgentProfile): Promise<void> {
+  await runSyncHook(profile, (projectRoot, dataDir) => {
     const notice = sessionStartNotice(readStatus(projectRoot), Date.now());
     if (notice !== null) {
       process.stdout.write(
         JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: notice } }) + '\n',
       );
     }
-    triggerWorker(projectRoot);
+    triggerWorker(projectRoot, dataDir);
   });
 }
 
 // ─── 共用骨架 ───────────────────────────────────────────────────────────────
 
-/** 关闭开关 → stdin → 项目根(换成主目录)→ 已初始化 → 已接入;全部满足才交给 handler。 */
-async function runSyncHook(handler: (projectRoot: string) => void): Promise<void> {
+/** 关闭开关 → stdin → 会话的根 → 数据位置 → 已接入;全部满足才交给 handler。 */
+async function runSyncHook(
+  profile: AgentProfile,
+  handler: (projectRoot: string, dataDir: string) => void,
+): Promise<void> {
   const start = Date.now();
   if (isKillSwitchOn()) return;
 
@@ -59,10 +65,13 @@ async function runSyncHook(handler: (projectRoot: string) => void): Promise<void
     const raw = await readStdinJson();
     if (raw === null) return;
     const cwd = typeof raw.cwd === 'string' && raw.cwd ? raw.cwd : process.cwd();
-    const projectRoot = resolveMainRoot(resolveProjectRoot(cwd));
-    if (!isInitialized(projectRoot)) return;
+    const sessionId = typeof raw.session_id === 'string' ? raw.session_id : null;
+    const projectRoot = sessionRootOf(sessionId, registrationStart(profile, cwd))?.root ?? null;
+    if (projectRoot === null) return;
+    const dataDir = getDataDir(projectRoot);
+    if (dataDir === null) return;
     if (readConnection(projectRoot) === null) return;
-    handler(projectRoot);
+    handler(projectRoot, dataDir);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[sync] hook 失败(已忽略,不影响会话):${msg}\n`);
@@ -72,6 +81,12 @@ async function runSyncHook(handler: (projectRoot: string) => void): Promise<void
   if (durationMs > HOOK_PERF_WARN_MS) {
     process.stderr.write(`[sync] hook 耗时 ${durationMs}ms(超出 ${HOOK_PERF_WARN_MS}ms 预算)\n`);
   }
+}
+
+/** 会话登记读不到时认根的起点(spec D6):agent 给的项目目录环境变量(projectDirEnv),没有再用 payload.cwd。 */
+function registrationStart(profile: AgentProfile, cwd: string): string {
+  const fromEnv = process.env[profile.projectDirEnv]?.trim();
+  return fromEnv !== undefined && fromEnv !== '' ? fromEnv : cwd;
 }
 
 /** 读 stdin 到 EOF 并解析为 JSON 对象;交互终端、空输入、解析失败、非对象都返回 null。 */
@@ -97,9 +112,9 @@ async function readStdinJson(): Promise<Record<string, unknown> | null> {
 
 // ─── 拉起与提示 ─────────────────────────────────────────────────────────────
 
-/** 节流窗口内或已有存活 worker 时不拉起;否则 touch 触发文件并拉起 detached worker。 */
-function triggerWorker(projectRoot: string): void {
-  const triggerPath = path.join(getDataDir(projectRoot), TRIGGER_FILENAME);
+/** 节流窗口内或已有存活 worker 时不拉起;否则 touch 数据目录里的触发文件并拉起 detached worker。 */
+function triggerWorker(projectRoot: string, dataDir: string): void {
+  const triggerPath = path.join(dataDir, TRIGGER_FILENAME);
   const now = Date.now();
   try {
     if (now - fs.statSync(triggerPath).mtimeMs < TRIGGER_THROTTLE_MS) return;
@@ -113,8 +128,15 @@ function triggerWorker(projectRoot: string): void {
   spawnSyncWorker(projectRoot);
 }
 
+/** 读同步状态;库或 sync 的表还没有(SyncNotInitializedError)按全空处理,不提示。 */
 function readStatus(projectRoot: string): SyncStatusState {
-  const conn = openSyncDb(projectRoot);
+  let conn: ReturnType<typeof openSyncDbForRead>;
+  try {
+    conn = openSyncDbForRead(projectRoot);
+  } catch (err) {
+    if (err instanceof SyncNotInitializedError) return emptyStatus();
+    throw err;
+  }
   try {
     return getStatus(conn.getDb());
   } finally {
