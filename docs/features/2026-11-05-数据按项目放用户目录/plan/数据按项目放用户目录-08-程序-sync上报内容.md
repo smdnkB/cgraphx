@@ -16,6 +16,9 @@
   - 读文件用哪个根:`rootOrMain(root, mainRoot)` 改名 `rootOrCurrent(root, currentRoot)`,语义「这个根的目录还在就用它,不在退回当前根」;`artifacts.ts`、`references.ts` 的调用一并换
   - 查提交(`artifacts.ts`):`gitForCommit` 改成「当前根的仓库有这个提交 → 当前根;否则这条提交事件的 cwd 目录还在 → `ctx.gitFor(cwd)`;否则当前根」;「提交在不在远程」同样先当前根、再提交 cwd 的仓库
   - 提交在哪个根做的:不只看副本——提交事件的 cwd 落在 `ctx.roots` 里哪个根(`matchProjectRoot` 不中时再看 cwd 等于某个根),就按那个根读文件;副本会话的归属(`commitReplicas`、`buildReplicaSessionPayloads`)照现在只看副本
+  - 实现中补定(PLAN_CONFLICT,你定的,11-05;依据 D13「哪个根触发都一样」):
+    - 子目录项目的提交:事件的 cwd 记的是工作区根(D9),上一条都不中时,再看「cwd 拼上项目根在仓库里的相对位置」是否等于某个根;相对位置为空时和上一条结果相同
+    - 移进副本的需求文件(movedFiles):条件是「改它的那个根不是副本」(`ctx.roots` 里该根的 replica 为 null),不是「改它的根是当前根」;判断文件此刻在不在,看改它的那个根。只有主目录加副本时,结果和改动前相同
 - 允许局部适配:
   - `gitFor` 的缓存结构;`createPathResolver` 内部写法
   - `payload.ts` 超 600 行时把字段构造类的函数拆到同目录新文件(新文件名写进回报,算本任务范围)
