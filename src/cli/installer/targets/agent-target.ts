@@ -5,8 +5,9 @@
  *   - `hooks.UserPromptSubmit`(context-monitor)——仅当 `capabilities.contextMonitor`。
  *   - `statusLine`(claude-hud)——仅当 `capabilities.statusLine`;非 cgraphx 的 statusLine 保留并提示。
  *   - `hooks.PreToolUse`(precommit-check,matcher `Bash`)——一律写入。
- *   - 死 hook 清理:pre-0.8 的 `codegraph mark-dirty` / `sync-if-dirty` 与 2.0 移除的
- *     `cgraphx prompt-hook`(install 自愈,uninstall 一并清扫)。
+ *   - 死 hook 清理:pre-0.8 的 `codegraph mark-dirty` / `sync-if-dirty`、2.0 移除的 `cgraphx prompt-hook`,
+ *     以及 2.0.14 下掉的平台同步、开发任务五条 hook(install 自愈,uninstall 一并清扫;五条被移除时经
+ *     notes 回传一行提示,spec:2026-11-05-下掉web与平台同步 D5)。
  *   - 配置目录下的模板资产(skills / agents / commands / hooks / plugins),按 agent 替换与能力过滤。
  *   - 资产部署成功后,配置目录下的版本记录 `cgraphx-version.json`(会话开始据此提示 skill 落后)。
  *   - 指引文件中的 cgraphx 标记块(内容取模板根 CLAUDE.md 并按 agent 替换)。
@@ -45,6 +46,19 @@ import { SKILL_VERSION_FILE, getCliVersion, removeSkillVersion, writeSkillVersio
 
 /** 2.0 已移除的前置 hook 命令:install 不再写,只用于识别残留。 */
 const PROMPT_HOOK_COMMAND = 'cgraphx prompt-hook';
+
+/**
+ * 2.0.14 下掉的平台同步、开发任务五条 hook 子命令(spec F3 D5):按完整子命令名认(前面是 `cgraphx `),
+ * 不按 `cgraphx sync-` / `cgraphx task-` 前缀认——以后同前缀的新命令会被误删。带不带 `--agent <id>`、
+ * 带不带容错后缀(` 2>/dev/null || true`)都算:取的是「命令串里含 `cgraphx <完整子命令名>`」。
+ */
+const REMOVED_FEATURE_HOOK_COMMANDS = [
+  'cgraphx sync-session-start-hook',
+  'cgraphx sync-stop-hook',
+  'cgraphx task-session-start-hook',
+  'cgraphx task-stop-hook',
+  'cgraphx task-post-tool-use-hook',
+] as const;
 
 /** settings 中本模块关心的子集;刻意宽松,只遍历已知数组 / 对象。 */
 interface SettingsJson {
@@ -119,9 +133,10 @@ class GenericAgentTarget implements AgentTarget {
     // 2. precommit-check(PreToolUse / Bash),一律写入
     files.push(this.writePrecommitHookEntry());
 
-    // 3. 清理已移除子命令留下的死 hook,升级即自愈;有移除才上报
+    // 3. 清理已移除子命令留下的死 hook,升级即自愈;有移除才上报。五条已下掉的 hook 被移除时多一行 note
     const hookCleanup = this.cleanupDeadHooks();
-    if (hookCleanup.action === 'removed') files.push(hookCleanup);
+    if (hookCleanup.file.action === 'removed') files.push(hookCleanup.file);
+    notes.push(...hookCleanup.notes);
 
     // 4. 指引文件标记块 upsert(同一标记,旧 1.x 块原位替换)
     const instructions = this.writeInstructionsEntry();
@@ -151,13 +166,15 @@ class GenericAgentTarget implements AgentTarget {
 
   uninstall(_loc: Location): WriteResult {
     const files: FileChange[] = [];
+    const notes: string[] = [];
 
     // 1. 精确移除 cgraphx hook 命令;statusLine 仅当指向 claude-hud 时移除
     files.push(this.removeCgraphxSettings());
 
-    // 2. 死 hook 清扫(与 install 自愈共用)
+    // 2. 死 hook 清扫(与 install 自愈共用);五条已下掉的 hook 被移除时同样回传 note
     const hookCleanup = this.cleanupDeadHooks();
-    if (hookCleanup.action === 'removed') files.push(hookCleanup);
+    if (hookCleanup.file.action === 'removed') files.push(hookCleanup.file);
+    notes.push(...hookCleanup.notes);
 
     // 3. 剥离指引文件标记块
     const file = agentInstructionsPath(this.root(), this.profile);
@@ -175,7 +192,7 @@ class GenericAgentTarget implements AgentTarget {
       files.push({ path: `${this.profile.configDirName}/${SKILL_VERSION_FILE}`, action: 'removed' });
     }
 
-    return { files };
+    return notes.length > 0 ? { files, notes } : { files };
   }
 
   describePaths(_loc: Location): string[] {
@@ -247,29 +264,41 @@ class GenericAgentTarget implements AgentTarget {
     return { path: file, action: 'removed' };
   }
 
-  /** 移除死 hook(见 isDeadHookCommand);install 与 uninstall 共用。 */
-  private cleanupDeadHooks(): FileChange {
+  /**
+   * 移除死 hook(见 isDeadHookCommand);install 与 uninstall 共用。移除的条目里有五条已下掉的子命令时,
+   * notes 带一行 `平台同步、开发任务已下掉:已移除 hooks(<事件名 / 连>)`(事件去重,取实际删掉条目所属的
+   * hook 事件;只删 1.x 那三条死 hook 时不出)。
+   */
+  private cleanupDeadHooks(): { file: FileChange; notes: string[] } {
     const file = this.settingsPath();
-    if (!fs.existsSync(file)) return { path: file, action: 'not-found' };
+    if (!fs.existsSync(file)) return { file: { path: file, action: 'not-found' }, notes: [] };
 
     const settings = readJsonFile(file) as SettingsJson;
     const hooks = settings.hooks;
     if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) {
-      return { path: file, action: 'unchanged' };
+      return { file: { path: file, action: 'unchanged' }, notes: [] };
     }
 
     let removedAny = false;
+    const removedFeatureEvents: string[] = [];
     for (const event of Object.keys(hooks)) {
       const groups = hooks[event];
       if (!Array.isArray(groups)) continue;
       for (const group of groups) {
         if (!group || !Array.isArray(group.hooks)) continue;
-        const before = group.hooks.length;
+        const removed = group.hooks.filter((h) => isDeadHookCommand((h as { command?: unknown })?.command));
+        if (removed.length === 0) continue;
+        removedAny = true;
         group.hooks = group.hooks.filter((h) => !isDeadHookCommand((h as { command?: unknown })?.command));
-        if (group.hooks.length !== before) removedAny = true;
+        if (
+          !removedFeatureEvents.includes(event) &&
+          removed.some((h) => isRemovedFeatureHookCommand((h as { command?: unknown })?.command))
+        ) {
+          removedFeatureEvents.push(event);
+        }
       }
     }
-    if (!removedAny) return { path: file, action: 'unchanged' };
+    if (!removedAny) return { file: { path: file, action: 'unchanged' }, notes: [] };
 
     for (const event of Object.keys(hooks)) {
       const groups = hooks[event];
@@ -282,7 +311,10 @@ class GenericAgentTarget implements AgentTarget {
     if (Object.keys(hooks).length === 0) delete settings.hooks;
 
     writeJsonFile(file, settings);
-    return { path: file, action: 'removed' };
+    const notes = removedFeatureEvents.length > 0
+      ? [`平台同步、开发任务已下掉:已移除 hooks(${removedFeatureEvents.join('/')})`]
+      : [];
+    return { file: { path: file, action: 'removed' }, notes };
   }
 
   /**
@@ -417,15 +449,23 @@ class GenericAgentTarget implements AgentTarget {
 
 /**
  * hook 命令是否指向已不存在的子命令(只会在运行时报错的「死 hook」):
- * pre-0.8 自动同步对(子串匹配,兼容 `npx …` 形式)与 2.0 移除的 `cgraphx prompt-hook`。
+ * pre-0.8 自动同步对(子串匹配,兼容 `npx …` 形式)、2.0 移除的 `cgraphx prompt-hook`,
+ * 以及 2.0.14 下掉的平台同步、开发任务五条子命令(见 REMOVED_FEATURE_HOOK_COMMANDS)。
  */
 function isDeadHookCommand(command: unknown): boolean {
   if (typeof command !== 'string') return false;
   return (
     command.includes('codegraph mark-dirty') ||
     command.includes('codegraph sync-if-dirty') ||
-    command.includes(PROMPT_HOOK_COMMAND)
+    command.includes(PROMPT_HOOK_COMMAND) ||
+    isRemovedFeatureHookCommand(command)
   );
+}
+
+/** 命令是否调已下掉的平台同步、开发任务子命令(完整子命令名匹配,不按前缀)。 */
+function isRemovedFeatureHookCommand(command: unknown): boolean {
+  if (typeof command !== 'string') return false;
+  return REMOVED_FEATURE_HOOK_COMMANDS.some((c) => command.includes(c));
 }
 
 /** 由 agent 描述生成 target。 */

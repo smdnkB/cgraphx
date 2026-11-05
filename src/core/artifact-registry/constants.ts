@@ -29,9 +29,6 @@ export const ARTIFACT_TYPE_KEY_PATTERN = /^[a-z0-9_]{1,64}$/;
 /** 合法依据写法:`spec@` 加 7–40 位十六进制前缀。 */
 export const BASIS_PATTERN = /^spec@([0-9a-fA-F]{7,40})$/;
 
-/** 平台任务编号:`T-<n>`。 */
-export const TASK_VALUE_PATTERN = /^T-\d+$/;
-
 /** 头部扫描窗口:找一级标题、标题后的引用行、html 注释各看这么多行。 */
 export const HEADER_SCAN_LINES = 30;
 

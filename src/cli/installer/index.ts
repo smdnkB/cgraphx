@@ -4,7 +4,7 @@
  * 按 agent 描述为每个选中的 agent(Claude Code / CodeBuddy …)部署模板资产、
  * cgraphx hook 与 statusLine、指引块;项目级的事每个目录只做一次:本地 `.cgraphx/`(知识库)
  * 初始化、docs / db 子系统、问项目名称并把本地旧库并进用户目录(spec:2026-11-05-数据按项目放
- * 用户目录 D25);timeline 与任务绑定 hook 对每个选中 agent 接入。
+ * 用户目录 D25);timeline hook 对每个选中 agent 接入。
  * 安装对象选择见 `agent-steps.ts`(spec §4.1),卸载规则见 `runUninstaller`(spec §5、D31)。
  *
  * Uses @clack/prompts for the interactive UI; `runInstallerWithOptions`
@@ -132,7 +132,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   }
 
   // 顺序固定(D25):① agent 配置 ② 本地 .cgraphx/ ③ 1.x 遗留表 ④ 选子系统 ⑤ docs 索引 ⑥ timeline 等 hook
-  //   ⑦ 问名字、并旧数据 ⑧ db-query 模板。
+  //   ⑦ 问名字、并旧数据、清掉已下掉功能的数据 ⑧ db-query 模板。
   // ① 逐 agent 写配置;单个 agent 失败只 warn,继续其他 agent 与后续步骤。
   installAgentTargets(clack, targets, location);
 
@@ -211,7 +211,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // ⑥ 对本次选中的每个 agent 接入 timeline + 任务绑定 hook;git post-commit 每项目一个
+  // ⑥ 对本次选中的每个 agent 接入 timeline hook;git post-commit 每项目一个
   if (chosen.includes('timeline')) {
     await installAgentHooks(clack, projectRoot, targets);
   }
@@ -220,6 +220,20 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   //   数据位置时会先写上并过记号,之后再并就成了「已经并过」。
   if (initOutcome !== 'skipped-unsafe') {
     await settleProjectData(clack, projectRoot, useDefaults);
+    // ⑦.5 清掉已下掉功能的数据(spec:2026-11-05-下掉web与平台同步 F3 D6):并旧数据之后收尾——timeline 的表
+    //   并走了,剩下的 sync/task 表和运行文件在这里删。删了东西才出 success;什么都没有不出声;失败只警告,
+    //   安装继续。幂等:第二次 install 什么都不删、什么都不出。
+    try {
+      const { cleanupRemovedFeatureData } = await import('../../core/project');
+      const cleanup = cleanupRemovedFeatureData(projectRoot);
+      if (cleanup.kind === 'cleaned') {
+        clack.log.success('平台同步、开发任务的数据已清掉');
+      } else if (cleanup.kind === 'failed') {
+        clack.log.warn(`清理已下掉的功能失败:${cleanup.reason}`);
+      }
+    } catch (err) {
+      clack.log.warn(`清理已下掉的功能失败:${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   // ⑧ db-query 模板(写进数据位置)
@@ -365,6 +379,11 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
       for (const p of r.removedPaths) {
         clack.log.success(`${r.displayName}:已移除 ${tildify(p)}`);
       }
+      // target 回传的 notes 原样打(与 install 路径同一渠道,如死 hook 清理的「已下掉」提示);
+      // unsupported 的 notes 已是上一行「已跳过」的理由,不重复打
+      for (const note of r.notes) {
+        clack.log.info(`${r.displayName}: ${note}`);
+      }
     } else if (r.status === 'not-configured') {
       clack.log.info(`${r.displayName}:未配置 —— 无需移除`);
     } else {
@@ -372,7 +391,7 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     }
   }
 
-  // Step 4:撤销 install 在 agent target 之外做的事。① 逐 agent 移除 timeline / 任务绑定 hook(部分卸载保留
+  // Step 4:撤销 install 在 agent target 之外做的事。① 逐 agent 移除 timeline hook(部分卸载保留
   //   git 钩子;同一仓库还有装着的目录时也留着,gitHookKeptFor 列出那些目录)。
   const cwd = process.cwd();
   const { gitHookKeptFor } = await uninstallAgentHooks(clack, cwd, targets, partial, involved);
@@ -402,7 +421,7 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
 
 /**
  * 本地 `.cgraphx/` 初始化(被折叠进 install 的 `cgraphx init`):建目录,本地库只建知识库(markdown)表——
- * timeline、task、sync 的表建在项目库(spec D8),本地库里有了它们会被当成没并过的旧库。幂等:装过的什么都不做。
+ * timeline 的表建在项目库(spec D8);本地库里有了 `timeline_*`/`task_*`/`sync_*` 任一张表,都会被当成没并过的旧数据。幂等:装过的什么都不做。
  *
  * @returns `initialized`(新建)、`already`(已装过)、`skipped-unsafe`(根像 $HOME / 文件系统根,不在那里建数据目录)。
  */

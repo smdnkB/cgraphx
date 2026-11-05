@@ -32,16 +32,11 @@ import { registerDocsCommands } from '../core/markdown/cli';
 import { registerDbCommands } from '../core/dbquery/cli';
 import { registerTimelineCommands } from '../core/timeline/cli';
 import { registerFeaturesCommands } from '../core/features/cli';
-import { readCachedProjectArtifactTypes } from '../core/sync';
-import { registerTaskCommands } from '../core/task/cli';
-import { registerSyncCommands } from '../core/sync/cli';
 import { registerReportCommands } from '../core/report/cli';
 import { registerReplicaCommands } from '../core/replica/cli';
 import { registerReleaseCommands } from '../core/release/cli';
 import { registerProjectCommands } from '../core/project/cli';
-// 组合根例外(仅此一处):cli/index.ts 作为组装入口可经 web 门面接入
-// `cgraphx web`;src/web/ 自身只依赖 src/core/,不反向依赖 cli。
-import { registerWebCommand } from '../web';
+import { registerLegacyHookCommands } from './legacy-hook-commands';
 
 import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
@@ -170,18 +165,13 @@ function main(): void {
   registerDocsCommands(program);
   registerDbCommands(program);
   registerTimelineCommands(program);
-  registerFeaturesCommands(program, {
-    readProjectArtifactTypes: readCachedProjectArtifactTypes,
-  });
-  registerTaskCommands(program);
-  registerSyncCommands(program);
+  registerFeaturesCommands(program);
   registerReportCommands(program);
   registerReplicaCommands(program);
   registerReleaseCommands(program);
   registerProjectCommands(program);
-
-  // web — 本地只读浏览服务(顶层命令,经 web 门面注册;组合根例外见上方 import)。
-  registerWebCommand(program);
+  // 已下掉功能的五个兼容空命令(隐藏,读完 stdin 不做任何事)
+  registerLegacyHookCommands(program);
 
   // ===========================================================================
   // (init / status / uninit were folded into install / uninstall — see the

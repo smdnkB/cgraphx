@@ -5,7 +5,7 @@
  * 副本登记 `replicas/`、副本里指回主目录的 `shared` 链接,以及并过记号与项目名称所在的 `project.json`。目录名
  * 遵从 `CGRAPHX_DIR` 环境变量覆盖。
  *
- * timeline、task、sync 的数据放在哪(没并过的旧库,或用户目录里的项目目录)由 `data-location.ts` 定,本文件
+ * timeline 的数据放在哪(没并过的旧库,或用户目录里的项目目录)由 `data-location.ts` 定,本文件
  * 不管,也不解析 shared 链接(副本和主目录的关系归 replica 子系统)。
  */
 

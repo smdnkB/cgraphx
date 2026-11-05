@@ -173,6 +173,20 @@ function assertBranchFree(mainRoot: string, branch: string): void {
 }
 
 /**
+ * spec:2026-11-05-下掉web与平台同步 D13(F5③):同一个 feature-id 已有在用的副本(present:没删、目录还在)
+ * → 一个需求只开一个副本,报 feature_has_replica,什么都不建;要并行先把需求拆成几个需求目录。
+ * 已删(removed)的 listReplicas 默认就不返回,目录已不在(missing)的过不了 isDirectory,都不拦。
+ */
+function assertFeatureHasNoReplica(mainRoot: string, featureId: string): void {
+  const existing = listReplicas(mainRoot).find((e) => e.featureId === featureId && isDirectory(e.path));
+  if (existing === undefined) return;
+  throw new ReplicaError(
+    'feature_has_replica',
+    `这个需求已经有副本 ${existing.name};一个需求只开一个副本,要并行先把需求拆成几个需求目录`,
+  );
+}
+
+/**
  * D22:副本目录名已登记给别的需求(副本在用、已删都算)→ name_taken。登记按目录名一个文件,照开会覆盖
  * 旧需求的登记,旧会话重新算归属时就算到新需求头上;同一个需求删了副本再开照旧。
  */
@@ -452,7 +466,8 @@ function filesToMove(mainRoot: string, kept: readonly string[]): string[] {
 // ---------- 入口 ----------
 
 /**
- * 在主目录旁开出需求副本并登记。这个需求已有在用、目录还在的副本 → 原样返回它(created: false)。
+ * 在主目录旁开出需求副本并登记。同一个 feature-id 已有在用副本(present)→ 报 feature_has_replica,
+ * 不开第二个(spec:2026-11-05-下掉web与平台同步 D13,一个需求只开一个副本);已删、目录已不在的照常另开。
  */
 export function createReplica(projectRoot: string, opts: CreateReplicaOptions): CreateReplicaResult {
   assertPlatform();
@@ -460,15 +475,11 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
   const { realRoot, baseBranch } = assertMainDir(projectRoot);
   const mainRoot = path.resolve(projectRoot);
 
-  const existing = listReplicas(mainRoot).find(
-    (e) => e.featureId === opts.featureId && isDirectory(e.path),
-  );
-  if (existing !== undefined) return { ...existing, created: false, movedFiles: existing.movedFiles ?? [], warnings: [] };
-
   assertCleanMain(mainRoot);
   assertBranchFree(mainRoot, opts.branch);
   const name = `${path.basename(realRoot)}${REPLICA_NAME_SEPARATOR}${opts.prefix}`;
   const target = path.join(path.dirname(realRoot), name);
+  assertFeatureHasNoReplica(mainRoot, opts.featureId);
   assertNameFree(mainRoot, name, opts.featureId);
   assertTargetFree(mainRoot, target);
   const baseCommit = gitValue(realRoot, ['rev-parse', '--verify', '-q', 'HEAD']);
@@ -507,7 +518,6 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
   const moved = moveOutOfMain(realRoot, opts.featureId, kept); // ⑥
   return {
     ...entry,
-    created: true,
     movedFiles: moved.movedFiles,
     warnings: [...warnings, ...moved.warnings],
   };

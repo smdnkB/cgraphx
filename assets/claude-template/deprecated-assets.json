@@ -41,6 +41,8 @@
     "skills/developer-timeline",
     "skills/iboc-check",
     "skills/visual-explain",
+    "skills/dev-handoff",
+    "agents/task-history",
     "commands/end.md"
   ]
 }

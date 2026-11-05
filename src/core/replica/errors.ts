@@ -6,7 +6,7 @@
  * 非 ReplicaError → 1。用户可修复的错误,消息带修复提示。
  */
 
-/** C-5 的十个 code。 */
+/** 副本流程的十一个 code(前十个来自开副本 plan C-5;feature_has_replica 来自 2026-11-05-下掉web与平台同步 spec D13)。 */
 export const REPLICA_ERROR_CODES = [
   'invalid_args',
   'not_main_dir',
@@ -14,6 +14,7 @@ export const REPLICA_ERROR_CODES = [
   'no_cow',
   'target_exists',
   'name_taken',
+  'feature_has_replica',
   'unsupported_platform',
   'dirty',
   'not_found',

@@ -26,11 +26,6 @@ import type {
   FeatureEntry,
 } from './types';
 
-/** 组合根可注入的读取函数(本项目类型表缓存等)。 */
-export interface FeaturesCommandDeps {
-  readProjectArtifactTypes?: (projectRoot: string) => readonly string[] | null;
-}
-
 /** 终端显示宽度:CJK / 全角字符按 2 列计,其余 1 列(表格对齐用)。 */
 function displayWidth(s: string): number {
   let w = 0;
@@ -118,7 +113,7 @@ function basisLabel(state: BasisState): string {
   }
 }
 
-/** show 的文本输出(四段:概要 / 产物 / 平台环节 / 其他文件)。 */
+/** show 的文本输出(四段:概要 / 产物 / 需求环节 / 其他文件)。 */
 function renderShow(detail: FeatureDetail): string {
   const labelWidth = 12;
   const summary = (label: string, value: string): string =>
@@ -128,9 +123,6 @@ function renderShow(detail: FeatureDetail): string {
     summary('feature-id', detail.featureId),
     summary('负责人', detail.owner ?? '-'),
   ];
-  if (detail.task !== null) {
-    lines.push(summary('任务', detail.task));
-  }
   lines.push(summary('阶段', detail.stage ?? '-'));
   lines.push(summary('spec 指纹', detail.specFingerprint ?? '无主 spec'));
 
@@ -154,7 +146,7 @@ function renderShow(detail: FeatureDetail): string {
     }
   }
 
-  lines.push('', '平台环节(按默认类型表;任务类型按「需求开发」估)');
+  lines.push('', '需求环节(按默认类型表)');
   for (const phase of detail.phases) {
     let status: string;
     if (phase.paths.length > 0) {
@@ -166,13 +158,7 @@ function renderShow(detail: FeatureDetail): string {
     }
     lines.push(`  ${padEnd(phase.name, 10)}${status}`);
   }
-  lines.push('  实现、知识经验:由 commit 和会话承载,以平台为准');
-  if (detail.customTypes.length > 0) {
-    lines.push(
-      '  项目自定义类型(环节以平台配置为准):' +
-        detail.customTypes.map((item) => item.type).join('、'),
-    );
-  }
+  lines.push('  实现、知识经验:由提交和会话承载,不按产物算');
 
   lines.push('', '其他文件');
   if (detail.otherFiles.length === 0) {
@@ -208,10 +194,7 @@ function renderCheck(report: CheckReport): string {
 }
 
 /** 把 `features` 命令组挂到 commander 程序上。主 CLI 调用一次。 */
-export function registerFeaturesCommands(
-  program: Command,
-  deps: FeaturesCommandDeps = {},
-): void {
+export function registerFeaturesCommands(program: Command): void {
   const features = program
     .command('features')
     .description(
@@ -334,7 +317,6 @@ export function registerFeaturesCommands(
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const report = checkFeatures(projectRoot, targets ?? [], {
-          projectTypes: deps.readProjectArtifactTypes?.(projectRoot) ?? null,
           staged: options.staged === true,
         });
         process.stdout.write(

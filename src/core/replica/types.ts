@@ -78,9 +78,7 @@ export interface CreateReplicaOptions {
 }
 
 export interface CreateReplicaResult extends ReplicaEntry {
-  /** false:这个需求的副本已经有了,没重建 */
-  created: boolean;
-  /** 从主目录移进副本的文件(仓库相对路径);副本已在(created 为 false)时照登记,以前的登记没有时为 [] */
+  /** 从主目录移进副本的文件(仓库相对路径);以前的登记没有时为 [] */
   movedFiles: string[];
   warnings: string[];
 }

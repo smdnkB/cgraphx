@@ -42,8 +42,6 @@ export interface ArtifactHeader {
   typeRaw: string | null;
   /** 负责人;空值记 null。 */
   owner: string | null;
-  /** 任务编号;空值记 null。 */
-  task: string | null;
   /** 依据(如 spec@3f9a1c2);空值记 null。 */
   basis: string | null;
 }

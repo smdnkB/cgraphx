@@ -22,9 +22,16 @@ import { sanitizeToolArgs } from './tool-args';
 import { WRITE_TOOLS_WHITELIST } from './constants';
 import { readCurrentTurnId, writeCurrentTurn, removeTurnState } from './turn-state';
 import type { TimelineEventInput } from './types';
-import { DEFAULT_AGENT_ID, requireAgentProfile, type AgentId } from '../agents';
-import { hasTaskSessionStartHook, skillVersionNotice } from '../skill-version';
+import {
+  agentConfigDir,
+  DEFAULT_AGENT_ID,
+  requireAgentProfile,
+  type AgentId,
+  type AgentProfile,
+} from '../agents';
+import { skillVersionNotice } from '../skill-version';
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 export { gitCommitHook, readGitCommitInfo, type GitCommitInfo, type GitDiffStats } from './git-commit';
@@ -237,10 +244,11 @@ export async function stopHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void>
  * 会话的根按开始的目录(payload.cwd)认,写进会话登记(已在就沿用:resume、compact 是同一个会话 id),
  * 同一会话之后的 hook 都按登记记(spec D6);记完顺手删掉 7 天没改过的登记。
  *
- * 该 agent 的 settings 里没接 task 会话开始 hook(只接了 timeline hook 的早期项目)时,
- * 项目 skill 版本落后的提示由这里单独输出一段(skill版本落后提示 spec D6);接了 task hook 时
- * 提示跟会话 id 走 task hook。按登记补装 git 钩子片段补不上时,原因也由这里输出(spec D33⑥);
- * 两段合成一条 additionalContext,都没有时 stdout 为空。这两段照旧按 payload.cwd 找,事件记不记都输出。
+ * 之后的会话开始提示全由这里出,每条独立 try/catch(哪条判断出错哪条不出,其余照出):
+ *   ① skill 版本落后:压缩后重开不出,其余按版本比较(skill版本落后提示 spec D5–D8);
+ *   ② 自动记忆去向:仅 Claude Code 会话、本人本地设置 `autoMemoryEnabled === false` 时出,压缩后重开也出;
+ *   ③ 按登记补回 git 钩子片段,补不上的原因(spec D33⑥)。
+ * 多条用空行连成一条 additionalContext,都没有时 stdout 为空。这些提示照旧按 payload.cwd 找,事件记不记都输出。
  */
 export async function sessionStartHook(agent: AgentId = DEFAULT_AGENT_ID): Promise<void> {
   // runHook 不提供写库后回调;读到 payload 时记下 cwd 与 source,runHook 返回后再检查版本。
@@ -262,7 +270,11 @@ export async function sessionStartHook(agent: AgentId = DEFAULT_AGENT_ID): Promi
   if (started) {
     cleanupSessionRegistrations();
     const { cwd, source } = started;
-    const notices = [skillVersionNoticeWithoutTaskHook(agent, cwd, source), ...repairGitHookSnippets(cwd)];
+    const notices = [
+      skillVersionNoticeSafe(agent, cwd, source),
+      autoMemoryOffNotice(agent, cwd),
+      ...repairGitHookSnippets(cwd),
+    ];
     const text = notices.filter((n): n is string => n !== null).join('\n\n');
     if (text !== '') {
       process.stdout.write(
@@ -289,12 +301,11 @@ function repairGitHookSnippets(cwd: string | undefined): string[] {
   }
 }
 
-/** 没接 task 会话开始 hook 时的版本落后提示;settings 读不出、无需提示或任何异常都 → null。 */
-function skillVersionNoticeWithoutTaskHook(agent: AgentId, cwd: string | undefined, source: string | undefined): string | null {
+/** 版本落后提示(直接调 skill-version 门面);无需提示或任何异常都 → null,不拖累其他提示。 */
+function skillVersionNoticeSafe(agent: AgentId, cwd: string | undefined, source: string | undefined): string | null {
   try {
     const profile = requireAgentProfile(agent);
     const projectRoot = resolveProjectRoot(cwd ?? process.cwd());
-    if (hasTaskSessionStartHook(projectRoot, profile) !== false) return null;
     return skillVersionNotice(projectRoot, profile, source);
   } catch (err) {
     process.stderr.write(`[timeline] skill version notice failed: ${err instanceof Error ? err.message : String(err)}\n`);
@@ -302,9 +313,49 @@ function skillVersionNoticeWithoutTaskHook(agent: AgentId, cwd: string | undefin
   }
 }
 
+/** Claude Code 本人的本地设置文件(不签入),`autoMemoryEnabled` 写在这里。 */
+const CLAUDE_LOCAL_SETTINGS_FILE = 'settings.local.json';
+
+/**
+ * 本项目是否关了 Claude Code 自动记忆:只看本人本地设置里 `autoMemoryEnabled` 是否为 false;
+ * 其他 agent、文件不存在、读不出或不是 JSON 对象一律按没关处理。
+ */
+function isAutoMemoryOff(projectRoot: string, profile: AgentProfile): boolean {
+  if (profile.id !== DEFAULT_AGENT_ID) return false;
+  try {
+    const file = path.join(agentConfigDir(projectRoot, profile), CLAUDE_LOCAL_SETTINGS_FILE);
+    const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    return (parsed as { autoMemoryEnabled?: unknown }).autoMemoryEnabled === false;
+  } catch {
+    return false;
+  }
+}
+
+/** 关了自动记忆以后,用户说「以后都这样做」时先问去向;只讲去向,不提还有没迁的记忆。 */
+function autoMemoryOffContext(): string {
+  return (
+    '本项目已关 Claude Code 自动记忆:用户要你以后都照某个做法来时,先问记到哪——' +
+    '知识库(项目里的决策、规则、教训,走 /knowledge-write)/ 项目约定(每轮都要守的,写进项目根目录 CLAUDE.md)/ ' +
+    '你个人的设置(只关于本人的偏好,写进 ~/.claude/CLAUDE.md)。'
+  );
+}
+
+/** 自动记忆去向提示:仅 Claude Code 会话且本人关了自动记忆时给出原文;不看压缩,任何异常 → null。 */
+function autoMemoryOffNotice(agent: AgentId, cwd: string | undefined): string | null {
+  try {
+    const profile = requireAgentProfile(agent);
+    const projectRoot = resolveProjectRoot(cwd ?? process.cwd());
+    return isAutoMemoryOff(projectRoot, profile) ? autoMemoryOffContext() : null;
+  } catch (err) {
+    process.stderr.write(`[timeline] auto memory notice failed: ${err instanceof Error ? err.message : String(err)}\n`);
+    return null;
+  }
+}
+
 /**
  * 会话结束(SessionEnd):记录 session_end 事件(metadata.reason 规则同 source),
- * 事件写入后删除本会话的 turn 状态文件(按会话的根找)。会话登记不删:同时触发的 task、sync hook
+ * 事件写入后删除本会话的 turn 状态文件(按会话的根找)。会话登记不删:同一会话之后的时间线 hook
  * 还要读,7 天后由会话开始 hook 清理。开关关闭、无 payload,或这一条不记(认不出会话的根)时
  * runHook 不调 buildEvent,此时也不碰 turn 文件。
  */
