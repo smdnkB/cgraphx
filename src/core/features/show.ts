@@ -24,7 +24,6 @@ import {
   findMainSpecRel,
   listFeatureFiles,
   readFeatureOwner,
-  readFeatureTask,
 } from './scanner';
 import type {
   BasisState,
@@ -34,7 +33,7 @@ import type {
   FeaturePhaseRow,
 } from './types';
 
-/** 平台环节行(顺序即展示顺序);knowledge 只进产物列表、不进环节。 */
+/** 需求环节行(顺序即展示顺序);knowledge 只进产物列表、不进环节。 */
 const PHASE_DEFS: ReadonlyArray<{
   phase: FeaturePhase;
   name: string;
@@ -128,7 +127,6 @@ export function showFeature(projectRoot: string, query: string): FeatureDetail {
   const artifacts: FeatureArtifactRow[] = [];
   const otherFiles: string[] = [];
   const phasePaths = new Map<FeaturePhase, string[]>();
-  const customTypes = new Map<string, string[]>();
 
   for (const projectRelPath of files) {
     const innerPath = innerPathOf(projectRelPath);
@@ -147,17 +145,12 @@ export function showFeature(projectRoot: string, query: string): FeatureDetail {
       basis: basisStateOf(identity.header, fingerprint),
     });
 
+    // 非内置类型只进产物列表,不进需求环节。
     if (builtin === undefined) {
-      const paths = customTypes.get(identity.type);
-      if (paths === undefined) {
-        customTypes.set(identity.type, [innerPath]);
-      } else {
-        paths.push(innerPath);
-      }
       continue;
     }
 
-    // 本地专用类型(handoff)与 knowledge 类不进五个平台环节。
+    // 本地专用类型(handoff)与 knowledge 类不进五个需求环节。
     if (
       builtin.minTier !== null &&
       builtin.defaultPhase !== null &&
@@ -183,13 +176,11 @@ export function showFeature(projectRoot: string, query: string): FeatureDetail {
     featureId,
     path: featureDirPosix,
     owner: readFeatureOwner(projectRoot, featureId),
-    task: readFeatureTask(projectRoot, featureId),
     stage: deriveFeatureStage(projectRoot, featureId),
     mainSpec: mainSpecRel === null ? null : innerPathOf(mainSpecRel),
     specFingerprint: fingerprint === null ? null : fingerprint.slice(0, 7),
     artifacts,
     phases,
-    customTypes: Array.from(customTypes, ([type, paths]) => ({ type, paths })),
     otherFiles,
   };
 }

@@ -26,9 +26,7 @@ export type {
 } from './types';
 export {
   scanFeatures,
-  readFeatureTask,
   readFeatureOwner,
-  scanFeatureTasks,
   FEATURES_DIR,
 } from './scanner';
 export { parseFeatureId } from './feature-id';
