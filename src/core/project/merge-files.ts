@@ -3,18 +3,17 @@
  *
  * - 锁:`<项目目录>/merge.lock`,同一项目同一时间只有一个目录在并;`wx` 独占创建,内容 `{"pid":…,"startedAt":…}`,
  *   pid 不存活或 mtime 超过 2 小时算陈旧,删掉后接管(规则同 sync.lock)
- * - 备份:在旧库写事务里把本地 `.cgraphx/` 的库文件、平台连接、db-query 配置与日志、轮次记录照原名复制进
+ * - 备份:在旧库写事务里把本地 `.cgraphx/` 的库文件、任务接口配置、db-query 配置与日志、轮次记录照原名复制进
  *   `<项目目录>/backups/<时间>-<目录名>/`;写事务挡住同目录的 hook,复制出来的库文件是一致的
- * - 文件并:`db-profiles.json`、`db-query.log`、`turns/`(`task-source.json` 归 sync 并);每一类旧目录里没有就什么
- *   都不做、不提示。再装一次时结果不变:配置逐字相同不管,日志已追加过的整段不再追加,轮次记录同名的不覆盖
- * - 并完删本地的平台连接、db-query 配置与日志、轮次记录(备份里有)
+ * - 文件并:`db-profiles.json`、`db-query.log`、`turns/`(`task-source.json` 不再并入,残留由升级清理删);每一类旧
+ *   目录里没有就什么都不做、不提示。再装一次时结果不变:配置逐字相同不管,日志已追加过的整段不再追加,轮次记录同名的不覆盖
+ * - 并完删本地的 db-query 配置与日志、轮次记录、残留的任务接口配置(备份里有)
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { DATABASE_FILENAME, type SqliteDatabase } from '../db';
-import { TASK_SOURCE_CONFIG_FILENAME } from '../task';
 import { TURNS_DIRNAME } from '../timeline';
 import { BACKUPS_DIRNAME } from '../user-data-dir';
 import {
@@ -28,7 +27,10 @@ import {
   PRIVATE_FILE_MODE,
 } from './constants';
 
-/** 备份里照原名放的文件(在的才放):库文件三件、平台连接、db-query 连接配置与日志。 */
+/** 任务接口配置文件名(task 子系统已下掉,名字保留:备份照旧、残留由升级清理删)。 */
+const TASK_SOURCE_CONFIG_FILENAME = 'task-source.json';
+
+/** 备份里照原名放的文件(在的才放):库文件三件、任务接口配置、db-query 连接配置与日志。 */
 const BACKUP_FILENAMES = [
   DATABASE_FILENAME,
   `${DATABASE_FILENAME}-wal`,
@@ -313,7 +315,7 @@ function isQueryLogFile(name: string): boolean {
   return name.startsWith(prefix) && /^[0-9]+$/.test(name.slice(prefix.length));
 }
 
-/** 旧库提交之后:删本地 `.cgraphx/` 里在的平台连接、db-query 配置与日志(连同轮转文件)、轮次记录;删不掉的不管。 */
+/** 旧库提交之后:删本地 `.cgraphx/` 里在的任务接口配置(残留)、db-query 配置与日志(连同轮转文件)、轮次记录;删不掉的不管。 */
 export function removeMergedLocalFiles(localDir: string): void {
   removeQuietly(path.join(localDir, TASK_SOURCE_CONFIG_FILENAME));
   removeQuietly(path.join(localDir, DB_PROFILES_FILENAME));

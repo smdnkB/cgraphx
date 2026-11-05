@@ -1,18 +1,19 @@
 /**
  * 并旧数据进用户目录(spec:2026-11-05-数据按项目放用户目录 D25~D30;F4)
  *
- * 升级前装过的目录,timeline、task、sync 的数据在本地 `.cgraphx/cgraphx.db`(旧库)。install 时把它并进用户目录里这个
- * 项目的项目库,只并一次(并过记号:本地 `.cgraphx/project.json` 的 mergedAt),并之前先备份。顺序固定:
+ * 升级前装过的目录,timeline 的数据在本地 `.cgraphx/cgraphx.db`(旧库;task、sync 子系统已下掉,它们的表不并,
+ * 随删旧表一起删)。install 时把它并进用户目录里这个项目的项目库,只并一次(并过记号:本地
+ * `.cgraphx/project.json` 的 mergedAt),并之前先备份。顺序固定:
  *
- * 1. 认根(装过的才并)、认标识;已经并过 → already;没有旧表 → 写记号,nothing。这两种都补齐项目目录和三套 schema
+ * 1. 认根(装过的才并)、认标识;已经并过 → already;没有旧表 → 写记号,nothing。这两种都补齐项目目录和 schema
  *    (项目数据被 project remove 删过的,重装时建回来)
  * 2. 拿项目目录的 merge.lock(同一项目同一时间只有一个目录在并),拿到后再看一次记号
  * 3. 备份:旧库写事务里复制本地文件(备份失败就不并)
  * 4. 第 ① 段:不加锁,把旧库现有的事件分批并进项目库(绝大多数事件在这一段并完)
- * 5. 第 ② 段:旧库写事务里并尾巴、task 表、sync 表与平台连接、文件,写记号,删旧表,提交。记号在提交之前写好:等写锁的
+ * 5. 第 ② 段:旧库写事务里并尾巴与 timeline_roots、文件,写记号,删旧表(含 task、sync 表),提交。记号在提交之前写好:等写锁的
  *    hook 拿到锁后在写事务里看到记号,改写项目库。任何一步失败:撤掉记号、回滚旧库;项目库里已写进去的保留,再装一次
- *    靠事件去重、task 与 sync 按键对上,结果和一次并完相同
- * 6. 提交之后删本地的平台连接、db-query 配置与日志、轮次记录(备份里有),旧库试一次 VACUUM
+ *    靠事件去重,结果和一次并完相同
+ * 6. 提交之后删本地的 db-query 配置与日志、轮次记录(备份里有),旧库试一次 VACUUM
  *
  * mergeLegacyData 不抛:任何失败返回 failed(reason 为原因),由 install 打 M3。
  */
@@ -31,8 +32,6 @@ import { DATABASE_FILENAME, DatabaseConnection, getLocalDatabasePath, type Sqlit
 import { getCodeGraphDir, isInitialized } from '../directory';
 import { identityOfRoot, projectDisplayName } from '../project-identity';
 import { listReplicas } from '../replica';
-import { ensureSyncSchema, mergeSyncTables } from '../sync';
-import { ensureTaskSchema, mergeTaskTables } from '../task';
 import { createTimelineMerger, ensureTimelineSchema, maxTimelineEventId, type TimelineMerger } from '../timeline';
 import { ensureProjectDir } from '../user-data-dir';
 import {
@@ -99,14 +98,12 @@ function unavailableMessage(root: string, unavailable: DataUnavailable): string 
   });
 }
 
-/** 项目库的三套 schema:timeline、task、sync。 */
+/** 项目库的 schema:timeline。 */
 function applyProjectSchemas(db: SqliteDatabase): void {
   ensureTimelineSchema(db);
-  ensureTaskSchema(db);
-  ensureSyncSchema(db);
 }
 
-/** 打开项目目录里的库,补齐三套 schema,关库。 */
+/** 打开项目目录里的库,补齐 schema,关库。 */
 function ensureProjectSchemas(dir: string): void {
   const conn = DatabaseConnection.open(path.join(dir, DATABASE_FILENAME));
   try {
@@ -189,29 +186,16 @@ interface TailInput extends MergeTarget {
 }
 
 /**
- * 第 ② 段(D27):旧库写事务里并尾巴与 timeline_roots、task 表、sync 表与平台连接、文件,写记号,删旧表,提交。
+ * 第 ② 段(D27):旧库写事务里并尾巴与 timeline_roots、文件,写记号,删旧表(含 task、sync 表),提交。
  * 返回 M2 提示。失败时先撤记号再回滚(回滚后等写锁的 hook 看到的是没有记号),再抛出。
  */
 function mergeTailLocked(input: TailInput): string[] {
-  const { root, oldDb, projectDb, merger } = input;
-  const dirName = path.basename(root);
+  const { root, oldDb, merger } = input;
   let marked = false;
   oldDb.exec('BEGIN IMMEDIATE');
   try {
     merger.mergeTail(input.upTo, input.attributionRoots);
-    mergeTaskTables(oldDb, projectDb, merger.mapping);
-    const notices = [
-      ...mergeSyncTables({
-        oldDb,
-        projectDb,
-        mapping: merger.mapping,
-        mergingRoot: root,
-        oldDataDir: input.localDir,
-        projectDataDir: input.projectDir,
-        dirName,
-      }).notices,
-    ];
-    notices.push(...mergeLegacyFiles(input.localDir, input.projectDir, dirName));
+    const notices = mergeLegacyFiles(input.localDir, input.projectDir, path.basename(root));
     updateLocalProjectJson(root, { mergedAt: new Date().toISOString(), mergedInto: input.projectDirName });
     marked = true;
     dropLegacyTables(oldDb);
@@ -234,7 +218,7 @@ function mergeLocked(target: MergeTarget): MergeOutcome {
     const oldDb = oldConn.getDb();
     backupLegacyData(oldDb, localDir, projectDir, path.basename(root));
 
-    // 旧库补 agent 列、自动消息改记;项目库补齐三套 schema
+    // 旧库补 agent 列、自动消息改记;项目库补齐 schema
     ensureTimelineSchema(oldDb);
     projectConn = DatabaseConnection.open(path.join(projectDir, DATABASE_FILENAME));
     const projectDb = projectConn.getDb();

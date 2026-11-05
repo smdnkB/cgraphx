@@ -4,7 +4,7 @@
  * 按 agent 描述为每个选中的 agent(Claude Code / CodeBuddy …)部署模板资产、
  * cgraphx hook 与 statusLine、指引块;项目级的事每个目录只做一次:本地 `.cgraphx/`(知识库)
  * 初始化、docs / db 子系统、问项目名称并把本地旧库并进用户目录(spec:2026-11-05-数据按项目放
- * 用户目录 D25);timeline 与任务绑定 hook 对每个选中 agent 接入。
+ * 用户目录 D25);timeline hook 对每个选中 agent 接入。
  * 安装对象选择见 `agent-steps.ts`(spec §4.1),卸载规则见 `runUninstaller`(spec §5、D31)。
  *
  * Uses @clack/prompts for the interactive UI; `runInstallerWithOptions`
@@ -211,7 +211,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // ⑥ 对本次选中的每个 agent 接入 timeline + 任务绑定 hook;git post-commit 每项目一个
+  // ⑥ 对本次选中的每个 agent 接入 timeline hook;git post-commit 每项目一个
   if (chosen.includes('timeline')) {
     await installAgentHooks(clack, projectRoot, targets);
   }
@@ -372,7 +372,7 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     }
   }
 
-  // Step 4:撤销 install 在 agent target 之外做的事。① 逐 agent 移除 timeline / 任务绑定 hook(部分卸载保留
+  // Step 4:撤销 install 在 agent target 之外做的事。① 逐 agent 移除 timeline hook(部分卸载保留
   //   git 钩子;同一仓库还有装着的目录时也留着,gitHookKeptFor 列出那些目录)。
   const cwd = process.cwd();
   const { gitHookKeptFor } = await uninstallAgentHooks(clack, cwd, targets, partial, involved);
@@ -402,7 +402,7 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
 
 /**
  * 本地 `.cgraphx/` 初始化(被折叠进 install 的 `cgraphx init`):建目录,本地库只建知识库(markdown)表——
- * timeline、task、sync 的表建在项目库(spec D8),本地库里有了它们会被当成没并过的旧库。幂等:装过的什么都不做。
+ * timeline 的表建在项目库(spec D8);本地库里有了 `timeline_*`/`task_*`/`sync_*` 任一张表,都会被当成没并过的旧数据。幂等:装过的什么都不做。
  *
  * @returns `initialized`(新建)、`already`(已装过)、`skipped-unsafe`(根像 $HOME / 文件系统根,不在那里建数据目录)。
  */

@@ -1,22 +1,21 @@
 /**
  * skill-version 门面:各 agent 配置目录里的版本记录(spec D1),以及会话开始时的落后提示(spec D5–D8)。
  *
- * 调用方:task / timeline 的会话开始 hook 读记录、出提示;cli 安装器写、删记录。
- * 只依赖 agents 门面,不依赖其它 core 子系统,也不依赖 cli / web(spec D9);
+ * 调用方:timeline 的会话开始 hook 读记录、出提示;cli 安装器写、删记录。
+ * 只依赖 agents 门面,不依赖其它 core 子系统,也不依赖 cli(spec D9);
  * 项目根由调用方按各自的规则解析后传入。
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { agentConfigDir, agentSettingsPath, type AgentProfile } from '../agents';
+import { agentConfigDir, type AgentProfile } from '../agents';
 import {
   FIRST_RECORDED_VERSION,
   NOTICE_PREFIX,
   NOTICE_UPDATE_HINT,
   SILENT_SOURCES,
   SKILL_VERSION_FILE,
-  TASK_SESSION_START_COMMAND,
 } from './constants';
 import { compareVersions, parseSemver } from './semver';
 
@@ -101,29 +100,4 @@ export function skillVersionNotice(projectRoot: string, profile: AgentProfile, s
   } catch {
     return null;
   }
-}
-
-/**
- * 该 agent 的 settings 里是否接了 task 的会话开始 hook(spec D6)。settings 读不出或不是 JSON 对象返回 null。
- * 按命令子串判断:命令末尾可能带 `--agent <id>` 与旧版二进制容错后缀。
- */
-export function hasTaskSessionStartHook(projectRoot: string, profile: AgentProfile): boolean | null {
-  let settings: unknown;
-  try {
-    settings = JSON.parse(fs.readFileSync(agentSettingsPath(projectRoot, profile), 'utf-8'));
-  } catch {
-    return null;
-  }
-  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) return null;
-  const hooks = (settings as { hooks?: unknown }).hooks;
-  if (hooks === null || typeof hooks !== 'object') return false;
-  const groups = (hooks as { SessionStart?: unknown }).SessionStart;
-  if (!Array.isArray(groups)) return false;
-  return groups.some((group: unknown) => {
-    const entries = group !== null && typeof group === 'object' ? (group as { hooks?: unknown }).hooks : undefined;
-    return Array.isArray(entries) && entries.some((entry: unknown) => {
-      const command = entry !== null && typeof entry === 'object' ? (entry as { command?: unknown }).command : undefined;
-      return typeof command === 'string' && command.includes(TASK_SESSION_START_COMMAND);
-    });
-  });
 }

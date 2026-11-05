@@ -11,7 +11,6 @@ import * as path from 'node:path';
 
 import { isInitialized } from '../directory';
 import { projectDisplayName } from '../project-identity';
-import { TASK_SOURCE_CONFIG_FILENAME } from '../task';
 import { BACKUPS_DIRNAME, projectsRoot, readIdentityFile } from '../user-data-dir';
 import { DB_PROFILES_FILENAME, REMOVE_MAX_RETRIES } from './constants';
 import { ProjectError } from './errors';
@@ -19,8 +18,8 @@ import { backupsSummary, readSummaryQuietly } from './list';
 import { displayPath } from './show';
 import type { RemovalPlan } from './types';
 
-/** 预览里列的配置文件(在的才列)。 */
-const CONFIG_FILENAMES = [TASK_SOURCE_CONFIG_FILENAME, DB_PROFILES_FILENAME] as const;
+/** 预览里列的配置文件(在的才列)。项目里的残留 `task-source.json` 由升级清理删,不列。 */
+const CONFIG_FILENAMES = [DB_PROFILES_FILENAME] as const;
 
 /** 删目录:碰上正在写的 hook(目录非空、文件被占)重试几次。 */
 const RM_OPTIONS: fs.RmOptions = { recursive: true, force: true, maxRetries: REMOVE_MAX_RETRIES };

@@ -12,6 +12,3 @@ export const NOTICE_UPDATE_HINT = '运行 cgraphx install -y 更新(只覆盖 cg
 
 /** 不提示的会话开始类型:上下文压缩发生在会话中途(spec D7)。 */
 export const SILENT_SOURCES: ReadonlySet<string> = new Set(['compact']);
-
-/** settings 中判定「已接 task 会话开始 hook」的命令子串(spec D6)。 */
-export const TASK_SESSION_START_COMMAND = 'cgraphx task-session-start-hook';

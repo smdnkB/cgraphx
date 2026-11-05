@@ -18,7 +18,6 @@ import { validateFrontmatter } from './validator';
 import { MarkdownQuery } from './query';
 import { openMarkdownDb } from './schema-bootstrap';
 import { resolveProjectRoot } from '../directory';
-import { recordReferenceHit } from '../sync';
 import type {
   ConceptSummary,
   DedupResponse,
@@ -151,7 +150,7 @@ export function registerDocsCommands(program: Command): void {
     .option('--q <keyword>', 'Full-text keyword (matches title + summary)')
     .option('--limit <n>', 'Max results (default 20, max 100)', '20')
     .option('--json', 'Output JSON')
-    .option('--session <id>', 'Session id for reference recording (defaults to host env)')
+    .option('--session <id>', '已不起作用,只为兼容旧用法保留')
     .action(
       async (
         pathArg: string | undefined,
@@ -184,11 +183,6 @@ export function registerDocsCommands(program: Command): void {
             process.stdout.write(JSON.stringify(results, null, 2) + '\n');
           } else {
             process.stdout.write(formatFindResults(results));
-          }
-          // 精确参考:按概念检索且命中(结果 concepts 含完全相同的概念名)才记录;不影响输出
-          const concept = options.concept;
-          if (concept && results.some(r => r.concepts.includes(concept))) {
-            recordReferenceHit(projectRoot, { kind: 'concept', value: concept, sessionId: options.session });
           }
         } catch (err) {
           handleQueryError(err);
@@ -336,7 +330,7 @@ export function registerDocsCommands(program: Command): void {
     .description('Show metadata + summary for a document (--body prints the full body)')
     .option('--json', 'Output JSON')
     .option('--body', 'Print the full document body (frontmatter stripped)')
-    .option('--session <id>', 'Session id for reference recording (defaults to host env)')
+    .option('--session <id>', '已不起作用,只为兼容旧用法保留')
     .action(
       async (
         docIdOrPath: string,
@@ -409,13 +403,13 @@ export function registerDocsCommands(program: Command): void {
 // ----- helpers -----------------------------------------------------------
 
 /**
- * `docs show --body`:读文档原文去掉 frontmatter 后输出,成功后记为本会话参考(kind=file)。
- * 读文件失败 → stderr 提示、退出码 1、不记录。
+ * `docs show --body`:读文档原文去掉 frontmatter 后输出。
+ * 读文件失败 → stderr 提示、退出码 1。
  */
 function writeDocumentBody(
   projectRoot: string,
   detail: DocumentDetail,
-  options: { json?: boolean; session?: string },
+  options: { json?: boolean },
 ): void {
   let body: string;
   try {
@@ -431,7 +425,6 @@ function writeDocumentBody(
     const text = body.endsWith('\n') ? body : body + '\n';
     process.stdout.write(`# ${detail.title}\n> path: ${detail.path}\n\n${text}`);
   }
-  recordReferenceHit(projectRoot, { kind: 'file', value: detail.path, sessionId: options.session });
 }
 
 /**

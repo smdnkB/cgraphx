@@ -3,19 +3,15 @@
  * copy-assets.cjs — postbuild asset copier for cgraphx 2.0.
  *
  * `tsc` only emits compiled JS/d.ts; runtime assets that live alongside the
- * TS sources (SQL schemas, the Claude skill template, the web static assets)
- * must be copied into `dist/` separately. This script is the single source of
- * truth for that.
+ * TS sources (SQL schemas, the Claude skill template) must be copied into
+ * `dist/` separately. This script is the single source of truth for that.
  *
  * What it copies (intentionally narrow — cgraphx 2.0 dropped the code graph,
  * so there is no graph schema and no tree-sitter wasm to ship):
  *
  *   src/core/markdown/schema.sql  → dist/core/markdown/schema.sql
  *   src/core/timeline/schema.sql  → dist/core/timeline/schema.sql
- *   src/core/task/schema.sql      → dist/core/task/schema.sql
- *   src/core/sync/schema.sql      → dist/core/sync/schema.sql
  *   assets/claude-template/**     → dist/.claude-template/**
- *   src/web/public/**             → dist/web/public/**
  *
  * What it does NOT copy:
  *   - src/core/db/schema.sql  (does not exist in 2.0 — db layer has no static schema)
@@ -54,7 +50,7 @@ function walk(from, to) {
   }
 }
 
-// 1) SQL schemas — markdown + timeline + task + sync subsystems. The dist/ path mirrors the
+// 1) SQL schemas — markdown + timeline subsystems. The dist/ path mirrors the
 //    src/ layout including the `core/` nesting, because runtime resolvers look
 //    them up relative to the compiled module file (schema-bootstrap.ts).
 copyFile(
@@ -64,14 +60,6 @@ copyFile(
 copyFile(
   path.join(root, 'src/core/timeline/schema.sql'),
   path.join(dist, 'core/timeline/schema.sql')
-);
-copyFile(
-  path.join(root, 'src/core/task/schema.sql'),
-  path.join(dist, 'core/task/schema.sql')
-);
-copyFile(
-  path.join(root, 'src/core/sync/schema.sql'),
-  path.join(dist, 'core/sync/schema.sql')
 );
 
 // 2) Claude skill/agent/hooks template — walked recursively.
@@ -84,16 +72,4 @@ if (fs.existsSync(tmplSrc)) {
   walk(tmplSrc, tmplDest);
 }
 
-// 3) web static assets (app.css etc.) — walked recursively, mirrored to
-//    dist/web/public so the compiled server.ts resolves them relative to its
-//    own module file. Absent source dir → silent skip (same mode as template).
-const webPublicSrc = path.join(root, 'src/web/public');
-const webPublicDest = path.join(dist, 'web/public');
-
-if (fs.existsSync(webPublicSrc)) {
-  fs.rmSync(webPublicDest, { recursive: true, force: true });
-  fs.mkdirSync(webPublicDest, { recursive: true });
-  walk(webPublicSrc, webPublicDest);
-}
-
-console.log('copy-assets: schemas + .claude-template + web/public copied into dist/');
+console.log('copy-assets: schemas + .claude-template copied into dist/');
