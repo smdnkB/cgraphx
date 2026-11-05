@@ -11,7 +11,9 @@ import {
   type WebServer,
 } from '../../src/web';
 import { createDirectory } from '../../src/core/directory';
-import { DatabaseConnection, getDatabasePath } from '../../src/core/db';
+import { DATABASE_FILENAME, DatabaseConnection, getLocalDatabasePath } from '../../src/core/db';
+import { identityOfRoot } from '../../src/core/project-identity';
+import { ensureProjectDir } from '../../src/core/user-data-dir';
 import { ensureMarkdownSchema } from '../../src/core/markdown/schema-bootstrap';
 import { ensureTimelineSchema } from '../../src/core/timeline/schema-bootstrap';
 
@@ -20,14 +22,13 @@ const servers: WebServer[] = [];
 const blockers: net.Server[] = [];
 
 /**
- * Build an initialized project fixture: createDirectory + open + apply
- * markdown (and optionally timeline) schemas, then close. Calling the
- * ensure*Schema helpers here is fixture construction, NOT web behavior — the
- * web server itself never applies schemas (read-only contract).
+ * 已初始化项目的夹具:createDirectory + 开本地库 + 建 markdown(可选 timeline)schema 后关掉。本地库带
+ * timeline 表即旧库模式(时间线数据就在本地库);不带则是项目库模式(时间线数据在临时 HOME 下的
+ * ~/.cgraphx/projects/)。这里调 ensure*Schema 是搭夹具,不是 web 行为——web 自己从不建 schema(只读契约)。
  */
 function initProject(projectRoot: string, opts: { timeline?: boolean } = {}): void {
   createDirectory(projectRoot);
-  const conn = DatabaseConnection.open(getDatabasePath(projectRoot));
+  const conn = DatabaseConnection.open(getLocalDatabasePath(projectRoot));
   try {
     ensureMarkdownSchema(conn.getDb());
     if (opts.timeline !== false) ensureTimelineSchema(conn.getDb());
@@ -38,7 +39,7 @@ function initProject(projectRoot: string, opts: { timeline?: boolean } = {}): vo
 
 /** Row count for a table via a short-lived connection (WAL allows concurrent readers). */
 function countRows(projectRoot: string, table: string): number {
-  const conn = DatabaseConnection.open(getDatabasePath(projectRoot));
+  const conn = DatabaseConnection.open(getLocalDatabasePath(projectRoot));
   try {
     const row = conn
       .getDb()
@@ -117,8 +118,16 @@ describe('startWebServer', () => {
     expect(exitCodeForWebError(err)).toBe(2);
   });
 
-  it('fails when the timeline schema is missing (spec §3.1)', async () => {
+  it('fails when the project db lacks the timeline schema (spec §3.1, D16)', async () => {
+    // 本地库没有 timeline 等表 → 项目库模式;项目库还不在 → 照常启动(时间线、任务页按没有数据显示)
     initProject(tmp, { timeline: false });
+    servers.push(await startWebServer({ projectRoot: tmp, port: 0 }));
+
+    // 在临时 HOME 下建出项目库(空库,不建 timeline 表)→ 启动报 schema 缺失,提示 cgraphx install
+    const info = identityOfRoot(tmp);
+    if (info === 'git-error' || info.identity === null) throw new Error(`认不出 ${tmp} 的项目标识`);
+    const { dir } = ensureProjectDir(info.identity);
+    DatabaseConnection.open(path.join(dir, DATABASE_FILENAME)).close();
 
     let caught: unknown;
     try {

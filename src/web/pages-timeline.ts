@@ -8,7 +8,8 @@
  * (返回 Promise,以 projectRoot 自管 DB 连接生命周期),故 `renderTimelinePage`
  * 声明为 async,内部 await facade;`GET /timeline` 路由分支用 `.then/.catch`
  * 兜底(server.ts)。四级分组(日期 > 会话 > 轮次 > 事件)在 web 层对
- * `queryEvents` 扁平结果装配,不新建查询层(spec §8)。
+ * `queryEvents` 扁平结果装配,不新建查询层(spec §8)。项目库还不在时不调门面,
+ * 按 0 条事件组装(spec:2026-11-05-数据按项目放用户目录 D16)。
  */
 
 import {
@@ -18,6 +19,7 @@ import {
   type TimelineEvent,
   type TimelineStats,
 } from '../core/timeline';
+import { hasDataDatabase } from './bootstrap';
 import {
   TIMELINE_EVENT_TYPES,
   EVENT_TYPE_LABELS,
@@ -393,6 +395,45 @@ function todayByType(todayEvents: TimelineEvent[]): Record<EventType, number> {
   return out;
 }
 
+/** 页面要的三份数据:今日事件(概况条)、近 7 日统计、事件列表。 */
+interface TimelineData {
+  todayEventsRaw: TimelineEvent[];
+  stats7d: TimelineStats;
+  list: { events: TimelineEvent[]; capped: boolean };
+}
+
+/**
+ * 取页面数据。项目库还不在(spec D16)→ 不调 timeline 门面(门面在库不在时抛错),按 0 条事件返回:
+ * 概况条全 0、列表空、筛选计数 0。
+ */
+async function loadTimelineData(
+  projectRoot: string,
+  query: TimelineQuery,
+  todayStr: string,
+  sevenDayStr: string,
+): Promise<TimelineData> {
+  if (!hasDataDatabase(projectRoot)) {
+    const stats7d: TimelineStats = {
+      totalEvents: 0,
+      byType: todayByType([]),
+      byTool: [],
+      byDay: [],
+      topFilesRead: [],
+      topFilesWritten: [],
+      windowStart: null,
+      windowEnd: null,
+    };
+    return { todayEventsRaw: [], stats7d, list: { events: [], capped: false } };
+  }
+  // 概况条(仪表盘口径,不受用户过滤影响)
+  const todayEventsRaw = await queryEvents(projectRoot, { since: todayStr, limit: 10000 });
+  const stats7d = await getEventStats(projectRoot, { since: sevenDayStr });
+  // 事件列表(受用户过滤影响)
+  const since = query.range === '7d' ? sevenDayStr : todayStr;
+  const list = await queryEventList(projectRoot, query, since);
+  return { todayEventsRaw, stats7d, list };
+}
+
 /** 组装全量视图模型。所有 href 在此计算,模板侧只渲染。 */
 async function assembleTimelineModel(projectRoot: string, query: TimelineQuery): Promise<TimelineContentModel> {
   const now = new Date();
@@ -402,20 +443,16 @@ async function assembleTimelineModel(projectRoot: string, query: TimelineQuery):
     return localDateStr(d);
   })();
 
+  const { todayEventsRaw, stats7d, list } = await loadTimelineData(projectRoot, query, todayStr, sevenDayStr);
+  const { events, capped } = list;
+
   // ---- 概况条(仪表盘口径,不受用户过滤影响)----
-  const todayEventsRaw = await queryEvents(projectRoot, { since: todayStr, limit: 10000 });
   const todayEvents = todayEventsRaw.filter((e) => e.event_type !== 'git_commit'); // 概况"事件数"不含提交
   const todayActiveSessions = new Set(
     todayEventsRaw.map((e) => e.session_id).filter((s): s is string => s !== null),
   ).size;
   const topTool = computeTopTool(todayEventsRaw);
-
-  const stats7d = await getEventStats(projectRoot, { since: sevenDayStr });
   const last7Bars = buildLast7Bars(stats7d, todayStr);
-
-  // ---- 事件列表(受用户过滤影响)----
-  const since = query.range === '7d' ? sevenDayStr : todayStr;
-  const { events, capped } = await queryEventList(projectRoot, query, since);
 
   // ---- 筛选面板 ----
   const typeCounts = query.range === 'today' ? todayByType(todayEventsRaw) : stats7d.byType;

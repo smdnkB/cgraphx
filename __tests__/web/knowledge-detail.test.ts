@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startWebServer, type WebServer } from '../../src/web';
 import { createDirectory } from '../../src/core/directory';
-import { DatabaseConnection, getDatabasePath } from '../../src/core/db';
+import { DatabaseConnection, getLocalDatabasePath } from '../../src/core/db';
 import { ensureMarkdownSchema } from '../../src/core/markdown/schema-bootstrap';
 import { ensureTimelineSchema } from '../../src/core/timeline/schema-bootstrap';
 import { indexMarkdownKnowledgeBase } from '../../src/core/markdown/indexer';
@@ -44,10 +44,10 @@ const MAIN_PATH = 'docs/knowledge/main.md';
 const OTHER_PATH = 'docs/knowledge/other.md';
 const THIRD_PATH = 'docs/knowledge/third.md';
 
-/** 初始化项目骨架(.cgraphx + markdown/timeline schema)。夹具搭建,非 web 行为。 */
+/** 初始化项目骨架(.cgraphx + 本地库建 markdown/timeline schema;本地库带 timeline 表即旧库模式,时间线也读它)。夹具搭建,非 web 行为。 */
 function initProject(projectRoot: string): void {
   createDirectory(projectRoot);
-  const conn = DatabaseConnection.open(getDatabasePath(projectRoot));
+  const conn = DatabaseConnection.open(getLocalDatabasePath(projectRoot));
   try {
     ensureMarkdownSchema(conn.getDb());
     ensureTimelineSchema(conn.getDb());
