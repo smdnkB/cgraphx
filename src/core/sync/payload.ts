@@ -3,10 +3,12 @@
  *
  * 每个协议字段只取自 plan T-3「字段来源表」,逐字段赋值,不展开 / 透传任何本地对象。
  * 从不读取 prompt 原文(仅 parseSlashSkill 内部取命令名)、命令原文、工具结果摘要(仅判断 success)、
- * cwd(仅推断路径解析与提交在哪个副本里做)。
+ * cwd(仅推断路径解析、提交在哪个根里做、查提交用哪个仓库)。
  *
- * 一轮上报以主目录为准(spec D25):上下文带「主目录 + 全部登记过的副本」,路径按它换算(D26);
- * 副本里没对上会话的提交不进仓库终端会话,每个副本单独成一个带绑定的会话(D28)。
+ * 一轮上报以当前根为准(spec:2026-11-05-数据按项目放用户目录 D11、D13):上下文带「timeline 记下的根 + 当前根 +
+ * 副本登记」(task 门面 collectProjectRoots),路径按它换算,读文件、查 git 的兜底是当前根;上报地址、终端会话 id、
+ * 副本会话 id 都用调用方从连接里取的上报地址,这里不取 origin。
+ * 副本里没对上会话的提交不进仓库终端会话,每个副本单独成一个带绑定的会话(版本流程与需求副本 spec D28)。
  */
 
 import { createHash } from 'node:crypto';
@@ -16,8 +18,9 @@ import path from 'node:path';
 
 import { agentConfigDir, listAgentProfiles } from '../agents';
 import { ARTIFACT_MAPPING_VERSION } from '../artifact-registry';
-import { listProjectRoots, replicaOfCwd, type ProjectRoot, type ReplicaEntry } from '../replica';
+import { replicaOfCwd, type ProjectRoot, type ReplicaEntry } from '../replica';
 import {
+  collectProjectRoots,
   featureBindingTarget,
   listEffectiveBindings,
   listMyFeatureTaskDeclarations,
@@ -27,10 +30,10 @@ import { listCommitEvents, listSessionEventsAfter, type TimelineEvent } from '..
 import { collectSessionArtifacts, reportableTypesFor } from './artifacts';
 import { REPLICA_SESSION_PREFIX, TERMINAL_SESSION_PREFIX } from './constants';
 import { SyncArgError } from './errors';
-import { createGitCache, getOriginUrl, getRepoToplevel, type GitCache } from './git';
+import { createGitCache, getRepoToplevel, type GitCache } from './git';
 import { isSafeRelPath } from './paths';
 import { collectSessionReferences } from './references';
-import { openSyncDb } from './schema-bootstrap';
+import { openSyncDbForRead } from './schema-bootstrap';
 import { listAllReferenceRecords } from './store';
 import type {
   IngestBinding,
@@ -43,8 +46,11 @@ import type {
 import { getClientVersion, type ServerTier } from './version';
 
 export interface SyncContext {
+  /** 当前根:createSyncContext 的起点所在的项目根(collectProjectRoots 的 currentRoot)。 */
   projectRoot: string;
+  /** 当前根所在的仓库根(`git rev-parse --show-toplevel`)。 */
   repoRoot: string;
+  /** 上报地址:`sync connect` 时存下的 origin 原样,由调用方从连接里取。 */
   remoteUrl: string;
   clientVersion: string;
   /** 服务端协议档位(spec §11.1)。 */
@@ -59,11 +65,14 @@ export interface SyncContext {
   commitEvents: TimelineEvent[];
   /** 有效绑定(含被取代段),按会话分组。 */
   bindingsBySession: Map<string, EffectiveBinding[]>;
-  /** 主目录仓库的 git 查询缓存。 */
+  /** 当前根所在仓库的 git 查询缓存。 */
   git: GitCache;
-  /** 按根取 git 查询缓存:主目录返回 `git`,副本按根懒建、一轮内复用(spec D29)。 */
-  gitFor(root: string): GitCache;
-  /** 主目录 + 全部登记过的副本(含已删除),按根路径长度降序;没有登记副本时只有主目录(spec D26)。 */
+  /**
+   * 按目录取 git 查询缓存:当前根返回 `git`;别的目录按所在的仓库(工作区根)懒建、一轮内复用,同一工作区里的
+   * 目录共用一份,当前根所在的工作区也返回 `git`。
+   */
+  gitFor(dir: string): GitCache;
+  /** timeline 记下的根 + 当前根 + 副本登记(C-10),按根路径长度降序。 */
   roots: ProjectRoot[];
   /** 提交事件 id → cwd 所在的副本;只放在副本里做的提交,没有登记副本时为空。一轮开始时算一次。 */
   commitReplicas: Map<number, ReplicaEntry>;
@@ -88,17 +97,17 @@ export interface BuiltSession {
 /**
  * 构造一轮同步的上下文。
  *
- * @throws SyncArgError 取不到 origin 远程地址或仓库根。
+ * 当前根与根汇总取自 task 门面 collectProjectRoots(start);上报地址 `opts.remoteUrl` 由调用方从连接里取,
+ * 这里不取 origin。
+ *
+ * @throws SyncArgError 当前根不在 git 仓库内。
  */
 export async function createSyncContext(
-  projectRoot: string,
-  opts?: { tier?: ServerTier; projectTypes?: readonly string[] | null },
+  start: string,
+  opts: { remoteUrl: string; tier?: ServerTier; projectTypes?: readonly string[] | null },
 ): Promise<SyncContext> {
-  const root = path.resolve(projectRoot);
-  const remoteUrl = getOriginUrl(root);
-  if (remoteUrl === null) {
-    throw new SyncArgError('当前仓库没有 origin 远程地址,请先运行 `git remote add origin <url>`');
-  }
+  const rootSet = collectProjectRoots(start);
+  const root = rootSet.currentRoot;
   const repoRoot = getRepoToplevel(root);
   if (repoRoot === null) {
     throw new SyncArgError(`${root} 不在 git 仓库内,请在 git 仓库内运行`);
@@ -117,18 +126,25 @@ export async function createSyncContext(
     skillDirs.push(path.join(os.homedir(), profile.configDirName, 'skills'));
   }
 
-  const tier = opts?.tier ?? '1.0';
+  const tier = opts.tier ?? '1.0';
   const commitEvents = await listCommitEvents(root);
-  const roots = listProjectRoots(root);
+  const roots = rootSet.roots;
 
   const git = createGitCache(repoRoot);
-  const replicaGits = new Map<string, GitCache>();
-  const gitFor = (gitRoot: string): GitCache => {
-    if (gitRoot === root) return git;
-    let cache = replicaGits.get(gitRoot);
+  // 目录 → 工作区根、工作区根 → 查询缓存:同一工作区里的目录只查一次工作区根、共用一份缓存
+  const workTreeOf = new Map<string, string>();
+  const gits = new Map<string, GitCache>([[repoRoot, git]]);
+  const gitFor = (dir: string): GitCache => {
+    if (dir === root) return git;
+    let workTree = workTreeOf.get(dir);
+    if (workTree === undefined) {
+      workTree = getRepoToplevel(dir) ?? dir;
+      workTreeOf.set(dir, workTree);
+    }
+    let cache = gits.get(workTree);
     if (cache === undefined) {
-      cache = createGitCache(getRepoToplevel(gitRoot) ?? gitRoot);
-      replicaGits.set(gitRoot, cache);
+      cache = createGitCache(workTree);
+      gits.set(workTree, cache);
     }
     return cache;
   };
@@ -136,11 +152,11 @@ export async function createSyncContext(
   return {
     projectRoot: root,
     repoRoot,
-    remoteUrl,
+    remoteUrl: opts.remoteUrl,
     clientVersion: getClientVersion(),
     tier,
     supportsTaskKey: tier !== '1.0',
-    allowedTypes: reportableTypesFor(tier, opts?.projectTypes ?? null),
+    allowedTypes: reportableTypesFor(tier, opts.projectTypes ?? null),
     reevaluateAll: false,
     commitEvents,
     bindingsBySession,
@@ -155,7 +171,7 @@ export async function createSyncContext(
 
 /**
  * 提交事件 id → cwd 所在的副本(replica 门面 replicaOfCwd)。没有登记副本时直接返回空表;
- * cwd 为空的事件不知道在哪做的,按主目录算。
+ * cwd 为空的事件不知道在哪做的,不算副本。
  */
 function mapCommitReplicas(
   roots: readonly ProjectRoot[],
@@ -171,12 +187,15 @@ function mapCommitReplicas(
   return map;
 }
 
-/** 一次开库预载全部参考精确记录并按会话分组;库未初始化等异常 → 空 Map,不抛。 */
+/**
+ * 一次只读开库预载全部参考精确记录并按会话分组:读的一方不建(sync status 也经这里),不写并过记号、不建目录、
+ * 不应用 schema;库或 sync 的表不在等异常 → 空 Map,不抛。
+ */
 function loadReferenceRecords(projectRoot: string): SyncContext['referenceRecords'] {
   const grouped: SyncContext['referenceRecords'] = new Map();
   let rows: ReturnType<typeof listAllReferenceRecords>;
   try {
-    const conn = openSyncDb(projectRoot);
+    const conn = openSyncDbForRead(projectRoot);
     try {
       rows = listAllReferenceRecords(conn.getDb());
     } finally {
@@ -421,7 +440,7 @@ export async function buildSessionPayload(
   return finish(session, maxEventId, bindingsHashOf(entries, ctx.supportsTaskKey), unreported);
 }
 
-/** 本仓库终端会话 id:前缀 + sha256(origin 远程地址) 前 16 位十六进制。 */
+/** 仓库终端会话 id:前缀 + sha256(上报地址) 前 16 位十六进制;上报地址即 ctx.remoteUrl(接入时存下的 origin)。 */
 export function terminalSessionId(remoteUrl: string): string {
   return TERMINAL_SESSION_PREFIX + sha256(remoteUrl).slice(0, 16);
 }
@@ -450,7 +469,7 @@ export function buildTerminalPayload(ctx: SyncContext): BuiltSession | null {
   return finish(session, maxEventId, bindingsHashOf([], ctx.supportsTaskKey), unreported);
 }
 
-/** 副本会话 id:前缀 + sha256(origin 远程地址) 前 16 位 + `-` + sha256(副本目录名) 前 8 位(十六进制)。 */
+/** 副本会话 id:前缀 + sha256(上报地址) 前 16 位 + `-` + sha256(副本目录名) 前 8 位(十六进制);上报地址同上。 */
 export function replicaSessionId(remoteUrl: string, replicaName: string): string {
   return `${REPLICA_SESSION_PREFIX}${sha256(remoteUrl).slice(0, 16)}-${sha256(replicaName).slice(0, 8)}`;
 }

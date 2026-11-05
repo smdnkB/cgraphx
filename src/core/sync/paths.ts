@@ -4,9 +4,10 @@
  * 两套相对路径:`repoRel` 相对 `git rev-parse --show-toplevel`(上报用);
  * `projectRel` 相对项目根(产物分类、沉淀目录判断用)。
  *
- * 多根(spec D26):给了「主目录 + 全部登记过的副本」时,落在副本里的绝对路径相对那个副本算
- * 项目内路径;副本整仓复制、布局相同,`repoRel` 照旧按主目录的「项目根在仓库内的相对位置」拼。
- * 主目录里的路径、没有登记副本时,结果与不给 roots 逐字相同。
+ * 多根(spec:2026-11-05-数据按项目放用户目录 D11):给了 roots(timeline 记下的根 + 当前根 + 副本登记,
+ * task 门面 collectProjectRoots)时,绝对路径落在哪个根里(取最长的根)就相对那个根算项目内路径;同一项目
+ * 各根布局相同,`repoRel` 照旧按当前根的「项目根在仓库内的相对位置」拼。不落在任何根里的,照原来比当前根的
+ * 原样路径和 realpath。
  */
 
 import fs from 'node:fs';
@@ -27,14 +28,16 @@ export function isSafeRelPath(p: string): boolean {
 export interface RelPaths {
   repoRel: string;
   projectRel: string;
-  /** 路径所在的根(主目录或副本)的绝对路径。 */
+  /** 路径所在的根(当前根、timeline 记下的根或副本)的绝对路径。 */
   root: string;
 }
 
 export interface PathResolver {
-  /** 绝对路径(或相对 `cwd` 的路径)→ 两种相对形式;不在主目录或任何副本内、或不安全返回 null。 */
+  /** 项目根在仓库内的相对位置(POSIX 分隔,'' 表示项目根即仓库根);按当前根算,同一项目各根相同。 */
+  readonly projectInRepo: string;
+  /** 绝对路径(或相对 `cwd` 的路径)→ 两种相对形式;不在当前根或任何根内、或不安全返回 null。 */
   fromAbs(p: string, cwd?: string): RelPaths | null;
-  /** 仓库相对路径 → 两种相对形式;`root` 是路径所在的根(不传为主目录)。不在项目根内或不安全返回 null。 */
+  /** 仓库相对路径 → 两种相对形式;`root` 是路径所在的根(不传为当前根)。不在项目根内或不安全返回 null。 */
   fromRepoRel(repoRel: string, root?: string): RelPaths | null;
   /** 项目相对路径 → 两种相对形式;`root` 同上。不安全返回 null。 */
   fromProjectRel(projectRel: string, root?: string): RelPaths | null;
@@ -60,8 +63,9 @@ function relWithin(root: string, abs: string): string | null {
 }
 
 /**
- * @param roots 主目录 + 全部登记过的副本(replica 门面 listProjectRoots)。不给、或其中没有副本时,
- *   只认主目录。
+ * @param projectRoot 当前根。
+ * @param roots timeline 记下的根 + 当前根 + 副本登记(task 门面 collectProjectRoots)。不给或为空时,
+ *   只认当前根。
  */
 export function createPathResolver(
   projectRoot: string,
@@ -70,10 +74,9 @@ export function createPathResolver(
 ): PathResolver {
   const project = path.resolve(projectRoot);
   const projectReal = realOrSelf(project);
-  // 项目根在仓库内的相对位置('' 表示项目根即仓库根)
+  // 项目根在仓库内的相对位置('' 表示项目根即仓库根);同一项目各根的相对位置相同,按当前根算
   const projectInRepo = toPosix(path.relative(realOrSelf(path.resolve(repoRoot)), projectReal));
-  // 登记过副本才按多根定根;没有副本时不多算一次
-  const multiRoots = roots !== undefined && roots.some((r) => r.replica !== null) ? roots : null;
+  const matchRoots = roots !== undefined && roots.length > 0 ? roots : null;
 
   const fromProjectRel = (projectRel: string, root: string = project): RelPaths | null => {
     if (!isSafeRelPath(projectRel)) return null;
@@ -82,14 +85,16 @@ export function createPathResolver(
   };
 
   return {
+    projectInRepo,
     fromAbs(p: string, cwd?: string): RelPaths | null {
       if (p === '') return null;
       const abs = path.isAbsolute(p) ? path.normalize(p) : path.resolve(cwd ?? project, p);
-      if (multiRoots !== null) {
-        const hit = matchProjectRoot(multiRoots, abs);
-        if (hit !== null && hit.root.replica !== null) return fromProjectRel(hit.rel, hit.root.root);
+      // 落在某个根里(取最长的根):相对那个根算项目内路径
+      if (matchRoots !== null) {
+        const hit = matchProjectRoot(matchRoots, abs);
+        if (hit !== null) return fromProjectRel(hit.rel, hit.root.root);
       }
-      // 主目录:照原来先比原样的项目根、再比 realpath 后的项目根
+      // 哪个根都不中:照原来先比原样的当前根、再比 realpath 后的当前根
       const projectRel = relWithin(project, abs) ?? relWithin(projectReal, abs);
       return projectRel === null ? null : fromProjectRel(projectRel);
     },
@@ -105,14 +110,19 @@ export function createPathResolver(
   };
 }
 
-/**
- * 读文件用哪个根:副本目录还在就用它,已不在(副本删掉了)退回主目录;主目录本身不查。
- */
-export function rootOrMain(root: string, mainRoot: string): string {
-  if (root === mainRoot) return mainRoot;
+/** p 是目录(跟随链接);不在、读不了 → false。 */
+export function isDirectory(p: string): boolean {
   try {
-    return fs.statSync(root, { throwIfNoEntry: false })?.isDirectory() === true ? root : mainRoot;
+    return fs.statSync(p, { throwIfNoEntry: false })?.isDirectory() === true;
   } catch {
-    return mainRoot;
+    return false;
   }
+}
+
+/**
+ * 读文件用哪个根:这个根的目录还在就用它,不在(副本删掉了、别的 clone 挪走了)退回当前根;当前根本身不查。
+ */
+export function rootOrCurrent(root: string, currentRoot: string): string {
+  if (root === currentRoot) return currentRoot;
+  return isDirectory(root) ? root : currentRoot;
 }
