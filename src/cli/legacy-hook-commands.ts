@@ -48,7 +48,7 @@ export function registerLegacyHookCommands(program: Command): void {
   for (const subcommand of LEGACY_HOOK_SUBCOMMANDS) {
     program
       .command(subcommand, { hidden: true })
-      .allowUnknownOptions()
+      .allowUnknownOption()
       .description('已下掉的旧 hook 子命令,只为兼容保留:读完输入,不做任何事')
       .option(`${AGENT_OPTION_FLAG} <id>`, '兼容旧配置:收下不解析')
       .action(async () => {
