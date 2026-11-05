@@ -26,11 +26,30 @@ export interface ReplicaEntry {
   removedAt: string | null;
 }
 
-/** replica 为 null 即主目录;realRoot 是 root 的 realpath(目录不在时取最近一级在的上级的 realpath 拼回),在 listProjectRoots 里一次算好 */
+/**
+ * replica 为 null 即不是副本登记的根(timeline 记下的根、当前根);realRoot 是 root 的 realpath(目录不在时取最近一级
+ * 在的上级的 realpath 拼回),在 listProjectRoots 里一次算好
+ */
 export interface ProjectRoot {
   root: string;
   realRoot: string;
   replica: ReplicaEntry | null;
+  /** 这个根最近一次活动的时间:按路径取调用方传入的 timeline 记下的根;没有记录为 null */
+  lastActiveAt: string | null;
+}
+
+/**
+ * 是不是副本(main-dir.ts 的 replicaLinkOf):
+ * - own:不是副本(没有 shared 链接,或链接不作数)
+ * - replica:登记过、没删除的副本
+ * - main-missing:shared 链接指向的主目录 `.cgraphx/` 已不在
+ */
+export type ReplicaLinkState = 'own' | 'replica' | 'main-missing';
+
+export interface ReplicaLink {
+  state: ReplicaLinkState;
+  /** own:项目根本身(path.resolve);replica:链接目标 realpath 的上级目录;main-missing:链接目标的上级目录 */
+  mainRoot: string;
 }
 
 /** 副本状态:在 / 目录已不在 / 已删除(removedAt 非空)。 */
