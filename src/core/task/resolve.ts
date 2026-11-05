@@ -11,9 +11,9 @@
  * 静默新建一个与接口任务同名的手动任务(或在 spec 头部声明里建出假的接口占位)。
  */
 
-import type { SqliteDatabase } from '../db';
+import type { DatabaseConnection, SqliteDatabase } from '../db';
 import { resolveSessionId } from './binding';
-import { TaskArgError, TaskSourceUnavailableError } from './errors';
+import { TaskArgError, TaskConfigError, TaskSourceUnavailableError } from './errors';
 import {
   featureTaskBindError,
   featureTaskName,
@@ -21,7 +21,7 @@ import {
   resolveFeatureTargetReadOnly,
 } from './feature-task';
 import { collectProjectRoots, type ProjectRootSet } from './roots';
-import { openTaskDb } from './schema-bootstrap';
+import { openTaskDb, openTaskDbReadOnly } from './schema-bootstrap';
 import { fetchRemoteTasks, loadTaskSourceConfig } from './source';
 import { TaskStore } from './store';
 import type { TaskItem, TaskListResult, TaskSourceConfig } from './types';
@@ -77,17 +77,32 @@ export function findTask(store: TaskStore, value: string): TaskItem | null {
  * @throws TaskConfigError 拿不到数据位置(项目未初始化、认不出项目等)。
  */
 export function findTaskByValue(projectRoot: string, value: string): TaskItem | null {
-  return lookupTaskByValue(projectRoot, value, null);
+  return lookupTaskByValue(openTaskDb(projectRoot), projectRoot, value, null);
 }
 
-/** findTaskByValue 的已取根汇总版(同一轮里根汇总只取一次):库按 rootSet.currentRoot 开。 */
+/**
+ * findTaskByValue 的已取根汇总版(同一轮里根汇总只取一次):库按 rootSet.currentRoot 只读打开。
+ * sync status 这类只读调用方也走这里,所以不建目录、不写并过记号、不应用 schema;
+ * 库或 task 表不在时按没找到处理。
+ */
 export function findTaskByValueIn(rootSet: ProjectRootSet, value: string): TaskItem | null {
-  return lookupTaskByValue(rootSet.currentRoot, value, rootSet);
+  let conn: DatabaseConnection;
+  try {
+    conn = openTaskDbReadOnly(rootSet.currentRoot);
+  } catch (err) {
+    if (err instanceof TaskConfigError) return null;
+    throw err;
+  }
+  return lookupTaskByValue(conn, rootSet.currentRoot, value, rootSet);
 }
 
-/** known 为 null 时用到需求目录才按 projectRoot 取根汇总。 */
-function lookupTaskByValue(projectRoot: string, value: string, known: ProjectRootSet | null): TaskItem | null {
-  const conn = openTaskDb(projectRoot);
+/** 用传入的连接查找,查完关掉;known 为 null 时用到需求目录才按 projectRoot 取根汇总。 */
+function lookupTaskByValue(
+  conn: DatabaseConnection,
+  projectRoot: string,
+  value: string,
+  known: ProjectRootSet | null,
+): TaskItem | null {
   try {
     const db = conn.getDb();
     const store = new TaskStore(db);
