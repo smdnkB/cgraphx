@@ -26,7 +26,7 @@ let cachedCliVersion: string | null | undefined;
 
 /**
  * 本机 cgraphx 的版本号:读包根 package.json(`src/core/skill-version/` 与 `dist/core/skill-version/`
- * 上溯三级都是包根,读法同 `sync/version.ts`)。读不到或不是合法版本号返回 null;进程内缓存。
+ * 上溯三级都是包根)。读不到或不是合法版本号返回 null;进程内缓存。
  */
 export function getCliVersion(): string | null {
   if (cachedCliVersion !== undefined) return cachedCliVersion;

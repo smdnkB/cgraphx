@@ -7,7 +7,7 @@
  *   3. 版本记在 `timeline_schema_versions`
  *
  * 库放在数据位置(基础层 data-location.ts):还没并过的旧库是项目本地的 `.cgraphx/cgraphx.db`,其余是用户目录里
- * 这个项目的目录(`~/.cgraphx/projects/<目录名>/cgraphx.db`)。和 task、sync 共用一个库文件,各自只碰自己的前缀表。
+ * 这个项目的目录(`~/.cgraphx/projects/<目录名>/cgraphx.db`),只放 timeline 的前缀表。
  * 写的一方(openTimelineDb、recorder)经 ensureDataDir 定位置,要建就建;读的一方(openTimelineDbForRead)只读,
  * 库不在就报错,不建目录、不应用 schema。
  */

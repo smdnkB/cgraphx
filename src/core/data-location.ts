@@ -1,7 +1,7 @@
 /**
  * 数据位置(spec:2026-11-05-数据按项目放用户目录 D2、D7、D8、D22)
  *
- * timeline、task、sync 的库和文件(轮次记录、`task-source.json`、锁、存活标记、触发文件),db-query 的项目级
+ * timeline 的库和文件(轮次记录),db-query 的项目级
  * `db-profiles.json` 与 `db-query.log`,都经这里定位置:
  *
  * - 项目根(D2):从起点往上第一个装过的目录(`.cgraphx/cgraphx.db` 在,就近优先);一直没有,再往上第一个有

@@ -104,13 +104,13 @@ export interface TimelineDataSummary {
 
 // ─── 并旧事件(spec D27、D28、D29 timeline 部分)───────────────────────────
 
-/** 旧库事件 id → 项目库事件 id 的对照,给 task、sync 换算存下的事件 id 与上报进度。 */
+/** 旧库事件 id → 项目库事件 id 的对照,project 并旧事件时换算 id。 */
 export interface EventIdMapping {
   /** 旧 id → 新 id;重复的取项目库已有那条的 id;旧库里没有这个 id → undefined */
   get(oldId: number): number | undefined;
   /**
    * 换算一个会话的进度:旧值在表里取对应新 id;不在取这个会话里不大于它的最大旧 id 对应的新 id;都没有 → 0。
-   * 这个会话在旧库里没有事件(终端会话、副本会话这类 sync 自己的会话 id)→ get(oldId) ?? 0。
+   * 这个会话在旧库里没有事件(终端会话、副本会话这类非 hook 记的会话 id)→ get(oldId) ?? 0。
    */
   mapProgress(sessionId: string, oldId: number): number;
   /** 并之前这个会话在项目库里的最大 id;项目库没有这个会话 → null */

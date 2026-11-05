@@ -34,9 +34,6 @@ import { StoreInsertError, StoreQueryError } from './errors';
 import { capJsonValue, truncateUtf8 } from './json-cap';
 import { computeTimelineStats, parseCommitFiles, tryParseJson } from './stats';
 
-/** `session_id IN (…)` 一次最多带的参数个数,超过分批查。 */
-const SESSION_ID_QUERY_BATCH = 500;
-
 // ─── Field-size enforcement ────────────────────────────────────────────────
 
 /** 纯文本列(prompt / commit message)按字节截断。 */
@@ -276,91 +273,6 @@ export class TimelineStore {
     } catch (err) {
       throw new StoreQueryError(
         `Timeline getById failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /** 每个会话的最大事件 id(session_id 为空的事件不计)。 */
-  listSessionMaxIds(): Array<{ sessionId: string; maxId: number }> {
-    try {
-      const rows = this.db
-        .prepare(
-          'SELECT session_id, max(id) AS max_id FROM timeline_events WHERE session_id IS NOT NULL GROUP BY session_id',
-        )
-        .all() as Array<{ session_id: string; max_id: number }>;
-      return rows.map((r) => ({ sessionId: r.session_id, maxId: Number(r.max_id) }));
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline 会话水位查询失败:${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /**
-   * 指定几个会话各自的最大事件 id(spec D15:Stop hook 只刷本会话,不扫全部会话);库里没有事件的会话不出现。
-   * `IN (…)` 一次最多 SESSION_ID_QUERY_BATCH 个参数,超过分批;空数组直接返回 []。
-   */
-  listSessionMaxIdsFor(sessionIds: readonly string[]): Array<{ sessionId: string; maxId: number }> {
-    if (sessionIds.length === 0) return [];
-    const unique = [...new Set(sessionIds)];
-    const out: Array<{ sessionId: string; maxId: number }> = [];
-    try {
-      for (let i = 0; i < unique.length; i += SESSION_ID_QUERY_BATCH) {
-        const batch = unique.slice(i, i + SESSION_ID_QUERY_BATCH);
-        const placeholders = batch.map(() => '?').join(', ');
-        const rows = this.db
-          .prepare(
-            `SELECT session_id, max(id) AS max_id FROM timeline_events WHERE session_id IN (${placeholders}) GROUP BY session_id`,
-          )
-          .all(...batch) as Array<{ session_id: string; max_id: number }>;
-        for (const r of rows) out.push({ sessionId: r.session_id, maxId: Number(r.max_id) });
-      }
-      return out;
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline 会话水位查询失败:${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /** 指定会话的全部事件,按 ts 升序、同 ts 按 id 升序,不设上限(spec D28:并过的旧事件 id 不按时间排,派生按 ts 读)。 */
-  listSessionEventsByTs(sessionId: string): TimelineEvent[] {
-    try {
-      const rows = this.db
-        .prepare('SELECT * FROM timeline_events WHERE session_id = ? ORDER BY ts ASC, id ASC')
-        .all(sessionId) as EventRow[];
-      return rows.map(rowToEvent);
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline 会话事件查询失败:${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /** 指定会话中 id 大于 afterId 的全部事件,按 id 升序,不设上限(不同于 query 的 limit + ts 倒序)。 */
-  listSessionEventsAfter(sessionId: string, afterId: number): TimelineEvent[] {
-    try {
-      const rows = this.db
-        .prepare('SELECT * FROM timeline_events WHERE session_id = ? AND id > ? ORDER BY id ASC')
-        .all(sessionId, afterId) as EventRow[];
-      return rows.map(rowToEvent);
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline 会话增量事件查询失败:${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /** 全部 git_commit 事件(含 session_id 为空的终端 commit),按 ts、id 升序,不设上限。 */
-  listCommitEvents(): TimelineEvent[] {
-    try {
-      const rows = this.db
-        .prepare("SELECT * FROM timeline_events WHERE event_type = 'git_commit' ORDER BY ts ASC, id ASC")
-        .all() as EventRow[];
-      return rows.map(rowToEvent);
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline commit 事件查询失败:${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

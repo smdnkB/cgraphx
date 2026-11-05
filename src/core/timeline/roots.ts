@@ -43,7 +43,7 @@ export function readRootRows(db: SqliteDatabase): TimelineRoot[] {
 
 /**
  * spec D10、D11:数据位置那份库记下的根,按 lastTs 降序。打开失败(库不在、认不出项目)、表不在、查询出错 → []。
- * 同步函数:task 的 Stop hook 每轮经它取根列表,只查 sqlite_master 和 timeline_roots,不扫事件表。
+ * 同步函数,只查 sqlite_master 和 timeline_roots,不扫事件表(project 的 show 用)。
  */
 export function listTimelineRoots(start: string): TimelineRoot[] {
   try {

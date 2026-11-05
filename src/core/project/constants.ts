@@ -5,7 +5,7 @@
 /** 并旧数据的锁:`~/.cgraphx/projects/<目录名>/merge.lock`,`wx` 独占创建(index C-15)。 */
 export const MERGE_LOCK_FILENAME = 'merge.lock';
 
-/** 锁的 mtime 超过这么久算陈旧,删掉后接管(pid 不存活同样算陈旧;规则同 sync.lock)。 */
+/** 锁的 mtime 超过这么久算陈旧,删掉后接管(pid 不存活同样算陈旧)。 */
 export const MERGE_LOCK_STALE_MS = 2 * 3600_000;
 
 /** 拿锁最多等多久;等不到就这一次不并,稍后再装一次。 */
