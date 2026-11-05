@@ -2,12 +2,15 @@
  * 同步执行器(spec §4.1–§4.6、§9):候选判定 → 构造 → 发送前断言 → 分批上报 → 失败分级 → 进度推进。
  *
  * 进度只按「整批成功响应」推进(spec §4.6),不使用回执里的 `accepted` 计数;`warnings` 不重试,
- * 明细随结果返回并持久化,`sync status` / `sync now` 展示。不论从哪个目录触发都按主目录跑(spec D25)。
+ * 明细随结果返回并持久化,`sync status` / `sync now` 展示。
+ *
+ * 传入的项目根就是当前根:连接、进度、锁都在数据位置,同一项目的各个目录(clone、worktree、副本)哪个触发都跑
+ * 同一份上报(spec D13)。上报地址按接入时存下的 origin(`sync_state.connection.remoteUrl`),旧连接没存的由本轮
+ * 取当前根的 origin 补存(resolveReportRemoteUrl)。
  * 一轮同步期间持有数据目录下的 `sync.lock`;worker 另持 `sync-worker.pid`(见 lock.ts)。
  */
 
 import type { SqliteDatabase } from '../db';
-import { resolveMainRoot } from '../replica';
 import { recordFeatureTaskMappings, refreshAutoBindings } from '../task';
 import { listCommitEvents, listSessionEventMaxIds } from '../timeline';
 import { chunkSession, envelopeBytes, groupBySession, packBatches, splitChunkEvents, type Chunk } from './batching';
@@ -37,7 +40,7 @@ import {
   type SyncContext,
 } from './payload';
 import { refreshPlatformSpec } from './platform-spec';
-import { openSyncDb } from './schema-bootstrap';
+import { openSyncDb, openSyncDbForRead } from './schema-bootstrap';
 import {
   ackSession,
   advanceSessionEvents,
@@ -48,6 +51,7 @@ import {
   listSessions,
   replaceUnreported,
   setBasis,
+  setConnection,
   setLastWarnings,
   setStatus,
   updatePendingPush,
@@ -65,6 +69,23 @@ import {
 import { serverTier } from './version';
 
 type SyncMode = 'foreground' | 'background';
+
+/** 取不到上报地址时本轮失败的文案(沿用原来取不到 origin 时的说法)。 */
+const NO_ORIGIN_MESSAGE = '当前仓库没有 origin 远程地址,请先运行 `git remote add origin <url>`';
+
+/**
+ * 本轮的上报地址(spec D13):连接里的 `remoteUrl` 不为 null 就用它;为 null(升级前接入的旧连接)时取 start 的
+ * origin(`git remote get-url origin` 原样),`save` 为真且取到了就写回连接;都没有 → null。库里没有连接时不写。
+ */
+export function resolveReportRemoteUrl(db: SqliteDatabase, start: string, opts: { save: boolean }): string | null {
+  const connection = getConnection(db);
+  if (connection !== null && connection.remoteUrl !== null) return connection.remoteUrl;
+  const origin = getOriginUrl(start);
+  if (origin !== null && opts.save && connection !== null) {
+    setConnection(db, { ...connection, remoteUrl: origin }, new Date().toISOString());
+  }
+  return origin;
+}
 
 function isPauseReason(code: string): code is PauseReason {
   return (PAUSE_REASONS as readonly string[]).includes(code);
@@ -353,7 +374,6 @@ function makeResult(
  * @throws SyncBusyError foreground 且等锁超时(后台同步正在进行)。
  */
 export async function runSync(projectRoot: string, mode: SyncMode): Promise<SyncRunResult> {
-  projectRoot = resolveMainRoot(projectRoot);
   const startedAt = new Date().toISOString();
 
   // 1. 接入判定
@@ -384,6 +404,12 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
       setStatus(db, status, now);
       return result;
     };
+    // 上报地址:暂停探测、类型表刷新、构造上下文共用,用到时取一次(旧连接没存的顺手补存)
+    let reportRemoteUrl: string | null | undefined;
+    const remoteUrlOfRound = (): string | null => {
+      if (reportRemoteUrl === undefined) reportRemoteUrl = resolveReportRemoteUrl(db, projectRoot, { save: true });
+      return reportRemoteUrl;
+    };
 
     // 3. 暂停处理
     if (status.pausedReason === 'invalid_token') {
@@ -396,8 +422,8 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
       }
       status.lastProbeAt = now;
       try {
-        const remoteUrl = getOriginUrl(projectRoot);
-        if (remoteUrl === null) throw new SyncError('当前仓库没有 origin 远程地址,请先运行 `git remote add origin <url>`');
+        const remoteUrl = remoteUrlOfRound();
+        if (remoteUrl === null) throw new SyncError(NO_ORIGIN_MESSAGE);
         await probePlatformStatus(conn.serverUrl, conn.token, remoteUrl);
         status.pausedReason = null;
         status.pausedAt = null;
@@ -427,12 +453,14 @@ export async function runSync(projectRoot: string, mode: SyncMode): Promise<Sync
     // 档位 ≥ 1.3 每轮上报前刷新本项目类型表;失败按默认类型表继续,不暂停、不计为同步失败
     let projectTypes: string[] | null = null;
     if (tier === '1.3') {
-      const remoteUrl = getOriginUrl(projectRoot);
+      const remoteUrl = remoteUrlOfRound();
       if (remoteUrl !== null) projectTypes = await refreshPlatformSpec(db, conn.serverUrl, conn.token, remoteUrl, now);
     }
     let ctx: SyncContext;
     try {
-      ctx = await createSyncContext(projectRoot, { tier, projectTypes });
+      const remoteUrl = remoteUrlOfRound();
+      if (remoteUrl === null) throw new SyncError(NO_ORIGIN_MESSAGE);
+      ctx = await createSyncContext(projectRoot, { remoteUrl, tier, projectTypes });
     } catch (err) {
       if (!(err instanceof SyncError)) throw err;
       status.failingSince ??= now;
@@ -509,10 +537,10 @@ async function activityMark(projectRoot: string): Promise<string> {
   return `${max}:${commits}:${readConnectedAt(projectRoot)}`;
 }
 
-/** 读 `sync_state` 连接的 connectedAt;无连接、无值或开库失败均为空串,不抛。 */
+/** 读 `sync_state` 连接的 connectedAt;无连接、无值或开库失败均为空串,不抛。只读打开:项目数据被删了不建回来。 */
 function readConnectedAt(projectRoot: string): string {
   try {
-    const conn = openSyncDb(projectRoot);
+    const conn = openSyncDbForRead(projectRoot);
     try {
       return getConnection(conn.getDb())?.connectedAt ?? '';
     } finally {
@@ -527,10 +555,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** 后台 worker:同步一轮后尾随等待,期间有新活动就再跑一轮。任何异常写 stderr,不抛出。 */
+/**
+ * 后台 worker:同步一轮后尾随等待,期间有新活动就再跑一轮。任何异常写 stderr,不抛出。
+ * 收到的根就是当前根;存活标记在数据位置,同一项目哪个根拉起的都只有一个 worker。
+ */
 export async function runWorker(projectRoot: string): Promise<void> {
   try {
-    projectRoot = resolveMainRoot(projectRoot);
     if (!claimWorker(projectRoot)) return;
     try {
       for (;;) {

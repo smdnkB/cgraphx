@@ -55,7 +55,7 @@ function stringOrNull(v: unknown): string | null {
 
 // ─── connection ─────────────────────────────────────────────────────────────
 
-/** 读连接信息;缺失或损坏返回 null。 */
+/** 读连接信息;缺失或损坏返回 null。升级前写的连接没有 `remoteUrl` 键 → null。 */
 export function getConnection(db: SqliteDatabase): SyncConnection | null {
   const raw = readState(db, 'connection');
   if (!isRecord(raw) || typeof raw.serverUrl !== 'string') return null;
@@ -64,6 +64,7 @@ export function getConnection(db: SqliteDatabase): SyncConnection | null {
     username: stringOrNull(raw.username),
     projectName: stringOrNull(raw.projectName),
     connectedAt: stringOrNull(raw.connectedAt),
+    remoteUrl: stringOrNull(raw.remoteUrl),
   };
 }
 
@@ -77,6 +78,7 @@ export function setConnection(db: SqliteDatabase, connection: SyncConnection, no
       username: connection.username,
       projectName: connection.projectName,
       connectedAt: connection.connectedAt,
+      remoteUrl: connection.remoteUrl,
     },
     now,
   );

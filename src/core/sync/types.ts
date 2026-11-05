@@ -161,12 +161,17 @@ export const PROJECT_SPEC_PROTOCOL_VERSION = '1.3';
 
 // ─── 本地类型 ───────────────────────────────────────────────────────────────
 
-/** 本地连接信息(`sync_state.connection`);手工存量配置时后三项为 null。不含 token。 */
+/** 本地连接信息(`sync_state.connection`);手工存量配置时 username、projectName、connectedAt 为 null。不含 token。 */
 export interface SyncConnection {
   serverUrl: string;
   username: string | null;
   projectName: string | null;
   connectedAt: string | null;
+  /**
+   * 上报地址(spec D13):`sync connect` 时 `git remote get-url origin` 的原样结果(平台按原样认项目,不规整);
+   * 升级前接入的旧连接没有这个值 → null,由下一轮同步补存。
+   */
+  remoteUrl: string | null;
 }
 
 /** 本轮在档位可上报集合外、不发送的产出(path 为仓库相对路径,spec §11.4)。 */
@@ -224,7 +229,12 @@ export interface ConnectInput {
 }
 
 export type ConnectOutcome =
-  | { kind: 'already'; connection: SyncConnection }
+  | {
+      kind: 'already';
+      connection: SyncConnection;
+      /** 存的上报地址和这个目录的 origin 不同时的提示(照存的地址上报,换地址要 --force);相同时不带。 */
+      notice?: string;
+    }
   | { kind: 'connected'; connection: SyncConnection; replacedExisting: boolean };
 
 /** `cgraphx docs` 记录的精确参考命中。 */
