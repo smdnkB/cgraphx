@@ -25,7 +25,7 @@ AI 后续要理解某张表 → 直接 `Read ddl/<table>.sql`;要扫一个工程
 
 ## 前置
 
-- `cgraphx` CLI 已装(`cgraphx db` 可用),目标项目已配 `.cgraphx/db-profiles.json` 或 `~/.cgraphx/db-profiles.json`。
+- `cgraphx` CLI 已装(`cgraphx db` 可用),目标项目已配项目级 `db-profiles.json`(`cgraphx db init` 生成,在项目数据目录)或用户级 `~/.cgraphx/db-profiles.json`。
 - 目标 DB profile 可连。先 `cgraphx db profiles` 确认。
 
 ## 流程

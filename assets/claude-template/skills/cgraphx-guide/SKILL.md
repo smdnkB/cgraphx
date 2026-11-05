@@ -32,7 +32,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | 阶段 | 命令 / skill |
 |---|---|
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
-| **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/init-tech-stack`(新项目先定技术栈,产出 ADR)、`/init-guides`(立项目规范)、`/init-knowledge`(接手陌生项目时建业务知识库)、`/knowledge-migrate`(用过 Claude Code 自动记忆的,每人跑一次:迁进项目,再关掉自动记忆) |
+| **项目级 · 每项目一次** | `cgraphx install`(建本地 `.cgraphx/` 与用户目录里这个项目的数据目录、并进原来的旧数据 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/init-tech-stack`(新项目先定技术栈,产出 ADR)、`/init-guides`(立项目规范)、`/init-knowledge`(接手陌生项目时建业务知识库)、`/knowledge-migrate`(用过 Claude Code 自动记忆的,每人跑一次:迁进项目,再关掉自动记忆) |
 | **日常做需求 · 必经两步** | `/dev-clarify` 澄清(有分歧的口径先拍板,再把功能点提案写进讨论稿,人审稿式改稿,终确认的就是《需求功能方案》),然后 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完,最后 `/code-review` |
 | **日常做需求 · 复杂按需** | `/dev-wireframe`(涉及界面时画线框)、`/dev-handoff`(探索或澄清结束、要开新会话继续时)、`/dev-spec`(写技术规格)、`/dev-plan`(大需求拆执行计划)、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
 | **版本发布 · 可选** | `/release-start` 开版本 → 每个需求 `/dev-start` 开副本 → `/dev-merge` 合入 → `/release-review` 审核并合入主干;副本单独也能用 |
@@ -41,7 +41,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | **收尾按需** | `/dev-end`(写收口档案,已上线时写发布记录)、`/doc-backfill`(老需求补头部、补单测产物和收口档案) |
 | **发布后按需** | `/doc-delivery`(需求文档、设计文档、接口文档,运行时选) |
 | **工作回顾按需** | `/doc-report`(日/周/月报)、`/doc-workload`(工作量汇报)、`/doc-monthly-report`(月底填报表) |
-| **卸载 · 可选** | `cgraphx uninstall`(按清单清 `.claude/` 内包自带 skills 和配置 + 删 `.cgraphx/`,`--keep-data` 保留数据)、`npm uninstall -g cgraphx` |
+| **卸载 · 可选** | `cgraphx uninstall`(按清单清 `.claude/` 内包自带 skills 和配置 + 删这个目录的 `.cgraphx/`;项目的数据留在 `~/.cgraphx/projects/`,要删用 `cgraphx project remove`)、`npm uninstall -g cgraphx` |
 
 ## 各 skill 导航
 
@@ -59,7 +59,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/dev-migrate` | 换技术栈重写整个系统(如 MyBatis → JPA):旧系统当标准答案,盘点行为清单、定目标与表映射,按切片走主链,每片新旧对拍 + 数据对账,最后出切换清单 |
 | `/init-tech-stack` | 新项目起步选型:按 12 层决策树逐层给推荐与优劣,产出 `docs/adr/` 技术栈选型 ADR;系统迁移时由 `/dev-migrate` 提示用户跑 |
 | `/release-start` | 发完一个版本、要按版本开发下一个时,在主干上打上个版本的 tag `v<版本号>`、拉出版本分支 `dev/<下个版本号>` 并装上提交拦截(版本分支上只收合并提交和 `chore(release):` 开头的整版改动) |
-| `/dev-start` | 开始做一个需求时(开了版本时每个需求都要),在主目录旁边写时复制出副本 `<主目录名>@<文件前缀>`、拉好需求分支、建好需求目录,给出到副本开新会话的启动语;副本里的会话和提交记进主目录 |
+| `/dev-start` | 开始做一个需求时(开了版本时每个需求都要),在主目录旁边写时复制出副本 `<主目录名>@<文件前缀>`、拉好需求分支、建好需求目录,给出到副本开新会话的启动语;副本里的会话和提交和主目录记进同一个项目的数据 |
 | `/dev-merge` | 副本里的需求做完、`/code-review` 过了:副本里跑,先同步主目录当前分支、就地解决冲突;主目录里跑 `/dev-merge <需求>`,预演没冲突就以「合入需求：<标题>」合入当前分支 |
 | `/release-review` | 发版那天、改好版本号之后,出发版审核报告 `docs/releases/v<版本号>-发版审核.md` 并提交;你说「发」再合入主干,列出可以清理的副本 |
 | `/api-case` | 从 spec 接口契约生成 bruno 测试接口(.bru + 断言 + 真实参数 + 多环境配置) |
@@ -98,10 +98,10 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 
 ```bash
 npm install -g cgraphx               # 装 CLI(Node ≥ 22.5 且 < 27)
-cd /your/project && cgraphx install  # 建 .cgraphx/ + 部署 skills/commands 到 .claude/ + 写 hooks/statusLine
+cd /your/project && cgraphx install  # 建 .cgraphx/ 与项目数据目录 + 部署 skills/commands 到 .claude/ + 写 hooks/statusLine
 ```
 
-`cgraphx install` 只作用于当前项目(项目级,写项目内 `.claude/` 与 `.cgraphx/`);升级用 `cgraphx upgrade`,在项目目录内执行——自动更新 CLI 并刷新当前项目;其他项目各自 cd 进去跑一次。
+`cgraphx install` 只作用于当前项目(项目级,写项目内 `.claude/`、`.cgraphx/`,项目的数据放 `~/.cgraphx/projects/<目录名>/`);升级用 `cgraphx upgrade`,在项目目录内执行——自动更新 CLI 并刷新当前项目;其他项目各自 cd 进去跑一次。
 
 接手陌生项目时可选第四步:`/init-knowledge` 派子 agent 自动探索、建业务知识库到 `docs/knowledge/`。
 
@@ -111,15 +111,16 @@ cd /your/project && cgraphx install  # 建 .cgraphx/ + 部署 skills/commands �
 - agent 经 knowledge-recall 自动查业务知识
 - agent 经 `db-query` 自动查数据库
 - `status` / `docs` / `db` / `timeline` 等 CLI 子命令由 agent / skill 调用,人类日常不主动跑
+- 同一项目在本机的各个目录(clone、worktree、副本)记进同一份数据;`cgraphx project show` 看这个目录属于哪个项目、数据在哪,认错了用 `cgraphx project name <名称>` 改,`cgraphx project list` / `cgraphx project remove <目录名>` 列出、删除项目数据
 
 ## 卸载
 
 ```bash
-cgraphx uninstall         # 按清单清 .claude/ 内包自带 skills/配置 + 删 .cgraphx/
+cgraphx uninstall         # 按清单清 .claude/ 内包自带 skills/配置 + 删这个目录的 .cgraphx/
 npm uninstall -g cgraphx  # 卸载 CLI
 ```
 
-`cgraphx uninstall` 在项目目录内执行;加 `--keep-data` 保留 `.cgraphx/` 数据。
+`cgraphx uninstall` 在项目目录内执行;加 `--keep-data` 保留这个目录的 `.cgraphx/`;项目的数据不随卸载删除,用 `cgraphx project list` 列出、`cgraphx project remove <目录名>` 删除。
 
 ## 视觉版
 

@@ -254,7 +254,7 @@ cgraphx@订单导出、cgraphx@积分发放、cgraphx@退款 已合入,可以删
 用户说删,cgraphx@积分发放 返回 `dirty`:
 
 ```text
-已删 cgraphx@订单导出、cgraphx@退款,登记和数据都留着。cgraphx@积分发放 有 2 个文件没提交,没删:src/points/expire.ts、src/points/expire.test.ts。
+已删 cgraphx@订单导出、cgraphx@退款,登记留着,副本里记下的会话和提交在项目的数据里。cgraphx@积分发放 有 2 个文件没提交,没删:src/points/expire.ts、src/points/expire.test.ts。
 
 发布照你们现在的流程走;发完跑 /release-start
 ```

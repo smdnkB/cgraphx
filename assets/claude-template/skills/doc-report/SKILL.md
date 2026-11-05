@@ -225,7 +225,7 @@ Developer Timeline 记录项目本地事件流:
 - `stop`:会话结束
 - `git_commit`:提交记录
 
-数据存在项目本地 `.cgraphx/cgraphx.db`,per-project 隔离。
+数据按项目存在 `~/.cgraphx/projects/<目录名>/cgraphx.db`:同一项目在本机各个目录(clone、worktree、副本)干活都记进这一份,在哪个目录查看到的都一样;还没并过旧数据的目录照旧在 `.cgraphx/cgraphx.db`。项目之间互相隔离。
 
 ### 命令
 

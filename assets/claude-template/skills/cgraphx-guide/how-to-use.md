@@ -21,7 +21,7 @@ cd your-project
 cgraphx install
 ```
 
-一条命令全做:建 `.cgraphx/` 数据目录(知识库 + timeline)+ 部署 skills/commands 到 `.claude/` + 接入 hooks/statusLine + 写工作方式到 `.claude/CLAUDE.md`。重启 Claude Code 即可。
+一条命令全做:建本地 `.cgraphx/`(知识库索引)和用户目录里这个项目的数据目录(timeline、任务、上报;同一项目的各个目录共用),并把原来的旧数据并过去 + 部署 skills/commands 到 `.claude/` + 接入 hooks/statusLine + 写工作方式到 `.claude/CLAUDE.md`。重启 Claude Code 即可。
 
 ### 升级
 
@@ -33,11 +33,11 @@ cgraphx upgrade           # 在项目目录内执行:npm 自更新 + 自动刷�
 ### 卸载 · 可选
 
 ```bash
-cgraphx uninstall         # 按清单清 .claude/ 内包自带 skills/配置 + 删 .cgraphx/
+cgraphx uninstall         # 按清单清 .claude/ 内包自带 skills/配置 + 删这个目录的 .cgraphx/
 npm uninstall -g cgraphx  # 卸载 CLI
 ```
 
-加 `--keep-data` 保留 `.cgraphx/` 数据。
+加 `--keep-data` 保留这个目录的 `.cgraphx/`;项目的数据不随卸载删除,用 `cgraphx project list` 列出、`cgraphx project remove <目录名>` 删除。
 
 ---
 
@@ -140,7 +140,7 @@ knowledge-recall(自动召回)
 - `/dev-merge` 合入:副本里跑,先同步主目录当前分支、就地解决冲突;主目录里跑 `/dev-merge <需求>`,预演没冲突就以「合入需求：<标题>」合入当前分支——需求做完、`/code-review` 过了之后
 - `/release-review` 发版审核:出 `docs/releases/v<版本号>-发版审核.md` 并提交,你说「发」再合入主干、列出可以清理的副本——发版那天改好版本号之后
 
-> 版本分支上直接提交会被拦下,只放行合并提交和以 `chore(release):` 开头的整版改动;副本里的会话、提交、任务归属记进主目录,知识库索引和「我的需求」索引各目录各建各的。副本单独也能用:没开版本时 `/dev-start` 从主目录当前分支拉,`/dev-merge` 合回这个分支,合完问要不要删副本。需要 git 2.38 以上;副本只支持 macOS、Linux。
+> 版本分支上直接提交会被拦下,只放行合并提交和以 `chore(release):` 开头的整版改动;副本里的会话、提交、任务归属和主目录记进同一个项目的数据,知识库索引和「我的需求」索引各目录各建各的。副本单独也能用:没开版本时 `/dev-start` 从主目录当前分支拉,`/dev-merge` 合回这个分支,合完问要不要删副本。需要 git 2.38 以上;副本只支持 macOS、Linux。
 
 ---
 
