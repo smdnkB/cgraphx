@@ -38,6 +38,7 @@ import { registerReplicaCommands } from '../core/replica/cli';
 import { registerReleaseCommands } from '../core/release/cli';
 import { registerProjectCommands } from '../core/project/cli';
 import { registerLegacyHookCommands } from './legacy-hook-commands';
+import { emitSessionNotices } from '../core/session-notices';
 
 import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
@@ -309,6 +310,44 @@ function main(): void {
         }
       },
     );
+
+  // ===========================================================================
+  // 会话提示的统一挂点(spec F4 / D16):每条命令 action 完成后出一次提示,只写 stderr。
+  // 不在任何子系统的 cli 里各调一次——漏一个就不提示(D16 没选)。调 process.exit 的命令
+  // 路径(upgrade、install/uninstall 出错)拿不到 postAction,不提示,下一条补上(已知接受项)。
+  // ===========================================================================
+
+  // 不算一条的命令名(C-9):隐藏命令、git 钩子调起的命令、`version`(`--help`、`--version`、
+  // `help` 不走 action,天然不算)。commander 没有公开的 hidden 读取口,按命令名静态列全
+  // (名单实现方式是 plan 允许的局部适配):
+  // - timeline 的 8 个隐藏 hook 子命令(agent 配置 / git 钩子调起;T-8 撤 hooks 时名单一并删)
+  // - commit-gate-hook(commit-msg 门禁片段调起)、guard(release 的 commit-msg 拦截片段调起)
+  // - 已下掉功能的 5 个兼容空命令(旧 agent 配置调起)
+  // - version(裸名词形式的 --version)
+  const NON_SESSION_COMMAND_NAMES = new Set([
+    'timeline-user-prompt-hook',
+    'timeline-pre-tool-use-hook',
+    'timeline-post-tool-use-hook',
+    'timeline-post-tool-use-failure-hook',
+    'timeline-stop-hook',
+    'timeline-session-start-hook',
+    'timeline-session-end-hook',
+    'timeline-git-commit-hook',
+    'commit-gate-hook',
+    'guard',
+    'sync-session-start-hook',
+    'sync-stop-hook',
+    'task-session-start-hook',
+    'task-stop-hook',
+    'task-post-tool-use-hook',
+    'version',
+  ]);
+
+  program.hook('postAction', (_thisCommand: Command, actionCommand: Command) => {
+    if (NON_SESSION_COMMAND_NAMES.has(actionCommand.name())) return;
+    // 提示绝不影响命令:emitSessionNotices 内部整体 try/catch,失败只是不出提示
+    emitSessionNotices(process.cwd());
+  });
 
   program.parse();
 }
