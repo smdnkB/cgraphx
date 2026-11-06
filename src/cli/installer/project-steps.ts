@@ -56,7 +56,7 @@ async function recordProjectName(clack: Clack, projectRoot: string, useDefaults:
     let name = plan.defaultName;
     if (!useDefaults) {
       const answer = await clack.text({
-        message: '项目名称(同名的目录记进同一个项目)',
+        message: '项目名称(这个项目按名字认,同名的目录记进同一个项目)',
         initialValue: plan.defaultName,
         validate: (value) => {
           const checked = validateProjectName(value ?? '');
