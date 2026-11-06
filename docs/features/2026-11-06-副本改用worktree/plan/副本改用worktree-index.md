@@ -209,7 +209,7 @@ npm run build
 npm test
 
 # 旧实现与旧说法必须清零
-grep -rn "no_cow\|--full-copy\|fullCopy\|写时复制" src/ assets/claude-template/ || echo "OK: 无残留"
+grep -rn "no_cow\|--full-copy\|fullCopy\|写时复制" src/core/replica/ assets/claude-template/ || echo "OK: 无残留"
 grep -rn "fetch" src/core/replica/ assets/claude-template/skills/dev-merge/SKILL.md || echo "OK: 没有 fetch"
 
 # 命令面
