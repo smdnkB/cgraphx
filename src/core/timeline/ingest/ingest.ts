@@ -11,11 +11,11 @@
  *      没变的直接跳过(实测 3,221 个文件几十毫秒),一个都没变就不开库、不拿锁
  *   3. 有要处理的先拿项目数据目录的 ingest.lock(写法沿用 project/merge-files.ts:wx 独占创建、
  *      pid 不活或超 2 小时算陈旧;最多等 3 秒,等不到 → busy,查询照常执行)
- *   4. 逐文件:认 start_cwd(新文件读会话头;subagents/ 下的文件跟主会话),按 start_dirs 认归属
- *      ——没认过的开始目录跑一次 findProjectRoot + identityOfRoot(不在补录里反复跑 git,结果缓存
- *      进 start_dirs);目录不在了按本项目库的 timeline_roots 和副本登记匹配(K1);归当前项目的
- *      文件从上次偏移增量读到最后一个完整行,事实映射成事件按 source_key 去重(D5)写库,顺手
- *      upsert timeline_roots(hook 退役后这里是它的写入方,不然删掉目录的会话再认不回来)
+ *   4. 逐文件:认 start_cwd(新文件读会话头;subagents/ 下的文件跟主会话)。开始目录还在就现认
+ *      ——同一趟按目录记住,git 按根只跑一次;不在了才用 start_dirs 缓存,再退到本项目库的
+ *      timeline_roots 与副本登记(K1)。归当前项目的文件从上次偏移增量读到最后一个完整行,事实映射
+ *      成事件按 source_key 去重(D5)写库,顺手 upsert timeline_roots(hook 退役后这里是它的写入方,
+ *      不然删掉目录的会话再认不回来)
  *   5. 项目库提交之后才更新 sessions.db 的偏移(D4:反过来的话中断会丢事件);别的项目的文件不代
  *      推进偏移——它的项目自己补
  *
@@ -152,6 +152,11 @@ export interface ClassificationContext {
   readonly sessionIndex: SessionIndex;
   /** 目录不在时的根匹配:本项目库 timeline_roots + 副本登记(在用、已删都算) */
   readonly fallbackMatcher: () => RootMatcher;
+  /**
+   * 本趟已认过的开始目录(键 = 传入的 cwd 原值):每个文件都会调 classifyStartDir,不记住的话
+   * 同一趟会为同一个开始目录反复扫 projects/ + 读 identity.json。只管这一趟,与 start_dirs 缓存无关。
+   */
+  readonly classified: Map<string, DirClassification>;
 }
 
 /** 事实 → 事件映射要用的上下文(增量与重建共用;重建的 projectDb 指向临时库)。 */
@@ -244,6 +249,7 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
         removedAtMs,
         unparsed: new Map(),
         sessionsWritten: new Set(),
+        classified: new Map(),
         projectDb,
         fallbackMatcher: () => {
           if (matcher === null) {
@@ -488,32 +494,62 @@ export function unparsedNotices(unparsed: UnparsedMap): string[] {
 
 // ─── 开始目录归属(D3、K1、K3)───────────────────────────────────────────────
 
-export function classifyStartDir(cwd: string, ctx: ClassificationContext): DirClassification {
+/** 目录还在不在(start 目录可能早被删/改名了);抛错(权限等)按不在。 */
+function startDirExists(cwd: string): boolean {
+  try {
+    return fs.statSync(cwd, { throwIfNoEntry: false })?.isDirectory() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/** 开始目录还在:现认。返回 null 表示 git 瞬时跑不起来(这一趟别写 start_dirs,下次再认)。 */
+function recognizeExistingDir(cwd: string): DirClassification | null {
+  const root = findProjectRoot(cwd);
+  if (root === null) return { dirName: null, root: null, name: null };
+  const info = identityOfRoot(root);
+  if (info === 'git-error') return null;
+  const identity = info.identity;
+  // K3:项目目录已在(findProjectDir 非空)才记;没有 → null,项目建了目录后重认
+  const dirName = identity !== null ? findProjectDir(identity)?.name ?? null : null;
+  return { dirName, root, name: identity?.name ?? null };
+}
+
+/** 开始目录不在了:只有这时才用 start_dirs 缓存,没认过的退到 timeline_roots 与副本登记(K1;都不中 → 留空)。 */
+function classifyGoneDir(cwd: string, ctx: ClassificationContext): DirClassification {
   const cached = ctx.sessionIndex.getStartDir(cwd);
-  // 认到过项目的直接用缓存(改名会清掉受影响根的行,下次重认);没认出来过的现认:
-  // 项目可能后来才装、才记名字、才建项目目录(K3 补历史的依据)
   if (cached !== null && cached.project_dir !== null) {
     return { dirName: cached.project_dir, root: cached.root, name: cached.name };
   }
-  const root = findProjectRoot(cwd);
+  const hit = ctx.fallbackMatcher().match(cwd, { allowSelf: true });
+  return hit !== null
+    ? { dirName: ctx.currentDirName, root: hit.root, name: null }
+    : { dirName: null, root: null, name: null };
+}
+
+/**
+ * 开始目录归属(D3、K1、K3):开始目录还在就现认(改名、换项目目录后这里才对得上),只有目录不在了
+ * 才用 start_dirs 缓存。结果按 cwd 记进本趟记忆,并写一行 start_dirs(目录将来被删时靠它兜底)。
+ */
+export function classifyStartDir(cwd: string, ctx: ClassificationContext): DirClassification {
+  const remembered = ctx.classified.get(cwd);
+  if (remembered !== undefined) return remembered;
+
   let out: DirClassification;
-  if (root !== null) {
-    const info = identityOfRoot(root);
-    if (info === 'git-error') {
-      // git 瞬时跑不起来:不缓存,下次文件变了再认
-      return { dirName: null, root: null, name: null };
+  if (startDirExists(cwd)) {
+    const recognized = recognizeExistingDir(cwd);
+    if (recognized === null) {
+      // git 跑不起来:不写 start_dirs(下次再认),但记进本趟记忆,别为每个文件反复跑失败的 git
+      const empty: DirClassification = { dirName: null, root: null, name: null };
+      ctx.classified.set(cwd, empty);
+      return empty;
     }
-    const identity = info.identity;
-    // K3:项目目录已在(findProjectDir 非空)才记;没有 → null,项目建了目录后重认
-    const dirName = identity !== null ? findProjectDir(identity)?.name ?? null : null;
-    out = { dirName, root, name: identity?.name ?? null };
+    out = recognized;
   } else {
-    // 目录不在了:按本项目库记过的根(timeline_roots)和副本登记匹配(K1;都不中 → 留空)
-    const hit = ctx.fallbackMatcher().match(cwd, { allowSelf: true });
-    out = hit !== null
-      ? { dirName: ctx.currentDirName, root: hit.root, name: null }
-      : { dirName: null, root: null, name: null };
+    out = classifyGoneDir(cwd, ctx);
   }
+
+  ctx.classified.set(cwd, out);
   try {
     ctx.sessionIndex.saveStartDir({ cwd, root: out.root, name: out.name, project_dir: out.dirName });
   } catch {

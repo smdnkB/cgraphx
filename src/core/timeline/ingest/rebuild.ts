@@ -11,8 +11,9 @@
  *      之后的增量只收删除之后的事实
  *   4. 全量解析这个项目的会话文件(归属判定与事实映射复用 ingest.ts 同一套函数,路径升序:主文件先于
  *      subagents/,session_head 先到先得),事件写进项目数据目录下的临时库 rebuild.tmp.db(先删残留再建,
- *      应用 timeline schema)。解析期间不碰项目库——「整个解析放一个事务」是 spec 明确没选的方案:
- *      持写锁十几秒,这期间的提交记录会写失败,而提交记录补不回来
+ *      应用 timeline schema)。sessions.db 里已记到别的项目、偏移又大于 0 的文件不从头读(交给增量,
+ *      免得改名后新项目把旧历史再解析一遍)。解析期间不碰项目库——「整个解析放一个事务」是 spec 明确
+ *      没选的方案:持写锁十几秒,这期间的提交记录会写失败,而提交记录补不回来
  *   5. 项目库一个短事务(秒级)里:ATTACH 临时库 → 删非提交事件(K24,不备份)→ INSERT SELECT 临时库
  *      事件 → 并 timeline_roots → 写 rebuilt_at → 提交。rebuilt_at 必须写在这个事务里:写在事务外,
  *      中断后会误判「重建过」。失败即回滚,清和写一起撤销,时间线还是旧的;重建中途杀进程同理
@@ -32,7 +33,7 @@ import { findProjectRoot, locateDataAtRoot } from '../../data-location';
 import { DatabaseConnection, DATABASE_FILENAME, type SqliteDatabase } from '../../db';
 import { listReplicas } from '../../replica';
 import { createRootMatcher, type RootMatcher } from '../../root-match';
-import { openSessionIndex, type SessionIndex } from '../../session-index';
+import { openSessionIndex, type SessionFileRow, type SessionIndex } from '../../session-index';
 import { sessionsRoot } from '../../user-data-dir';
 import { readRootRows } from '../roots';
 import { ensureTimelineSchema } from '../schema-bootstrap';
@@ -148,12 +149,17 @@ function firstSessionHead(facts: readonly SessionFact[]): Extract<SessionFact, {
 }
 
 /**
- * 文件的 start_cwd:sessions.db 已认过的直接用;subagents/ 下的文件跟主会话(spec D2 表注)——本轮
- * 先解析主文件,自己刚认出的结果优先,没有再查 sessions.db 里主文件的行。
+ * 文件的 start_cwd:sessions.db 已认过的直接用(recorded 是调用方取到的那一行,不再重查);subagents/
+ * 下的文件跟主会话(spec D2 表注)——本轮先解析主文件,自己刚认出的结果优先,没有再查 sessions.db 里
+ * 主文件的行。
  */
-function knownStartCwd(file: string, sessionIndex: SessionIndex, parsedStartCwd: Map<string, string>): string | null {
-  const known = sessionIndex.getSessionFile(file);
-  if (known !== null && known.start_cwd !== null) return known.start_cwd;
+function knownStartCwd(
+  file: string,
+  recorded: SessionFileRow | null,
+  sessionIndex: SessionIndex,
+  parsedStartCwd: Map<string, string>,
+): string | null {
+  if (recorded !== null && recorded.start_cwd !== null) return recorded.start_cwd;
   const main = subagentMainPath(file);
   if (main !== null) {
     const own = parsedStartCwd.get(main);
@@ -307,6 +313,7 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
     const classifyCtx: ClassificationContext = {
       currentDirName: loc.projectDirName,
       sessionIndex,
+      classified: new Map(),
       fallbackMatcher: () => {
         if (matcher === null) {
           const recorded = readRootRows(projectDb).map((r) => r.root);
@@ -331,7 +338,19 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
       for (const file of listSessionFiles(agentRoot)) {
         const stat = statOrNull(file);
         if (stat === null) continue; // 文件没了(F1 ⑤):已记进时间线的留着
-        let startCwd = knownStartCwd(file, sessionIndex, parsedStartCwd);
+        // 循环开头取一次,后面判断跳过与 knownStartCwd 共用(同一个文件不查两遍 sessions.db)
+        const recorded = sessionIndex.getSessionFile(file);
+        // D5:已记到别的项目、内容也读过的文件不在重建里从头读——偏移留着交给增量,否则改名后
+        // 新项目会把旧历史再解析一遍。没记过 / 归本项目 / 偏移还是 0 的照旧从头读
+        if (
+          recorded !== null &&
+          recorded.project_dir !== null &&
+          recorded.project_dir !== loc.projectDirName &&
+          recorded.byte_offset > 0
+        ) {
+          continue;
+        }
+        let startCwd = knownStartCwd(file, recorded, sessionIndex, parsedStartCwd);
         let result: SessionFileReadResult | null = null;
         if (startCwd === null) {
           result = await sessionFactsReader(profile.sessionReader)(file, 0);
