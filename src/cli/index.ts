@@ -37,6 +37,7 @@ import { registerReportCommands } from '../core/report/cli';
 import { registerReplicaCommands } from '../core/replica/cli';
 import { registerReleaseCommands } from '../core/release/cli';
 import { registerProjectCommands } from '../core/project/cli';
+import { checkDuplicateName } from '../core/project';
 import { registerLegacyHookCommands } from './legacy-hook-commands';
 import { emitSessionNotices } from '../core/session-notices';
 
@@ -315,6 +316,8 @@ function main(): void {
   // 会话提示的统一挂点(spec F4 / D16):每条命令 action 完成后出一次提示,只写 stderr。
   // 不在任何子系统的 cli 里各调一次——漏一个就不提示(D16 没选)。调 process.exit 的命令
   // 路径(upgrade、install/uninstall 出错)拿不到 postAction,不提示,下一条补上(已知接受项)。
+  // 这里挂两个提示:会话提示(emitSessionNotices)+ 重名提示(checkDuplicateName);都只写 stderr、
+  // 都各自整体 try/catch——提示不得影响命令结果与退出码(spec 全局约束 2)。
   // ===========================================================================
 
   // 不算一条的命令名(C-9):隐藏命令、git 钩子调起的命令、`version`(`--help`、`--version`、
@@ -347,6 +350,13 @@ function main(): void {
     if (NON_SESSION_COMMAND_NAMES.has(actionCommand.name())) return;
     // 提示绝不影响命令:emitSessionNotices 内部整体 try/catch,失败只是不出提示
     emitSessionNotices(process.cwd());
+    // 重名提示(spec F3、C-8):这个目录第一次判断,重名才往 stderr 写一行;--json 的 stdout 不混提示
+    try {
+      const notice = checkDuplicateName(process.cwd());
+      if (notice !== null) process.stderr.write(`${notice}\n`);
+    } catch {
+      // 判断失败不影响命令结果与退出码,下次再判断
+    }
   });
 
   program.parse();

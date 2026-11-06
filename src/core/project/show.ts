@@ -10,21 +10,15 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { locateData, missingDataMessage, type DataLocation } from '../data-location';
-import { identityKind, projectDisplayName, type ProjectIdentity } from '../project-identity';
+import { projectDisplayName, type ProjectIdentity } from '../project-identity';
 import { listTimelineRoots, type TimelineRoot } from '../timeline';
 import { findProjectDir } from '../user-data-dir';
 import { ProjectError } from './errors';
 import type { ProjectRef, ProjectRootInfo, ProjectShowReport } from './types';
 
-/** 有标识的项目引用;dir 是项目目录名(还没建为 null)。 */
+/** 有标识的项目引用;dir 是项目目录名(还没建为 null),display 就是名字。 */
 export function projectRefOf(identity: ProjectIdentity, dir: string | null): ProjectRef {
-  return {
-    dir,
-    display: projectDisplayName(identity),
-    kind: identityKind(identity),
-    origin: identity.origin,
-    name: identity.name,
-  };
+  return { dir, display: projectDisplayName(identity), name: identity.name };
 }
 
 /** timeline 记下的根(已按最近活动降序)→ 根信息,顺带看目录还在不在。 */

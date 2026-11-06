@@ -1,25 +1,28 @@
 /**
- * 项目标识(spec:2026-11-05-数据按项目放用户目录 D3、D4、D5、D18、D19)
+ * 项目标识(spec:2026-11-06-项目按名称认 D1、D2、D3)
  *
- * 一个根(D2,见 data-location.ts 的 findProjectRoot)属于哪个项目看它的标识:规整后的 origin、项目名称
- * 两项,两项都相同才算同一个项目。按根取:
+ * 一个根(见 data-location.ts 的 findProjectRoot)属于哪个项目只看名字:名字相同就是同一个项目。名字按
+ * 下面的顺序取,取第一个成立的:
  *
- * | 根 | 标识 |
+ * | 根 | 名字 |
  * |---|---|
- * | 工作区根,有 origin,没记名字 | origin |
- * | 工作区根,记了名字 | 名字 |
- * | 工作区里的子目录(一个仓库装了几个项目) | origin 加名字;没有 origin 只用名字 |
- * | 不在 git 仓库里 | 名字 |
- * | 装过、该有名字却没记 | 默认名字(目录名;子目录项目取子目录名),不写回 |
- * | 没有 origin、没记名字、也没装过 | 没有标识 |
+ * | 记了名字(工作区根 / 子目录项目 / 不在 git 仓库里) | 记下的名字 |
+ * | 工作区根,有 origin,没记名字 | 仓库名(origin 的最后一段) |
+ * | 装过,没记名字、也没有仓库名 | 默认名字(目录名;子目录项目取子目录名),不写回 |
+ * | 都没有 | 没有标识 |
+ *
+ * 子目录项目(一个仓库装了几个项目)不按仓库名取,只认记下的名字或子目录名。
  *
  * 名字存放:根在 git 仓库里存本地 git 配置——工作区根 `cgraphx.projectName`,子目录项目
  * `[cgraphx "<子目录>"] projectName`(worktree 共用、`cp -R` 带着、新 clone 没有);不在 git 仓库里存本地
  * `.cgraphx/project.json` 的 `name`。
  *
+ * 地址(origin)只跟根一起带出来给两处用:没记名字时取默认名字(D2)、重名判断(D9 的 K6);**不参与任何
+ * 「是不是同一个项目」的比较**。
+ *
  * 跑 git:认标识只跑一次 `git config -z --get-regexp`,一次取齐 origin、各级配置里的 `url.*.insteadof` 和
- * `cgraphx.*`。同一进程按根记住标识(git 出错的不记,下一次再试),同一工作区读出的配置也记住;会话登记、
- * git 钩子把认好的标识填进来(rememberRootIdentity),之后的调用不再跑 git。
+ * `cgraphx.*`。同一进程按根记住标识(git 出错的不记,下一次再试),同一工作区读出的配置也记住;git 钩子列
+ * 仓库里的项目时把认好的标识填进来(rememberRootIdentity),之后的调用不再跑 git。
  */
 
 import { execFileSync } from 'node:child_process';
@@ -29,28 +32,32 @@ import * as path from 'node:path';
 import { readLocalProjectJson, updateLocalProjectJson } from './data-location';
 import { isInitialized } from './directory';
 
-/** spec D3:按 origin 认 → name 为 null;按名字认 → origin 为 null;子目录项目两项都有(没有 origin 时只有 name)。两项都相同才算同一个标识。 */
-export interface ProjectIdentity { origin: string | null; name: string | null }
-export type IdentityKind = 'origin' | 'name' | 'origin+name';
+/** spec D1:项目标识只有一个名字,名字相同就是同一个项目。 */
+export interface ProjectIdentity { name: string }
+
 export interface RootIdentity {
   root: string;
-  /** null = 没有标识(D3 表最后一行:没有 origin、没记名字、也没装过) */
+  /** null = 没有标识(D1:记下的名字、仓库名、默认名字都没有) */
   identity: ProjectIdentity | null;
+  /**
+   * 这个根规整后的 origin(已应用 insteadOf)。只给取默认名字与重名判断用,不参与项目比较:没有 origin、或不
+   * 在 git 仓库里为 null(此时 identity 仍可能有)。
+   */
+  origin: string | null;
   /** 根所在的 git 工作区根(从根往上第一个有 .git 的目录,目录或文件都算);不在 git 里为 null */
   workTreeRoot: string | null;
   /** 根相对工作区根的 POSIX 路径;根就是工作区根、或不在 git 里为 null */
   subdir: string | null;
-  /** 这个根按名字认:没有 origin 的工作区根、子目录项目、不在 git 里的目录 */
-  needsName: boolean;
-  /** 名字从哪来:'recorded' 记下的;'default' 按默认名字认、没写回;不按名字认为 null */
-  nameSource: 'recorded' | 'default' | null;
+  /** 名字从哪来:'recorded' 记下的;'repo' 有 origin 取的仓库名;'default' 默认名字;没有标识为 null */
+  nameSource: 'recorded' | 'repo' | 'default' | null;
 }
 
 type NameSource = RootIdentity['nameSource'];
 
-/** 进程内记下的一个根:标识,以及名字从哪来。 */
+/** 进程内记下的一个根:标识、这个根规整后的 origin,以及名字从哪来。 */
 interface RememberedRoot {
   identity: ProjectIdentity | null;
+  origin: string | null;
   nameSource: NameSource;
 }
 
@@ -69,7 +76,7 @@ interface InsteadOfRule {
   prefix: string;
 }
 
-/** 认标识的那一次配置读取:只取 origin、insteadOf 和 cgraphx 自己的键(D5)。 */
+/** 认标识的那一次配置读取:只取 origin、insteadOf 和 cgraphx 自己的键,一次取齐。 */
 const CONFIG_KEYS_REGEXP = '^(remote\\.origin\\.url|url\\..*\\.insteadof|cgraphx\\..*)$';
 
 /** git 输出的键:节名、键名转小写,子节名原样。 */
@@ -80,13 +87,13 @@ const ROOT_NAME_KEY = 'cgraphx.projectname';
 const SUBDIR_NAME_PREFIX = 'cgraphx.';
 const SUBDIR_NAME_SUFFIX = '.projectname';
 
-/** URL 写法里按主机、路径拆开的协议(D4);其余协议(`file://` 等)只去末尾的 `/`、`.git`。 */
+/** URL 写法里按主机、路径拆开的协议;其余协议(`file://` 等)只去末尾的 `/`、`.git`。 */
 const URL_SCHEMES: ReadonlySet<string> = new Set(['ssh', 'git', 'http', 'https', 'git+ssh', 'ssh+git']);
 const SCHEME_RE = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//;
 /** Windows 盘符路径(`C:\x`、`C:/x`)是本地路径,不是 scp 写法。 */
 const DRIVE_PATH_RE = /^[A-Za-z]:[\\/]/;
 
-/** 项目名称最多多少个字(按码点,D19)。 */
+/** 项目名称最多多少个字(按码点)。 */
 const MAX_NAME_LENGTH = 100;
 const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
 
@@ -183,7 +190,7 @@ function hostOfAuthority(authority: string): string {
 }
 
 /**
- * spec D4:比的是规整后的 `主机/路径`。scp 写法(`[用户@]主机:路径`,冒号前没有 `/`)和 URL 写法(ssh、git、
+ * 地址规整:比的是规整后的 `主机/路径`。scp 写法(`[用户@]主机:路径`,冒号前没有 `/`)和 URL 写法(ssh、git、
  * http、https、git+ssh、ssh+git)拆成主机和路径,去掉用户名、密码、端口,主机转小写,路径去掉开头的 `/`、`~`
  * 和末尾的 `/`、`.git`;其余(本地路径、`file://`)只去末尾的 `/`、`.git`,原样返回。
  */
@@ -297,39 +304,48 @@ export function readGitConfig(cwd: string): GitConfigSnapshot | 'git-error' {
   return loadGitConfig(resolved, findWorkTreeRoot(resolved));
 }
 
-/** 装过才按默认名字认;没装过就没有标识。 */
+/** 装过才按默认名字认;没装过就没有标识。origin 原样带出(有地址但认不出名字的根也可能有)。 */
 function defaultIdentity(root: string, subdir: string | null, origin: string | null): RememberedRoot {
-  if (!isInstalled(root)) return { identity: null, nameSource: null };
-  return { identity: { origin, name: defaultNameOf(root, subdir) }, nameSource: 'default' };
+  if (!isInstalled(root)) return { identity: null, origin, nameSource: null };
+  return { identity: { name: defaultNameOf(root, subdir) }, origin, nameSource: 'default' };
 }
 
-/** 按 D3 的表认标识;在 git 里时读一次配置。 */
+/** 仓库名:规整后 origin 按 `/` 拆段的最后一段,过一遍项目名校验;取不到、不像名字 → null。 */
+function repoNameOf(origin: string | null): string | null {
+  if (origin === null) return null;
+  const segments = origin.split('/').filter((seg) => seg !== '');
+  const last = segments[segments.length - 1];
+  if (last === undefined) return null;
+  const checked = validateProjectName(last);
+  return checked.ok ? checked.name : null;
+}
+
+/** 按 D2 的顺序认标识;在 git 里时读一次配置。origin 在每一步都原样带出。 */
 function readRootIdentity(root: string, workTreeRoot: string | null, subdir: string | null): RememberedRoot | 'git-error' {
   if (workTreeRoot === null) {
     const name = recordedName(readLocalProjectJson(root)?.name ?? null);
-    if (name !== null) return { identity: { origin: null, name }, nameSource: 'recorded' };
+    if (name !== null) return { identity: { name }, origin: null, nameSource: 'recorded' };
     return defaultIdentity(root, null, null);
   }
   const config = loadGitConfig(root, workTreeRoot);
   if (config === 'git-error') return 'git-error';
+  const origin = config.origin;
   if (subdir === null) {
-    if (config.rootName !== null) return { identity: { origin: null, name: config.rootName }, nameSource: 'recorded' };
-    if (config.origin !== null) return { identity: { origin: config.origin, name: null }, nameSource: null };
-    return defaultIdentity(root, null, null);
+    if (config.rootName !== null) return { identity: { name: config.rootName }, origin, nameSource: 'recorded' };
+    // D2:仓库名只对工作区根生效;子目录项目不走这一条
+    const repoName = repoNameOf(origin);
+    if (repoName !== null) return { identity: { name: repoName }, origin, nameSource: 'repo' };
+    return defaultIdentity(root, null, origin);
   }
   const name = config.subdirNames.get(subdir);
-  if (name !== undefined) return { identity: { origin: config.origin, name }, nameSource: 'recorded' };
-  return defaultIdentity(root, subdir, config.origin);
-}
-
-function needsNameOf(workTreeRoot: string | null, subdir: string | null, identity: ProjectIdentity | null): boolean {
-  return workTreeRoot === null || subdir !== null || identity === null || identity.origin === null;
+  if (name !== undefined) return { identity: { name }, origin, nameSource: 'recorded' };
+  return defaultIdentity(root, subdir, origin);
 }
 
 /**
- * spec D3、D5:根的标识。根在 git 工作区里时在根下跑且只跑一次配置读取(同一工作区读过的不再跑);不在 git
- * 里不跑 git,名字取本地 `.cgraphx/project.json`。git 跑不起来或报错 → 'git-error',不进记忆。同一进程按
- * `path.resolve(root)` 记住标识;workTreeRoot、subdir、needsName 每次现算。
+ * spec D1、D2:根的标识与它规整后的 origin。根在 git 工作区里时在根下跑且只跑一次配置读取(同一工作区读过的
+ * 不再跑);不在 git 里不跑 git,名字取本地 `.cgraphx/project.json`。git 跑不起来或报错 → 'git-error',不进
+ * 记忆。同一进程按 `path.resolve(root)` 记住标识与 origin;workTreeRoot、subdir 每次现算。
  */
 export function identityOfRoot(root: string): RootIdentity | 'git-error' {
   const resolved = path.resolve(root);
@@ -342,14 +358,13 @@ export function identityOfRoot(root: string): RootIdentity | 'git-error' {
     remembered = read;
     memoSet(rootMemo, resolved, remembered);
   }
-  const needsName = needsNameOf(workTreeRoot, subdir, remembered.identity);
   return {
     root: resolved,
     identity: remembered.identity,
+    origin: remembered.origin,
     workTreeRoot,
     subdir,
-    needsName,
-    nameSource: needsName ? remembered.nameSource : null,
+    nameSource: remembered.nameSource,
   };
 }
 
@@ -359,14 +374,19 @@ function sameOptionalIdentity(a: ProjectIdentity | null, b: ProjectIdentity | nu
 }
 
 /**
- * spec D8:把认好的标识(会话登记、git 钩子读出来的)填进进程内记忆,之后 identityOfRoot(root) 不跑 git。
- * 和已记住的相同就不动;不同时名字一律按记下的算(按默认名字认只在现读配置时分得出)。
+ * 把认好的标识(仓库项目列表、git 钩子读出来的)填进进程内记忆,之后 identityOfRoot(root) 不跑 git。
+ * 和已记住的相同就不动;不同时名字一律按记下的算(默认名字只在现读配置时分得出)。已记住的根保留原来的
+ * origin——后填的标识不带地址,不能把它清成 null。
  */
-export function rememberRootIdentity(root: string, identity: ProjectIdentity | null): void {
+export function rememberRootIdentity(root: string, identity: ProjectIdentity | null, origin: string | null): void {
   const key = path.resolve(root);
   const current = rootMemo.get(key);
   if (current !== undefined && sameOptionalIdentity(current.identity, identity)) return;
-  memoSet(rootMemo, key, { identity, nameSource: identity !== null && identity.name !== null ? 'recorded' : null });
+  memoSet(rootMemo, key, {
+    identity,
+    origin: current?.origin ?? origin,
+    nameSource: identity !== null ? 'recorded' : null,
+  });
 }
 
 /** 改名以后清掉这个根记住的标识和它所在工作区的配置,同进程后面的 identityOfRoot 重新读。 */
@@ -376,19 +396,14 @@ function clearRootIdentity(root: string): void {
   configMemo.delete(findWorkTreeRoot(resolved) ?? resolved);
 }
 
-export function identityKind(id: ProjectIdentity): IdentityKind {
-  if (id.origin !== null) return id.name !== null ? 'origin+name' : 'origin';
-  return 'name';
-}
-
-/** spec D18:按 origin 认 → `github.com/smdnkB/cgraphx`;按 origin 加名字 → `github.com/org/platform#server`;按名字 → 名字本身。 */
+/** spec D1:显示名就是名字;没有标识 → 空串。 */
 export function projectDisplayName(id: ProjectIdentity): string {
-  if (id.origin !== null && id.name !== null) return `${id.origin}#${id.name}`;
-  return id.origin ?? id.name ?? '';
+  return id.name;
 }
 
+/** spec D1:名字相同就是同一个项目;地址不参与比较。 */
 export function sameIdentity(a: ProjectIdentity, b: ProjectIdentity): boolean {
-  return a.origin === b.origin && a.name === b.name;
+  return a.name === b.name;
 }
 
 /** 默认名字:目录名;子目录项目取子目录最后一段。 */
@@ -396,7 +411,7 @@ export function defaultProjectName(info: RootIdentity): string {
   return defaultNameOf(info.root, info.subdir);
 }
 
-/** spec D19:去掉首尾空白;不能为空、不能有换行和控制字符、不超过 100 个字(按码点)。 */
+/** 去掉首尾空白;不能为空、不能有换行和控制字符、不超过 100 个字(按码点)。 */
 export function validateProjectName(raw: string): { ok: true; name: string } | { ok: false; reason: string } {
   const name = raw.trim();
   if (name === '') return { ok: false, reason: '项目名称不能为空' };
@@ -406,7 +421,7 @@ export function validateProjectName(raw: string): { ok: true; name: string } | {
 }
 
 /**
- * spec D3、D19:记下项目名称。根在 git 工作区里 → 写本地 git 配置(工作区根 `cgraphx.projectName`,子目录
+ * spec D1、D2:记下项目名称。根在 git 工作区里 → 写本地 git 配置(工作区根 `cgraphx.projectName`,子目录
  * 项目 `cgraphx.<子目录>.projectName`);不在 git 里且装过 → 写本地 `.cgraphx/project.json` 的 `name`;
  * 不在 git 里也没装过 → 抛错。写完清掉这个根的进程内记忆。
  */

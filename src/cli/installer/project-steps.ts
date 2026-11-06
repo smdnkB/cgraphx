@@ -12,6 +12,7 @@ import { projectDisplayName, validateProjectName } from '../../core/project-iden
 import { listOtherInstalledDirs } from '../../core/repo-projects';
 import {
   applyInstallName,
+  checkDuplicateName,
   hasUnmergedLegacyData,
   mergeLegacyData,
   planInstallName,
@@ -40,8 +41,8 @@ function errorMessage(err: unknown): string {
 }
 
 /**
- * install 第 ⑦ 步:这个目录按名字认时记下项目名称(`-y` 用默认名,交互时问,默认名打底;取消就退出安装,
- * 记不下只提示),再把本地旧库并进用户目录。不受子系统勾选影响;失败只提示,安装照常往下走(D30)。
+ * install 第 ⑦ 步:记下项目名称(每个项目都问;`-y` 用默认名,交互时问,默认名打底;取消就退出安装,记不下只
+ * 提示),再把本地旧库并进用户目录。不受子系统勾选影响;失败只提示,安装照常往下走(D30)。
  */
 export async function settleProjectData(clack: Clack, projectRoot: string, useDefaults: boolean): Promise<void> {
   await recordProjectName(clack, projectRoot, useDefaults);
@@ -51,12 +52,12 @@ export async function settleProjectData(clack: Clack, projectRoot: string, useDe
 async function recordProjectName(clack: Clack, projectRoot: string, useDefaults: boolean): Promise<void> {
   try {
     const plan = planInstallName(projectRoot);
-    if (!plan.needsName) return;
+    if (plan.defaultName === null) return;
     let name = plan.defaultName;
     if (!useDefaults) {
       const answer = await clack.text({
         message: '项目名称(这个项目按名字认,同名的目录记进同一个项目)',
-        initialValue: plan.defaultName ?? undefined,
+        initialValue: plan.defaultName,
         validate: (value) => {
           const checked = validateProjectName(value ?? '');
           return checked.ok ? undefined : checked.reason;
@@ -68,11 +69,23 @@ async function recordProjectName(clack: Clack, projectRoot: string, useDefaults:
       }
       name = answer;
     }
-    if (name === null) return;
-    const { notice } = applyInstallName(projectRoot, name);
-    if (notice !== null) clack.log.info(notice);
+    applyInstallName(projectRoot, name);
+    reportDuplicateName(clack, projectRoot);
   } catch (err) {
     clack.log.warn(`没记下项目名称:${errorMessage(err)}`);
+  }
+}
+
+/**
+ * install 里的重名提示(spec F3、C-8):名字记下之后判断一次,命中就用 clack 打一句。判断或提示自己失败静默——
+ * 名字已经记下了,这里只是顺带提示,不能落进外层变成「没记下项目名称」。
+ */
+function reportDuplicateName(clack: Clack, projectRoot: string): void {
+  try {
+    const notice = checkDuplicateName(projectRoot);
+    if (notice !== null) clack.log.info(notice);
+  } catch {
+    // 提示不影响安装
   }
 }
 

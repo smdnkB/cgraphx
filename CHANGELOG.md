@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Changed — projects are recognized by name
+
+A project is now identified by its name alone; the remote address no longer
+takes part in deciding whether two directories are the same project.
+`cgraphx install` asks for the name once per project (with `-y`, or when
+`upgrade` re-runs it, the suggested default is used and written back) and
+stores it in the local git config (`cgraphx.projectName`, or
+`cgraphx.<subdir>.projectName` for a project in a subdirectory of the
+repository; a directory outside git keeps it in `.cgraphx/project.json`).
+Changing the remote, forking, or cloning from a different URL no longer
+splits a project's history. The project directory is named after the
+project (`~/.cgraphx/projects/cgraphx/`), so directories with the same name
+share one timeline and the same project-level connection profiles. A
+directory that meets an existing project with that name gets one notice (on
+stderr, and inside `install`) while the data is still recorded; rename with
+`cgraphx project name`. `identity.json` moves to version 2 (`name` plus the
+`origins` used only by that notice). Removal records and duplicate checks
+live in `~/.cgraphx/sessions.db`, the latter in a new `dirs_checked` table.
+A start directory that still exists is classified on the spot, so changing
+the remote no longer makes ingestion miss new events; a rebuild no longer
+re-parses session files already recorded to another project.
+
 ### Changed — the timeline is parsed from agent session files instead of hooks
 
 cgraphx no longer records agent events through hooks in the agent's

@@ -3,27 +3,25 @@
  *
  * - renameProject:`cgraphx project name <名称>`。名字只经基础层 writeProjectName 写(根在 git 里写本地 git 配置,
  *   不在 git 里写本地 `project.json`);写完把受影响的根(这个根,加上其余工作区里同一相对位置的根)在用户级
- *   sessions.db 里的开始目录归属清掉,下次补录按新标识重新认;偏移不动,已经记下的不搬(spec 2026-11-06-会话文件
+ *   sessions.db 里的开始目录归属清掉,下次补录按新名字重新认;偏移不动,已经记下的不搬(spec 2026-11-06-会话文件
  *   解析替代hooks D2)。之前记的事件留在原项目下,不搬。还有没并过去的旧数据的目录不许改名:先 install 并过去。
- * - planInstallName / applyInstallName:install 时问名字、记名字(K2:按名字认的根,装的时候就把名字记下来,
- *   用默认名字的也记)。
+ * - planInstallName / applyInstallName:install 时问名字、记名字(所有根装的时候都把名字记下来,用默认名字的也记)。
+ *
+ * 重名提示不在这里:install 与普通命令共用 checkDuplicateName(duplicate.ts),记完名字由调用方去判断。
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { findProjectRoot, locateData, missingDataMessage } from '../data-location';
 import { isInitialized } from '../directory';
 import {
   defaultProjectName,
-  identityKind,
   identityOfRoot,
   projectDisplayName,
   sameIdentity,
   validateProjectName,
   writeProjectName,
   type ProjectIdentity,
-  type RootIdentity,
 } from '../project-identity';
 import { listSiblingRoots } from '../repo-projects';
 import { openSessionIndex } from '../session-index';
@@ -76,25 +74,11 @@ function isInstalled(dir: string): boolean {
   }
 }
 
-function realpathOrResolve(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return path.resolve(p);
-  }
-}
-
 /** 校验并规整名字(去首尾空白);不合法 → invalid_name。 */
 function checkedName(rawName: string): string {
   const checked = validateProjectName(rawName);
   if (!checked.ok) throw new ProjectError('invalid_name', checked.reason);
   return checked.name;
-}
-
-/** 记下名字以后的标识(spec D3):工作区根、不在 git 里 → 按名字认;子目录项目 → 原 origin 加名字。 */
-function identityWithName(info: RootIdentity, name: string): ProjectIdentity {
-  if (info.subdir !== null) return { origin: info.identity?.origin ?? null, name };
-  return { origin: null, name };
 }
 
 /**
@@ -129,13 +113,7 @@ function latestRootText(dataDir: string): string {
   }
 }
 
-/** 仓库名:origin 按 `/` 拆后的最后一段。 */
-function repoNameOf(origin: string): string {
-  const segments = origin.split('/').filter((seg) => seg !== '');
-  return segments[segments.length - 1] ?? origin;
-}
-
-/** 改名后给人看的几行:新名字已有数据 → M7;原来按 origin 认 → M8;其余 → M6;原来没有标识 → 只有第一行。 */
+/** 改名后给人看的几行:新名字已有数据 → M7;原来有标识 → M6;原来没有标识 → 只有第一行。 */
 function renameLines(
   prev: ProjectIdentity | null,
   next: ProjectIdentity,
@@ -152,9 +130,7 @@ function renameLines(
   const lines = [`之后记到 ${nextDisplay}`];
   if (prev === null) return lines;
   lines.push(`之前记的 ${events} 条还在 ${projectDisplayName(prev)} 下`);
-  if (identityKind(prev) === 'origin' && prev.origin !== null) {
-    lines.push(`${repoNameOf(prev.origin)} 的别的 clone 照旧记在那里`);
-  }
+  lines.push(`别的按「${projectDisplayName(prev)}」记的目录照旧记在那里`);
   return lines;
 }
 
@@ -179,7 +155,7 @@ export function renameProject(start: string, rawName: string): RenameOutcome {
   }
 
   const prev = info.identity;
-  const next = identityWithName(info, name);
+  const next: ProjectIdentity = { name };
   if (prev !== null && sameIdentity(prev, next)) return { lines: [UNCHANGED_LINE] };
 
   const siblings = listSiblingRoots(root);
@@ -192,41 +168,25 @@ export function renameProject(start: string, rawName: string): RenameOutcome {
 }
 
 /**
- * install 要不要问项目名称(spec D3、K2):按 D2 认根;没有根、git 出错 → 不问。needsName 照根的标识;记过名字时
- * defaultName 是记下的名字,否则是默认名字(目录名;子目录项目取子目录名)。
+ * install 要不要问项目名称(spec D6):起点往上找项目根;没有根、git 出错 → 不问(defaultName 为 null)。有根且 git 正常时
+ * 一律有默认名字:记下的名字,否则是仓库名 / 目录名(子目录项目取子目录名)。
  */
 export function planInstallName(start: string): InstallNamePlan {
   const root = findProjectRoot(start);
-  if (root === null) return { needsName: false, defaultName: null, recorded: false };
+  if (root === null) return { defaultName: null, recorded: false };
   const info = identityOfRoot(root);
-  if (info === 'git-error') return { needsName: false, defaultName: null, recorded: false };
-  const recorded = info.nameSource === 'recorded';
-  const defaultName = recorded ? (info.identity?.name ?? defaultProjectName(info)) : defaultProjectName(info);
-  return { needsName: info.needsName, defaultName, recorded };
-}
-
-/** M5:记下的名字本机已有数据、这个目录还没记进去过。项目库读不出时判断不了,不提示。 */
-function installNotice(root: string, next: ProjectIdentity): string | null {
-  const dir = findProjectDir(next);
-  if (dir === null) return null;
-  let roots: TimelineRoot[];
-  try {
-    roots = readTimelineSummary(dir.dir)?.roots ?? [];
-  } catch {
-    return null;
-  }
-  const self = realpathOrResolve(root);
-  if (roots.some((r) => realpathOrResolve(r.root) === self)) return null;
-  return `${projectDisplayName(next)} 已经有数据(在 ${latestRootOf(roots)} 记的),这个目录也记进去`;
+  if (info === 'git-error') return { defaultName: null, recorded: false };
+  return { defaultName: info.identity?.name ?? defaultProjectName(info), recorded: info.nameSource === 'recorded' };
 }
 
 /**
  * install 时记下项目名称(spec D3、K2)。只有记过同一个名字时不写;其余(包括按默认名字认的)一律写,写完清掉受
- * 影响的根在 sessions.db 里的开始目录归属。notice 为 M5(这个名字已有数据、这个目录还没记进去过),否则 null。
+ * 影响的根在 sessions.db 里的开始目录归属。重名提示由调用方用 checkDuplicateName 判断(install 与普通命令共用同一
+ * 套判断,见 duplicate.ts)。
  *
  * @throws ProjectError invalid_name(名字不合法)、cannot_record(记不下)、no_project(git 跑不起来)
  */
-export function applyInstallName(start: string, name: string): { notice: string | null } {
+export function applyInstallName(start: string, name: string): void {
   const checked = checkedName(name);
   const root = findProjectRoot(start);
   if (root === null) throw new ProjectError('cannot_record', cannotRecordMessage(path.resolve(start)));
@@ -236,12 +196,10 @@ export function applyInstallName(start: string, name: string): { notice: string 
     throw new ProjectError('cannot_record', notInstalledMessage(root));
   }
 
-  const next = identityWithName(info, checked);
   const unchanged = info.nameSource === 'recorded' && info.identity?.name === checked;
   if (!unchanged) {
     const siblings = listSiblingRoots(root);
     writeProjectName(root, checked);
     clearStartDirs(siblings);
   }
-  return { notice: installNotice(root, next) };
 }

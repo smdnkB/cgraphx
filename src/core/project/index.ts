@@ -6,6 +6,8 @@
  *   (planInstallName、applyInstallName)
  * - F4 并旧数据:把目录本地的旧库并进用户目录里这个项目的项目库,先备份、两段并、写记号后删旧表
  *   (mergeLegacyData、hasUnmergedLegacyData)
+ * - F3 重名提示:这个目录记进去的项目本机已有别的目录的数据时提示一句,按目录只判断一次、记录在 sessions.db
+ *   (checkDuplicateName)
  * - F5 列出和删除:用户目录里的项目数据(listProjects、planRemoval、executeRemoval)
  * - 升级清理:清掉已下掉功能(平台同步、开发任务)留在数据位置与本地 `.cgraphx/` 的表和运行文件
  *   (cleanupRemovedFeatureData;spec:2026-11-05-下掉web与平台同步 F3 D6)
@@ -18,7 +20,6 @@
 export type {
   InstallNamePlan,
   MergeOutcome,
-  ProjectKind,
   ProjectListItem,
   ProjectRef,
   ProjectRootInfo,
@@ -28,6 +29,7 @@ export type {
 } from './types';
 export { showProject } from './show';
 export { renameProject, planInstallName, applyInstallName } from './name';
+export { checkDuplicateName } from './duplicate';
 export { listProjects } from './list';
 export { planRemoval, executeRemoval } from './remove';
 export { mergeLegacyData, hasUnmergedLegacyData } from './merge';

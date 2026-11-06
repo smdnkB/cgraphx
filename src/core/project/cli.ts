@@ -27,7 +27,7 @@ import {
   showProject,
 } from './index';
 import { displayPath } from './show';
-import type { ProjectKind, ProjectListItem, ProjectShowReport } from './types';
+import type { ProjectListItem, ProjectShowReport } from './types';
 
 interface JsonOption {
   json?: boolean;
@@ -37,12 +37,6 @@ interface RemoveOptions {
   backups?: boolean;
   yes?: boolean;
 }
-
-const KIND_LABELS: Readonly<Record<ProjectKind, string>> = {
-  origin: '按 origin 认',
-  name: '按名字认',
-  'origin+name': '按 origin 加名字认',
-};
 
 /** M15:`project show` 在旧库。 */
 const LEGACY_SHOW_NOTICE = '这个目录还有没并过去的旧数据,运行 cgraphx install 并过去';
@@ -101,8 +95,7 @@ function formatSize(bytes: number): string {
 
 function printShow(report: ProjectShowReport): void {
   const { project } = report;
-  const kind = project.kind !== null ? `(${KIND_LABELS[project.kind]})` : '';
-  writeOut(`项目:${project.display}${kind}`);
+  writeOut(`项目:${project.display}`);
   const data = report.mode === 'none' || report.dataDir === null ? '还没有数据' : displayPath(report.dataDir);
   writeOut(`数据:${data}`);
   writeOut(report.mode === 'legacy' ? `这个目录:旧库——${LEGACY_SHOW_NOTICE}` : '这个目录:项目库');
@@ -191,9 +184,7 @@ export function registerProjectCommands(program: Command): void {
 
   project
     .command('name <名称>')
-    .description(
-      '改项目名称:没有 origin 的仓库、仓库里的子目录项目、不在 git 里的目录按名字认项目;改完之后记到新名字下,之前记的留在原项目',
-    )
+    .description('改项目名称:改完之后记到新名字下,之前记的留在原项目')
     .action((rawName: string) => {
       try {
         for (const line of renameProject(resolveProjectRoot(process.cwd()), rawName).lines) writeOut(line);
