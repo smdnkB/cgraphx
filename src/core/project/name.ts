@@ -6,9 +6,10 @@
  *   sessions.db 里的开始目录归属清掉,下次补录按新名字重新认;偏移不动,已经记下的不搬(spec 2026-11-06-会话文件
  *   解析替代hooks D2)。之前记的事件留在原项目下,不搬。还有没并过去的旧数据的目录不许改名:先 install 并过去。
  * - planInstallName / applyInstallName:install 时问名字、记名字(所有根装的时候都把名字记下来,用默认名字的也记)。
+ *
+ * 重名提示不在这里:install 与普通命令共用 checkDuplicateName(duplicate.ts),记完名字由调用方去判断。
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { findProjectRoot, locateData, missingDataMessage } from '../data-location';
@@ -70,14 +71,6 @@ function isInstalled(dir: string): boolean {
     return isInitialized(dir);
   } catch {
     return false;
-  }
-}
-
-function realpathOrResolve(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return path.resolve(p);
   }
 }
 
@@ -186,28 +179,14 @@ export function planInstallName(start: string): InstallNamePlan {
   return { defaultName: info.identity?.name ?? defaultProjectName(info), recorded: info.nameSource === 'recorded' };
 }
 
-/** M5:记下的名字本机已有数据、这个目录还没记进去过。项目库读不出时判断不了,不提示。 */
-function installNotice(root: string, next: ProjectIdentity): string | null {
-  const dir = findProjectDir(next);
-  if (dir === null) return null;
-  let roots: TimelineRoot[];
-  try {
-    roots = readTimelineSummary(dir.dir)?.roots ?? [];
-  } catch {
-    return null;
-  }
-  const self = realpathOrResolve(root);
-  if (roots.some((r) => realpathOrResolve(r.root) === self)) return null;
-  return `${projectDisplayName(next)} 已经有数据(在 ${latestRootOf(roots)} 记的),这个目录也记进去`;
-}
-
 /**
  * install 时记下项目名称(spec D3、K2)。只有记过同一个名字时不写;其余(包括按默认名字认的)一律写,写完清掉受
- * 影响的根在 sessions.db 里的开始目录归属。notice 为 M5(这个名字已有数据、这个目录还没记进去过),否则 null。
+ * 影响的根在 sessions.db 里的开始目录归属。重名提示由调用方用 checkDuplicateName 判断(install 与普通命令共用同一
+ * 套判断,见 duplicate.ts)。
  *
  * @throws ProjectError invalid_name(名字不合法)、cannot_record(记不下)、no_project(git 跑不起来)
  */
-export function applyInstallName(start: string, name: string): { notice: string | null } {
+export function applyInstallName(start: string, name: string): void {
   const checked = checkedName(name);
   const root = findProjectRoot(start);
   if (root === null) throw new ProjectError('cannot_record', cannotRecordMessage(path.resolve(start)));
@@ -217,12 +196,10 @@ export function applyInstallName(start: string, name: string): { notice: string 
     throw new ProjectError('cannot_record', notInstalledMessage(root));
   }
 
-  const next: ProjectIdentity = { name: checked };
   const unchanged = info.nameSource === 'recorded' && info.identity?.name === checked;
   if (!unchanged) {
     const siblings = listSiblingRoots(root);
     writeProjectName(root, checked);
     clearStartDirs(siblings);
   }
-  return { notice: installNotice(root, next) };
 }

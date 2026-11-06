@@ -12,6 +12,7 @@ import { projectDisplayName, validateProjectName } from '../../core/project-iden
 import { listOtherInstalledDirs } from '../../core/repo-projects';
 import {
   applyInstallName,
+  checkDuplicateName,
   hasUnmergedLegacyData,
   mergeLegacyData,
   planInstallName,
@@ -68,10 +69,23 @@ async function recordProjectName(clack: Clack, projectRoot: string, useDefaults:
       }
       name = answer;
     }
-    const { notice } = applyInstallName(projectRoot, name);
-    if (notice !== null) clack.log.info(notice);
+    applyInstallName(projectRoot, name);
+    reportDuplicateName(clack, projectRoot);
   } catch (err) {
     clack.log.warn(`没记下项目名称:${errorMessage(err)}`);
+  }
+}
+
+/**
+ * install 里的重名提示(spec F3、C-8):名字记下之后判断一次,命中就用 clack 打一句。判断或提示自己失败静默——
+ * 名字已经记下了,这里只是顺带提示,不能落进外层变成「没记下项目名称」。
+ */
+function reportDuplicateName(clack: Clack, projectRoot: string): void {
+  try {
+    const notice = checkDuplicateName(projectRoot);
+    if (notice !== null) clack.log.info(notice);
+  } catch {
+    // 提示不影响安装
   }
 }
 
