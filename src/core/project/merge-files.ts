@@ -5,16 +5,16 @@
  *   pid 不存活或 mtime 超过 2 小时算陈旧,删掉后接管
  * - 备份:在旧库写事务里把本地 `.cgraphx/` 的库文件、任务接口配置、db-query 配置与日志、轮次记录照原名复制进
  *   `<项目目录>/backups/<时间>-<目录名>/`;写事务挡住同目录的 hook,复制出来的库文件是一致的
- * - 文件并:`db-profiles.json`、`db-query.log`、`turns/`(`task-source.json` 不再并入,残留由升级清理删);每一类旧
- *   目录里没有就什么都不做、不提示。再装一次时结果不变:配置逐字相同不管,日志已追加过的整段不再追加,轮次记录同名的不覆盖
- * - 并完删本地的 db-query 配置与日志、轮次记录、残留的任务接口配置(备份里有)
+ * - 文件并:`db-profiles.json`、`db-query.log`(`task-source.json` 不再并入,残留由升级清理删;`turns/` 也不再
+ *   并入——hook 退役后没人读写轮次记录,残留由时间线重建清理,见 timeline/ingest/rebuild.ts);每一类旧目录里
+ *   没有就什么都不做、不提示。再装一次时结果不变:配置逐字相同不管,日志已追加过的整段不再追加
+ * - 并完删本地的 db-query 配置与日志、轮次记录、残留的任务接口配置(备份里有;轮次记录是删不是并)
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { DATABASE_FILENAME, type SqliteDatabase } from '../db';
-import { TURNS_DIRNAME } from '../timeline';
 import { BACKUPS_DIRNAME } from '../user-data-dir';
 import {
   DB_PROFILES_FILENAME,
@@ -29,6 +29,12 @@ import {
 
 /** 任务接口配置文件名(task 子系统已下掉,名字保留:备份照旧、残留由升级清理删)。 */
 const TASK_SOURCE_CONFIG_FILENAME = 'task-source.json';
+
+/**
+ * 轮次记录目录名(相对数据目录)。turns/ 不再并入(hook 退役后没人读写),备份照旧带、清理照旧删;
+ * T-8 会删掉 turn-state.ts 的同名导出,这里用本地常量解耦(值就是 'turns')。
+ */
+const TURNS_DIRNAME = 'turns';
 
 /** 备份里照原名放的文件(在的才放):库文件三件、任务接口配置、db-query 连接配置与日志。 */
 const BACKUP_FILENAMES = [
@@ -269,30 +275,9 @@ function appendLog(src: string, dst: string): void {
   chmodPrivate(dst, PRIVATE_FILE_MODE);
 }
 
-/** turns/:旧的每个文件,项目的 turns/ 里没有同名的才复制(项目里没有 turns/ 先建)。 */
-function mergeTurns(srcDir: string, dstDir: string): void {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(srcDir, { withFileTypes: true });
-  } catch (err) {
-    if (isMissing(err)) return;
-    throw err;
-  }
-  const files = entries.filter((entry) => entry.isFile());
-  if (files.length === 0) return;
-  fs.mkdirSync(dstDir, { recursive: true });
-  for (const file of files) {
-    try {
-      fs.copyFileSync(path.join(srcDir, file.name), path.join(dstDir, file.name), fs.constants.COPYFILE_EXCL);
-    } catch (err) {
-      // 项目里已有同名的(别的目录的会话、hook 刚写的):留项目里的
-      if (errnoOf(err) !== 'EEXIST') throw err;
-    }
-  }
-}
-
 /**
- * 文件并(D29 文件行),由调用方在旧库写事务里调。返回 M2 的 db-query 那句(配置和项目里已有的不一样时)。
+ * 文件并(D29 文件行;turns/ 不再并入,D20),由调用方在旧库写事务里调。返回 M2 的 db-query 那句
+ * (配置和项目里已有的不一样时)。
  *
  * @throws 读写文件出错:由调用方按并失败处理
  */
@@ -302,7 +287,6 @@ export function mergeLegacyFiles(localDir: string, projectDir: string, dirName: 
     notices.push(`${dirName} 的 db-query 连接配置和项目里已有的不一样,没并,在备份里`);
   }
   appendLog(path.join(localDir, DB_QUERY_LOG_FILENAME), path.join(projectDir, DB_QUERY_LOG_FILENAME));
-  mergeTurns(path.join(localDir, TURNS_DIRNAME), path.join(projectDir, TURNS_DIRNAME));
   return notices;
 }
 

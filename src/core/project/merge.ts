@@ -1,18 +1,20 @@
 /**
- * 并旧数据进用户目录(spec:2026-11-05-数据按项目放用户目录 D25~D30;F4)
+ * 并旧数据进用户目录(spec:2026-11-05-数据按项目放用户目录 D25~D30;F4;
+ * 2026-11-06-会话文件解析替代hooks D20 只并提交记录)
  *
  * 升级前装过的目录,timeline 的数据在本地 `.cgraphx/cgraphx.db`(旧库;task、sync 子系统已下掉,它们的表不并,
  * 随删旧表一起删)。install 时把它并进用户目录里这个项目的项目库,只并一次(并过记号:本地
- * `.cgraphx/project.json` 的 mergedAt),并之前先备份。顺序固定:
+ * `.cgraphx/project.json` 的 mergedAt),并之前先备份。timeline 只并提交记录与 timeline_roots(D20)——hook 记的
+ * 事件升级后按会话文件全量重建(F6,install 并旧数据之后接 timeline/ingest/rebuild.ts),不并。顺序固定:
  *
  * 1. 认根(装过的才并)、认标识;已经并过 → already;没有旧表 → 写记号,nothing。这两种都补齐项目目录和 schema
  *    (项目数据被 project remove 删过的,重装时建回来)
  * 2. 拿项目目录的 merge.lock(同一项目同一时间只有一个目录在并),拿到后再看一次记号
  * 3. 备份:旧库写事务里复制本地文件(备份失败就不并)
- * 4. 第 ① 段:不加锁,把旧库现有的事件分批并进项目库(绝大多数事件在这一段并完)
+ * 4. 第 ① 段:不加锁,把旧库现有的提交记录分批并进项目库(绝大多数在这一段并完)
  * 5. 第 ② 段:旧库写事务里并尾巴与 timeline_roots、文件,写记号,删旧表(含 task、sync 表),提交。记号在提交之前写好:等写锁的
  *    hook 拿到锁后在写事务里看到记号,改写项目库。任何一步失败:撤掉记号、回滚旧库;项目库里已写进去的保留,再装一次
- *    靠事件去重,结果和一次并完相同
+ *    靠提交 hash 去重,结果和一次并完相同
  * 6. 提交之后删本地的 db-query 配置与日志、轮次记录(备份里有),旧库试一次 VACUUM
  *
  * mergeLegacyData 不抛:任何失败返回 failed(reason 为原因),由 install 打 M3。
@@ -51,14 +53,13 @@ const LEGACY_TABLES_SQL =
   "SELECT name FROM sqlite_master WHERE type = 'table' AND (name LIKE 'timeline\\_%' ESCAPE '\\' " +
   "OR name LIKE 'task\\_%' ESCAPE '\\' OR name LIKE 'sync\\_%' ESCAPE '\\') ORDER BY name";
 
-type OutcomeExtra = Partial<Pick<MergeOutcome, 'events' | 'sessions' | 'duplicates' | 'notices' | 'mergedAt' | 'reason'>>;
+type OutcomeExtra = Partial<Pick<MergeOutcome, 'events' | 'duplicates' | 'notices' | 'mergedAt' | 'reason'>>;
 
 function outcome(kind: MergeOutcome['kind'], display: string, extra: OutcomeExtra = {}): MergeOutcome {
   return {
     kind,
     display,
     events: extra.events ?? 0,
-    sessions: extra.sessions ?? 0,
     duplicates: extra.duplicates ?? 0,
     notices: extra.notices ?? [],
     mergedAt: extra.mergedAt ?? null,
@@ -179,7 +180,7 @@ interface TailInput extends MergeTarget {
   oldDb: SqliteDatabase;
   projectDb: SqliteDatabase;
   merger: TimelineMerger;
-  /** 第 ① 段并到的事件 id */
+  /** 第 ① 段并到的提交记录 id */
   upTo: number;
   /** 归根候选:并的那个目录和它登记过的副本(在用、已删都算) */
   attributionRoots: readonly string[];
@@ -241,7 +242,6 @@ function mergeLocked(target: MergeTarget): MergeOutcome {
     const stats = merger.stats();
     return outcome('merged', target.display, {
       events: stats.events,
-      sessions: stats.sessions,
       duplicates: stats.duplicates,
       notices,
     });
@@ -300,9 +300,9 @@ function mergeFrom(start: string, known: { display: string }): MergeOutcome {
 }
 
 /**
- * 把起点所在目录(按 D2 认根,装过的才并)的本地旧库并进用户目录里这个项目的项目库(spec D25~D30)。
- * 结果:merged 并好了(events、sessions、duplicates、notices);already 已经并过(mergedAt);nothing 没有要并的;
- * failed 没并成(reason)。不抛:任何异常都返回 failed。
+ * 把起点所在目录(按 D2 认根,装过的才并)的本地旧库并进用户目录里这个项目的项目库(spec D25~D30;只并提交记录
+ * 与 timeline_roots,D20)。结果:merged 并好了(events、duplicates、notices);already 已经并过(mergedAt);
+ * nothing 没有要并的;failed 没并成(reason)。不抛:任何异常都返回 failed。
  */
 export function mergeLegacyData(start: string): MergeOutcome {
   const known = { display: '' };

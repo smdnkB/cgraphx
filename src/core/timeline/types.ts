@@ -107,35 +107,19 @@ export interface TimelineDataSummary {
   roots: TimelineRoot[];
 }
 
-// ─── 并旧事件(spec D27、D28、D29 timeline 部分)───────────────────────────
-
-/** 旧库事件 id → 项目库事件 id 的对照,project 并旧事件时换算 id。 */
-export interface EventIdMapping {
-  /** 旧 id → 新 id;重复的取项目库已有那条的 id;旧库里没有这个 id → undefined */
-  get(oldId: number): number | undefined;
-  /**
-   * 换算一个会话的进度:旧值在表里取对应新 id;不在取这个会话里不大于它的最大旧 id 对应的新 id;都没有 → 0。
-   * 这个会话在旧库里没有事件(终端会话、副本会话这类非 hook 记的会话 id)→ get(oldId) ?? 0。
-   */
-  mapProgress(sessionId: string, oldId: number): number;
-  /** 并之前这个会话在项目库里的最大 id;项目库没有这个会话 → null */
-  projectMaxIdBefore(sessionId: string): number | null;
-}
+// ─── 并旧数据(spec D27、D28 timeline 部分;2026-11-06-会话文件解析替代hooks D20 只并提交)───
 
 export interface TimelineMergeStats {
-  /** 旧库处理过的事件数(含重复) */
+  /** 旧库处理过的提交记录数(含重复) */
   events: number;
-  /** 旧库非空 session_id 的不同值个数 */
-  sessions: number;
-  /** 重复的条数(项目库里已经有,只留一份) */
+  /** 重复的条数(项目库里已有同 hash 的,只留一份) */
   duplicates: number;
 }
 
 export interface TimelineMerger {
-  readonly mapping: EventIdMapping;
-  /** D27 ①:不加锁,把旧库 id ≤ upToId 的事件分批写进项目库 */
+  /** D27 ①:不加锁,把旧库 id ≤ upToId 的提交记录分批写进项目库 */
   mergeEventsUpTo(upToId: number): void;
-  /** D27 ②:由调用方在旧库写事务里调;并 id > afterId 的事件,再并 timeline_roots */
+  /** D27 ②:由调用方在旧库写事务里调;并 id > afterId 的提交记录,再并 timeline_roots */
   mergeTail(afterId: number, attributionRoots: readonly string[]): void;
   stats(): TimelineMergeStats;
 }
