@@ -1,6 +1,6 @@
 ---
 name: dev-merge
-description: 需求合入与副本清理:需求在副本里做完、/code-review 过了,在主目录的会话里输入 /dev-merge <需求>,从副本取回需求分支、先预演合并(不动工作区),没冲突就用合并提交「合入需求：<标题>」合进主目录当前所在的分支(开了版本是版本分支,没开是主干),有冲突列出撞上的已合入需求;在副本的会话里输入 /dev-merge,先把主目录当前所在的分支同步进需求分支、就地解决冲突;在主目录说「删副本 <需求>」时核对合入和没提交的改动,问过再删。不推送,不把副本加成远程。Use when 合入需求、需求合入、同步版本分支、副本合入、删副本、清理副本、dev-merge。
+description: 需求合入与副本清理:需求在副本里做完、/code-review 过了,在主目录的会话里输入 /dev-merge <需求>,先预演合并(不动工作区),没冲突就用合并提交「合入需求：<标题>」合进主目录当前所在的分支(开了版本是版本分支,没开是主干),有冲突列出撞上的已合入需求;副本和主目录是同一个仓库,合入、同步直接用 `refs/heads/<分支>`;在副本的会话里输入 /dev-merge,先把主目录当前所在的分支同步进需求分支、就地解决冲突;在主目录说「删副本 <需求>」时核对合入和没提交的改动,问过再删。不推送、不取远程对象,不把副本加成远程。Use when 合入需求、需求合入、同步版本分支、副本合入、删副本、清理副本、dev-merge。
 ---
 
 # 需求合入 (dev-merge)
@@ -18,6 +18,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
   ```
 
   用到 START 的命令,都把这一行写在同一条命令的开头:每次调用都是新的 shell,上一次算的 START 不在了,空着的 START 让 `"$START"..HEAD` 变成空范围,命令照样成功、结果却是空的。B 是主干:有 main 用 main,没有用 master。git 报错(如 main、master 都没有)时这一行以非零退出、后面的不跑:停下,把报错原样转告用户。
+- 副本和主目录是同一个仓库:需求分支就在主目录的仓库里。合入、同步都直接写全 `refs/heads/<分支>`,不取远程对象、不建远程。
 - 副本里同步主目录的分支只用 /dev-merge(它用 `--no-ff` 产生合并提交);用 `git pull`、默认的 `git merge` 快进同步过,同步进来的提交会被当成需求自己做的,`replica list` 的合入判断就不准了。
 - 输出文件路径的 git 命令都带 `-c core.quotePath=false`,中文路径原样输出,不转成 `"\344\270…"`。
 
@@ -47,8 +48,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 3. **同步**:
 
    ```bash
-   git fetch --no-tags /Users/smdnk/objects/ai/cgraphx dev/2.0.11
-   git merge --no-ff -m "同步 dev/2.0.11" FETCH_HEAD
+   git merge --no-ff -m "同步 dev/2.0.11" refs/heads/dev/2.0.11
    ```
 
    有冲突 → 就地和用户一起解决:`git -c core.quotePath=false diff --name-only --diff-filter=U` 列出冲突文件,逐个说清两边各改了什么、合起来怎么写,用户确认后改好、`git add`;全部解决后 `git commit --no-edit`(说明沿用「同步 dev/2.0.11」)。git 提交门禁(commit-msg 钩子)拦下时,按提示自查,说明不改,带 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重试。
@@ -61,7 +61,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
 以 /dev-merge 订单导出、主目录在 dev/2.0.11 上为例。
 
-1. **找到副本**:`cgraphx replica list --json`,按副本目录名(`name`)、feature-id(`featureId`)或标题(featureId 去掉日期段)找。找不到 → 停下,列出在用的副本,问合哪个;`state` 是 `missing` → 停下:副本已不在,取不到需求分支;`merged` 是 true → 停下「已经合入过了,副本里没有新的提交」(合入后只同步过也算,不造空的「第 2 次」);`merged` 是 false、`ahead` 是 0 → 停下「cgraphx@订单导出 还没有提交,没有可合入的」;`merged` 是 null(git 判断不了)→ 说一句判断不了合没合入,照常往下走。
+1. **找到副本**:`cgraphx replica list --json`,按副本目录名(`name`)、feature-id(`featureId`)或标题(featureId 去掉日期段)找。找不到 → 停下,列出在用的副本,问合哪个;`state` 是 `missing` → 停下:「cgraphx@订单导出 已不在;需求分支还在的话,先 /dev-start 订单导出 接上再合」;`merged` 是 true → 停下「已经合入过了,副本里没有新的提交」(合入后只同步过也算,不造空的「第 2 次」);`merged` 是 false、`ahead` 是 0 → 停下「cgraphx@订单导出 还没有提交,没有可合入的」;`merged` 是 null(git 判断不了)→ 说一句判断不了合没合入,照常往下走。
 
 2. **主干上开过版本**:当前分支是主干,且 `git config --local --get cgraphx.releaseFlow` 输出 `true` → 停下问:
 
@@ -77,16 +77,18 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
 4. **副本干净**:这条副本的 `dirty` 不为空 → 停下,列出文件,提示先在副本里提交。
 
-5. **取回需求分支**,不加远程、不在主目录建分支:
+5. **确认主目录里有这个分支**(同一个仓库,不取远程对象、不在主目录建分支):
 
    ```bash
-   git fetch --no-tags /Users/smdnk/objects/ai/cgraphx@订单导出 feat/订单导出
+   git rev-parse -q --verify refs/heads/feat/订单导出
    ```
+
+   输出为空 → 停下:「主目录没有分支 feat/订单导出,合不了;核对分支是不是被改名或删掉了」。
 
 6. **预演**,不动工作区:
 
    ```bash
-   git -c core.quotePath=false merge-tree --write-tree --name-only HEAD FETCH_HEAD; echo "exit=$?"    # exit=1 即有冲突:第一行是合并结果的树,之后到空行为止是冲突文件
+   git -c core.quotePath=false merge-tree --write-tree --name-only HEAD refs/heads/feat/订单导出; echo "exit=$?"    # exit=1 即有冲突:第一行是合并结果的树,之后到空行为止是冲突文件
    ```
 
    有冲突 → 分支不动;每个冲突文件找出撞上的、已经合入的需求。改过它的合并里,第二个父提交已在主干里的是同步主干(把主干上的热修复合进了版本分支),其余是「合入需求：X」:
@@ -122,7 +124,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
    输出 0 → 不带次数;输出 1 → 第 2 次,以此类推。标题 = 需求目录名去掉日期段;冒号是全角「：」,括号是半角。
 
-8. **合入**:`git merge --no-ff -m "合入需求：订单导出" FETCH_HEAD`
+8. **合入**:`git merge --no-ff -m "合入需求：订单导出" refs/heads/feat/订单导出`
 
 9. **回报**:
 
@@ -143,14 +145,15 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
 1. `cgraphx replica list --json` 找到这条副本(找法同上),先说清状况再问:
    - `dirty` 不为空 → 不删,报「cgraphx@订单导出 有 2 个文件没提交」并列出文件
-   - `merged` 是 false、`ahead` 大于 0 → 「cgraphx@订单导出 还差 2 个提交没合入」(`ahead`),副本删了这些提交就没了,问还删不删
+   - `merged` 是 false、`ahead` 大于 0 → 「cgraphx@订单导出 还差 2 个提交没合入;目录删了,提交留在分支 feat/订单导出 上,/dev-start 订单导出 能接着做」(`ahead`),再问还删不删
    - `merged` 是 false、`ahead` 是 0 → 「cgraphx@订单导出 还没有提交」,问还删不删
    - `merged` 是 true → 「cgraphx@订单导出 已合入,可以删;删掉这个副本吗?」
    - `merged` 是 null → 「判断不了 cgraphx@订单导出 合没合入」,不删;请用户先在副本里看一眼 `git log`,确认提交都已合入再说删
    - `state` 是 `missing` → 「cgraphx@订单导出 已不在」,问要不要把登记标成已删
 2. 用户说删 → `cgraphx replica remove cgraphx@订单导出 --json`:
-   - `"state": "removed"` → 回「已删 cgraphx@订单导出,登记留着,副本里记下的会话和提交在项目的数据里」
-   - `"state": "missing"` → 回「cgraphx@订单导出 已不在,登记已标成已删」
+   - `"state": "removed"` → 回「已删 cgraphx@订单导出,登记和数据都留着」;再看 `branch.state`:`deleted` → 加一句「分支 feat/订单导出 已删除」;`kept` → 加一句「分支 feat/订单导出 留着,提交还在;接着做:/dev-start 订单导出」
+   - `"state": "missing"` → 回「cgraphx@订单导出 已不在,登记已标成已删」,同样按 `branch.state` 加那一句
+   - `warnings` 逐条转告
    - `"code": "dirty"` → 不删,报「cgraphx@订单导出 有 2 个文件没提交」并列出 `files`
    - 其余 `code` → 把 `message` 原样告诉用户
 
@@ -180,13 +183,14 @@ $ cgraphx replica list --json
   ]
 }
 $ git -c core.quotePath=false status --porcelain --untracked-files=no
-$ git fetch --no-tags /Users/smdnk/objects/ai/cgraphx@订单导出 feat/订单导出
-$ git -c core.quotePath=false merge-tree --write-tree --name-only HEAD FETCH_HEAD; echo "exit=$?"
+$ git rev-parse -q --verify refs/heads/feat/订单导出
 9b1c4d7e2f0a6b8c3d5e7f9a1b2c4d6e8f0a2b4c
+$ git -c core.quotePath=false merge-tree --write-tree --name-only HEAD refs/heads/feat/订单导出; echo "exit=$?"
+4b7e2a9c0d1f3e5a7b9c1d3e5f7a9b1c3d5e7f9a
 exit=0
 $ B=$(git rev-parse -q --verify refs/heads/main >/dev/null && echo main || echo master); L=$(git rev-list --first-parent HEAD --not "$B" --) || exit 1; C=$(printf '%s\n' "$L" | tail -n 1); START=${C:+$C^1}; START=${START:-HEAD}; git log --first-parent --merges --format=%s "$START"..HEAD | grep -cE '^合入需求：订单导出(\(第 [0-9]+ 次\))?$'
 0
-$ git merge --no-ff -m "合入需求：订单导出" FETCH_HEAD
+$ git merge --no-ff -m "合入需求：订单导出" refs/heads/feat/订单导出
 $ git rev-list --count --no-merges "HEAD^1..HEAD^2"
 3
 $ git -c core.quotePath=false diff --name-only "HEAD^1" HEAD | wc -l
@@ -203,7 +207,7 @@ $ git -c core.quotePath=false diff --name-only "HEAD^1" HEAD -- docs/knowledge/
 预演有冲突时,dev/2.0.11 不动:
 
 ```text
-$ git -c core.quotePath=false merge-tree --write-tree --name-only HEAD FETCH_HEAD; echo "exit=$?"
+$ git -c core.quotePath=false merge-tree --write-tree --name-only HEAD refs/heads/feat/订单导出; echo "exit=$?"
 5e2f8a1c3b4d6e7f9a0b1c2d3e4f5a6b7c8d9e0f
 src/order/routes.ts
 
@@ -230,8 +234,7 @@ $ dirname "$(cd -P .cgraphx/shared && pwd)"
 $ git -C /Users/smdnk/objects/ai/cgraphx symbolic-ref --short HEAD
 dev/2.0.11
 $ git -c core.quotePath=false status --porcelain
-$ git fetch --no-tags /Users/smdnk/objects/ai/cgraphx dev/2.0.11
-$ git merge --no-ff -m "同步 dev/2.0.11" FETCH_HEAD
+$ git merge --no-ff -m "同步 dev/2.0.11" refs/heads/dev/2.0.11
 Auto-merging src/order/routes.ts
 CONFLICT (content): Merge conflict in src/order/routes.ts
 Automatic merge failed; fix conflicts and then commit the result.
@@ -252,6 +255,25 @@ docs/knowledge/积分流水.md
 可以合入了：到主目录的会话里输入 /dev-merge 订单导出
 ```
 
+在主目录说「删副本 订单导出」(还差 2 个提交,用户仍说删):
+
+```text
+$ cgraphx replica remove cgraphx@订单导出 --json
+{
+  "ok": true,
+  "name": "cgraphx@订单导出",
+  "state": "removed",
+  "branch": { "name": "feat/订单导出", "state": "kept", "tip": "9b1c4d7e2f0a6b8c3d5e7f9a1b2c4d6e8f0a2b4c" },
+  "warnings": []
+}
+```
+
+回给用户:
+
+```text
+已删 cgraphx@订单导出,登记和数据都留着;分支 feat/订单导出 留着,提交还在;接着做:/dev-start 订单导出
+```
+
 ## 停下问用户
 
 | 情况 | 怎么做 |
@@ -262,21 +284,23 @@ docs/knowledge/积分流水.md
 | 副本里:同步有冲突 | 就地和用户一起解决,每个文件的改法等用户确认 |
 | 副本里:说删副本 | 停下,提示到主目录的会话里说 |
 | 主目录:没说合哪个需求,或找不到副本 | 列出在用的副本,问合哪个 |
-| 主目录:副本已不在、已经合入没有新提交、还没有提交 | 停下,说明情况 |
+| 主目录:副本已不在 | 停下,提示需求分支还在的话先 `/dev-start <需求>` 接上再合 |
+| 主目录:已经合入没有新提交、还没有提交 | 停下,说明情况 |
+| 主目录没有 `refs/heads/<需求分支>` | 停下,提示核对分支是不是被改名或删掉了 |
 | 主目录:在主干上,`cgraphx.releaseFlow` 为 true | 停下问:先 /release-start、这次合进 main、还是不再按版本走 |
 | 主目录:有改了没提交的已跟踪文件 | 停下,提示先提交或收好 |
 | 主目录:副本里有没提交的改动 | 停下,提示先在副本里提交 |
 | 主目录:预演有冲突 | 分支不动,列出冲突文件和撞上的需求,提示到副本里同步 |
 | 合入、同步带进 `docs/knowledge/` | 问要不要跑 `cgraphx docs index` |
 | 没开版本,合完 | 问删不删这个副本 |
-| 删副本:没合入、还没有提交,或有没提交的改动 | 没合入说差几个提交、还没有提交照实说,问过再删;有没提交的改动不删 |
+| 删副本时差提交 | 照实说差几个、提交留在分支上,问过再删 |
+| 删副本:还没有提交,或有没提交的改动 | 还没有提交照实说,问过再删;有没提交的改动不删 |
 | 删副本:判断不了合没合入(`merged` 为 null) | 不删,请用户先在副本里确认提交都已合入 |
 
 ## 红线
 
-1. ❌ 不把副本加成远程,不在主目录建需求分支:只用 `git fetch --no-tags <副本路径> <需求分支>` 和 FETCH_HEAD。
+1. ❌ 不推送、不取远程对象、不把副本加成远程;合入、同步都写全 `refs/heads/<分支>`,只合这个分支。
 2. ❌ 预演有冲突不合,不在主目录解决冲突。
 3. ❌ 版本分支上只做合并,不改代码。
 4. ❌ 删副本前必须问;有没提交的改动的不删。
-5. ❌ 不推送。
-6. ❌ 没问过不跑 `cgraphx docs index`。
+5. ❌ 没问过不跑 `cgraphx docs index`。

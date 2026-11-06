@@ -19,6 +19,8 @@ export interface AgentProfile {
   readonly configDirName: string;
   /** 指引块所在文件名(如 `CLAUDE.md`)。 */
   readonly instructionsFileName: string;
+  /** 项目根下除配置目录、指引文件外还要带走的额外配置文件(相对项目根,如 `.mcp.json`)。 */
+  readonly extraConfigFiles: readonly string[];
   /** settings 文件名(位于配置目录内)。 */
   readonly settingsFileName: string;
   /** 项目根目录环境变量名。 */
