@@ -380,10 +380,11 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
   const mainRoot = realRoot;
 
   const warnings = mainDirtyWarnings(mainRoot); // K7、D9
+  // 排在分支判断之前:worktree 的需求分支一直在主目录,在用副本重复开时先判分支只会提示「换个分支名」
+  assertFeatureHasNoReplica(mainRoot, opts.featureId);
   const plan = planBranch(mainRoot, opts); // ③、K15、D7
   const name = `${path.basename(realRoot)}${REPLICA_NAME_SEPARATOR}${opts.prefix}`;
   const target = path.join(path.dirname(realRoot), name);
-  assertFeatureHasNoReplica(mainRoot, opts.featureId);
   assertNameFree(mainRoot, name, opts.featureId);
   assertTargetFree(mainRoot, target);
 
