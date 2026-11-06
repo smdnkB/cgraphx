@@ -2,7 +2,7 @@
 
 本地优先的 AI agent 研发系统 · skill 流程 + 知识库 / 数据库 / 时间线
 
-最后更新:2026-10-31
+最后更新:2026-11-06
 
 每个 skill 怎么用,见同目录的 [skill 一览](skills.html):一个 skill 一行,默认折叠,可搜索。
 
@@ -21,12 +21,12 @@ cd your-project
 cgraphx install
 ```
 
-一条命令全做:建本地 `.cgraphx/`(知识库索引)和用户目录里这个项目的数据目录(timeline;同一项目的各个目录共用),并把原来的旧数据并过去 + 部署 skills/commands 到 `.claude/` + 接入 hooks/statusLine + 写工作方式到 `.claude/CLAUDE.md`。重启 Claude Code 即可。
+一条命令全做:建本地 `.cgraphx/`(知识库索引)和用户目录里这个项目的数据目录(timeline;同一项目的各个目录共用),并把原来的旧数据并过去 + 部署 skills/commands 到 `.claude/` + 接 context-monitor/statusLine + 装 git 钩子(提交记录 + 提交门禁)+ 写工作方式到 `.claude/CLAUDE.md`。重启 Claude Code 即可。
 
 ### 升级
 
 ```bash
-cgraphx upgrade           # 在项目目录内执行:npm 自更新 + 自动刷新本项目 skills/hooks(自动清理已改名/移除的旧 skill)
+cgraphx upgrade           # 在项目目录内执行:npm 自更新 + 自动刷新本项目 skills/git 钩子(自动清理已改名/移除的旧 skill)
                           # 其他项目各自 cd 进去跑一次;只换包不动项目:cgraphx upgrade --no-install
 ```
 
@@ -108,7 +108,7 @@ knowledge-recall(自动召回)
 /doc-delivery(需求文档、设计文档、接口文档)
 ```
 
-日常默认两步:**澄清 + 实现**。大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完;复杂需求按需补规格和测试。timeline 自动记录开发事件,你不需要主动跑命令。
+日常默认两步:**澄清 + 实现**。大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完;复杂需求按需补规格和测试。timeline 从 agent 的会话文件自动补录开发事件(不需要 agent 支持 hook),你不需要主动跑命令。
 
 **版本发布 · 可选**:`/release-start` 开版本 → 每个需求 `/dev-start` 开副本 → `/dev-merge` 合入 → `/release-review` 审核并合入主干;副本单独也能用。不用就照旧在当前分支上开发。
 
@@ -272,4 +272,4 @@ docs/
 
 ---
 
-cgraphx 使用说明 · 2026-10-31
+cgraphx 使用说明 · 2026-11-06

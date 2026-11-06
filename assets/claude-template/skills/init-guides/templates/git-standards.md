@@ -1,6 +1,6 @@
 # git-standards.md 生成模板
 
-git-standards.md 是**提交门禁文件**(precommit-check hook 指向它),含两部分。门禁触发时 agent 自己跑 `git diff --cached` 对照逐项判断,命中报告用户,不替用户改代码。
+git-standards.md 是**提交门禁文件**(git 提交门禁的 commit-msg 钩子指向它),含两部分。门禁触发时 agent 自己跑 `git diff --cached` 对照逐项判断,命中报告用户,不替用户改代码。
 
 ## 第一部分 · 提交消息规范
 

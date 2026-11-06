@@ -94,7 +94,7 @@ description: 代码开发完成后的文档收口补账:核实 docs/features/ �
 
 - 提交范围:该需求 `docs/features/<目录>/` 下本次改动(补的头部 + 补出的规格/报告/收口档案)+ unit-code 产出的测试文件;不混入其他需求、不夹带无关文件
 - commit message:项目有 `docs/guides/git-standards.md` 按其规范;没有则参考 `docs: <需求标题> 文档补账`
-- 被 precommit 门禁拦截 → 按提示自查 staged diff 后重试(`CGRAPHX_PRECOMMIT_REVIEWED=1`)
+- 被 git 提交门禁(commit-msg 钩子)拦截 → 按提示自查 staged diff 后重试(`CGRAPHX_PRECOMMIT_REVIEWED=1`)
 - 该需求无任何改动 → 不产生提交
 
 ### 8. 收尾汇报

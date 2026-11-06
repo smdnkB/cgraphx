@@ -92,6 +92,8 @@ description: 基于 Developer Timeline 事件流生成日报、周报、月报�
 cgraphx timeline query --since=<date-or-range> --until=<date-or-now> --format=table
 ```
 
+查询前 cgraphx 会自动补录 agent 的会话文件(开发事件不靠 hook,agent 用的命令不变);升级后第一次查询会先全量重建一次。补录失败只打 stderr 提示,不影响查询输出。
+
 按需补充统计:
 
 ```bash
@@ -221,8 +223,8 @@ Developer Timeline 记录项目本地事件流:
 
 - `user_prompt`:用户提出的任务
 - `auto_message`:自动消息(后台任务通知、子 agent 交回结果)—— 不是用户提的,统计提问时不算
-- `pre_tool_use` / `post_tool_use`:工具调用、文件、命令
-- `stop`:会话结束
+- `post_tool_use`:工具调用、文件、命令
+- `stop`:轮次结束
 - `git_commit`:提交记录
 
 数据按项目存在 `~/.cgraphx/projects/<目录名>/cgraphx.db`:同一项目在本机各个目录(clone、worktree、副本)干活都记进这一份,在哪个目录查看到的都一样;还没并过旧数据的目录照旧在 `.cgraphx/cgraphx.db`。项目之间互相隔离。
@@ -264,7 +266,7 @@ cgraphx timeline show <id>
 ## 前置条件和失败处理
 
 - 项目必须已 `cgraphx install`(会建 `.cgraphx/`)。
-- Timeline hooks 必须安装(`cgraphx timeline install` 或 `cgraphx install`)。
-- Kill-switch:`CGRAPHX_NO_TIMELINE=1` 时 hooks 静默不记录。
-- 如果 timeline 无数据,说明原因并建议检查 hooks;可以退化到 `git log` + 当前工作区状态,但必须标明覆盖不足。
+- 提交记录片段须已安装(`cgraphx timeline install`,只装 post-commit / post-merge 两个 git 钩子片段);其余开发事件不靠 hook,查时间线前自动补录 agent 的会话文件。
+- Kill-switch:`CGRAPHX_NO_TIMELINE=1` 时不采集、不补录。
+- 如果 timeline 无数据,说明原因,看命令输出里有没有补录失败的提示;可以退化到 `git log` + 当前工作区状态,但必须标明覆盖不足。
 - Timeline 全量记录 prompt、命令和文件路径,不脱敏;报告时默认摘要化敏感内容。

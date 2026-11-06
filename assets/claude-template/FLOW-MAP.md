@@ -68,8 +68,8 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 - **链**:小需求一个会话跑 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 在一个会话里按任务派子 agent 跑完,全部做完统一验证,最后提示跑 `/code-review`。判断看需求规模(预估变更文件 ≥10,且跨 ≥3 个相互独立的模块),不看任务量;拿不准先 `/dev-plan`。
 - **前置**:spec 必有;大需求要有 plan。
 - **强制读**:规范由 plan 打「强制引用」标注(dev-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 dev-impl 只读标注,无 plan 时 dev-impl 自行识别;**缺失 → 中断,先 `/init-guides` 补齐**
-- **提交**:任务文件写提交点。大需求由 dev-impl-subagent 的主会话按提交点提交,不构建、不测试,全部做完统一验证;小需求由 dev-impl 按 plan 的提交点提交。`git-standards.md` 的提交规范结晶进 index「提交规范」节,precommit 门禁兜底;push 永远归用户。
-- **收尾**:沉淀提示(新增或变更的实体、新定的业务口径、坑、隐式约束,走 `/knowledge-write`);需求环节缺口提醒(按 `cgraphx features show`,只提醒不拦);需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录;commit 门禁由 precommit-check hook 先跑 `cgraphx features check --staged`(产物不合格必须改对),再指向 `docs/guides/git-standards.md` 自查。
+- **提交**:任务文件写提交点。大需求由 dev-impl-subagent 的主会话按提交点提交,不构建、不测试,全部做完统一验证;小需求由 dev-impl 按 plan 的提交点提交。`git-standards.md` 的提交规范结晶进 index「提交规范」节,git 提交门禁(commit-msg 钩子)兜底;push 永远归用户。
+- **收尾**:沉淀提示(新增或变更的实体、新定的业务口径、坑、隐式约束,走 `/knowledge-write`);需求环节缺口提醒(按 `cgraphx features show`,只提醒不拦);需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录;commit 门禁(git commit-msg 钩子)先跑 `cgraphx features check --staged`(产物不合格必须改对),再指向 `docs/guides/git-standards.md` 自查。
 
 ## 版本流程(可选)
 
@@ -143,7 +143,7 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 | `interface-standards.md` | 接口任务 |
 | `coding-standards.md` | 所有任务(契约部分) |
 | `testing-standards.md` | plan 不读;`unit-code` 执行前自读(内容全是单测向);接口测试规范由 `api-case` 读 `interface-standards.md` 送达 |
-| `git-standards.md` | 结晶进 index「提交规范」节(plan 级,一次)+ precommit-check 门禁兜底(deny → 按已结晶的检查点自查) |
+| `git-standards.md` | 结晶进 index「提交规范」节(plan 级,一次)+ git 提交门禁(commit-msg 钩子)兜底(打回 → 按已结晶的检查点自查) |
 - **执行期**:有 plan 时 dev-impl 只读任务的「强制引用」标注,没有 plan 时自己识别;api-case 执行前自读 `interface-standards.md`;unit-code 执行前自读 `testing-standards.md`;`git-standards.md` 由 plan 结晶进 index「提交规范」节,门禁兜底。
 
 ## 事后文档(发布后 · 按需,不在开发主链)

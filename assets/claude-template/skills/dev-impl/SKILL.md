@@ -24,7 +24,7 @@ description: 用户要求根据已确认的 plan、spec、任务清单、实现�
 7. **沉淀提示** —— SQL 写错过的直接记进 SQL避坑.md;其余确有内容才问(见下)。
 8. **需求环节缺口提醒** —— 有需求目录时才做(见下)。
 
-> **提交点**:plan 的任务文件写了「提交点」时,每完成一个任务并通过验证后,按提交点和 index「提交规范」节(从 `git-standards.md` 结晶)逐笔提交;precommit 门禁自查按 plan 检查点过后用 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重试即可。plan 没写提交点的不擅自提交,交用户决定;push 永远归用户。
+> **提交点**:plan 的任务文件写了「提交点」时,每完成一个任务并通过验证后,按提交点和 index「提交规范」节(从 `git-standards.md` 结晶)逐笔提交;git 提交门禁(commit-msg 钩子)拦下时,按 plan 检查点自查过后用 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重试即可。plan 没写提交点的不擅自提交,交用户决定;push 永远归用户。
 
 ## 汇报范例
 

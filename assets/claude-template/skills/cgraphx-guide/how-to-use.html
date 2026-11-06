@@ -386,11 +386,11 @@ footer p { margin: 0; }
 
       <div class="t-sep"># ── 项目级 · 每项目一次 ──────────────────────</div>
       <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx install</div>
-      <div class="t-note"># 建 .cgraphx/ 与项目数据目录 + 部署 skills 到 .claude/ + 接入 hooks/statusLine + 写工作方式</div>
+      <div class="t-note"># 建 .cgraphx/ 与项目数据目录 + 部署 skills 到 .claude/ + 接 context-monitor/statusLine + 装 git 钩子(提交记录 + 门禁)+ 写工作方式</div>
       <div class="t-note"># 重启 Claude Code 即可</div>
 
       <div class="t-sep"># ── 升级 ────────────────────────────────────</div>
-      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx upgrade <span class="t-comment"># npm 自更新 + 自动刷新本项目 skills/hooks(自动清理旧 skill)</span></div>
+      <div class="t-line"><span class="t-path">~/my-project</span> <span class="t-prompt">$</span> cgraphx upgrade <span class="t-comment"># npm 自更新 + 自动刷新本项目 skills/git 钩子(自动清理旧 skill)</span></div>
       <div class="t-note"># 其他项目各自 cd 进去跑一次;只换包不动项目:cgraphx upgrade --no-install</div>
 
       <div class="t-sep"># ── 卸载 · 可选 ──────────────────────────────</div>
@@ -472,7 +472,7 @@ knowledge-recall(自动召回)
 /doc-delivery(需求文档、设计文档、接口文档)</div>
 
   <div class="highlight">
-    <p>日常默认两步:<strong>澄清 + 实现</strong>。大需求先 <code>/dev-plan</code>,再 <code>/dev-impl-subagent</code> 一个会话跑完;复杂需求按需补规格和测试。timeline 自动记录开发事件,你不需要主动跑命令。</p>
+    <p>日常默认两步:<strong>澄清 + 实现</strong>。大需求先 <code>/dev-plan</code>,再 <code>/dev-impl-subagent</code> 一个会话跑完;复杂需求按需补规格和测试。timeline 从 agent 的会话文件自动补录开发事件(不需要 agent 支持 hook),你不需要主动跑命令。</p>
   </div>
 
   <p><strong>版本发布 · 可选</strong>:<code>/release-start</code> 开版本 → 每个需求 <code>/dev-start</code> 开副本 → <code>/dev-merge</code> 合入 → <code>/release-review</code> 审核并合入主干;副本单独也能用。不用就照旧在当前分支上开发。</p>
@@ -591,7 +591,7 @@ knowledge-recall(自动召回)
       <li><code>/doc-monthly-report</code> 月底把工作台日报汇总成「月底日报」填报表<em>(每行 ≤100 字,只在会话里输出)</em></li>
     </ul>
     <div class="highlight">
-      <p>timeline 通过隐藏 hook 自动记录(每次约 5ms,不阻塞工作流),数据按项目放在 <code>~/.cgraphx/projects/&lt;目录名&gt;/</code>,同一项目的各个目录记在一起——不用回忆,不用拼凑。</p>
+      <p>timeline 查询前自动补录 agent 的会话文件(不需要 agent 支持 hook,只要能读会话文件),提交记录经 git 钩子记入,数据按项目放在 <code>~/.cgraphx/projects/&lt;目录名&gt;/</code>,同一项目的各个目录记在一起——不用回忆,不用拼凑。</p>
     </div>
   </div>
 
