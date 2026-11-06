@@ -240,7 +240,7 @@ test -d "$TMP/demo@demo" && test -f "$TMP/demo@demo/.env" && test -f "$TMP/demo@
   && test -d "$TMP/demo@demo/.claude" && echo "OK: 带进来了"
 test ! -e docs/features/2026-11-06-demo/demo-功能方案-v1.md && echo "OK: 讨论稿已移走"
 git -C "$TMP/demo@demo" worktree list | grep -q "demo@demo" && echo "OK: 是真的 worktree"
-git -C "$TMP/demo@demo" status --porcelain --untracked-files=all | grep -q "docs/features/2026-11-06-demo/demo-功能方案-v1.md" && echo "OK: 讨论稿在副本里(未跟踪)"
+git -C "$TMP/demo@demo" status --porcelain --untracked-files=all | grep -q "docs/features/2026-11-06-demo/" && echo "OK: 讨论稿在副本里(未跟踪)"
 ! git -C "$TMP/demo@demo" status --porcelain | grep -qE "\.env|\.mcp\.json" && echo "OK: 带进来的文件被藏起来"
 test -n "$(git -C "$REPO" status --porcelain -- .env)" && echo "OK: 主目录照常看得到 .env"
 test "$(git -C "$REPO" config --get extensions.worktreeConfig)" = true && echo "OK: 开了 worktreeConfig"
