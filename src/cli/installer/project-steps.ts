@@ -40,8 +40,8 @@ function errorMessage(err: unknown): string {
 }
 
 /**
- * install 第 ⑦ 步:这个目录按名字认时记下项目名称(`-y` 用默认名,交互时问,默认名打底;取消就退出安装,
- * 记不下只提示),再把本地旧库并进用户目录。不受子系统勾选影响;失败只提示,安装照常往下走(D30)。
+ * install 第 ⑦ 步:记下项目名称(每个项目都问;`-y` 用默认名,交互时问,默认名打底;取消就退出安装,记不下只
+ * 提示),再把本地旧库并进用户目录。不受子系统勾选影响;失败只提示,安装照常往下走(D30)。
  */
 export async function settleProjectData(clack: Clack, projectRoot: string, useDefaults: boolean): Promise<void> {
   await recordProjectName(clack, projectRoot, useDefaults);
@@ -51,12 +51,12 @@ export async function settleProjectData(clack: Clack, projectRoot: string, useDe
 async function recordProjectName(clack: Clack, projectRoot: string, useDefaults: boolean): Promise<void> {
   try {
     const plan = planInstallName(projectRoot);
-    if (!plan.needsName) return;
+    if (plan.defaultName === null) return;
     let name = plan.defaultName;
     if (!useDefaults) {
       const answer = await clack.text({
-        message: '项目名称(这个项目按名字认,同名的目录记进同一个项目)',
-        initialValue: plan.defaultName ?? undefined,
+        message: '项目名称(同名的目录记进同一个项目)',
+        initialValue: plan.defaultName,
         validate: (value) => {
           const checked = validateProjectName(value ?? '');
           return checked.ok ? undefined : checked.reason;
@@ -68,7 +68,6 @@ async function recordProjectName(clack: Clack, projectRoot: string, useDefaults:
       }
       name = answer;
     }
-    if (name === null) return;
     const { notice } = applyInstallName(projectRoot, name);
     if (notice !== null) clack.log.info(notice);
   } catch (err) {

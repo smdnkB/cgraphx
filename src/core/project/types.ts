@@ -4,16 +4,10 @@
  * `--json` 输出直接序列化这些对象,字段顺序即输出顺序;路径一律绝对路径,大小一律字节数,时间一律 ISO 原样。
  */
 
-import type { IdentityKind } from '../project-identity';
-
-export type ProjectKind = IdentityKind;
-
-/** 一个项目:项目目录名(还没建为 null)、显示名(spec D18)与标识。标识缺失时 kind、origin、name 为 null,display 为目录名。 */
+/** 一个项目:项目目录名(还没建为 null)、显示名与名字。标识缺失时 name 为 null,display 是目录名。 */
 export interface ProjectRef {
   dir: string | null;
   display: string;
-  kind: ProjectKind | null;
-  origin: string | null;
   name: string | null;
 }
 
@@ -65,9 +59,8 @@ export interface RemovalPlan {
   lines: string[];
 }
 
-/** install 要不要问项目名称:needsName 照 spec D3;recorded 为真时 defaultName 是记下的名字,否则是默认名字。 */
+/** install 要不要问项目名称:defaultName 为 null 表示不问;recorded 为真时 defaultName 是记下的名字,否则是默认名字。 */
 export interface InstallNamePlan {
-  needsName: boolean;
   defaultName: string | null;
   recorded: boolean;
 }

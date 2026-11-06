@@ -2,7 +2,7 @@
  * 一个 git 仓库里的项目(spec:2026-11-05-数据按项目放用户目录 D9、D19、D31)
  *
  * - git 钩子按工作区根列出这个仓库的项目:从工作区根按 D2 认的根,加上本地 git 配置里记了名字的子目录项目
- *   (`[cgraphx "<子目录>"] projectName`);只跑一次配置读取,读完把各根的标识填进进程内记忆
+ *   (`[cgraphx "<子目录>"] projectName`);只跑一次配置读取,读完把各根的标识与地址填进进程内记忆
  * - 改名影响到的根:这个根,加上同一仓库各个工作区里同一相对位置的根
  * - 卸载时「还有别的装着的」:同一仓库各个工作区里,工作区根或记了名字的子目录有 `.cgraphx/cgraphx.db` 的目录
  */
@@ -74,14 +74,14 @@ export function listRepoProjects(workTreeRoot: string): RepoProject[] | 'git-err
     if (info === 'git-error') return 'git-error';
     if (info.identity !== null) {
       projects.push({ root: base, identity: info.identity, subdir: null });
-      rememberRootIdentity(base, info.identity);
+      rememberRootIdentity(base, info.identity, info.origin);
     }
   }
   for (const [subdir, name] of config.subdirNames) {
     const root = joinSubdir(top, subdir);
-    const identity: ProjectIdentity = { origin: config.origin, name };
+    const identity: ProjectIdentity = { name };
     projects.push({ root, identity, subdir });
-    rememberRootIdentity(root, identity);
+    rememberRootIdentity(root, identity, config.origin);
   }
   return projects;
 }

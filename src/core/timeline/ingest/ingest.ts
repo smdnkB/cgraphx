@@ -126,7 +126,7 @@ export interface DirClassification {
   dirName: string | null;
   /** 认定用的根(start_dirs 存一份,timeline_roots 的 upsert 也用它) */
   root: string | null;
-  origin: string | null;
+  /** 认到的项目名字(项目按名字认);没认出来为 null */
   name: string | null;
 }
 
@@ -493,7 +493,7 @@ export function classifyStartDir(cwd: string, ctx: ClassificationContext): DirCl
   // 认到过项目的直接用缓存(改名会清掉受影响根的行,下次重认);没认出来过的现认:
   // 项目可能后来才装、才记名字、才建项目目录(K3 补历史的依据)
   if (cached !== null && cached.project_dir !== null) {
-    return { dirName: cached.project_dir, root: cached.root, origin: cached.origin, name: cached.name };
+    return { dirName: cached.project_dir, root: cached.root, name: cached.name };
   }
   const root = findProjectRoot(cwd);
   let out: DirClassification;
@@ -501,21 +501,21 @@ export function classifyStartDir(cwd: string, ctx: ClassificationContext): DirCl
     const info = identityOfRoot(root);
     if (info === 'git-error') {
       // git 瞬时跑不起来:不缓存,下次文件变了再认
-      return { dirName: null, root: null, origin: null, name: null };
+      return { dirName: null, root: null, name: null };
     }
     const identity = info.identity;
     // K3:项目目录已在(findProjectDir 非空)才记;没有 → null,项目建了目录后重认
     const dirName = identity !== null ? findProjectDir(identity)?.name ?? null : null;
-    out = { dirName, root, origin: identity?.origin ?? null, name: identity?.name ?? null };
+    out = { dirName, root, name: identity?.name ?? null };
   } else {
     // 目录不在了:按本项目库记过的根(timeline_roots)和副本登记匹配(K1;都不中 → 留空)
     const hit = ctx.fallbackMatcher().match(cwd, { allowSelf: true });
     out = hit !== null
-      ? { dirName: ctx.currentDirName, root: hit.root, origin: null, name: null }
-      : { dirName: null, root: null, origin: null, name: null };
+      ? { dirName: ctx.currentDirName, root: hit.root, name: null }
+      : { dirName: null, root: null, name: null };
   }
   try {
-    ctx.sessionIndex.saveStartDir({ cwd, root: out.root, origin: out.origin, name: out.name, project_dir: out.dirName });
+    ctx.sessionIndex.saveStartDir({ cwd, root: out.root, name: out.name, project_dir: out.dirName });
   } catch {
     // 认定结果记不下只影响下次还要现认,不影响本次归属
   }

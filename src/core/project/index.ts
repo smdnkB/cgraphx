@@ -18,7 +18,6 @@
 export type {
   InstallNamePlan,
   MergeOutcome,
-  ProjectKind,
   ProjectListItem,
   ProjectRef,
   ProjectRootInfo,

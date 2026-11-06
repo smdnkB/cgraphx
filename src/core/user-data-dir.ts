@@ -1,5 +1,5 @@
 /**
- * 用户目录(spec:2026-11-05-数据按项目放用户目录 D20、D21、D23、D24)
+ * 用户目录(spec:2026-11-05-数据按项目放用户目录 D20、D23、D24;2026-11-06-项目按名称认 D1、D3、D8)
  *
  * ```text
  * ~/.cgraphx/
@@ -9,7 +9,10 @@
  * ```
  *
  * - 位置每次现取 `os.homedir()`(测试改 HOME 就换);不看 `CGRAPHX_DIR`,它只管本地目录名
- * - 项目目录名按标识取,撞名依次加 `-2`、`-3`…;读的一方按 identity.json 认目录,不按名字猜
+ * - 项目目录名按名字取(spec D3),撞名依次加 `-2`、`-3`…;读的一方按 identity.json 里的名字认目录,不按
+ *   目录名猜
+ * - identity.json 版本 2:名字 + 项目记下的地址(`origins`,只给重名判断用,不参与项目比较);版本 1 带名字的
+ *   仍读得出,只有 origin 的按没有标识(不自动迁移)
  * - 建项目目录只经 ensureProjectDir:先在 `projects/` 下的临时目录(`.` 开头,不列出)写好 identity.json,
  *   再整个改名到位,不会留下没有标识的半个目录;`projects/` 与项目目录 0700(Windows 照默认权限)
  * - `~/.cgraphx/` 根下不放 `cgraphx.db`:放了,家目录下的目录往上找项目根都会停在家目录
@@ -19,7 +22,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { sameIdentity, type ProjectIdentity } from './project-identity';
+import type { ProjectIdentity } from './project-identity';
 
 export const IDENTITY_FILENAME = 'identity.json';
 export const BACKUPS_DIRNAME = 'backups';
@@ -29,12 +32,19 @@ const USER_DATA_DIRNAME = '.cgraphx';
 const PROJECTS_DIRNAME = 'projects';
 const SESSIONS_DIRNAME = 'sessions';
 
-const IDENTITY_VERSION = 1;
+const IDENTITY_VERSION = 2;
+
+/** 项目目录的 identity.json(版本 2):项目名字 + 项目记下的地址。 */
+export interface ProjectDirIdentity {
+  name: string;
+  /** 项目记下的 origin(已规整),一次一个追加;只给重名判断用,不参与项目比较 */
+  origins: string[];
+}
 
 /** `projects/` 和项目目录的权限(D23)。 */
 const PRIVATE_DIR_MODE = 0o700;
 
-/** 项目目录名最多多少个字(按码点,D21)。 */
+/** 项目目录名最多多少个字(按码点)。 */
 const MAX_DIR_NAME_LENGTH = 120;
 /** 不能做文件名的字符:`/ \ : * ? " < > |` 和控制字符,换成 `-`。 */
 const UNSAFE_NAME_CHARS = /[/\\:*?"<>|\u0000-\u001f\u007f]/g;
@@ -68,39 +78,43 @@ export function sessionsRoot(): string {
 }
 
 /**
- * spec D21:项目目录的基础名(不含 `-2` 后缀)。按 origin(含 origin 加名字)→ 规整后的 origin 按 `/` 拆段、去掉
- * 空段、用 `-` 连,有名字再接 `-名字`;按名字 → 名字。不能做文件名的字符换成 `-`,去掉首尾的 `.` 和空格,超过
- * 120 个字截断(截断后再去一次首尾的 `.` 和空格)。
+ * spec D3:项目目录的基础名(不含 `-2` 后缀)。就是名字:不能做文件名的字符换成 `-`,去掉首尾的 `.` 和空格,
+ * 超过 120 个字截断(截断后再去一次首尾的 `.` 和空格);清空后什么都不剩 → `-`。
  */
 export function projectDirBaseName(id: ProjectIdentity): string {
-  let raw: string;
-  if (id.origin !== null) {
-    raw = id.origin.split('/').filter((seg) => seg !== '').join('-');
-    if (id.name !== null) raw = `${raw}-${id.name}`;
-  } else {
-    raw = id.name ?? '';
-  }
-  const cleaned = raw.replace(UNSAFE_NAME_CHARS, '-').replace(EDGE_DOTS_AND_SPACES, '');
+  const cleaned = id.name.replace(UNSAFE_NAME_CHARS, '-').replace(EDGE_DOTS_AND_SPACES, '');
   const truncated = [...cleaned].slice(0, MAX_DIR_NAME_LENGTH).join('').replace(EDGE_DOTS_AND_SPACES, '');
   return truncated === '' ? FALLBACK_DIR_NAME : truncated;
 }
 
-function isStringOrNull(value: unknown): value is string | null {
-  return value === null || typeof value === 'string';
+/** 是普通对象(不是数组、不是 null)。 */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** 项目目录的 identity.json;读不出、格式不对(版本不是 1、字段类型不对、两项都没有)→ null。 */
-export function readIdentityFile(dir: string): ProjectIdentity | null {
+/** identity.json 的 origins:是数组时只留其中的字符串元素,不是数组按空数组。 */
+function originsOf(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((item): item is string => typeof item === 'string');
+}
+
+/**
+ * 项目目录的 identity.json(spec D1、D8)。版本 2 要 name 是去首尾空白后非空的字符串,origins 只留其中的字符串
+ * 元素;版本 1 只认带名字的(顶层的 origin 丢掉)。读不出、版本不对、name 不像名字 → null。
+ */
+export function readIdentityFile(dir: string): ProjectDirIdentity | null {
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(fs.readFileSync(path.join(dir, IDENTITY_FILENAME), 'utf8'));
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-    const { version, origin, name } = parsed as Record<string, unknown>;
-    if (version !== IDENTITY_VERSION || !isStringOrNull(origin) || !isStringOrNull(name)) return null;
-    if (origin === null && name === null) return null;
-    return { origin, name };
+    parsed = JSON.parse(fs.readFileSync(path.join(dir, IDENTITY_FILENAME), 'utf8'));
   } catch {
     return null;
   }
+  if (!isPlainObject(parsed)) return null;
+  const name = typeof parsed['name'] === 'string' ? parsed['name'].trim() : '';
+  if (name === '') return null;
+  if (parsed['version'] === IDENTITY_VERSION) return { name, origins: originsOf(parsed['origins']) };
+  if (parsed['version'] === 1) return { name, origins: [] };
+  return null;
 }
 
 /** 目录名是 `<基础名>` → 1,`<基础名>-<n>`(n ≥ 2)→ n,其余 → null。 */
@@ -126,8 +140,8 @@ function listRealDirs(root: string): string[] {
 }
 
 /**
- * 找这个标识已建的项目目录:`projects/` 下名字是 `<基础名>` 或 `<基础名>-<n>`(n ≥ 2)、identity.json 与 id 相同
- * 的那个(按 n 从小到大);不跳过中间缺号。只读,不建。
+ * 找这个项目已建的项目目录:`projects/` 下名字是 `<基础名>` 或 `<基础名>-<n>`(n ≥ 2)、identity.json 里的名字
+ * 是 `id.name` 的那个(按 n 从小到大);不跳过中间缺号。只读,不建。
  */
 export function findProjectDir(id: ProjectIdentity): { dir: string; name: string } | null {
   const root = projectsRoot();
@@ -141,7 +155,7 @@ export function findProjectDir(id: ProjectIdentity): { dir: string; name: string
   for (const { name } of candidates) {
     const dir = path.join(root, name);
     const found = readIdentityFile(dir);
-    if (found !== null && sameIdentity(found, id)) return { dir, name };
+    if (found !== null && found.name === id.name) return { dir, name };
   }
   return null;
 }
@@ -193,23 +207,62 @@ function removeStaleTempDirs(root: string): void {
   }
 }
 
-/** 在临时目录里写 identity.json(C-15:两空格缩进 + 换行,字段顺序 version、origin、name、createdAt)。 */
+/** 在临时目录里写 identity.json(spec D1、D8:两空格缩进 + 换行,字段顺序 version、name、origins、createdAt)。 */
 function writeIdentityFile(dir: string, id: ProjectIdentity): void {
-  const content = { version: IDENTITY_VERSION, origin: id.origin, name: id.name, createdAt: new Date().toISOString() };
+  const content = { version: IDENTITY_VERSION, name: id.name, origins: [], createdAt: new Date().toISOString() };
   fs.writeFileSync(path.join(dir, IDENTITY_FILENAME), `${JSON.stringify(content, null, 2)}\n`);
 }
 
-/** 这个目录名已在、而且就是这个标识的 → 返回它。 */
+/**
+ * spec D8:把项目记下的 origin 追加进 identity.json(同目录临时文件 + rename 写回)。保留 name、createdAt 和其
+ * 余不相干的字段;写回的版本一律是 2,版本 1 的顶层 `origin` 字段丢掉(版本 2 里地址只在 origins 里)。已经记过
+ * 就不写。返回是否追加;文件读不出、不是对象 → false,不动它。写不上抛错(调用方吞掉)。
+ */
+export function appendProjectOrigin(dir: string, origin: string): boolean {
+  const file = path.join(dir, IDENTITY_FILENAME);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return false;
+  }
+  if (!isPlainObject(parsed)) return false;
+  const origins = originsOf(parsed['origins']);
+  if (origins.includes(origin)) return false;
+  const next: Record<string, unknown> = { version: IDENTITY_VERSION };
+  if (typeof parsed['name'] === 'string') next['name'] = parsed['name'];
+  next['origins'] = origins.concat(origin);
+  if (typeof parsed['createdAt'] === 'string') next['createdAt'] = parsed['createdAt'];
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key === 'version' || key === 'name' || key === 'origins' || key === 'createdAt' || key === 'origin') continue;
+    next[key] = value;
+  }
+  const tmp = path.join(dir, `${IDENTITY_FILENAME}.${process.pid}.tmp`);
+  try {
+    fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // 没写成功就没有临时文件
+    }
+    throw err;
+  }
+  return true;
+}
+
+/** 这个目录名已在、而且 identity.json 里的名字就是这个项目的 → 返回它。 */
 function ownedDir(root: string, name: string, id: ProjectIdentity): { dir: string; name: string } | null {
   const dir = path.join(root, name);
   const found = readIdentityFile(dir);
-  return found !== null && sameIdentity(found, id) ? { dir, name } : null;
+  return found !== null && found.name === id.name ? { dir, name } : null;
 }
 
 /**
- * 建项目目录的唯一入口(D21):已建就返回;没有就先在 `projects/` 下的临时目录写好 identity.json,再改名到第一个
- * 空着的 `<基础名>`、`<基础名>-2`、`<基础名>-3`…。路过已在的名字时看它是不是这个标识的(别的进程刚建好);
- * 改名时目标已在 → 重新 findProjectDir,还没有就试下一个名字。返回目录绝对路径和目录名。
+ * 建项目目录的唯一入口(spec D3):已建就返回;没有就先在 `projects/` 下的临时目录写好 identity.json,再改名到
+ * 第一个空着的 `<基础名>`、`<基础名>-2`、`<基础名>-3`…。路过已在的名字时看 identity.json 是不是这个项目的
+ * (别的进程刚建好);改名时目标已在 → 重新 findProjectDir,还没有就试下一个名字。返回目录绝对路径和目录名。
  */
 export function ensureProjectDir(id: ProjectIdentity): { dir: string; name: string } {
   const existing = findProjectDir(id);
@@ -245,7 +298,7 @@ export function ensureProjectDir(id: ProjectIdentity): { dir: string; name: stri
   }
 }
 
-export interface ProjectDirEntry { name: string; dir: string; identity: ProjectIdentity | null }
+export interface ProjectDirEntry { name: string; dir: string; identity: ProjectDirIdentity | null }
 
 /** `projects/` 下每个一级目录(不跟随链接),不含 `.` 开头的;按名字排序。只读。 */
 export function listProjectDirs(): ProjectDirEntry[] {

@@ -75,9 +75,9 @@ function latestActiveAt(roots: readonly TimelineRoot[]): string | null {
   return latest;
 }
 
-/** identity.json 读不出的项目目录:kind、origin、name 为 null,显示名用目录名。 */
+/** identity.json 读不出的项目目录:name 为 null,显示名用目录名。 */
 function missingIdentityRef(dirName: string): ProjectRef {
-  return { dir: dirName, display: dirName, kind: null, origin: null, name: null };
+  return { dir: dirName, display: dirName, name: null };
 }
 
 /** `cgraphx project list`:用户目录里的每个项目,按目录名排序。只读。 */
