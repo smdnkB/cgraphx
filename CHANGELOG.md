@@ -2,6 +2,62 @@
 
 ## Unreleased
 
+### Changed — the timeline is parsed from agent session files instead of hooks
+
+cgraphx no longer records agent events through hooks in the agent's
+configuration. The seven hidden `timeline-*-hook` commands and the
+`precommit-check` PreToolUse hook are deleted, and `cgraphx install` /
+`uninstall` remove their dead entries from agent settings; the seven
+timeline commands stay registered as hidden no-op commands that read
+stdin and exit 0, so a project that upgraded but has not re-run install
+sees no errors. Events now come from the session files the agents
+themselves leave behind: before a timeline query, after a commit (the
+post-commit hook's background process), and after `install` merges old
+data, cgraphx parses whatever is new in Claude Code's
+`~/.claude/projects` (`CLAUDE_CONFIG_DIR` wins) and CodeBuddy's
+`~/.codebuddy/projects` transcripts — each agent has one reader that
+produces uniform session facts — and appends the events to the project's
+database. A tool event is one row per call: timestamp from the result
+line, cwd from the call line (the directory before the command ran), and
+duration as the difference between the two
+(`metadata.duration_source: "transcript"`); the turn number is the uuid
+of the turn's question. `pre_tool_use` and `session_end` are no longer
+recorded — `--type` still accepts them, but the hook-era data is gone
+after the rebuild below. Per-file offsets and start-directory
+classifications live in a new user-level `~/.cgraphx/sessions.db`
+(mode 0600) that does not follow a project's data: `project remove`
+records the removal and later ingests only pick up facts from after it,
+and `project name` clears the remembered start directories so they are
+reclassified. The three session-start notices (skill version, auto-memory
+direction, git hook repair) now print with the first cgraphx command of
+a session, on stderr, once per session (or once per project per day
+outside a session).
+
+The first `cgraphx install` (or first timeline query) after upgrading
+wipes the events the hooks recorded and rebuilds the timeline from
+session files in one pass — commits, which the git hooks recorded, are
+kept, and the merge of old data now copies only commits and
+`timeline_roots`. A project rebuilds once and only once. **Sessions whose
+files are gone cannot come back**: agents clean up their session files
+after about 30 days, so on a machine where those files were already
+cleaned up the history before the upgrade is lost.
+
+### Changed — the commit gate moved into the git commit-msg hook
+
+Agent commits are gated by a `commit-msg` git hook snippet now — a new
+hidden `commit-gate-hook` command with exit 0 (pass, including any
+failure to run the checks) and exit 3 (reject, message on stderr) —
+instead of the PreToolUse hook in the agent's settings. The snippet only
+starts the check when a session variable is set, so a person's manual
+commits wait for nothing. Version-branch interception, the
+`features check` artifact check and the message self-check run in the
+same place, under the same rules. The gate's own failure never blocks a
+commit: `command not found`, a timeout, any error passes. `--no-verify`
+now skips the gate — it could not skip the PreToolUse hook before. A
+commit that skipped the gate is marked `metadata.gate = "skipped"` in
+the timeline (「跳过门禁」 in human-readable output), and the release
+review lists such commits.
+
 ### Changed — data lives per project under the user directory
 
 Until now every directory recorded into its own `.cgraphx/cgraphx.db`. Only

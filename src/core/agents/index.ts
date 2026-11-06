@@ -4,12 +4,13 @@
  */
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { AGENT_PROFILES } from './profiles';
 import type { AgentId, AgentProfile, SessionFromEnv } from './types';
 
-export { AGENT_IDS } from './types';
-export type { AgentId, AgentProfile, SessionFromEnv } from './types';
+export { AGENT_IDS, SESSION_READER_IDS } from './types';
+export type { AgentId, AgentProfile, SessionFromEnv, SessionReaderId } from './types';
 
 export const DEFAULT_AGENT_ID: AgentId = 'claude-code';
 export const AGENT_OPTION_FLAG = '--agent' as const;
@@ -88,11 +89,6 @@ export function selectInstalledAgents(projectRoot: string): AgentProfile[] {
   return installed.length > 0 ? installed : [defaultAgentProfile()];
 }
 
-/** hook 进程解析 --agent 参数:无法识别时按 Claude Code 处理,不阻塞 hook。 */
-export function resolveHookAgent(arg: string | undefined): AgentProfile {
-  return (arg ? getAgentProfile(arg) : undefined) ?? defaultAgentProfile();
-}
-
 export function agentConfigDir(projectRoot: string, profile: AgentProfile): string {
   return path.join(path.resolve(projectRoot), profile.configDirName);
 }
@@ -114,11 +110,6 @@ export function applyAssetReplacements(content: string, profile: AgentProfile): 
   return out;
 }
 
-/** hook 命令:claude-code 原样,其他 agent 追加 `--agent <id>`。 */
-export function hookCommand(base: string, profile: AgentProfile): string {
-  return profile.id === DEFAULT_AGENT_ID ? base : `${base} ${AGENT_OPTION_FLAG} ${profile.id}`;
-}
-
 /** 按登记顺序从环境变量取会话 id;都没有返回 null。 */
 export function resolveSessionIdFromEnv(env: NodeJS.ProcessEnv = process.env): SessionFromEnv | null {
   for (const profile of AGENT_PROFILES) {
@@ -127,6 +118,16 @@ export function resolveSessionIdFromEnv(env: NodeJS.ProcessEnv = process.env): S
     if (value) return { sessionId: value, agent: profile.id };
   }
   return null;
+}
+
+/**
+ * 会话文件根目录(如 `~/.claude/projects`):`sessionsDirEnv` 的环境变量设了(非空)以它为根拼 `sessionsDir`,
+ * 否则家目录拼;`sessionsDir` 为 null(agent 会话文件不在固定位置)→ null。
+ */
+export function agentSessionsRoot(profile: AgentProfile, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (profile.sessionsDir === null) return null;
+  const override = profile.sessionsDirEnv !== null ? env[profile.sessionsDirEnv]?.trim() : undefined;
+  return path.join(override ? override : os.homedir(), ...profile.sessionsDir);
 }
 
 /** 读取文件文本;不存在或读取失败返回 null。 */

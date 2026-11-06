@@ -1,6 +1,7 @@
 /**
  * 安装器中按 agent 执行的步骤:安装对象选择(spec §4.1)、逐 agent 写配置、
- * 逐 agent 接入 / 移除 timeline hook。每个 agent 失败只 warn,继续其他 agent(spec §12)。
+ * timeline 的 git 片段接入 / 移除(片段与 agent 无关,每项目只装一次)。单个 agent 失败只 warn,继续
+ * 其他 agent(spec §12)。
  */
 
 import * as os from 'node:os';
@@ -9,7 +10,6 @@ import { ALL_TARGETS, getTarget, resolveTargetFlag } from './targets/registry';
 import type { AgentTarget, Location } from './targets/types';
 import { hookNotice, type HookSnippetResult } from '../../core/git-hooks';
 import {
-  DEFAULT_AGENT_ID,
   defaultAgentProfile,
   isAgentInstalled,
   selectInstalledAgents,
@@ -40,17 +40,6 @@ function targetOf(profile: AgentProfile): AgentTarget {
   const target = getTarget(profile.id);
   if (!target) throw new Error(`agent ${profile.id} 未生成 target`);
   return target;
-}
-
-/**
- * timeline 日志行前缀:本次涉及的 agent(被选中 / 实际已装)只有 claude-code 时为空
- * (与改造前输出一致),否则为 `<displayName>: `。
- */
-function hookLogPrefix(involved: readonly AgentTarget[], target: AgentTarget): string {
-  const onlyDefault = involved.length === 1
-    && involved[0]?.id === DEFAULT_AGENT_ID
-    && target.id === DEFAULT_AGENT_ID;
-  return onlyDefault ? '' : `${target.displayName}: `;
 }
 
 /** 当前项目中「已装」的 agent 的 target;一个都没装时为 `[claude-code]`。 */
@@ -125,9 +114,10 @@ export function installAgentTargets(
 }
 
 /**
- * 「可选子系统」的 Developer Timeline 项:对每个选中 agent 依次接入 timeline hook。
- * git post-commit、post-merge 钩子每项目一份(首个 agent 写入,其后幂等),它们的安装提示同一句只打一次。
- * 只接 hook、不开库:项目库的 timeline schema 由 install 并旧数据那一步建(spec D8、D25)。
+ * 「可选子系统」的 Developer Timeline 项:装 git 提交记录片段(post-commit / post-merge)。
+ * 片段与 agent 无关,每项目装一次——会话事件改由会话文件解析补录,不再接 agent hook
+ * (spec:2026-11-06-会话文件解析替代hooks D17、D18)。没选 agent 就整个跳过。
+ * 只装片段、不开库:项目库的 timeline schema 由 install 并旧数据那一步建(spec D8、D25)。
  */
 export async function installAgentHooks(
   clack: Clack,
@@ -139,62 +129,55 @@ export async function installAgentHooks(
     return;
   }
   const { installTimelineHooks } = await import('../../core/timeline');
-  const printedNotices = new Set<string>();
-
-  for (const target of targets) {
-    const prefix = hookLogPrefix(targets, target);
-    try {
-      const report = installTimelineHooks(projectRoot, { agent: target.id });
-      const events = report.writtenHookEvents.length > 0
-        ? report.writtenHookEvents.join('/')
-        : '已存在(幂等)';
-      clack.log.success(`${prefix}Developer Timeline 已装:${events}${gitHookSummary(report.gitHooks)}`);
-      // 多个 agent 的报告里是同一批 git 钩子:同一句提示只打一次
-      for (const notice of gitHookNotices(report.gitHooks)) {
-        if (printedNotices.has(notice)) continue;
-        printedNotices.add(notice);
-        clack.log.warn(`${prefix}${notice}`);
-      }
-    } catch (err) {
-      // 失败只 warn,不中断安装
-      clack.log.warn(`${prefix}timeline install 失败:${errorMessage(err)}`);
-    }
+  try {
+    const report = installTimelineHooks(projectRoot);
+    clack.log.success(`Developer Timeline 已装:git 提交记录片段${gitHookSummary(report.gitHooks)}`);
+    for (const notice of gitHookNotices(report.gitHooks)) clack.log.warn(notice);
+  } catch (err) {
+    // 失败只 warn,不中断安装
+    clack.log.warn(`timeline install 失败:${errorMessage(err)}`);
   }
 }
 
 /**
- * 逐 agent 移除 timeline hook。`keepGitHook` 为真(`uninstall -t`)时不动
- * git post-commit 钩子;否则随首个 agent 一并移除——同一仓库还有装着 cgraphx 的目录时留着(spec D31)。
- * 返回的 `gitHookKeptFor` 是各 agent 的 timeline 报告里第一个非空的「还装着的目录」(删了钩子、没碰钩子时为 [])。
- * `involved` 是日志前缀计算所依据的「本次涉及的 agent」(彻底卸载时为清扫前已装的 agent),缺省即 `targets`。
+ * 移除 timeline 的 git 提交记录片段与提交门禁片段(spec D18、K22)。`keepGitHook` 为真(`uninstall -t`,
+ * 部分卸载)时都不动;否则先卸提交记录片段——同一仓库还有装着 cgraphx 的目录时留着(spec D31),
+ * 提交门禁片段走同一判断(`gitHookKeptFor` 非空时也留着)。返回的 `gitHookKeptFor` 是提交记录片段
+ * 报告里「还装着的目录」(删了钩子、没碰钩子时为 [])。
  */
 export async function uninstallAgentHooks(
   clack: Clack,
   projectRoot: string,
-  targets: readonly AgentTarget[],
   keepGitHook: boolean,
-  involved: readonly AgentTarget[] = targets,
 ): Promise<{ gitHookKeptFor: string[] }> {
+  if (keepGitHook) return { gitHookKeptFor: [] };
+
   const { uninstallTimelineHooks } = await import('../../core/timeline');
   let gitHookKeptFor: string[] = [];
+  try {
+    const tlReport = uninstallTimelineHooks(projectRoot);
+    gitHookKeptFor = tlReport.gitHookKeptFor;
+    // 还有装着的目录时钩子留着,不打「已移除」
+    if (tlReport.gitHookRemoved && tlReport.gitHookKeptFor.length === 0) {
+      clack.log.success('Developer Timeline:已移除 git 提交记录片段(post-commit)');
+    }
+    for (const notice of tlReport.gitHookNotices) clack.log.warn(`Developer Timeline:${notice}`);
+  } catch (err) {
+    clack.log.warn(`timeline uninstall 失败:${errorMessage(err)}`);
+  }
 
-  for (const target of targets) {
-    const prefix = hookLogPrefix(involved, target);
+  // 提交门禁片段(commit-msg)与提交记录片段同一判断:同一仓库还有装着的目录时留着,否则一并卸掉。
+  if (gitHookKeptFor.length === 0) {
+    const { removeCommitGate } = await import('../../core/commit-gate');
     try {
-      const tlReport = uninstallTimelineHooks(projectRoot, { agent: target.id, keepGitHook });
-      if (gitHookKeptFor.length === 0) gitHookKeptFor = tlReport.gitHookKeptFor;
-      if (tlReport.removedHookEvents.length > 0) {
-        clack.log.success(
-          `${prefix}Developer Timeline:已移除 hooks(${tlReport.removedHookEvents.join(', ')})`,
-        );
+      const gate = removeCommitGate(projectRoot);
+      if (gate.status === 'removed') {
+        clack.log.success(`已移除提交门禁片段:${gate.hookPath}`);
+      } else if (gate.notice !== undefined) {
+        clack.log.warn(gate.notice);
       }
-      // 还有装着的目录时钩子留着,不打「已移除」
-      if (tlReport.gitHookRemoved && tlReport.gitHookKeptFor.length === 0) {
-        clack.log.success(`${prefix}Developer Timeline:已移除 git post-commit hook`);
-      }
-      for (const notice of tlReport.gitHookNotices) clack.log.warn(`${prefix}Developer Timeline:${notice}`);
     } catch (err) {
-      clack.log.warn(`${prefix}timeline uninstall 失败:${errorMessage(err)}`);
+      clack.log.warn(`移除提交门禁片段失败:${errorMessage(err)}`);
     }
   }
   return { gitHookKeptFor };

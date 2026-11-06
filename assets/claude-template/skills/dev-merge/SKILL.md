@@ -51,7 +51,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
    git merge --no-ff -m "同步 dev/2.0.11" FETCH_HEAD
    ```
 
-   有冲突 → 就地和用户一起解决:`git -c core.quotePath=false diff --name-only --diff-filter=U` 列出冲突文件,逐个说清两边各改了什么、合起来怎么写,用户确认后改好、`git add`;全部解决后 `git commit --no-edit`(说明沿用「同步 dev/2.0.11」)。提交门禁拦下时,按提示自查,说明不改,带 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重试。
+   有冲突 → 就地和用户一起解决:`git -c core.quotePath=false diff --name-only --diff-filter=U` 列出冲突文件,逐个说清两边各改了什么、合起来怎么写,用户确认后改好、`git add`;全部解决后 `git commit --no-edit`(说明沿用「同步 dev/2.0.11」)。git 提交门禁(commit-msg 钩子)拦下时,按提示自查,说明不改,带 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重试。
 
 4. **知识文件**:`git -c core.quotePath=false diff --name-only "HEAD^1" HEAD -- docs/knowledge/` 有输出 → 问一句要不要在副本里跑 `cgraphx docs index`;没问过不跑。合并显示 `Already up to date.`(没有新东西)就跳过这步。
 

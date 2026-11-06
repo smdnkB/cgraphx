@@ -35,10 +35,6 @@ export const SUMMARY_VERSION = 2;
 export const DEFAULT_QUERY_LIMIT = 100;
 export const MAX_QUERY_LIMIT = 10_000;
 
-/** Performance budget — single hook invocation total wall-clock. */
-export const PERF_BUDGET_MS = 50;
-export const PERF_WARN_MS = 50;
-
 /** Truncation marker appended to truncated string fields. */
 export const TRUNCATED_SUFFIX = '... [truncated]';
 
@@ -46,44 +42,9 @@ export const TRUNCATED_SUFFIX = '... [truncated]';
 export const DISABLED_RESPONSE_TEXT = '';
 
 /**
- * Claude Code hook 事件名 → cgraphx 隐藏子命令名。
- *
- * 唯一事实来源:installer(写 settings.json)和 cli.ts(注册实际命令)都从这里读,
- * 不会因手误不同步。
+ * git post-commit / post-merge 片段调起的隐藏子命令(agent hook 时代的 7 条采集子命令已随
+ * 会话文件解析替代 hooks 撤掉,见 spec:2026-11-06-会话文件解析替代hooks D17、D19)。
  */
-export const HOOK_EVENTS_TO_COMMANDS = [
-  { event: 'UserPromptSubmit', subcommand: 'timeline-user-prompt-hook' },
-  { event: 'PreToolUse', subcommand: 'timeline-pre-tool-use-hook' },
-  { event: 'PostToolUse', subcommand: 'timeline-post-tool-use-hook' },
-  { event: 'Stop', subcommand: 'timeline-stop-hook' },
-  { event: 'SessionStart', subcommand: 'timeline-session-start-hook' },
-  { event: 'SessionEnd', subcommand: 'timeline-session-end-hook' },
-  // 只接入有该事件的 agent;命令带容错后缀,PATH 命中旧版全局 cgraphx 时不让宿主显示报错
-  {
-    event: 'PostToolUseFailure',
-    subcommand: 'timeline-post-tool-use-failure-hook',
-    requiresCapability: 'postToolUseFailure',
-    tolerateLegacyBinary: true,
-  },
-] as const satisfies readonly HookEventEntry[];
-
-/** hook 名单项:requiresCapability 为 agent 描述 capabilities 的键,不具备该能力的 agent 不接入。 */
-export interface HookEventEntry {
-  readonly event: string;
-  readonly subcommand: string;
-  readonly requiresCapability?: 'postToolUseFailure';
-  readonly tolerateLegacyBinary?: boolean;
-}
-
-/**
- * 新增 hook 命令的旧版容错后缀:旧版全局 cgraphx 不认识新子命令会报 unknown command
- * 并以 1 退出;加后缀后静默成功。已有 6 个 hook 的命令串保持不变,不加。
- */
-export const LEGACY_BINARY_TOLERANT_SUFFIX = ' 2>/dev/null || true';
-
-/** timeline 接入的 Claude Code hook 事件名联合(由 HOOK_EVENTS_TO_COMMANDS 推出)。 */
-export type HookEventName = (typeof HOOK_EVENTS_TO_COMMANDS)[number]['event'];
-
 export const GIT_COMMIT_SUBCOMMAND = 'timeline-git-commit-hook';
 
 /**
@@ -106,27 +67,17 @@ export const COMMIT_HOOK_ENV = 'CGRAPHX_GIT_HOOK';
  */
 export const COMMIT_REFLOG_ENV = 'CGRAPHX_COMMIT_REFLOG';
 
+/**
+ * post-commit / post-merge 片段在前台取好、经环境变量传给后台记录进程的三样门禁上下文(plan C-11):
+ * 门禁记号的内容(commit-msg 门禁只要没打回就写的 `git write-tree` 输出,前台读出即删——后台自己读时
+ * 连续快速提交的记号已被下一笔覆盖)与 cherry-pick / rebase 是否在进行。记录进程据此判这笔提交是否
+ * 跳过了门禁(K16);post-merge 记的合并提交不判,变量照传无害。
+ */
+export const GATE_TREE_ENV = 'CGRAPHX_GATE_TREE';
+export const CHERRY_PICK_ENV = 'CGRAPHX_CHERRY_PICK';
+export const REBASE_ENV = 'CGRAPHX_REBASE';
+
 // ─── Tool classification (timeline-data-quality feature) ───────────────────
-// Defined here so the enricher hooks share one source of truth.
-
-/**
- * Tools that mutate state and are therefore worth recording as pre_tool_use
- * (write-tools whitelist). Drives which pre events are kept — read-only tool
- * pre events are dropped to cut noise.
- *
- * Bash is included because it carries semantic signals (test/build/lint/git-write)
- * even though it does not directly modify a single file.
- */
-export const WRITE_TOOLS_WHITELIST = new Set([
-  'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash',
-]);
-
-/**
- * Task-management tools (subject/status/taskId are extracted from these).
- */
-export const TASK_TOOLS = new Set([
-  'TaskUpdate', 'TaskCreate', 'TaskGet',
-]);
 
 /**
  * File-reading tools (used to split topFiles into read vs written).
@@ -134,8 +85,6 @@ export const TASK_TOOLS = new Set([
 export const READ_FILE_TOOLS = new Set(['Read', 'Grep', 'Glob']);
 
 /**
- * File-writing tools. Note: distinct from WRITE_TOOLS_WHITELIST —
- * Bash is in the whitelist (carries duration/semantic value) but does not
- * directly modify a specific file, so it is excluded here.
+ * File-writing tools (used to split topFiles into read vs written).
  */
 export const WRITE_FILE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);

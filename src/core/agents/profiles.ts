@@ -13,17 +13,18 @@ const CLAUDE_CODE: AgentProfile = {
   settingsFileName: 'settings.json',
   projectDirEnv: 'CLAUDE_PROJECT_DIR',
   sessionIdEnv: 'CLAUDE_CODE_SESSION_ID',
+  sessionsDir: ['.claude', 'projects'],
+  sessionsDirEnv: 'CLAUDE_CONFIG_DIR',
+  sessionReader: 'claude-transcript',
   cliCommands: ['claude'],
-  writeTools: ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'],
-  capabilities: { statusLine: true, contextMonitor: true, postToolUseFailure: true },
+  capabilities: { statusLine: true, contextMonitor: true },
   assetReplacements: [],
 };
 
 /**
  * CodeBuddy 描述:部署到 .codebuddy/,不支持 statusLine 与 context-monitor。
- * - sessionIdEnv:实测 CodeBuddy 2.167.0 向 Bash 子进程注入 CODEBUDDY_SESSION_ID(值即 hook payload 的 session_id)。
- * - cliCommands / writeTools:实测命令名为 codebuddy;写类工具与 Claude Code 同名(另有别名 NotebookWrite,本批不覆盖)。
- * - postToolUseFailure:实测 2.167.0 没有该事件,失败调用走 PostToolUse 并带 is_error。
+ * - sessionIdEnv:实测 CodeBuddy 2.167.0 向 Bash 子进程注入 CODEBUDDY_SESSION_ID(值即会话文件的 session_id)。
+ * - cliCommands:实测命令名为 codebuddy。
  */
 const CODEBUDDY: AgentProfile = {
   id: 'codebuddy',
@@ -34,9 +35,11 @@ const CODEBUDDY: AgentProfile = {
   settingsFileName: 'settings.json',
   projectDirEnv: 'CODEBUDDY_PROJECT_DIR',
   sessionIdEnv: 'CODEBUDDY_SESSION_ID',
+  sessionsDir: ['.codebuddy', 'projects'],
+  sessionsDirEnv: null,
+  sessionReader: 'codebuddy-transcript',
   cliCommands: ['codebuddy'],
-  writeTools: ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'],
-  capabilities: { statusLine: false, contextMonitor: false, postToolUseFailure: false },
+  capabilities: { statusLine: false, contextMonitor: false },
   // 顺序即替换顺序:先替换目录路径,再替换指引文件名与环境变量
   assetReplacements: [
     ['.claude/', '.codebuddy/'],

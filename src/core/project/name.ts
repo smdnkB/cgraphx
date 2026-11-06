@@ -2,9 +2,9 @@
  * 项目名称(spec:2026-11-05-数据按项目放用户目录 D3、D19;F2;K2)
  *
  * - renameProject:`cgraphx project name <名称>`。名字只经基础层 writeProjectName 写(根在 git 里写本地 git 配置,
- *   不在 git 里写本地 `project.json`);写完把受影响的根(这个根,加上其余工作区里同一相对位置的根)上的会话登记
- *   改写成新标识,本机正在跑的会话之后也记到新项目。之前记的事件留在原项目下,不搬。还有没并过去的旧数据的目录
- *   不许改名:先 install 并过去。
+ *   不在 git 里写本地 `project.json`);写完把受影响的根(这个根,加上其余工作区里同一相对位置的根)在用户级
+ *   sessions.db 里的开始目录归属清掉,下次补录按新标识重新认;偏移不动,已经记下的不搬(spec 2026-11-06-会话文件
+ *   解析替代hooks D2)。之前记的事件留在原项目下,不搬。还有没并过去的旧数据的目录不许改名:先 install 并过去。
  * - planInstallName / applyInstallName:install 时问名字、记名字(K2:按名字认的根,装的时候就把名字记下来,
  *   用默认名字的也记)。
  */
@@ -26,7 +26,7 @@ import {
   type RootIdentity,
 } from '../project-identity';
 import { listSiblingRoots } from '../repo-projects';
-import { rewriteSessionRegistrations } from '../session-registry';
+import { openSessionIndex } from '../session-index';
 import { countEventsUnderRoots, readTimelineSummary, type TimelineRoot } from '../timeline';
 import { findProjectDir } from '../user-data-dir';
 import { ProjectError } from './errors';
@@ -97,6 +97,23 @@ function identityWithName(info: RootIdentity, name: string): ProjectIdentity {
   return { origin: null, name };
 }
 
+/**
+ * 清掉受影响的根在 sessions.db 里的开始目录归属(下次补录重新认;偏移不动)。sessions.db 打不开、清不掉都不报错
+ * ——名字本身已经记下了,归属下次补录时重新认。
+ */
+function clearStartDirs(roots: readonly string[]): void {
+  try {
+    const index = openSessionIndex();
+    try {
+      index.deleteStartDirsByRoots(roots);
+    } finally {
+      index.close();
+    }
+  } catch {
+    // 用户目录写不了:不影响改名结果
+  }
+}
+
 /** 最近活动的根(roots 已按最近活动降序);没有 → `—`。 */
 function latestRootOf(roots: readonly TimelineRoot[]): string {
   const latest = roots[0]?.root;
@@ -144,7 +161,7 @@ function renameLines(
 /**
  * `cgraphx project name <名称>`(spec D19):给这个目录的根记下项目名称,之后记到按新标识认的项目。start 是起点。
  * 顺序:校验名字 → 认根 → 旧库不许改 → 认标识 → 标识没变就不写 → 数受影响的根下原项目记的事件 → 写名字 →
- * 改写会话登记 → 出提示。
+ * 清开始目录归属 → 出提示。
  *
  * @throws ProjectError invalid_name(名字不合法)、cannot_record(记不下)、legacy_data(还有没并过去的旧数据)、
  *   no_project(git 跑不起来)
@@ -170,7 +187,7 @@ export function renameProject(start: string, rawName: string): RenameOutcome {
   const events = prevDir !== null ? countEventsUnderRoots(prevDir.dir, siblings) : 0;
   writeProjectName(root, name);
   const nextDir = findProjectDir(next);
-  rewriteSessionRegistrations(siblings, next, nextDir?.name ?? null);
+  clearStartDirs(siblings);
   return { lines: renameLines(prev, next, nextDir, events) };
 }
 
@@ -204,8 +221,8 @@ function installNotice(root: string, next: ProjectIdentity): string | null {
 }
 
 /**
- * install 时记下项目名称(spec D3、K2)。只有记过同一个名字时不写;其余(包括按默认名字认的)一律写,写完改写受影响
- * 的根上的会话登记。notice 为 M5(这个名字已有数据、这个目录还没记进去过),否则 null。
+ * install 时记下项目名称(spec D3、K2)。只有记过同一个名字时不写;其余(包括按默认名字认的)一律写,写完清掉受
+ * 影响的根在 sessions.db 里的开始目录归属。notice 为 M5(这个名字已有数据、这个目录还没记进去过),否则 null。
  *
  * @throws ProjectError invalid_name(名字不合法)、cannot_record(记不下)、no_project(git 跑不起来)
  */
@@ -224,7 +241,7 @@ export function applyInstallName(start: string, name: string): { notice: string 
   if (!unchanged) {
     const siblings = listSiblingRoots(root);
     writeProjectName(root, checked);
-    rewriteSessionRegistrations(siblings, next, findProjectDir(next)?.name ?? null);
+    clearStartDirs(siblings);
   }
   return { notice: installNotice(root, next) };
 }

@@ -43,14 +43,17 @@ export function getCurrentTimelineSchemaVersion(db: SqliteDatabase): number {
 }
 
 /**
- * 在已打开的连接上应用 timeline schema,每次 hook 触发都会调用(幂等)。
+ * 在已打开的连接上应用 timeline schema,每次打开库都会调用(幂等)。
  *
- * 先执行全幂等的 schema.sql,再为旧库补 agent 列(见 ensureAgentColumn)。
+ * 先给旧库补 source_key 列与部分唯一索引(见 ensureSourceKeyColumn——它在 schema.sql 之前:
+ * schema.sql 里建这个索引要列已在,旧库不先补,exec 会报 no such column),再执行全幂等的
+ * schema.sql,最后为旧库补 agent 列(见 ensureAgentColumn)。
  *
  * @throws TimelineSchemaError 库中记录的版本高于本构建支持的版本
  *   (新版 cgraphx 写过的库被旧版打开)。
  */
 export function ensureTimelineSchema(db: SqliteDatabase): void {
+  ensureSourceKeyColumn(db);
   const schemaPath = resolveSchemaPath();
   const sql = fs.readFileSync(schemaPath, 'utf-8');
   db.exec(sql);
@@ -104,6 +107,53 @@ function ensureAgentColumn(db: SqliteDatabase): void {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('duplicate column name')) return;
+    throw err;
+  }
+}
+
+/** timeline_events 表是否已在(新库第一次打开时还没有,由 schema.sql 建)。 */
+function hasTimelineEventsTable(db: SqliteDatabase): boolean {
+  return db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'timeline_events' LIMIT 1")
+    .get() !== undefined;
+}
+
+/** timeline_events 是否已有 source_key 列(一次 PRAGMA 查询,不扫表)。 */
+function hasSourceKeyColumn(db: SqliteDatabase): boolean {
+  const cols = db.prepare('PRAGMA table_info(timeline_events)').all() as Array<{ name: string }>;
+  return cols.some((c) => c.name === 'source_key');
+}
+
+/**
+ * 旧库补 source_key 列与部分唯一索引(spec 2026-11-06-会话文件解析替代hooks D5;新库两样都由
+ * schema.sql 建,这里表不在直接跳过)。写法同 ensureAgentColumn:快路径已有列直接返回(索引随后的
+ * schema.sql 里有 IF NOT EXISTS 会补),慢路径 BEGIN IMMEDIATE 写事务内二次确认后补列,并发抢先
+ * 补列导致的 `duplicate column name` 视为成功。
+ *
+ * 在 schema.sql **之前**执行(与 ensureAgentColumn 相反):schema.sql 里建 source_key 的部分唯一
+ * 索引要这一列在,旧库(表已在、列没有)不先补列,exec 会在建索引那条上报 no such column。
+ * 不升 `TIMELINE_SCHEMA_VERSION`:升了旧版全局 cgraphx 打开库报错、hook 不再记录(取舍同 D5)。
+ */
+function ensureSourceKeyColumn(db: SqliteDatabase): void {
+  if (!hasTimelineEventsTable(db) || hasSourceKeyColumn(db)) return;
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      if (!hasSourceKeyColumn(db)) {
+        db.exec('ALTER TABLE timeline_events ADD COLUMN source_key TEXT');
+        db.exec(
+          'CREATE UNIQUE INDEX IF NOT EXISTS timeline_events_source_key_uidx ' +
+            'ON timeline_events(source_key) WHERE source_key IS NOT NULL',
+        );
+      }
+      db.exec('COMMIT');
+    } catch (err) {
+      try { db.exec('ROLLBACK'); } catch { /* 事务可能已结束 */ }
+      throw err;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('duplicate column name')) return; // 并发的另一个进程抢先补了列,索引由 schema.sql 补
     throw err;
   }
 }

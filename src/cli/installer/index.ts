@@ -1,10 +1,11 @@
 /**
  * cgraphx 交互式安装器(2.0)
  *
- * 按 agent 描述为每个选中的 agent(Claude Code / CodeBuddy …)部署模板资产、
- * cgraphx hook 与 statusLine、指引块;项目级的事每个目录只做一次:本地 `.cgraphx/`(知识库)
- * 初始化、docs / db 子系统、问项目名称并把本地旧库并进用户目录(spec:2026-11-05-数据按项目放
- * 用户目录 D25);timeline hook 对每个选中 agent 接入。
+ * 按 agent 描述为每个选中的 agent(Claude Code / CodeBuddy …)部署模板资产、statusLine 与指引块;
+ * 项目级的事每个目录只做一次:本地 `.cgraphx/`(知识库)初始化、docs / db 子系统、问项目名称并把本地
+ * 旧库并进用户目录(spec:2026-11-05-数据按项目放用户目录 D25)、timeline 的 git 提交记录片段与提交门禁
+ * 片段(片段与 agent 无关,每项目一份;门禁选了 agent 就装,不看「可选子系统」勾选——spec:2026-11-06-
+ * 会话文件解析替代hooks D17、D18)。
  * 安装对象选择见 `agent-steps.ts`(spec §4.1),卸载规则见 `runUninstaller`(spec §5、D31)。
  *
  * Uses @clack/prompts for the interactive UI; `runInstallerWithOptions`
@@ -131,10 +132,30 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // 顺序固定(D25):① agent 配置 ② 本地 .cgraphx/ ③ 1.x 遗留表 ④ 选子系统 ⑤ docs 索引 ⑥ timeline 等 hook
-  //   ⑦ 问名字、并旧数据、清掉已下掉功能的数据 ⑧ db-query 模板。
+  // 顺序固定(D25):① agent 配置 + 提交门禁片段 ② 本地 .cgraphx/ ③ 1.x 遗留表 ④ 选子系统 ⑤ docs 索引
+  //   ⑥ timeline 的 git 提交记录片段 ⑦ 问名字、并旧数据、清掉已下掉功能的数据 ⑦.6 时间线重建(F6)
+  //   ⑧ db-query 模板。
   // ① 逐 agent 写配置;单个 agent 失败只 warn,继续其他 agent 与后续步骤。
   installAgentTargets(clack, targets, location);
+
+  // ①.5 提交门禁片段(spec:2026-11-06-会话文件解析替代hooks D18、F5 ②③):install 选了 agent 就装、
+  //     不看「可选子系统」勾选——门禁管的是 agent 的提交,不随 Developer Timeline 勾选走。片段没写入
+  //     (被跟踪的钩子文件、链接、非 shell)时按 F5 ③ 打警告(hookNotice 的原因原文,被跟踪的还给要加
+  //     的几行);不在 git 仓库只提示,不拦安装。
+  if (targets.length > 0) {
+    const { installCommitGate } = await import('../../core/commit-gate');
+    try {
+      const gate = installCommitGate(process.cwd());
+      if (gate.status === 'installed' || gate.status === 'updated') {
+        clack.log.success(`提交门禁已装:${gate.hookPath}`);
+      } else if (gate.notice !== undefined) {
+        clack.log.warn(gate.notice);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      clack.log.warn(`提交门禁没装上:${msg}`);
+    }
+  }
 
   // ② 本地 `.cgraphx/`(被折叠进 install 的 `cgraphx init`),本地库只建知识库表。幂等;危险根($HOME /
   //   文件系统根)跳过并提示,不在那里建数据目录;上面写的 agent 配置不受影响。
@@ -177,7 +198,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
           value: 'timeline' as const,
           label: 'Developer Timeline',
           hint: targets.length > 0
-            ? `装 ${targets.map((t) => t.displayName).join(' / ')} hooks(项目级)`
+            ? 'git 提交记录片段(post-commit / post-merge)'
             : '未选择 agent — 跳过',
         },
       ],
@@ -211,7 +232,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
     }
   }
 
-  // ⑥ 对本次选中的每个 agent 接入 timeline hook;git post-commit 每项目一个
+  // ⑥ 装 timeline 的 git 提交记录片段(与 agent 无关,装一次;会话事件由会话文件解析补录)
   if (chosen.includes('timeline')) {
     await installAgentHooks(clack, projectRoot, targets);
   }
@@ -233,6 +254,28 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
       }
     } catch (err) {
       clack.log.warn(`清理已下掉的功能失败:${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // ⑦.6 时间线重建(spec F6、D19;F5 图末步):并旧数据之后——只并了提交记录的旧库在这之后按会话文件
+    //   全量重建(清 hook 事件、保留提交记录);重建过(K23 只一次)或没有旧数据的就只走增量,基本是
+    //   空趟。失败只警告,安装照常。
+    try {
+      const { ensureTimelineUpToDate } = await import('../../core/timeline');
+      const s = clack.spinner();
+      s.start('正在从会话文件重建时间线…');
+      const outcome = await ensureTimelineUpToDate(projectRoot).finally(() => s.stop('从会话文件重建时间线'));
+      if (outcome.status === 'rebuilt') {
+        clack.log.success(`时间线已重建:${outcome.sessions ?? 0} 个会话,${outcome.events ?? 0} 条事件`);
+      } else if (outcome.status === 'failed') {
+        clack.log.warn(`时间线重建失败:${outcome.reason ?? '原因不明'}`);
+      } else if (outcome.status === 'busy') {
+        clack.log.warn('时间线正在补录,这次没重建;下次安装或查询会接着来');
+      } else if (outcome.status === 'skipped-legacy') {
+        clack.log.warn('这个目录的旧数据没并过去,时间线还没重建;并好之后下次安装或查询会接着来');
+      }
+      for (const notice of outcome.notices) clack.log.warn(notice);
+    } catch (err) {
+      clack.log.warn(`时间线重建失败:${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -272,8 +315,8 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
 export interface RunUninstallerOptions {
   /**
    * 逗号分隔的 agent id,或 `auto` / `all` / `none`。不给 → 卸载全部 agent,移除 git 钩子片段(timeline 的
-   * post-commit / post-merge、版本分支提交拦截;同一仓库还有装着的目录时留着)与本地 `.cgraphx/`;
-   * 给出 → 只移除指定 agent 的配置,不动 git 钩子、不删 `.cgraphx/`(忽略 `--keep-data`)。
+   * post-commit / post-merge、提交门禁的 commit-msg、版本分支提交拦截;同一仓库还有装着的目录时留着)与
+   * 本地 `.cgraphx/`;给出 → 只移除指定 agent 的配置,不动 git 钩子、不删 `.cgraphx/`(忽略 `--keep-data`)。
    */
   target?: string;
   /** Non-interactive: target=all, no prompts (also skips the data-delete confirm). */
@@ -340,9 +383,10 @@ export function uninstallTargets(
 /**
  * 交互式卸载(`runInstallerWithOptions` 的逆过程),只卸这个目录(spec D31)。清扫全部 agent(或 `--target`
  * 指定的),每个 agent 打一段反馈:移除 agent 配置(hook / statusLine / 指引块)、包内 `.claude/` 资产(按清单)、
- * timeline 等 hook 与死 hook 残留(pre-0.8 auto-sync、2.0 移除的 prompt-hook)。彻底卸载时再:同一仓库没有别的
- * 装着的目录才删 git 钩子与版本分支提交拦截;删本地 `.cgraphx/`(被折叠进来的 `uninit`)前先把没并过的旧数据
- * 并进用户目录,并不过去就留着;删除要确认(`--yes` 不问,`--keep-data` 保留)。用户目录里的项目数据不删,
+ * 死 hook 残留(pre-0.8 auto-sync、2.0 移除的 prompt-hook、2.0.14 下掉的 sync/task、2.0.15 撤掉的时间线 hook
+ * 与 precommit-check)。彻底卸载时再:同一仓库没有别的装着的目录才删 git 钩子片段(提交记录、提交门禁、
+ * 版本分支提交拦截);删本地 `.cgraphx/`(被折叠进来的 `uninit`)前先把没并过的旧数据并进用户目录,
+ * 并不过去就留着;删除要确认(`--yes` 不问,`--keep-data` 保留)。用户目录里的项目数据不删,
  * 收尾说明它在哪、怎么删。
  */
 export async function runUninstaller(opts: RunUninstallerOptions): Promise<void> {
@@ -391,10 +435,10 @@ export async function runUninstaller(opts: RunUninstallerOptions): Promise<void>
     }
   }
 
-  // Step 4:撤销 install 在 agent target 之外做的事。① 逐 agent 移除 timeline hook(部分卸载保留
-  //   git 钩子;同一仓库还有装着的目录时也留着,gitHookKeptFor 列出那些目录)。
+  // Step 4:撤销 install 在 agent target 之外做的事。移除 timeline 的 git 提交记录片段与提交门禁片段
+  //   (部分卸载保留;同一仓库还有装着的目录时也留着,gitHookKeptFor 列出那些目录)。
   const cwd = process.cwd();
-  const { gitHookKeptFor } = await uninstallAgentHooks(clack, cwd, targets, partial, involved);
+  const { gitHookKeptFor } = await uninstallAgentHooks(clack, cwd, partial);
 
   if (partial) {
     // 部分卸载(-t)不动 git 钩子与 `.cgraphx/`;已无已装 agent 时提示

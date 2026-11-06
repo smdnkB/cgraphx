@@ -16,7 +16,7 @@ description: 为项目初始化 docs/guides/ 规范文件模板。根据技术�
 | `interface-standards.md` | API 路径/参数/返回值/兼容 | 接口任务 · api-case |
 | `data-standards.md` | 模型层 + DDL 层 + ORM 映射 + **schema 变更约定** | schema 任务 |
 | `testing-standards.md` | 框架/单测集成边界/mock/fixture/覆盖 | 单测任务 · unit-code |
-| `git-standards.md` | commit 消息规范 + 提交前检查点 | precommit-check 门禁 |
+| `git-standards.md` | commit 消息规范 + 提交前检查点 | git 提交门禁(commit-msg 钩子) |
 
 两种模式:新项目起步立起步默认(文件内显式注明"待演进,有代码后重跑校准");已有项目从代码与 git 历史挖既有约定固化成文。**你只提发现和建议,决策归用户。**
 

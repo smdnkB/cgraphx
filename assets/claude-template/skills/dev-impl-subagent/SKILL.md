@@ -55,7 +55,7 @@ index:docs/features/2026-10-20-订单导出/plan/订单导出-index.md
 ## 提交
 
 - 只 stage 回报里这一笔列出的文件,不用 `git add -A` 或 `git add .`。
-- 提交说明按 index「提交规范」写;提交门禁拦下时,按「提交规范」的检查点自查,再带 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重新提交。
+- 提交说明按 index「提交规范」写;git 提交门禁(commit-msg 钩子)拦下时,按「提交规范」的检查点自查,再带 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重新提交。
 - `features check` 报失败时,按提示改对,算主会话的小修复,改完和这一笔一起提交。
 
 ## 停下问用户

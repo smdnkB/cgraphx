@@ -166,6 +166,12 @@ function rowToEvent(row: EventRow): TimelineEvent {
 export class TimelineStore {
   constructor(private readonly db: SqliteDatabase) {}
 
+  /**
+   * 写一条事件。带 source_key 的行按部分唯一索引去重:键撞上时静默跳过(INSERT OR IGNORE,
+   * 补录重读同一事实不多记,spec 2026-11-06-会话文件解析替代hooks D5);不带键的行(hook 路径、
+   * git_commit)不进部分索引,行为与原来相同。被跳过时返回的 id 是连接上最近一次成功写入的 id,
+   * 只作信息用。
+   */
   insert(input: TimelineEventInput): number {
     const ts = input.ts ?? new Date().toISOString();
     const cwd = input.cwd ?? process.cwd();
@@ -194,12 +200,12 @@ export class TimelineStore {
     try {
       const result = this.db
         .prepare(
-          `INSERT INTO timeline_events (
+          `INSERT OR IGNORE INTO timeline_events (
              ts, session_id, event_type, tool_name, tool_args,
              tool_result_summary, prompt_text, duration_ms,
              commit_hash, commit_message, commit_files, cwd, metadata,
-             turn_id, commit_insertions, commit_deletions, agent
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             turn_id, commit_insertions, commit_deletions, agent, source_key
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           ts,
@@ -219,6 +225,7 @@ export class TimelineStore {
           input.commit_insertions ?? null,
           input.commit_deletions ?? null,
           input.agent ?? null,
+          input.source_key ?? null,
         );
       const id = (result as unknown as { lastInsertRowid: number }).lastInsertRowid;
       return typeof id === 'number' ? id : Number(id);
@@ -273,44 +280,6 @@ export class TimelineStore {
     } catch (err) {
       throw new StoreQueryError(
         `Timeline getById failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /**
-   * Find the most recent pre_tool_use event matching the given filter.
-   *
-   * Used by B-2's duration_ms enricher to compute post.ts - pre.ts for
-   * write-tool post events within a turn. Filters on turn_id + tool_name +
-   * session_id; session_id null is matched via `IS NULL` (the schema allows
-   * NULL session_id for events Claude Code couldn't attribute to a session).
-   *
-   * Uses idx_timeline_turn_id (turn_id index) plus the ORDER BY ts DESC
-   * LIMIT 1 pattern to keep the lookup sub-millisecond at scale.
-   *
-   * @returns the matching event, or null if none exists.
-   */
-  getMostRecentPre(filter: {
-    turn_id: string;
-    tool_name: string;
-    session_id: string | null;
-  }): TimelineEvent | null {
-    const sessionClause = filter.session_id === null
-      ? 'AND session_id IS NULL'
-      : 'AND session_id = ?';
-    const sql = `SELECT * FROM timeline_events
-                 WHERE turn_id = ? AND tool_name = ? ${sessionClause}
-                   AND event_type = 'pre_tool_use'
-                 ORDER BY ts DESC, id DESC LIMIT 1`;
-    const params = filter.session_id === null
-      ? [filter.turn_id, filter.tool_name]
-      : [filter.turn_id, filter.tool_name, filter.session_id];
-    try {
-      const row = this.db.prepare(sql).get(...params) as EventRow | undefined;
-      return row ? rowToEvent(row) : null;
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline getMostRecentPre failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

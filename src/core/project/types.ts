@@ -72,12 +72,13 @@ export interface InstallNamePlan {
   recorded: boolean;
 }
 
-/** 并旧数据的结果(spec D30),由 install 按 kind 打 M1~M4。 */
+/** 并旧数据的结果(spec D30;只并提交记录与 timeline_roots,2026-11-06-会话文件解析替代hooks D20),由 install 按 kind 打 M1~M4。 */
 export interface MergeOutcome {
   kind: 'merged' | 'already' | 'nothing' | 'failed';
   display: string;
+  /** 并进去的提交记录数(含重复) */
   events: number;
-  sessions: number;
+  /** 重复的提交记录条数(项目库里已有同 hash 的,只留一份) */
   duplicates: number;
   /** M2 */
   notices: string[];

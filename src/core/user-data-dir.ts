@@ -4,8 +4,8 @@
  * ```text
  * ~/.cgraphx/
  * ├── db-profiles.json        用户级连接配置(db-query 管,不归这里)
- * ├── sessions/               会话登记(session-registry.ts)
- * └── projects/<目录名>/       一个项目一个:identity.json、cgraphx.db、轮次记录、配置、backups/
+ * ├── sessions.db             会话文件索引(进度与提示频控,session-index.ts 管,不归这里)
+ * └── projects/<目录名>/       一个项目一个:identity.json、cgraphx.db、配置、backups/
  * ```
  *
  * - 位置每次现取 `os.homedir()`(测试改 HOME 就换);不看 `CGRAPHX_DIR`,它只管本地目录名
@@ -59,6 +59,10 @@ export function projectsRoot(): string {
   return path.join(userDataRoot(), PROJECTS_DIRNAME);
 }
 
+/**
+ * hook 时代写会话登记的 `~/.cgraphx/sessions/`(已不再写):时间线按会话文件全量重建时删掉它
+ * (spec:2026-11-06-会话文件解析替代hooks D19,`timeline/ingest/rebuild.ts`)。勿再用于写入。
+ */
 export function sessionsRoot(): string {
   return path.join(userDataRoot(), SESSIONS_DIRNAME);
 }

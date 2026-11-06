@@ -4,13 +4,16 @@
  * 只删 `~/.cgraphx/projects/` 下的一级真实目录:目录名含路径分隔符、以 `.` 开头(含 `.`、`..`、临时目录)的不认;
  * 链接、文件、按 realpath 不在 `projects/` 下的一律拒绝。planRemoval 出预览,executeRemoval 删之前再核一遍目标。
  * 删的时候有 hook 在写照样删;还装着的目录之后再干活会重新建项目目录记起来(M17 提示)。
+ * 删完整项目数据后把标识记进用户级 sessions.db 的 removed_projects(K3:补录按它过滤,删掉的内容不再捡回来;
+ * spec 2026-11-06-会话文件解析替代hooks D2)。
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { isInitialized } from '../directory';
-import { projectDisplayName } from '../project-identity';
+import { projectDisplayName, type ProjectIdentity } from '../project-identity';
+import { openSessionIndex } from '../session-index';
 import { BACKUPS_DIRNAME, projectsRoot, readIdentityFile } from '../user-data-dir';
 import { DB_PROFILES_FILENAME, REMOVE_MAX_RETRIES } from './constants';
 import { ProjectError } from './errors';
@@ -124,6 +127,23 @@ function stillInstalledRoots(dir: string): string[] {
 }
 
 /**
+ * 把删掉的项目标识记进 sessions.db 的 removed_projects(K3)。删完整项目数据后调;sessions.db 打不开、写不上
+ * 都不报错——删除本身已经完成,只是之后补录可能把会话再捡回来。
+ */
+function recordRemovedProject(identity: ProjectIdentity): void {
+  try {
+    const index = openSessionIndex();
+    try {
+      index.recordRemovedProject(identity);
+    } finally {
+      index.close();
+    }
+  } catch {
+    // 用户目录写不了:不影响删除结果
+  }
+}
+
+/**
  * 按预览删:backupsOnly 只删 `backups/`,否则删整个项目目录。删之前再核一遍目标(预览到确认之间目录可能换成了链接)。
  * lines 为 M16 / M17 / 只删备份那句。
  *
@@ -142,7 +162,10 @@ export function executeRemoval(plan: RemovalPlan): { lines: string[] } {
     return { lines: [`已删除 ${plan.display} 的 ${plan.backups.count} 份备份`] };
   }
   const stillInstalled = stillInstalledRoots(dir);
+  // 标识在删之前读:identity.json 在被删的目录里;读不出(没有、坏了)不记,不报错
+  const identity = readIdentityFile(dir);
   fs.rmSync(dir, RM_OPTIONS);
+  if (identity !== null) recordRemovedProject(identity);
   const lines = [`已删除 ${plan.display} 的数据`];
   if (stillInstalled.length === 0) {
     lines.push(`${plan.events} 条事件、${plan.sessions} 个会话、配置和备份`);

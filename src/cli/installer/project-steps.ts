@@ -93,8 +93,8 @@ async function mergeLegacyAndReport(clack: Clack, root: string, pending: boolean
   }
   switch (outcome.kind) {
     case 'merged': {
-      const duplicates = outcome.duplicates > 0 ? `\n其中 ${outcome.duplicates} 条之前已经并过,只留一份` : '';
-      clack.log.success(`已把 ${outcome.events} 条事件、${outcome.sessions} 个会话并进项目 ${outcome.display}${duplicates}`);
+      const duplicates = outcome.duplicates > 0 ? `\n其中 ${outcome.duplicates} 笔之前已经并过,只留一份` : '';
+      clack.log.success(`已把 ${outcome.events} 笔提交并进项目 ${outcome.display}${duplicates}`);
       for (const notice of outcome.notices) clack.log.warn(notice);
       break;
     }
