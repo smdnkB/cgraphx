@@ -166,6 +166,12 @@ function rowToEvent(row: EventRow): TimelineEvent {
 export class TimelineStore {
   constructor(private readonly db: SqliteDatabase) {}
 
+  /**
+   * 写一条事件。带 source_key 的行按部分唯一索引去重:键撞上时静默跳过(INSERT OR IGNORE,
+   * 补录重读同一事实不多记,spec 2026-11-06-会话文件解析替代hooks D5);不带键的行(hook 路径、
+   * git_commit)不进部分索引,行为与原来相同。被跳过时返回的 id 是连接上最近一次成功写入的 id,
+   * 只作信息用。
+   */
   insert(input: TimelineEventInput): number {
     const ts = input.ts ?? new Date().toISOString();
     const cwd = input.cwd ?? process.cwd();
@@ -194,12 +200,12 @@ export class TimelineStore {
     try {
       const result = this.db
         .prepare(
-          `INSERT INTO timeline_events (
+          `INSERT OR IGNORE INTO timeline_events (
              ts, session_id, event_type, tool_name, tool_args,
              tool_result_summary, prompt_text, duration_ms,
              commit_hash, commit_message, commit_files, cwd, metadata,
-             turn_id, commit_insertions, commit_deletions, agent
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             turn_id, commit_insertions, commit_deletions, agent, source_key
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           ts,
@@ -219,6 +225,7 @@ export class TimelineStore {
           input.commit_insertions ?? null,
           input.commit_deletions ?? null,
           input.agent ?? null,
+          input.source_key ?? null,
         );
       const id = (result as unknown as { lastInsertRowid: number }).lastInsertRowid;
       return typeof id === 'number' ? id : Number(id);

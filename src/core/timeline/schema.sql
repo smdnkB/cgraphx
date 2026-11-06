@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS timeline_events (
   turn_id TEXT,
   commit_insertions INTEGER,
   commit_deletions INTEGER,
-  agent TEXT
+  agent TEXT,
+  source_key TEXT
 );
 
 CREATE INDEX IF NOT EXISTS timeline_events_ts_idx ON timeline_events(ts);
@@ -39,6 +40,11 @@ CREATE INDEX IF NOT EXISTS timeline_events_type_idx ON timeline_events(event_typ
 CREATE INDEX IF NOT EXISTS timeline_events_tool_name_idx ON timeline_events(tool_name);
 CREATE INDEX IF NOT EXISTS timeline_events_session_idx ON timeline_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_turn_id ON timeline_events(turn_id);
+
+-- 解析事件的去重键(spec 2026-11-06-会话文件解析替代hooks D5):部分唯一索引,无键的行
+-- (hook 路径、git_commit)不进索引、行为不变。只加列不升版本号(同上面 timeline_meta 的取舍),
+-- 旧库补列与索引见 schema-bootstrap.ts 的 ensureSourceKeyColumn。
+CREATE UNIQUE INDEX IF NOT EXISTS timeline_events_source_key_uidx ON timeline_events(source_key) WHERE source_key IS NOT NULL;
 
 -- 迁移水位等内部状态(如 auto_message 存量改记的扫描进度)。键值表,不占版本号:
 -- 升版本号会让比它旧的全局 cgraphx 打开库时报错、hook 不再记录(spec 2026-10-31)。

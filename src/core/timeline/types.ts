@@ -36,6 +36,11 @@ export interface TimelineEventInput {
   commit_deletions?: number | null;
   /** 来源 agent;git_commit 未归属会话时为 null。 */
   agent?: AgentId | null;
+  /**
+   * 去重键(spec:2026-11-06-会话文件解析替代hooks D5):解析补录的事件按它 INSERT OR IGNORE,
+   * 重读同一事实不多记;hook 路径与 git_commit 不带(部分唯一索引只盖非空行,行为不变)。
+   */
+  source_key?: string;
 }
 
 export interface TimelineEvent {
