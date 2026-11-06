@@ -1,6 +1,6 @@
 ---
 name: dev-start
-description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,先按 dev-spec 的命名规则定好需求目录名,再用写时复制在主目录旁边开出副本 <主目录名>@<文件前缀>(依赖包、.env 这类被忽略的本地文件一起带过去,没被跟踪的不带,这个需求目录下的移进副本),副本里从主目录当前所在的分支拉出 feat/<文件前缀>(bug 修复用 fix/)并登记到主目录——副本里的会话和提交和主目录记进同一个项目的数据;接着建好副本自己的知识库索引和「我的需求」索引,给出到副本开新会话的启动语。只在主目录执行,不在副本里开副本。Use when 开副本、开需求副本、在副本里做、并行做需求、dev-start。
+description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,先按 dev-spec 的命名规则定好需求目录名,再用 git worktree 在主目录旁边开出副本 <主目录名>@<文件前缀>(只带 agent 配置和 .worktreeinclude 清单里写的文件,依赖默认不带),副本里从主目录当前所在的分支拉出 feat/<文件前缀>(bug 修复用 fix/)并登记到主目录——副本里的会话和提交和主目录记进同一个项目的数据;接着建好副本自己的知识库索引和「我的需求」索引,给出到副本开新会话的启动语。只在主目录执行,不在副本里开副本。Use when 开副本、开需求副本、在副本里做、并行做需求、dev-start。
 ---
 
 # 开需求副本 (dev-start)
@@ -9,9 +9,9 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
 
 - 一个需求只开一个副本:要几个会话并行,先把需求按功能点拆成几个需求目录(各自写讨论稿),再各开各的副本;做完、/code-review 过了,在主目录 /dev-merge 合入。
 - 副本从主目录当前所在的分支拉:开了版本是 dev/<版本号>,没开就是 main——副本单独也能用,不用先 /release-start。
-- 副本里的会话和提交和主目录记进同一个项目的数据;知识库索引和「我的需求」索引副本自己建。
+- 副本里的会话和提交和主目录记进同一个项目的数据;知识库索引和「我的需求」索引副本自己建。副本是 git worktree,只带 agent 配置和清单里写的文件;依赖和构建产物不带,第一次要在副本里安装、构建一次;几个副本共用一份 stash,副本里别用 `git stash`。
 - 只在主目录执行。同一个需求换会话,在副本里直接开新会话,不开新副本。
-- 说法:**在副本里** = 项目根下 `.cgraphx/shared` 是符号链接;只有经 `cgraphx replica create` 开出、登记过的目录才算副本,自己用 cp 复制的、git worktree 都不算。
+- 说法:**在副本里** = 项目根下 `.cgraphx/shared` 是符号链接;只有经 `cgraphx replica create` 开出、登记过的 git worktree 才算副本,自己 `git worktree add` 开的、`cp` 复制的都不算。
 
 ## 流程
 
@@ -34,11 +34,11 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
 
    | 返回 | 怎么做 |
    |---|---|
-   | `"ok": true`、`"created": true` | 接第 4 步 |
-   | `"ok": true`、`"created": false` | 这个需求的副本已经有了,不重建,直接给启动语 |
-   | `"code": "dirty_main"` | 列出 `files`,停下:主目录有改了没提交的文件,开出来副本会带走这些改动,先提交或收好;没被跟踪的新文件不拦,也不带进副本 |
-   | `"code": "no_cow"` | 问「这块盘不能快速复制，要整份复制 4.1 GB,继续吗?」(大小 = `requiredBytes` ÷ 1024³,保留一位小数);用户同意 → 同一条命令加 `--full-copy` 重跑 |
+   | `"ok": true`、`"reattached": false` | 接第 4 步 |
+   | `"ok": true`、`"reattached": true` | 接第 4 步;启动语之后加一句「接上了分支 `feat/<文件前缀>`,先 `/dev-merge` 同步一次」 |
+   | `"code": "worktree_failed"` | 把 `message`(git 的原话)告诉用户,停下 |
    | `"code": "name_taken"` | 副本目录名已登记给别的需求(副本删了也算,旧会话的归属靠那份登记):把 `message` 告诉用户,请用户给这个需求换个标题或加业务 ID,按新的 feature-id、文件前缀和分支重跑 |
+   | `"code": "feature_has_replica"` | 需求已有在用副本:停下,转告返回的 `message` |
    | 其余 `code` | 把 `message` 原样告诉用户,停下 |
 
 4. **建副本自己的两份索引**:
@@ -48,7 +48,7 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
    cgraphx features sync /Users/smdnk/objects/ai/cgraphx@订单导出
    ```
 
-5. **转告**:`warnings` 逐条转告用户(如副本里 Python 的 .venv 写死了主目录路径,要在副本里重建);`movedFiles` 不为空时,说一句这些文件已移进副本。
+5. **转告**:`warnings` 逐条转告用户(可能是「主目录有 3 个文件没提交,没带进副本」「清单里的 X 主目录没有,没带」「主目录里的 X 没删掉……手动删掉主目录这份」「钩子片段没补上……」);`movedFiles` 不为空时,说一句这些文件已移进副本。
 
 6. **给启动语**:
 
@@ -58,7 +58,16 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
 
    已经澄清过、需求目录里有终确认的讨论稿 → `/dev-clarify` 换成 `/dev-spec`,新会话的 /dev-spec 直接复用这个需求目录;讨论稿还带「写稿中」那一行的(旧版是「审卡中」),照旧 `/dev-clarify`,新会话接着写。一次开了几个需求、需求之间有依赖时,说明各开一个副本、都从当前分支拉;被依赖的需求合入后,在依赖方的副本会话里输入 /dev-merge 同步一次再联调。
 
-   启动语之后补一句:「副本里同步主目录的分支只用 /dev-merge,不要 git pull、git merge——快进同步过,合没合入就判断不准了」。
+   启动语之后依次补四句:
+
+   ```text
+   依赖和构建产物没带过来,第一次要在副本里安装、构建一次
+   启动要用的本地配置写进主目录的 .worktreeinclude(gitignore 语法,一行一个路径,可以用通配),下次开副本自动带
+   副本里不要用 git stash,几个副本共用一份
+   副本里同步主目录的分支只用 /dev-merge,不要 git pull、git merge——快进同步过,合没合入就判断不准了
+   ```
+
+   `.worktreeinclude` 由项目自己维护,cgraphx 不创建、也不提交;主目录里没有这个文件就什么都不带,也不提示。
 
 ## 范例
 
@@ -80,14 +89,15 @@ $ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch 
   "featureId": "2026-10-27-订单导出",
   "branch": "feat/订单导出",
   "baseBranch": "dev/2.0.11",
-  "createdAt": "2026-10-27T08:00:00.000Z",
-  "removedAt": null,
-  "created": true,
+  "baseCommit": "4b8e1a7",
   "movedFiles": [
     "docs/features/2026-10-27-订单导出/订单导出-功能方案-v1.md",
     "docs/features/2026-10-27-订单导出/订单导出-功能方案-v2.md"
   ],
-  "warnings": []
+  "createdAt": "2026-10-27T08:00:00.000Z",
+  "removedAt": null,
+  "warnings": [],
+  "reattached": false
 }
 $ cgraphx docs index /Users/smdnk/objects/ai/cgraphx@订单导出
 $ cgraphx features sync /Users/smdnk/objects/ai/cgraphx@订单导出
@@ -100,22 +110,55 @@ $ cgraphx features sync /Users/smdnk/objects/ai/cgraphx@订单导出
 
 在 /Users/smdnk/objects/ai/cgraphx@订单导出 开新会话，输入 /dev-spec
 
+依赖和构建产物没带过来,第一次要在副本里安装、构建一次
+启动要用的本地配置写进主目录的 .worktreeinclude(gitignore 语法,一行一个路径,可以用通配),下次开副本自动带
+副本里不要用 git stash,几个副本共用一份
 副本里同步主目录的分支只用 /dev-merge,不要 git pull、git merge——快进同步过,合没合入就判断不准了
 ```
 
-这块盘不能写时复制:
+开 worktree 失败:
 
 ```text
 $ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch feat/订单导出 --json
 {
   "ok": false,
-  "code": "no_cow",
-  "message": "…",
-  "requiredBytes": 4402341478
+  "code": "worktree_failed",
+  "message": "开 worktree 失败:fatal: …;没有留下任何东西,主目录没动"
 }
 ```
 
-问「这块盘不能快速复制，要整份复制 4.1 GB,继续吗?」;用户说继续 → 同一条命令加 `--full-copy` 重跑。
+把 `message` 原样转告用户,停下,不自己重跑。
+
+主目录有改动:
+
+```text
+$ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch feat/订单导出 --json
+{
+  "ok": true,
+  "name": "cgraphx@订单导出",
+  ...
+  "warnings": ["主目录有 3 个文件没提交,没带进副本"],
+  "reattached": false
+}
+```
+
+照常开,不用先提交;把 `warnings` 里那条转告用户,主目录那份不动。
+
+接上留下的分支(上次删副本时分支没合完,留下了):
+
+```text
+$ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch feat/订单导出 --json
+{
+  "ok": true,
+  "name": "cgraphx@订单导出",
+  "branch": "feat/订单导出",
+  "baseCommit": "4b8e1a7",
+  "warnings": [],
+  "reattached": true
+}
+```
+
+`baseCommit` 沿用第一次开副本那条,分支上差几个提交照旧算进合入判断。启动语之后补一句「接上了分支 feat/订单导出,先 /dev-merge 同步一次」。
 
 两个有依赖的需求一起开(/dev-start 积分发放 积分兑换),各走一遍第 2~5 步,最后:
 
@@ -135,16 +178,14 @@ $ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch 
 | 在副本里 | 停下,提示到主目录的会话里开;同一个需求换会话,在副本里直接开新会话 |
 | 本会话的澄清还没收拢(还没写出讨论稿,或讨论稿还带「写稿中」那一行):③ 拍板了还没写进去的口径、等人拍板的事只在对话里 | 先不开副本——当前会话按 dev-clarify 的放法把「澄清进度」写进讨论稿,再开副本(讨论稿随需求目录移进副本),到副本里开新会话接着 `/dev-clarify` |
 | 需求目录名、业务 ID、标题语言还没确认 | 先问齐,不替用户定 |
-| 主目录有改了没提交的文件(`dirty_main`) | 列出来,停下 |
-| 这块盘不能写时复制(`no_cow`) | 问过才带 `--full-copy` 重跑 |
+| 分支已存在、不是这个需求留下的(`invalid_args`) | 把 `message` 告诉用户,请用户换分支名,或先确认那个分支是谁的 |
+| 开 worktree 失败(`worktree_failed`) | `message` 原样转告,停下 |
 | 副本目录名已登记给别的需求(`name_taken`) | 请用户换个标题或加业务 ID,按新名字重跑 |
 | 需求已有在用副本(`feature_has_replica`) | 停下,转告命令返回的 message |
 | 其余失败 | 把 `message` 原样告诉用户,停下 |
 
 ## 红线
 
-1. ❌ 不用 cp 自己复制目录:只有经 `cgraphx replica create` 开出、登记过的才算副本。
+1. ❌ 不用 cp 复制、不自己 git worktree add:只有经 cgraphx replica create 开出、登记过的才算副本。
 2. ❌ 不在副本里开副本。
-3. ❌ 主目录有改了没提交的已跟踪文件时不开。
-4. ❌ 没问过不带 `--full-copy`。
-5. ❌ 不替用户定需求目录名,不把中文标题转成英文 slug。
+3. ❌ 不替用户定需求目录名,不把中文标题转成英文 slug。
