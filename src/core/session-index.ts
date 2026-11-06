@@ -5,7 +5,7 @@
  * 项目删除记录(removed_projects)、提示记录(notices_shown)的唯一存放;只放路径、会话编号、进度,不放会话内容。
  * 进度不随项目数据删(D2):`project remove` 只写 removed_projects、偏移不动;改名只清 start_dirs,已经记下的不挪。
  *
- * 基础层定位(同 session-registry.ts):不 import 任何子系统。建表 SQL 就写在本文件(幂等 CREATE TABLE IF NOT EXISTS),
+ * 基础层定位:不 import 任何子系统。建表 SQL 就写在本文件(幂等 CREATE TABLE IF NOT EXISTS),
  * 不新增随包资产;sessions.db 是 cgraphx 自身基础设施,不走 data-standards 的版本表机制(spec 全局约束)。
  * 并发写入安全靠 SQLite 自身(busy_timeout 沿用基础层 5 秒);和项目库是两个库,别在项目库事务里碰它(跨库无法同事务)。
  */

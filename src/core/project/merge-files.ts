@@ -32,7 +32,7 @@ const TASK_SOURCE_CONFIG_FILENAME = 'task-source.json';
 
 /**
  * 轮次记录目录名(相对数据目录)。turns/ 不再并入(hook 退役后没人读写),备份照旧带、清理照旧删;
- * T-8 会删掉 turn-state.ts 的同名导出,这里用本地常量解耦(值就是 'turns')。
+ * 本地常量解耦,值就是 'turns'。
  */
 const TURNS_DIRNAME = 'turns';
 

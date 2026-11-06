@@ -10,7 +10,7 @@
  * - 升级清理:清掉已下掉功能(平台同步、开发任务)留在数据位置与本地 `.cgraphx/` 的表和运行文件
  *   (cleanupRemovedFeatureData;spec:2026-11-05-下掉web与平台同步 F3 D6)
  *
- * 无库表。只依赖基础层(project-identity、repo-projects、user-data-dir、session-registry、data-location、directory、
+ * 无库表。只依赖基础层(project-identity、repo-projects、user-data-dir、data-location、directory、
  * db)与 timeline、replica 的门面(spec D1);它们都不依赖 project。命令注册 registerProjectCommands 在
  * cli.ts(同其他子系统,主 CLI 从 `../core/project/cli` import)。
  */

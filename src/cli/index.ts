@@ -174,7 +174,7 @@ function main(): void {
   registerReplicaCommands(program);
   registerReleaseCommands(program);
   registerProjectCommands(program);
-  // 已下掉功能的五个兼容空命令(隐藏,读完 stdin 不做任何事)
+  // 已下掉功能的兼容空命令(隐藏,读完 stdin 不做任何事):平台同步、开发任务 5 条 + 时间线 hook 7 条
   registerLegacyHookCommands(program);
 
   // ===========================================================================
@@ -320,9 +320,9 @@ function main(): void {
   // 不算一条的命令名(C-9):隐藏命令、git 钩子调起的命令、`version`(`--help`、`--version`、
   // `help` 不走 action,天然不算)。commander 没有公开的 hidden 读取口,按命令名静态列全
   // (名单实现方式是 plan 允许的局部适配):
-  // - timeline 的 8 个隐藏 hook 子命令(agent 配置 / git 钩子调起;T-8 撤 hooks 时名单一并删)
+  // - timeline-git-commit-hook(git post-commit / post-merge 片段调起)
   // - commit-gate-hook(commit-msg 门禁片段调起)、guard(release 的 commit-msg 拦截片段调起)
-  // - 已下掉功能的 5 个兼容空命令(旧 agent 配置调起)
+  // - 已下掉功能的 12 个兼容空命令(旧 agent 配置调起:平台同步、开发任务 5 条 + 时间线 hook 7 条)
   // - version(裸名词形式的 --version)
   const NON_SESSION_COMMAND_NAMES = new Set([
     'timeline-user-prompt-hook',

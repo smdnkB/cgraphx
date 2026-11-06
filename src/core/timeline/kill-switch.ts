@@ -1,8 +1,8 @@
 /**
  * timeline 的总开关:`CGRAPHX_NO_TIMELINE` 设了(非空,且不是 '0'/'false')就不再采集。
  *
- * hook 时代从 hook-runner.ts 出;会话文件解析替代 hooks 后,补录管线(ingest)与重建也用它,
- * 独立成文件,不再挂在 hook 入口下面(hook-runner 整体删除见 spec 2026-11-06-会话文件解析替代hooks D19)。
+ * hook 时代从 hook 入口出;会话文件解析替代 hooks 后,补录管线(ingest)与重建也用它,
+ * 独立成文件(hook 入口已随 hook 体系整体删除,spec 2026-11-06-会话文件解析替代hooks D19)。
  */
 
 import { NO_TIMELINE_ENV } from './constants';

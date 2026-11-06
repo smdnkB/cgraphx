@@ -43,6 +43,7 @@
     "skills/visual-explain",
     "skills/dev-handoff",
     "agents/task-history",
-    "commands/end.md"
+    "commands/end.md",
+    "hooks/precommit-check"
   ]
 }

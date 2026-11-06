@@ -85,7 +85,7 @@ const EVENT_COLUMNS =
   'commit_hash, commit_message, commit_files, cwd, metadata, turn_id, commit_insertions, ' +
   'commit_deletions, agent, source_key';
 
-/** 轮次记录目录名(相对数据目录;hook 时代的 turns/,重建后没人读写,T-8 会删掉 turn-state.ts)。 */
+/** 轮次记录目录名(相对数据目录;hook 时代的 turns/,重建后没人读写,顺手删掉)。 */
 const TURNS_DIRNAME = 'turns';
 
 /** 全量解析进临时库后要推进的进度(项目库提交之后才写 sessions.db,D4)。 */
