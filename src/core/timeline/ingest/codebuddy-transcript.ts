@@ -113,7 +113,8 @@ function subagentFileId(filePath: string): string | null {
   const parts = filePath.split(path.sep);
   const idx = parts.lastIndexOf('subagents');
   if (idx < 1) return null;
-  return parts[idx - 1] !== '' ? parts[idx - 1] : null;
+  const parent = parts[idx - 1];
+  return parent !== undefined && parent !== '' ? parent : null;
 }
 
 interface ScanState {

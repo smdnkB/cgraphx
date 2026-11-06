@@ -41,8 +41,9 @@ export async function readJsonlLinesFrom(
     let lineStart = start;
     let lastLineEnd = start;
     const stream = fs.createReadStream(filePath, { start, end: size - 1, highWaterMark: CHUNK_BYTES });
-    stream.on('data', (chunk: Buffer) => {
-      pending = pending.length === 0 ? chunk : Buffer.concat([pending, chunk]);
+    stream.on('data', (chunk: string | Buffer) => {
+      const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+      pending = pending.length === 0 ? buf : Buffer.concat([pending, buf]);
       let nl = pending.indexOf(0x0a);
       while (nl >= 0) {
         const text = pending.subarray(0, nl).toString('utf8');

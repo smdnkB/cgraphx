@@ -123,7 +123,9 @@ export class SessionIndex {
   private readonly conn: DatabaseConnection;
   private readonly db: SqliteDatabase;
 
-  private constructor(conn: DatabaseConnection) {
+  // 经 openSessionIndex() 构造(建库、建表、清理都在那里);TS 没有 internal,
+  // 构造器保持可见,外部仍请走 openSessionIndex。
+  constructor(conn: DatabaseConnection) {
     this.conn = conn;
     this.db = conn.getDb();
   }

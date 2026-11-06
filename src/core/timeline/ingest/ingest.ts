@@ -196,8 +196,10 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
   const dataDir = loc.dataDir;
 
   const sessionIndex = openSessionIndex();
+  // conn / countBefore 在 projectDb 闭包里赋值,闭包外的判空要按声明类型取值(下面取了一次别名)
   let conn: DatabaseConnection | null = null;
   let countBefore: number | null = null;
+  const openConn = (): DatabaseConnection | null => conn;
   try {
     // 候选文件与快速筛选:大小和 mtime 都没变的跳过(含别的项目的——进度一行一份,别家文件
     // 变了归别家的运行补,这里只看要不要重新认)
@@ -263,14 +265,15 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
         await processFile(item.file, item.profile, item.stat, fresh ?? null, ctx);
       }
 
-      const events = conn !== null ? Math.max(0, countEvents(conn.getDb()) - (countBefore ?? 0)) : 0;
+      const dbConn = openConn();
+      const events = dbConn !== null ? Math.max(0, countEvents(dbConn.getDb()) - (countBefore ?? 0)) : 0;
       return { status: 'synced', sessions: ctx.sessionsWritten.size, events, notices: unparsedNotices(ctx.unparsed) };
     } finally {
       releaseIngestLock(dataDir);
     }
   } finally {
     try {
-      conn?.close();
+      openConn()?.close();
     } catch {
       // 关不上不影响结果
     }
@@ -632,7 +635,7 @@ export function mapFacts(
             fact.args,
             fact.isError ? {} : undefined, // is_error 走失败分支:空 failure 也让摘要的 success 置 false
           ),
-          duration_ms: duration !== null && duration >= 0 ? duration : null,
+          duration_ms: duration !== null && duration >= 0 ? duration : undefined,
           turn_id: turnIdOf(fact.sessionId, ts),
           cwd: fact.cwd ?? startCwd,
           agent: profile.id,
