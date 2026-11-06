@@ -251,6 +251,8 @@ function addWorktree(mainRoot: string, target: string, opts: CreateReplicaOption
   if (r.status === 0) return baseCommit;
   removeQuietly(target);
   runGit(mainRoot, ['worktree', 'prune']);
+  // add 失败时分支可能已经建出来了(⑦:什么都不留);接上的分支不在这一步,不能删
+  if (plan.reattached === null) runGit(mainRoot, ['branch', '-D', opts.branch]);
   throw new ReplicaError('worktree_failed', `开 worktree 失败:${firstLine(r.stderr)};没有留下任何东西,主目录没动`);
 }
 
