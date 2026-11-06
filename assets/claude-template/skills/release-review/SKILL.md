@@ -131,7 +131,11 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
 
    「cgraphx@订单导出、cgraphx@积分发放 已合入,可以删;cgraphx@导出优化 还差 2 个提交没合入，留着，跟到下个版本;cgraphx@会员积分 还没有提交，留着;删掉这 2 个已合入的副本吗?」
 
-   用户说删 → 逐个 `cgraphx replica remove <副本目录名> --json`(已不在的也跑,只补登记,不报错);返回 `"code": "dirty"` → 不删,报「cgraphx@订单导出 有 2 个文件没提交」并列出 `files`。
+   用户说删 → 逐个 `cgraphx replica remove <副本目录名> --json`(已不在的也跑,只补登记,不报错),按返回的 `state` 和 `branch.state` 回报:
+   - `"state": "removed"` → 「已删 cgraphx@订单导出(分支 feat/订单导出 已删除)」,分支留着时换成「(分支 feat/订单导出 留着,提交还在)」;后面接一句「登记留着,副本里记下的会话和提交在项目的数据里」
+   - `"state": "missing"` → 「cgraphx@订单导出 已不在」,同样带上分支结果
+   - `warnings` 逐条转告
+   - 返回 `"code": "dirty"` → 不删,报「cgraphx@订单导出 有 2 个文件没提交」并列出 `files`
 8. **提示**:「发布照你们现在的流程走;发完跑 /release-start」
 
 ## 范例
@@ -261,7 +265,7 @@ cgraphx@订单导出、cgraphx@积分发放、cgraphx@退款 已合入,可以删
 用户说删,cgraphx@积分发放 返回 `dirty`:
 
 ```text
-已删 cgraphx@订单导出、cgraphx@退款,登记留着,副本里记下的会话和提交在项目的数据里。cgraphx@积分发放 有 2 个文件没提交,没删:src/points/expire.ts、src/points/expire.test.ts。
+已删 cgraphx@订单导出、cgraphx@退款(分支 feat/订单导出、feat/退款 已删除),登记留着,副本里记下的会话和提交在项目的数据里。cgraphx@积分发放 有 2 个文件没提交,没删:src/points/expire.ts、src/points/expire.test.ts。
 
 发布照你们现在的流程走;发完跑 /release-start
 ```
