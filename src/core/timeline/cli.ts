@@ -23,6 +23,7 @@
 import type { Command } from 'commander';
 
 import { queryEvents, getEventById, getEventStats } from './indexer';
+import { ensureTimelineUpToDate, describeSyncOutcome } from './ingest/ingest';
 import { installTimelineHooks, uninstallTimelineHooks, type InstallReport } from './installer';
 import { locateData } from '../data-location';
 import { resolveProjectRoot } from '../directory';
@@ -177,6 +178,21 @@ function exitCodeForError(err: unknown): number {
   return 1;
 }
 
+/**
+ * 查询前自动补录(spec F1):四个查询命令在查询之前调,会话文件里新增的部分先解析进库。
+ * 补录的任何失败只写 stderr——不碰查询的退出码与 stdout,`--json` 的结果不混提示
+ * (ensureTimelineUpToDate 自己不抛,这里再兜一层)。
+ */
+async function backfillBeforeQuery(): Promise<void> {
+  try {
+    const outcome = await ensureTimelineUpToDate(process.cwd());
+    for (const line of describeSyncOutcome(outcome)) process.stderr.write(`[timeline] ${line}\n`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[timeline] 时间线补录失败:${msg},结果可能缺最近的\n`);
+  }
+}
+
 function renderError(err: unknown): void {
   if (err instanceof TimelineSchemaError || err instanceof StoreQueryError) {
     process.stderr.write(`[timeline] ${err.message}\n`);
@@ -216,6 +232,7 @@ export function registerTimelineCommands(program: Command): void {
       limit?: number;
       format?: string;
     }) => {
+      await backfillBeforeQuery();
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
@@ -246,6 +263,7 @@ export function registerTimelineCommands(program: Command): void {
     .command('show <id>')
     .description('Show full detail for one event by id')
     .action(async (idArg: string) => {
+      await backfillBeforeQuery();
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
@@ -272,6 +290,7 @@ export function registerTimelineCommands(program: Command): void {
     .option('--by <field>', 'Group by: day | event_type | tool_name (default: all)')
     .option('--format <format>', 'json (default) | table', 'json')
     .action(async (opts: { since?: string; until?: string; by?: string; format?: string }) => {
+      await backfillBeforeQuery();
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
@@ -313,6 +332,7 @@ export function registerTimelineCommands(program: Command): void {
     .option('--limit <n>', 'Default 20', v => parseInt(v, 10))
     .option('--format <format>', 'json (default) | table', 'json')
     .action(async (opts: { limit?: number; format?: string }) => {
+      await backfillBeforeQuery();
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {

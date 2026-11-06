@@ -23,7 +23,10 @@ export type { EventIdMapping, TimelineMergeStats, TimelineMerger } from './types
 export { ensureTimelineSchema } from './schema-bootstrap';
 export { TURNS_DIRNAME } from './turn-state';
 export { installTimelineHooks, uninstallTimelineHooks } from './installer';
-export { isKillSwitchOn } from './hook-runner';
+// 查询前补录(spec F1,plan C-4):会话文件解析进项目库 + 人读提示渲染;开关独立成 kill-switch.ts
+export { ensureTimelineUpToDate, describeSyncOutcome } from './ingest/ingest';
+export type { TimelineSyncOutcome, TimelineSyncStatus } from './ingest/ingest';
+export { isKillSwitchOn } from './kill-switch';
 export { LEGACY_BINARY_TOLERANT_SUFFIX } from './constants';
 export { describeEvent } from './describe';
 export type {

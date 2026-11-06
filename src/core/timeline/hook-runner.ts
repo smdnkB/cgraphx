@@ -14,7 +14,12 @@
  * 出错、起点往上没有根)或这个根按 D7 不记(没有标识、没装过而项目库不在)时,这一条不记、不写轮次记录。
  */
 
-import { NO_TIMELINE_ENV, PERF_WARN_MS } from './constants';
+import { PERF_WARN_MS } from './constants';
+// isKillSwitchOn 已挪到 kill-switch.ts(补录管线也用它);这里 re-export 保持既有引用
+// (git-commit.ts)不动,hook-runner 整体删除时一并清(spec 2026-11-06-会话文件解析替代hooks D19)。
+import { isKillSwitchOn } from './kill-switch';
+
+export { isKillSwitchOn };
 import { recordEvent, type EventEnricher } from './recorder';
 import { readStdinJson, extractHookPayload, type HookPayload } from './payload';
 import { ensureDataDirAtRoot } from '../data-location';
@@ -130,11 +135,4 @@ function startOf(payload: HookPayload, options: RunHookOptions | undefined): str
   const profile = getAgentProfile(options?.agent ?? DEFAULT_AGENT_ID);
   const fromEnv = profile === undefined ? undefined : process.env[profile.projectDirEnv]?.trim();
   return fromEnv !== undefined && fromEnv !== '' ? fromEnv : cwd;
-}
-
-export function isKillSwitchOn(): boolean {
-  const v = process.env[NO_TIMELINE_ENV];
-  if (!v) return false;
-  const trimmed = v.trim().toLowerCase();
-  return trimmed !== '' && trimmed !== '0' && trimmed !== 'false';
 }
