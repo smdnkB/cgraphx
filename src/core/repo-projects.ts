@@ -40,7 +40,7 @@ function joinSubdir(workTreeRoot: string, subdir: string): string {
 }
 
 /** `git worktree list --porcelain` 列出的各个工作区根;git 出错 → null。 */
-function listWorktreeRoots(cwd: string): string[] | null {
+export function listWorktreeRoots(cwd: string): string[] | null {
   let out: string;
   try {
     out = execFileSync('git', ['worktree', 'list', '--porcelain'], {
