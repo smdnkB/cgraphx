@@ -20,6 +20,9 @@ export function describeEvent(e: TimelineEvent): string {
       if (e.commit_hash) parts.push(e.commit_hash.slice(0, 7));
       if (e.commit_message) parts.push(truncate(e.commit_message, 100));
       if (e.commit_files.length > 0) parts.push(`(${e.commit_files.length} files)`);
+      // 跳过门禁的提交(agent --no-verify 绕过 commit-msg 门禁,K16 标记)在人读摘要上标出来(spec F3)
+      const gate = typeof e.metadata.gate === 'string' ? e.metadata.gate : null;
+      if (gate === 'skipped') parts.push('跳过门禁');
       return parts.join(' ');
     }
     case 'stop':

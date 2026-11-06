@@ -16,15 +16,34 @@
  *
  * 会话 id 与来源 agent 经 agents 门面从会话环境变量解析:agent 在会话内通过 Bash 提交时子进程继承该变量;
  * 终端手动提交时没有,两者均记为 null(未归属)。
+ *
+ * 记完提交后的后台收尾(spec D15,每步独立 try/catch,任何一步失败只写 stderr、不影响这笔提交):
+ * ① 判定「这笔提交跳过了门禁」(K16)并写 `metadata.gate = 'skipped'`——判定靠片段前台取走的门禁
+ * 记号内容(GATE_TREE_ENV)与这笔提交的 tree 对不上等六条,见 isGateSkipped;② 按登记补回被外部
+ * 工具冲掉的 git 钩子片段(会话开始钩子退役后这里是补回的时机);③ 调 ensureTimelineUpToDate 补录
+ * 会话文件(F1),人读提示写 stderr。
  */
 
 import { execSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import { resolveSessionIdFromEnv } from '../agents';
+import { COMMIT_GATE_MARKER } from '../commit-gate';
 import { locateDataAtRoot } from '../data-location';
+import { hookNotice, repairHookSnippets, resolveHooksDir } from '../git-hooks';
 import { listRepoProjects, type RepoProject } from '../repo-projects';
-import { COMMIT_BRANCH_ENV, COMMIT_HOOK_ENV, COMMIT_REFLOG_ENV, COMMIT_SHA_ENV } from './constants';
+import {
+  CHERRY_PICK_ENV,
+  COMMIT_BRANCH_ENV,
+  COMMIT_HOOK_ENV,
+  COMMIT_REFLOG_ENV,
+  COMMIT_SHA_ENV,
+  GATE_TREE_ENV,
+  REBASE_ENV,
+} from './constants';
 import { isKillSwitchOn } from './hook-runner';
+import { describeSyncOutcome, ensureTimelineUpToDate } from './ingest/ingest';
 import { recordEvent } from './recorder';
 
 /** numstat 汇总:files 含二进制文件,增删行数不计二进制文件。 */
@@ -46,6 +65,8 @@ export interface GitCommitInfo {
   deletions: number;
   /** 当前分支名;detached HEAD(输出为 `HEAD`)或命令失败时为 null。 */
   branch: string | null;
+  /** 这笔提交的 tree hash(`git show -s --format=%T`);读不到为 null。K16 判「跳过门禁」用,增强项不是闸门。 */
+  tree: string | null;
   /** 父提交 hash,第一父提交在前;根提交为空数组。 */
   parents: string[];
   /** 合并提交(父提交 ≥ 2)相对第一父提交的改动统计;其余为 null。 */
@@ -87,6 +108,9 @@ export async function gitCommitHook(): Promise<void> {
   const session_id = fromEnv?.sessionId ?? null;
   const agent = fromEnv?.agent ?? null;
 
+  // K16 判「跳过门禁」(spec D14):先于记提交单独算,任何一步读不出只当没跳过,绝不影响提交记录。
+  const gateSkipped = isGateSkipped(info, fromEnv !== null);
+
   // 一个项目一条,各记各的:一个项目的库出错不耽误别的项目
   for (const share of sharesOf(info)) {
     try {
@@ -100,12 +124,36 @@ export async function gitCommitHook(): Promise<void> {
         commit_insertions: share.insertions,
         commit_deletions: share.deletions,
         cwd: info.cwd,
-        metadata: commitMetadata(info, share.merge),
+        metadata: commitMetadata(info, share.merge, gateSkipped),
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       process.stderr.write(`[timeline] git-commit record failed: ${msg}\n`);
     }
+  }
+
+  // 钩子片段被外部工具(husky 重写钩子目录、新 worktree 等)冲掉时按登记补回(spec D15)。补不上的写
+  // 一行 stderr——后台进程没人看,但与会话开始的提示(F4)同源同文;失败只写 stderr。
+  try {
+    for (const result of repairHookSnippets(info.cwd)) {
+      const what = path.basename(result.hookPath) === 'commit-msg' ? '版本分支提交拦截没补上' : '提交记录片段没补上';
+      const notice = hookNotice(result, what);
+      if (notice !== null) process.stderr.write(`[cgraphx] ${notice}\n`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[timeline] git-commit hook repair failed: ${msg}\n`);
+  }
+
+  // 查时间线前补录(spec F1,plan C-4):人读提示写 stderr,任何失败不影响这笔提交。
+  try {
+    const outcome = await ensureTimelineUpToDate(info.cwd);
+    for (const line of describeSyncOutcome(outcome)) {
+      process.stderr.write(`[timeline] ${line}\n`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[timeline] git-commit ingest failed: ${msg}\n`);
   }
 }
 
@@ -227,11 +275,52 @@ function isFastForward(info: GitCommitInfo): boolean {
   return info.parents.length === 1;
 }
 
-/** git_commit 的 metadata:分支(读得到才带)+ 合并统计(合并提交才带,merge 是这一份的统计);都没有 → undefined。 */
-function commitMetadata(info: GitCommitInfo, merge: GitDiffStats | null): Record<string, unknown> | undefined {
+/**
+ * K16:这笔提交是不是跳过了门禁(spec D14;跳过 = agent 带 `--no-verify` 绕过了 commit-msg 门禁)。
+ * 六条全部成立才标:
+ * 1. 会话环境变量认得出会话(agent 的提交;终端手动提交不标);
+ * 2. 不是 post-merge 调起(post-merge 记的合并提交一律不判);
+ * 3. commit-msg 钩子文件里有门禁片段(marker 取 commit-gate 门面)——没重装、片段没装上时
+ *    没有门禁可走,不标;
+ * 4. 这笔提交的 tree 与前台传来的门禁记号内容(GATE_TREE_ENV)不一致——一致或没传都算走过
+ *    门禁(检查超时、跑不起来时 commit-gate 照写记号);
+ * 5. 不在 cherry-pick / rebase 进行中(两者都没有 commit-msg 门禁可言);
+ * 6. 不是 revert(说明以 `Revert "` 开头且带 `This reverts commit`)。
+ *
+ * 标记只是附加信息(spec F3):整段包在 try/catch 里,任何一步读不出 → 不标。
+ */
+function isGateSkipped(info: GitCommitInfo, isAgentCommit: boolean): boolean {
+  try {
+    if (!isAgentCommit) return false;
+    if (process.env[COMMIT_HOOK_ENV] === 'post-merge') return false;
+    if (!hasCommitGateSnippet(info.cwd)) return false;
+    const gateTree = (process.env[GATE_TREE_ENV] ?? '').trim();
+    if (gateTree === '' || info.tree === null || info.tree === gateTree) return false;
+    if (process.env[CHERRY_PICK_ENV] === '1' || process.env[REBASE_ENV] === '1') return false;
+    if (info.message.startsWith('Revert "') && info.message.includes('This reverts commit')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** commit-msg 钩子文件里有没有门禁片段:按 commit-gate 门面导出的 marker 判,不逐字依赖片段内容。不在仓库、文件不在、读不了 → 没有。 */
+function hasCommitGateSnippet(cwd: string): boolean {
+  const hooksDir = resolveHooksDir(cwd);
+  if (hooksDir === null) return false;
+  try {
+    return fs.readFileSync(path.join(hooksDir, 'commit-msg'), 'utf8').includes(COMMIT_GATE_MARKER);
+  } catch {
+    return false;
+  }
+}
+
+/** git_commit 的 metadata:分支(读得到才带)+ 合并统计(合并提交才带,merge 是这一份的统计)+ 跳过门禁标记(K16 成立才带);都没有 → undefined。 */
+function commitMetadata(info: GitCommitInfo, merge: GitDiffStats | null, gateSkipped: boolean): Record<string, unknown> | undefined {
   const meta: Record<string, unknown> = {};
   if (info.branch !== null) meta.branch = info.branch;
   if (merge !== null) meta.merge = { parents: info.parents, ...merge };
+  if (gateSkipped) meta.gate = 'skipped';
   return Object.keys(meta).length > 0 ? meta : undefined;
 }
 
@@ -244,7 +333,7 @@ function runGit(args: string, cwd?: string): string {
 }
 
 /**
- * 读取一个提交的信息 + 父提交 + 汇总增删行数 + 分支名。
+ * 读取一个提交的信息 + 父提交 + 汇总增删行数 + 分支名 + tree(K16 判「跳过门禁」用)。
  *
  * `pinned.hash` 合法时读该提交,否则读 HEAD;`pinned.branch` 有定义时直接采用
  * (空串 = detached HEAD → null),未定义时读当前分支。钩子在提交当下固定这两项,
@@ -267,11 +356,12 @@ export function readGitCommitInfo(pinned: { hash?: string; branch?: string } = {
     // 以仓库根为 cwd 跑后面的命令,hook 从别处启动也能正确执行。
     const parents = readParents(hash, cwd);
     const branch = readBranch(pinned.branch, cwd);
+    const tree = readTree(hash, cwd);
 
     const firstParent = parents[0];
     if (parents.length >= 2 && firstParent !== undefined) {
       const merge = readNumstat(`diff --numstat ${firstParent} ${hash}`, cwd);
-      return { hash, message, files: [], cwd, insertions: 0, deletions: 0, branch, parents, merge };
+      return { hash, message, files: [], cwd, insertions: 0, deletions: 0, branch, tree, parents, merge };
     }
 
     // quotePath=false:中文等非 ASCII 路径原样输出,不转成 "\344\270..." 带引号的形式;
@@ -279,7 +369,7 @@ export function readGitCommitInfo(pinned: { hash?: string; branch?: string } = {
     const files = runGit(`-c core.quotePath=false diff-tree --root --no-commit-id --name-only -r ${ref}`, cwd)
       .split('\n').map(s => s.trim()).filter(Boolean);
     const { insertions, deletions } = readNumstat(`show --numstat --format= ${ref}`, cwd);
-    return { hash, message, files, cwd, insertions, deletions, branch, parents, merge: null };
+    return { hash, message, files, cwd, insertions, deletions, branch, tree, parents, merge: null };
   } catch {
     return null;
   }
@@ -288,6 +378,16 @@ export function readGitCommitInfo(pinned: { hash?: string; branch?: string } = {
 /** `git rev-list --parents -n 1 <hash>` 输出 `<hash> <父1> <父2> …`,取父提交部分;失败照常抛出。 */
 function readParents(hash: string, cwd: string): string[] {
   return runGit(`rev-list --parents -n 1 ${hash}`, cwd).trim().split(/\s+/).slice(1).filter(Boolean);
+}
+
+/** 这笔提交的 tree hash(`git show -s --format=%T`),K16 判「跳过门禁」用;读不到 → null,增强项不是闸门。 */
+function readTree(hash: string, cwd: string): string | null {
+  try {
+    const out = runGit(`show -s --format=%T ${hash}`, cwd).trim();
+    return out !== '' ? out : null;
+  } catch {
+    return null;
+  }
 }
 
 /** 当前分支:`pinned` 有定义时直接采用(空串 → null);否则读 HEAD 的分支名,失败或 detached → null。 */

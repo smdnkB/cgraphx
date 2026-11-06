@@ -106,6 +106,16 @@ export const COMMIT_HOOK_ENV = 'CGRAPHX_GIT_HOOK';
  */
 export const COMMIT_REFLOG_ENV = 'CGRAPHX_COMMIT_REFLOG';
 
+/**
+ * post-commit / post-merge 片段在前台取好、经环境变量传给后台记录进程的三样门禁上下文(plan C-11):
+ * 门禁记号的内容(commit-msg 门禁只要没打回就写的 `git write-tree` 输出,前台读出即删——后台自己读时
+ * 连续快速提交的记号已被下一笔覆盖)与 cherry-pick / rebase 是否在进行。记录进程据此判这笔提交是否
+ * 跳过了门禁(K16);post-merge 记的合并提交不判,变量照传无害。
+ */
+export const GATE_TREE_ENV = 'CGRAPHX_GATE_TREE';
+export const CHERRY_PICK_ENV = 'CGRAPHX_CHERRY_PICK';
+export const REBASE_ENV = 'CGRAPHX_REBASE';
+
 // ─── Tool classification (timeline-data-quality feature) ───────────────────
 // Defined here so the enricher hooks share one source of truth.
 

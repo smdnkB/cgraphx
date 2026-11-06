@@ -20,13 +20,16 @@ import { agentSettingsPath, DEFAULT_AGENT_ID, hookCommand, requireAgentProfile, 
 import { hookRemoveNotice, installHookSnippet, removeHookSnippet, resolveHooksDir, type HookSnippetResult } from '../git-hooks';
 import { listOtherInstalledDirs } from '../repo-projects';
 import {
+  CHERRY_PICK_ENV,
   COMMIT_BRANCH_ENV,
   COMMIT_HOOK_ENV,
   COMMIT_REFLOG_ENV,
   COMMIT_SHA_ENV,
+  GATE_TREE_ENV,
   GIT_COMMIT_SUBCOMMAND,
   HOOK_EVENTS_TO_COMMANDS,
   LEGACY_BINARY_TOLERANT_SUFFIX,
+  REBASE_ENV,
   type HookEventEntry,
 } from './constants';
 import { cleanDebrisCgraphxDirs } from './debris';
@@ -124,28 +127,47 @@ function findGitRoot(projectRoot: string): string | null {
 const GIT_HOOK_MARKER = '# cgraphx-timeline-hook';
 
 /**
- * post-commit 片段:先在前台取得本次提交的 hash 与分支,再把记录进程放到后台。
- * 命令替换带 `|| true`:片段紧跟 shebang,钩子是 `#!/bin/sh -e` 这类写法时,一条命令失败
- * (如 detached HEAD 上的 symbolic-ref)会让整个钩子提前退出,跳过原钩子后面的内容。
+ * 门禁上下文的前台取值(post-commit / post-merge 共用,每行带 marker):读出并删掉门禁记号
+ * (commit-msg 门禁只要没打回就写的 `git write-tree` 输出,内容经 GATE_TREE_ENV 传给后台记录进程,
+ * 由它判这笔提交走没走过门禁——前台读掉删掉是因为后台进程启动有延迟,连续快速提交时记号已被下一笔
+ * 覆盖),再判 cherry-pick / rebase 是否在进行。命令替换与条件命令一律 `|| true`:
+ * 片段紧跟 shebang,钩子是 `#!/bin/sh -e` 这类写法时,一条命令失败会让整个钩子提前退出,
+ * 跳过原钩子后面的内容。
+ */
+function buildGateContextLines(): string[] {
+  return [
+    `__cgx_gitdir=$(git rev-parse --absolute-git-dir 2>/dev/null || true); __cgx_gate_tree=$([ -n "$__cgx_gitdir" ] && cat "$__cgx_gitdir/cgraphx/commit-gate-pass" 2>/dev/null || true); [ -n "$__cgx_gitdir" ] && rm -f "$__cgx_gitdir/cgraphx/commit-gate-pass" 2>/dev/null || true ${GIT_HOOK_MARKER}`,
+    `__cgx_cherry=$([ -n "$__cgx_gitdir" ] && [ -e "$__cgx_gitdir/CHERRY_PICK_HEAD" ] && echo 1 || true); __cgx_rebase=$([ -n "$__cgx_gitdir" ] && { [ -d "$__cgx_gitdir/rebase-merge" ] || [ -d "$__cgx_gitdir/rebase-apply" ]; } && echo 1 || true) ${GIT_HOOK_MARKER}`,
+  ];
+}
+
+/**
+ * post-commit 片段:先在前台取得本次提交的 hash、分支与门禁上下文,再把记录进程放到后台。
  */
 function buildGitPostCommitSnippet(): string[] {
   return [
     `${GIT_HOOK_MARKER} — record commit events to .cgraphx/cgraphx.db`,
     `__cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true) ${GIT_HOOK_MARKER}`,
-    `${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & ${GIT_HOOK_MARKER}`,
+    ...buildGateContextLines(),
+    `${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" ${GATE_TREE_ENV}="$__cgx_gate_tree" ${CHERRY_PICK_ENV}="$__cgx_cherry" ${REBASE_ENV}="$__cgx_rebase" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & ${GIT_HOOK_MARKER}`,
   ];
 }
 
 /**
- * post-merge 片段:`$1` 为 1 是 squash 合并(不产生提交),跳过;其余同 post-commit,另传
- * COMMIT_HOOK_ENV=post-merge,并当场取 reflog 最新一行经 COMMIT_REFLOG_ENV 传过去,记录进程据此跳过快进
- * (快进不产生新提交)。hash 和 reflog 那一行用一条 `git log -g` 同时取(`--no-show-signature`:配了
- * log.showSignature 时不混进签名校验的输出);关掉了 reflog 取不到时 hash 退回 rev-parse。
+ * post-merge 片段:`$1` 为 1 是 squash 合并(不产生提交),跳过;其余同 post-commit(hash、分支、
+ * 门禁上下文都取),另传 COMMIT_HOOK_ENV=post-merge,并当场取 reflog 最新一行经 COMMIT_REFLOG_ENV
+ * 传过去,记录进程据此跳过快进(快进不产生新提交;合并提交也不判门禁跳过,但上下文照传无害)。
+ * hash 和 reflog 那一行用一条 `git log -g` 同时取(`--no-show-signature`:配了 log.showSignature 时
+ * 不混进签名校验的输出);关掉了 reflog 取不到时 hash 退回 rev-parse。
  */
 function buildGitPostMergeSnippet(): string[] {
   return [
     `${GIT_HOOK_MARKER} — record merge commits to .cgraphx/cgraphx.db`,
-    `if [ "$1" != "1" ]; then __cgx_r=$(git log -g -1 --no-show-signature --format='%H %gs' HEAD 2>/dev/null || true); __cgx_sha=\${__cgx_r%% *}; __cgx_reflog=\${__cgx_r#* }; [ -n "$__cgx_sha" ] || __cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true); ${COMMIT_HOOK_ENV}=post-merge ${COMMIT_REFLOG_ENV}="$__cgx_reflog" ${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & fi ${GIT_HOOK_MARKER}`,
+    `if [ "$1" != "1" ]; then ${GIT_HOOK_MARKER}`,
+    `__cgx_r=$(git log -g -1 --no-show-signature --format='%H %gs' HEAD 2>/dev/null || true); __cgx_sha=\${__cgx_r%% *}; __cgx_reflog=\${__cgx_r#* }; [ -n "$__cgx_sha" ] || __cgx_sha=$(git rev-parse HEAD 2>/dev/null || true); __cgx_branch=$(git symbolic-ref --short -q HEAD 2>/dev/null || true) ${GIT_HOOK_MARKER}`,
+    ...buildGateContextLines(),
+    `${COMMIT_HOOK_ENV}=post-merge ${COMMIT_REFLOG_ENV}="$__cgx_reflog" ${COMMIT_SHA_ENV}="$__cgx_sha" ${COMMIT_BRANCH_ENV}="$__cgx_branch" ${GATE_TREE_ENV}="$__cgx_gate_tree" ${CHERRY_PICK_ENV}="$__cgx_cherry" ${REBASE_ENV}="$__cgx_rebase" cgraphx ${GIT_COMMIT_SUBCOMMAND} >/dev/null 2>&1 & ${GIT_HOOK_MARKER}`,
+    `fi ${GIT_HOOK_MARKER}`,
   ];
 }
 
