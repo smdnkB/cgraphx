@@ -87,4 +87,14 @@ export interface RemoveReplicaResult {
   name: string;
   /** removed:删掉了目录;missing:目录早已不在,只在登记里记为删除 */
   state: 'removed' | 'missing';
+  /** 需求分支怎么处理的(D12、K13):已合入就删(deleted),还没合入或删不掉就留着(kept) */
+  branch: {
+    name: string;
+    /** deleted:已删;kept:留着(还没合入 / 删不掉 / 主目录里没有这个分支) */
+    state: 'deleted' | 'kept';
+    /** 删除前 `refs/heads/<分支>` 的提交号;主目录里没有这个引用 → '' */
+    tip: string;
+  };
+  /** 没删掉的分支等,给人手动处理的提示 */
+  warnings: string[];
 }

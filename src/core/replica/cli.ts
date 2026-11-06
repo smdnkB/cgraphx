@@ -152,12 +152,21 @@ function printList(rows: readonly ReplicaStatus[], all: boolean): void {
   }
 }
 
+/** 分支结果补的那一行(C-7):删了 / 留着(提交还在)/ 主目录里没有这个引用。 */
+function branchLine(branch: RemoveReplicaResult['branch']): string {
+  if (branch.state === 'deleted') return `分支 ${branch.name} 已删除`;
+  if (branch.tip !== '') return `分支 ${branch.name} 留着,提交还在`;
+  return `分支 ${branch.name} 不在主目录里,没有可处理的分支`;
+}
+
 function printRemove(r: RemoveReplicaResult): void {
   writeOut(
     r.state === 'removed'
-      ? `已删除副本 ${r.name};登记留在主目录,副本里记下的会话和提交在项目的数据里`
+      ? `已删副本 ${r.name};登记留在主目录,副本里记下的会话和提交在项目的数据里`
       : `副本 ${r.name} 的目录已经不在了,已在登记里记为删除`,
   );
+  writeOut(branchLine(r.branch));
+  for (const warning of r.warnings) writeErr(warning);
 }
 
 /** 把 `replica` 命令组挂到 commander 程序上。主 CLI 调用一次。 */
@@ -207,7 +216,7 @@ export function registerReplicaCommands(program: Command): void {
 
   replica
     .command('remove <name-or-feature-id>')
-    .description('删副本:核对是本主目录的副本、没有没提交的改动后删掉目录,登记留下(只在主目录执行)')
+    .description('删 worktree;按合入情况删/留需求分支,登记留下(只在主目录执行)')
     .option('--json', '输出机器可读 JSON')
     .action((nameOrFeatureId: string, opts: JsonOption) => {
       const projectRoot = resolveProjectRoot(process.cwd());
