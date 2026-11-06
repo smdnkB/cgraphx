@@ -42,7 +42,7 @@ import {
   GATE_TREE_ENV,
   REBASE_ENV,
 } from './constants';
-import { isKillSwitchOn } from './hook-runner';
+import { isKillSwitchOn } from './kill-switch';
 import { describeSyncOutcome, ensureTimelineUpToDate } from './ingest/ingest';
 import { recordEvent } from './recorder';
 

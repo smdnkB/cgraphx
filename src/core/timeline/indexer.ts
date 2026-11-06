@@ -49,20 +49,6 @@ export async function getEventStats(projectRoot: string, filter: TimelineQueryFi
 }
 
 /**
- * Public wrapper around TimelineStore.getMostRecentPre (B-2).
- *
- * Finds the most recent pre_tool_use matching (turn_id, tool_name, session_id).
- * Used by the post-tool-use enricher to compute duration_ms; exposed publicly
- * so CLI / programmatic callers can do the same lookup.
- */
-export async function getMostRecentPre(
-  projectRoot: string,
-  filter: { turn_id: string; tool_name: string; session_id: string | null },
-): Promise<TimelineEvent | null> {
-  return readEvents<TimelineEvent | null>(projectRoot, () => null, (store) => store.getMostRecentPre(filter));
-}
-
-/**
  * Public wrapper around TimelineStore.getSessionStats (B-6).
  *
  * Aggregates the per-session stats the stop-hook enricher attaches to the

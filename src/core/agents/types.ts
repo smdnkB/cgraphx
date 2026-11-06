@@ -33,13 +33,9 @@ export interface AgentProfile {
   readonly sessionReader: SessionReaderId;
   /** 用于 PATH 检测的 CLI 命令名。 */
   readonly cliCommands: readonly string[];
-  /** 写类工具名(task PostToolUse 匹配用)。 */
-  readonly writeTools: readonly string[];
   readonly capabilities: {
     readonly statusLine: boolean;
     readonly contextMonitor: boolean;
-    /** 宿主是否有 PostToolUseFailure hook 事件(失败调用经它上报)。 */
-    readonly postToolUseFailure: boolean;
   };
   /** 部署资产时按序执行的字面替换规则。 */
   readonly assetReplacements: ReadonlyArray<readonly [from: string, to: string]>;

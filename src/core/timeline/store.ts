@@ -285,44 +285,6 @@ export class TimelineStore {
   }
 
   /**
-   * Find the most recent pre_tool_use event matching the given filter.
-   *
-   * Used by B-2's duration_ms enricher to compute post.ts - pre.ts for
-   * write-tool post events within a turn. Filters on turn_id + tool_name +
-   * session_id; session_id null is matched via `IS NULL` (the schema allows
-   * NULL session_id for events Claude Code couldn't attribute to a session).
-   *
-   * Uses idx_timeline_turn_id (turn_id index) plus the ORDER BY ts DESC
-   * LIMIT 1 pattern to keep the lookup sub-millisecond at scale.
-   *
-   * @returns the matching event, or null if none exists.
-   */
-  getMostRecentPre(filter: {
-    turn_id: string;
-    tool_name: string;
-    session_id: string | null;
-  }): TimelineEvent | null {
-    const sessionClause = filter.session_id === null
-      ? 'AND session_id IS NULL'
-      : 'AND session_id = ?';
-    const sql = `SELECT * FROM timeline_events
-                 WHERE turn_id = ? AND tool_name = ? ${sessionClause}
-                   AND event_type = 'pre_tool_use'
-                 ORDER BY ts DESC, id DESC LIMIT 1`;
-    const params = filter.session_id === null
-      ? [filter.turn_id, filter.tool_name]
-      : [filter.turn_id, filter.tool_name, filter.session_id];
-    try {
-      const row = this.db.prepare(sql).get(...params) as EventRow | undefined;
-      return row ? rowToEvent(row) : null;
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline getMostRecentPre failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /**
    * Aggregate stats for a single session (B-6).
    *
    * Used by the stop-hook enricher to summarize the session at its end:

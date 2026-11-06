@@ -2,7 +2,7 @@
  * 2026-10-31 timeline 区分自动消息:
  *   - 判定:提问文本去掉开头空白后,`<task-notification>` / `<agent-message` 开头的
  *     记成 auto_message 并把来源写进 metadata.source;真实提问与 `<system-reminder>` 照旧
- *   - 自动消息照旧开新一轮(turn_id 照旧生成、写入 turn 状态文件,后续事件沿用)
+ *     (hook 时代经会话开始前的 user-prompt hook 记,现在由会话文件读取器用同一判定分类)
  *   - 存量迁移:旧版本记成 user_prompt 的这类行改记为 auto_message,按 id 水位
  *     只扫新行(旧版全局 cgraphx 之后写进来的也能改到),不升 schema 版本号
  */
@@ -11,7 +11,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { Readable } from 'node:stream';
 
 import { DatabaseConnection } from '../../../src/core/db';
 import {
@@ -21,54 +20,11 @@ import {
 import { TimelineStore } from '../../../src/core/timeline/store';
 import { classifyAutoMessage } from '../../../src/core/timeline/auto-message';
 import { describeEvent } from '../../../src/core/timeline/describe';
-import { userPromptHook, preToolUseHook } from '../../../src/core/timeline/hooks';
-import type { TimelineEvent } from '../../../src/core/timeline/types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function makeTmpProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cg-auto-msg-'));
-}
-
-/** 用合成 stdin payload 驱动 hook,与宿主调起方式一致(cwd 指向临时项目)。 */
-async function runHookWithPayload(
-  hook: () => Promise<void>,
-  payload: Record<string, unknown>,
-): Promise<void> {
-  const originalStdin = process.stdin;
-  const fakeStdin = new Readable({ read() {} });
-  fakeStdin.isTTY = false;
-  try {
-    Object.defineProperty(process, 'stdin', { value: fakeStdin, configurable: true });
-    setImmediate(() => {
-      fakeStdin.push(JSON.stringify(payload));
-      fakeStdin.push(null);
-    });
-    await hook();
-  } finally {
-    Object.defineProperty(process, 'stdin', { value: originalStdin, configurable: true });
-  }
-}
-
-/** 用新连接读全部事件(ts DESC);不经过待测连接,避免读到未提交内容。 */
-function readAllRows(dbPath: string): TimelineEvent[] {
-  const conn = DatabaseConnection.open(dbPath);
-  try {
-    return new TimelineStore(conn.getDb()).query({});
-  } finally {
-    conn.close();
-  }
-}
-
-/** 读 <dir>/.cgraphx/turns/<会话>.json。 */
-function readTurnFile(dir: string, sessionId: string): { turn_id?: string } | null {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(dir, '.cgraphx', 'turns', `${sessionId}.json`), 'utf8'));
-  } catch {
-    return null;
-  }
 }
 
 // ─── 判定 ───────────────────────────────────────────────────────────────────
@@ -87,85 +43,6 @@ describe('classifyAutoMessage', () => {
     expect(classifyAutoMessage('<system-reminder>\n提醒\n</system-reminder>\n\n真提问')).toBeNull();
     expect(classifyAutoMessage('   ')).toBeNull();
   });
-});
-
-// ─── hook 写入 ──────────────────────────────────────────────────────────────
-
-describe('userPromptHook 区分自动消息', () => {
-  let dir: string;
-  let dbPath: string;
-  let conn: DatabaseConnection;
-  let realCwd: string;
-
-  beforeEach(() => {
-    dir = makeTmpProject();
-    dbPath = path.join(dir, '.cgraphx', 'cgraphx.db');
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    conn = DatabaseConnection.open(dbPath);
-    ensureTimelineSchema(conn.getDb());
-    realCwd = process.cwd();
-  });
-
-  afterEach(() => {
-    process.chdir(realCwd);
-    conn.close();
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('后台任务通知记成 auto_message,来源写 metadata.source,照旧开新一轮', async () => {
-    const sessionId = 'sess-task-note';
-    await runHookWithPayload(userPromptHook, {
-      session_id: sessionId,
-      cwd: dir,
-      prompt: '<task-notification>\n<task-id>t1</task-id>\n<status>completed</status>',
-    });
-
-    const turnFile = readTurnFile(dir, sessionId);
-    expect(turnFile?.turn_id).toMatch(UUID_V4);
-
-    await runHookWithPayload(preToolUseHook, {
-      session_id: sessionId,
-      cwd: dir,
-      tool_name: 'Edit',
-      tool_input: { file_path: 'src/a.ts' },
-    });
-
-    const rows = readAllRows(dbPath);
-    expect(rows.some((r) => r.event_type === 'user_prompt')).toBe(false);
-    const auto = rows.find((r) => r.event_type === 'auto_message');
-    expect(auto).toBeDefined();
-    expect(auto!.metadata).toEqual({ source: 'task_notification' });
-    // 自动消息开的新一轮:后续工具事件沿用同一个 turn_id
-    expect(auto!.turn_id).toBe(turnFile!.turn_id);
-    expect(rows.find((r) => r.event_type === 'pre_tool_use')!.turn_id).toBe(turnFile!.turn_id);
-  });
-
-  it('子 agent 交回记成 auto_message,来源 agent_message', async () => {
-    await runHookWithPayload(userPromptHook, {
-      session_id: 'sess-agent-msg',
-      cwd: dir,
-      prompt: '<agent-message from="ab12">\n[Subagent hand-back] 报告正文',
-    });
-
-    const rows = readAllRows(dbPath);
-    const auto = rows.find((r) => r.event_type === 'auto_message');
-    expect(auto?.metadata).toEqual({ source: 'agent_message' });
-  });
-
-  it('普通提问仍是 user_prompt,不带 metadata.source', async () => {
-    await runHookWithPayload(userPromptHook, {
-      session_id: 'sess-real',
-      cwd: dir,
-      prompt: '把这个需求实现一下',
-    });
-
-    const rows = readAllRows(dbPath);
-    const prompt = rows.find((r) => r.event_type === 'user_prompt');
-    expect(prompt).toBeDefined();
-    expect(prompt!.metadata).toEqual({});
-    expect(rows.some((r) => r.event_type === 'auto_message')).toBe(false);
-  });
-
 });
 
 describe('auto_message 的事件摘要', () => {

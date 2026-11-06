@@ -10,7 +10,6 @@ export {
   queryEvents,
   getEventById,
   getEventStats,
-  getMostRecentPre,
   getSessionStats,
   resolveTimeBound,
 } from './indexer';
@@ -26,7 +25,6 @@ export { installTimelineHooks, uninstallTimelineHooks } from './installer';
 export { ensureTimelineUpToDate, describeSyncOutcome } from './ingest/ingest';
 export type { TimelineSyncOutcome, TimelineSyncStatus } from './ingest/ingest';
 export { isKillSwitchOn } from './kill-switch';
-export { LEGACY_BINARY_TOLERANT_SUFFIX } from './constants';
 export { describeEvent } from './describe';
 export type {
   EventType,

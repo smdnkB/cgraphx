@@ -89,11 +89,6 @@ export function selectInstalledAgents(projectRoot: string): AgentProfile[] {
   return installed.length > 0 ? installed : [defaultAgentProfile()];
 }
 
-/** hook 进程解析 --agent 参数:无法识别时按 Claude Code 处理,不阻塞 hook。 */
-export function resolveHookAgent(arg: string | undefined): AgentProfile {
-  return (arg ? getAgentProfile(arg) : undefined) ?? defaultAgentProfile();
-}
-
 export function agentConfigDir(projectRoot: string, profile: AgentProfile): string {
   return path.join(path.resolve(projectRoot), profile.configDirName);
 }
@@ -113,11 +108,6 @@ export function applyAssetReplacements(content: string, profile: AgentProfile): 
     out = out.split(from).join(to);
   }
   return out;
-}
-
-/** hook 命令:claude-code 原样,其他 agent 追加 `--agent <id>`。 */
-export function hookCommand(base: string, profile: AgentProfile): string {
-  return profile.id === DEFAULT_AGENT_ID ? base : `${base} ${AGENT_OPTION_FLAG} ${profile.id}`;
 }
 
 /** 按登记顺序从环境变量取会话 id;都没有返回 null。 */
