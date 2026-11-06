@@ -31,6 +31,7 @@ import * as fs from 'node:fs';
 import { registerDocsCommands } from '../core/markdown/cli';
 import { registerDbCommands } from '../core/dbquery/cli';
 import { registerTimelineCommands } from '../core/timeline/cli';
+import { registerCommitGateCommands } from '../core/commit-gate/cli';
 import { registerFeaturesCommands } from '../core/features/cli';
 import { registerReportCommands } from '../core/report/cli';
 import { registerReplicaCommands } from '../core/replica/cli';
@@ -165,6 +166,8 @@ function main(): void {
   registerDocsCommands(program);
   registerDbCommands(program);
   registerTimelineCommands(program);
+  // 隐藏的 commit-gate-hook 命令(commit-msg 门禁片段经 PATH 调起)
+  registerCommitGateCommands(program);
   registerFeaturesCommands(program);
   registerReportCommands(program);
   registerReplicaCommands(program);
