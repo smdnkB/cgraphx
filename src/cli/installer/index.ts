@@ -132,7 +132,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   }
 
   // 顺序固定(D25):① agent 配置 ② 本地 .cgraphx/ ③ 1.x 遗留表 ④ 选子系统 ⑤ docs 索引 ⑥ timeline 等 hook
-  //   ⑦ 问名字、并旧数据、清掉已下掉功能的数据 ⑧ db-query 模板。
+  //   ⑦ 问名字、并旧数据、清掉已下掉功能的数据 ⑦.6 时间线重建(F6)⑧ db-query 模板。
   // ① 逐 agent 写配置;单个 agent 失败只 warn,继续其他 agent 与后续步骤。
   installAgentTargets(clack, targets, location);
 
@@ -233,6 +233,28 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
       }
     } catch (err) {
       clack.log.warn(`清理已下掉的功能失败:${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // ⑦.6 时间线重建(spec F6、D19;F5 图末步):并旧数据之后——只并了提交记录的旧库在这之后按会话文件
+    //   全量重建(清 hook 事件、保留提交记录);重建过(K23 只一次)或没有旧数据的就只走增量,基本是
+    //   空趟。失败只警告,安装照常。
+    try {
+      const { ensureTimelineUpToDate } = await import('../../core/timeline');
+      const s = clack.spinner();
+      s.start('正在从会话文件重建时间线…');
+      const outcome = await ensureTimelineUpToDate(projectRoot).finally(() => s.stop('从会话文件重建时间线'));
+      if (outcome.status === 'rebuilt') {
+        clack.log.success(`时间线已重建:${outcome.sessions ?? 0} 个会话,${outcome.events ?? 0} 条事件`);
+      } else if (outcome.status === 'failed') {
+        clack.log.warn(`时间线重建失败:${outcome.reason ?? '原因不明'}`);
+      } else if (outcome.status === 'busy') {
+        clack.log.warn('时间线正在补录,这次没重建;下次安装或查询会接着来');
+      } else if (outcome.status === 'skipped-legacy') {
+        clack.log.warn('这个目录的旧数据没并过去,时间线还没重建;并好之后下次安装或查询会接着来');
+      }
+      for (const notice of outcome.notices) clack.log.warn(notice);
+    } catch (err) {
+      clack.log.warn(`时间线重建失败:${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

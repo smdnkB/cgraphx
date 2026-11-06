@@ -1,9 +1,11 @@
 /**
  * 补录管线(spec F1 的落库侧:plan T-3;D3、D4、D9):查时间线之前,把各家 agent 会话文件里新增的
- * 部分解析成事件写进这个项目的项目库。只做增量——全量重建(F6)在 T-4,入口里留了接缝。
+ * 部分解析成事件写进这个项目的项目库。全量重建(F6)在 rebuild.ts,由同一入口在增量之前执行(T-4);
+ * 归属判定、事实映射、K11 计数与 ingest.lock 在这里导出,重建复用同一套函数。
  *
  * 流程:
- *   1. 开关关闭 → skipped-disabled;这个目录的旧数据还没并过(K25)→ skipped-legacy,都不碰库
+ *   1. 开关关闭 → skipped-disabled;这个目录的旧数据还没并过(K25)→ skipped-legacy,都不碰库;
+ *      这个项目还没重建过(timeline_meta 无 rebuilt_at)→ 先全量重建(F6,见 rebuild.ts)再增量
  *   2. 列出各家 agent 会话根目录下的全部会话文件(路径升序:同一会话的主文件排在它的 subagents/
  *      文件前面,先到先写的 session_head 才保得住「会话开始取本会话第一条消息」);大小和 mtime 都
  *      没变的直接跳过(实测 3,221 个文件几十毫秒),一个都没变就不开库、不拿锁
@@ -40,6 +42,7 @@ import { summarizeToolResponse } from '../post-tool-summary';
 import { sanitizeToolArgs } from '../tool-args';
 import { TimelineStore } from '../store';
 import type { TimelineEventInput } from '../types';
+import { rebuildTimeline } from './rebuild';
 import { listSessionFiles, sessionFactsReader } from './reader';
 import type { SessionFact, SessionFactTs, SessionFileReadResult } from './types';
 
@@ -65,7 +68,7 @@ export interface TimelineSyncOutcome {
   reason?: string;
 }
 
-/** 门面入口(C-4)。内部顺序:开关关闭 → 旧数据没并过 → 增量补录(重建的检查在 T-4 接进来)。 */
+/** 门面入口(C-4)。内部顺序:开关关闭 → 旧数据没并过 → F6 重建(T-4,只一次)→ 增量补录。 */
 export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyncOutcome> {
   try {
     // F1 ④:开关关了不补录、不碰库,也不提示
@@ -73,9 +76,22 @@ export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyn
     // F1 ③ / K25:旧数据还没并过的目录,时间线停在升级前,提示先 install(经 project 门面取,
     // timeline⇄project 双向引用是 spec D3 定的复用,运行期函数调用无碍)
     if (hasUnmergedLegacyData(start)) return { status: 'skipped-legacy', notices: [] };
-    // F6 重建的检查(T-4):timeline_meta 无 rebuilt_at 时先全量重建再增量。重建落地前的过渡期直接
-    // 增量——重建上线时会清掉这段期间与旧 hook 事件并存的数据(提交记录除外),结果仍以解析为准。
-    return await ingestIncremental(start);
+    // F6(T-4):timeline_meta 无 rebuilt_at → 先全量重建再增量;重建过 → null,直接增量
+    const rebuilt = await rebuildTimeline(start);
+    if (rebuilt !== null && rebuilt.status === 'busy') return { status: 'busy', notices: [] };
+    if (rebuilt !== null && rebuilt.status === 'failed') {
+      return { status: 'failed', reason: rebuilt.reason, notices: [] };
+    }
+    const outcome = await ingestIncremental(start);
+    if (rebuilt === null || rebuilt.status === 'mark-only') return outcome;
+    // 重建的汇总在前(F6 图「记下重建过了、输出重建了多少」);增量紧随其后几乎总是空趟(偏移刚推进
+    // 到位),就算有也是重建期间新追加的内容,数字直接相加
+    return {
+      status: 'rebuilt',
+      sessions: (rebuilt.sessions ?? 0) + (outcome.sessions ?? 0),
+      events: (rebuilt.events ?? 0) + (outcome.events ?? 0),
+      notices: [...rebuilt.notices, ...outcome.notices],
+    };
   } catch (err) {
     return { status: 'failed', reason: errorMessage(err), notices: [] };
   }
@@ -105,7 +121,7 @@ export function describeSyncOutcome(outcome: TimelineSyncOutcome): string[] {
 // ─── 补录主体 ────────────────────────────────────────────────────────────────
 
 /** 开始目录认到的归属;dirName 为 null 表示这次没认出来(项目可能后来才装,文件变了再认)。 */
-interface DirClassification {
+export interface DirClassification {
   /** 认到的项目目录名(归当前项目 ⇔ 等于 ctx.currentDirName) */
   dirName: string | null;
   /** 认定用的根(start_dirs 存一份,timeline_roots 的 upsert 也用它) */
@@ -115,35 +131,52 @@ interface DirClassification {
 }
 
 /** 一个待处理文件的 stat 结果(比较用,size 与 mtimeMs 都已取整存同一种写法)。 */
-interface FileStat {
+export interface FileStat {
   readonly size: number;
   readonly mtimeMs: number;
 }
 
-/** 一趟补录的共享上下文。 */
-interface IngestContext {
+/** K11:整份读出内容却一条事实都没有的文件,按 agent 显示名 + 行内 version 计数(增量与重建共用)。 */
+export interface UnparsedTally {
+  display: string;
+  version: string | null;
+  count: number;
+}
+
+export type UnparsedMap = Map<string, UnparsedTally>;
+
+/** 归属判定要用的上下文(增量与重建共用;重建的 fallbackMatcher 读项目库记过的根)。 */
+export interface ClassificationContext {
   /** 当前项目(查询所在)的项目目录名 */
   readonly currentDirName: string;
   readonly sessionIndex: SessionIndex;
-  /** sessions.db 里的会话文件进度(处理过程中随手更新,subagents/ 文件跟主会话时读得到新值) */
-  readonly rows: Map<string, SessionFileRow>;
-  /** 项目删过数据 → 只收这之后的事实(K3);没删过 → null */
-  readonly removedAtMs: number | null;
-  /** K11:整份读不出事实的文件,按 agent 显示名 + 行内 version 计数 */
-  readonly unparsed: Map<string, { display: string; version: string | null; count: number }>;
-  /** 本趟写过事件的会话 */
-  readonly sessionsWritten: Set<string>;
-  /** 项目库,第一次要用时才打开(没文件要处理就不开) */
-  readonly projectDb: () => SqliteDatabase;
   /** 目录不在时的根匹配:本项目库 timeline_roots + 副本登记(在用、已删都算) */
   readonly fallbackMatcher: () => RootMatcher;
+}
+
+/** 事实 → 事件映射要用的上下文(增量与重建共用;重建的 projectDb 指向临时库)。 */
+export interface FactMappingContext {
+  /** 事件写入目标库,第一次要用时才打开(增量:没文件要处理就不开;重建:临时库,直接给) */
+  readonly projectDb: () => SqliteDatabase;
+  /** 项目删过数据 → 只收这之后的事实(K3);没删过 → null */
+  readonly removedAtMs: number | null;
+  /** 本趟写过事件的会话 */
+  readonly sessionsWritten: Set<string>;
+}
+
+/** 一趟补录的共享上下文。 */
+interface IngestContext extends ClassificationContext, FactMappingContext {
+  /** sessions.db 里的会话文件进度(处理过程中随手更新,subagents/ 文件跟主会话时读得到新值) */
+  readonly rows: Map<string, SessionFileRow>;
+  /** K11:整份读不出事实的文件,按 agent 显示名 + 行内 version 计数 */
+  readonly unparsed: UnparsedMap;
 }
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function statOrNull(file: string): FileStat | null {
+export function statOrNull(file: string): FileStat | null {
   try {
     const st = fs.statSync(file);
     return { size: st.size, mtimeMs: Math.round(st.mtimeMs) };
@@ -231,12 +264,7 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
       }
 
       const events = conn !== null ? Math.max(0, countEvents(conn.getDb()) - (countBefore ?? 0)) : 0;
-      const notices = [...ctx.unparsed.values()].map(
-        (u) =>
-          `${u.display}${u.version !== null ? ` ${u.version}` : ''} 的会话文件有 ${u.count} 个解析不出,` +
-          '时间线可能不全;升级 cgraphx 或反馈',
-      );
-      return { status: 'synced', sessions: ctx.sessionsWritten.size, events, notices };
+      return { status: 'synced', sessions: ctx.sessionsWritten.size, events, notices: unparsedNotices(ctx.unparsed) };
     } finally {
       releaseIngestLock(dataDir);
     }
@@ -336,22 +364,15 @@ function writeFacts(
     project_dir: ctx.currentDirName,
     byte_offset: result.consumedBytes,
   });
-  if (fullRead && stat.size > 0 && result.facts.length === 0) {
-    // K11:整份读出内容却一条事实都没有(agent 升级改了格式),提示带行内 version
-    const version = readLineVersion(file);
-    const key = `${profile.displayName} ${version ?? ''}`;
-    const cur = ctx.unparsed.get(key);
-    if (cur === undefined) ctx.unparsed.set(key, { display: profile.displayName, version, count: 1 });
-    else cur.count += 1;
-  }
+  noteUnparsed(ctx.unparsed, file, profile, stat, result, fullRead);
 }
 
-/** 项目库记下项目在本机出现过的根(spec K1、K10 的写法同 recorder)。 */
+/** 项目库记下项目在本机出现过的根(spec K1、K10 的写法同 recorder;重建写进临时库,并库时再并)。 */
 const UPSERT_ROOT_SQL =
   'INSERT INTO timeline_roots (root, first_ts, last_ts) VALUES (?, ?, ?) ' +
   'ON CONFLICT(root) DO UPDATE SET first_ts = min(first_ts, excluded.first_ts), last_ts = max(last_ts, excluded.last_ts)';
 
-function upsertRoot(db: SqliteDatabase, root: string | null, events: readonly TimelineEventInput[]): void {
+export function upsertRoot(db: SqliteDatabase, root: string | null, events: readonly TimelineEventInput[]): void {
   if (root === null || events.length === 0) return;
   let first: string | null = null;
   let last: string | null = null;
@@ -393,13 +414,13 @@ function saveRow(
 }
 
 /** 会话文件对应的会话编号:主文件是文件名;subagents/ 下的子 agent 文件是主会话目录名(读取器同款认法)。 */
-function sessionFileId(file: string): string {
+export function sessionFileId(file: string): string {
   const main = subagentMainPath(file);
   return path.basename(main ?? file, '.jsonl');
 }
 
 /** 子 agent 文件 → 同目录(项目子目录)下不带 subagents/ 段的主会话文件路径;主文件 → null。 */
-function subagentMainPath(file: string): string | null {
+export function subagentMainPath(file: string): string | null {
   const parts = file.split(path.sep);
   const idx = parts.lastIndexOf('subagents');
   if (idx < 1) return null;
@@ -436,9 +457,35 @@ function readLineVersion(file: string): string | null {
   }
 }
 
+/** K11 判定与计数(增量与重建共用):从头读的整份没有事实才算(agent 升级改了格式),提示带行内 version。 */
+export function noteUnparsed(
+  unparsed: UnparsedMap,
+  file: string,
+  profile: AgentProfile,
+  stat: FileStat,
+  result: SessionFileReadResult,
+  fullRead: boolean,
+): void {
+  if (!fullRead || stat.size === 0 || result.facts.length > 0) return;
+  const version = readLineVersion(file);
+  const key = `${profile.displayName} ${version ?? ''}`;
+  const cur = unparsed.get(key);
+  if (cur === undefined) unparsed.set(key, { display: profile.displayName, version, count: 1 });
+  else cur.count += 1;
+}
+
+/** K11 的人读提示(F1 ② 的原文)。 */
+export function unparsedNotices(unparsed: UnparsedMap): string[] {
+  return [...unparsed.values()].map(
+    (u) =>
+      `${u.display}${u.version !== null ? ` ${u.version}` : ''} 的会话文件有 ${u.count} 个解析不出,` +
+      '时间线可能不全;升级 cgraphx 或反馈',
+  );
+}
+
 // ─── 开始目录归属(D3、K1、K3)───────────────────────────────────────────────
 
-function classifyStartDir(cwd: string, ctx: IngestContext): DirClassification {
+export function classifyStartDir(cwd: string, ctx: ClassificationContext): DirClassification {
   const cached = ctx.sessionIndex.getStartDir(cwd);
   // 认到过项目的直接用缓存(改名会清掉受影响根的行,下次重认);没认出来过的现认:
   // 项目可能后来才装、才记名字、才建项目目录(K3 补历史的依据)
@@ -486,11 +533,11 @@ function factIso(ts: SessionFactTs): string | null {
   return ms === null ? null : new Date(ms).toISOString();
 }
 
-function mapFacts(
+export function mapFacts(
   facts: readonly SessionFact[],
   profile: AgentProfile,
   startCwd: string,
-  ctx: IngestContext,
+  ctx: FactMappingContext,
 ): TimelineEventInput[] {
   const events: TimelineEventInput[] = [];
   // 本趟见到的每个会话最新一条提问的 uuid(D6:轮次编号取提问消息的 uuid,重新解析不变)
