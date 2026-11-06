@@ -73,14 +73,14 @@ export interface CreateReplicaOptions {
   /** 文件前缀 = feature-id 去掉日期段,由调用方(dev-start)传入 */
   prefix: string;
   branch: string;
-  /** 不用写时复制,整份复制 */
-  fullCopy?: boolean;
 }
 
 export interface CreateReplicaResult extends ReplicaEntry {
   /** 从主目录移进副本的文件(仓库相对路径);以前的登记没有时为 [] */
   movedFiles: string[];
   warnings: string[];
+  /** 这次接上了删副本时留下的分支(D7、K15) */
+  reattached: boolean;
 }
 
 export interface RemoveReplicaResult {

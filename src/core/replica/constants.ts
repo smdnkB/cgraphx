@@ -16,3 +16,9 @@ export const SUPPORTED_PLATFORMS: readonly NodeJS.Platform[] = ['darwin', 'linux
 
 /** 副本目录名 `<主目录名>@<文件前缀>` 里的分隔符(plan C-8)。 */
 export const REPLICA_NAME_SEPARATOR = '@';
+
+/**
+ * 开副本时要带的文件清单(spec D3):主目录根下的这个文件,gitignore 语法,列出的文件带进副本;
+ * cgraphx 不创建、不提交,只在这里记文件名,别处不写字面量。
+ */
+export const WORKTREE_INCLUDE_NAME = '.worktreeinclude';
