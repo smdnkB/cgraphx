@@ -110,7 +110,7 @@ cd /your/project && cgraphx install  # 建 .cgraphx/ 与项目数据目录 + 部
 - agent 经 knowledge-recall 自动查业务知识
 - agent 经 `db-query` 自动查数据库
 - `status` / `docs` / `db` / `timeline` 等 CLI 子命令由 agent / skill 调用,人类日常不主动跑
-- 同一项目在本机的各个目录(clone、worktree、副本)记进同一份数据;`cgraphx project show` 看这个目录属于哪个项目、数据在哪,认错了用 `cgraphx project name <名称>` 改,`cgraphx project list` / `cgraphx project remove <目录名>` 列出、删除项目数据
+- 项目按名称认,名字相同就是一个项目;`install` 时记下名字,主目录、别的 clone、worktree、需求副本都记进同一份数据,项目级数据库连接配置也共用;新目录碰上重名会提示一句(不是同一个项目就 `cgraphx project name <名称>`)。`cgraphx project show` 看这个目录属于哪个项目、数据在哪,认错了用 `cgraphx project name <名称>` 改,`cgraphx project list` / `cgraphx project remove <目录名>` 列出、删除项目数据
 
 ## 卸载
 

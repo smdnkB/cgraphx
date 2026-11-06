@@ -21,7 +21,7 @@ cd your-project
 cgraphx install
 ```
 
-一条命令全做:建本地 `.cgraphx/`(知识库索引)和用户目录里这个项目的数据目录(timeline;同一项目的各个目录共用),并把原来的旧数据并过去 + 部署 skills/commands 到 `.claude/` + 接 context-monitor/statusLine + 装 git 钩子(提交记录 + 提交门禁)+ 写工作方式到 `.claude/CLAUDE.md`。重启 Claude Code 即可。
+一条命令全做:建本地 `.cgraphx/`(知识库索引)和用户目录里这个项目的数据目录(timeline;同一项目的各个目录共用),并问一次项目名称(项目按名称认,同名的目录记进同一份数据;地址只用来取默认名字)+ 把原来的旧数据并过去 + 部署 skills/commands 到 `.claude/` + 接 context-monitor/statusLine + 装 git 钩子(提交记录 + 提交门禁)+ 写工作方式到 `.claude/CLAUDE.md`。重启 Claude Code 即可。
 
 ### 升级
 
