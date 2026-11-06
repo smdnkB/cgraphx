@@ -4,7 +4,7 @@
  * 删除不可恢复,登记文件的 path 被改错就可能删到别处,所以逐条核对全过才删:登记过且没删;副本目录(按 D22
  * 在主目录的上级、名为登记的副本目录名)就是登记的 path;它不是主目录、也不是主目录的上级;目录名以
  * `<主目录名>@` 开头;目录里的 `.cgraphx/shared` 指回本主目录的 `.cgraphx/`;目录在 `git worktree list`
- * 里(旧版写时复制出来的副本不是 worktree,停在这条);K9 没有改动。
+ * 里(旧版整仓复制出来的副本不是 worktree,停在这条);K9 没有改动。
  *
  * 删目录只用 `git worktree remove --force`(副本里通常有被忽略的 node_modules、.env,不带 force 会被拒绝)。
  * 需求分支按 K9 处理(C-7、K13):已合入、或还没有自己做的提交 → 删;还没合入 → 留着,下次开同一个需求
@@ -76,7 +76,7 @@ function verifyTarget(mainRoot: string, entry: ReplicaEntry): string {
   if (lstatOrUndefined(link)?.isSymbolicLink() !== true || realpathOr(link) !== mainLocalDir) {
     throw unsafeTarget(mainRoot, entry, `${link} 不是指回本主目录 ${mainLocalDir} 的链接`);
   }
-  // 5. 这个目录确实是本仓库的 worktree(D13;旧版写时复制出来的副本不是,git 列不出来也按这条拦下)
+  // 5. 这个目录确实是本仓库的 worktree(D13;旧版整仓复制出来的副本不是,git 列不出来也按这条拦下)
   const worktrees = listWorktreeRoots(mainRoot);
   if (worktrees === null || !worktrees.some((wt) => realpathOr(wt) === realDir)) {
     throw unsafeTarget(mainRoot, entry, '这个目录不是本仓库的 worktree');
