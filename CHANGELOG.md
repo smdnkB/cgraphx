@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### Changed — replicas are git worktrees
+
+A replica is now a git worktree (`git worktree add`) next to the main
+directory instead of a copy-on-write copy of the whole directory. Only what
+an agent needs is carried over: each agent's config directory, instructions
+file and extra config (Claude Code's `.mcp.json`), plus the files listed in
+the project's `.worktreeinclude` (gitignore syntax, paths relative to the
+project root; cgraphx neither creates nor commits it). Dependencies and
+build output are not copied — install and build once inside the replica.
+The carried files are hidden from git in the replica through a per-worktree
+`core.excludesFile` (the main repository gains
+`extensions.worktreeConfig`), so the carried files stay out of the
+replica's `git status` while the main directory still sees them; the shared `.git/info/exclude` is
+no longer written. A main directory with uncommitted tracked changes no
+longer blocks replica creation — it only produces a warning. Merging and
+syncing use the requirement branch from the same repository
+(`refs/heads/<branch>`), so the `git fetch` steps are gone. Deleting a
+replica removes the worktree with `git worktree remove --force` and keeps
+the branch when it still has unmerged commits; opening the same
+requirement again reattaches to that branch and keeps the original base
+commit.
+
+**Breaking:** `--full-copy` and the `no_cow` / `dirty_main` error codes are
+gone, and copy-on-write replicas created by an older version are not
+supported. Remove them with the previous version's `cgraphx replica remove`
+before upgrading: for an old replica the branch does not exist in the main
+repository, so the new commands report it as undecided and refuse to delete
+it rather than deleting the wrong thing.
+
 ### Changed — projects are recognized by name
 
 A project is now identified by its name alone; the remote address no longer
