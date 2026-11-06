@@ -6,6 +6,10 @@
 export const AGENT_IDS = ['claude-code', 'codebuddy'] as const;
 export type AgentId = (typeof AGENT_IDS)[number];
 
+/** 会话文件读取器标识(每家已登记 agent 一个,读取器在 timeline/ingest/;接新 agent = 加一个读取器)。 */
+export const SESSION_READER_IDS = ['claude-transcript', 'codebuddy-transcript'] as const;
+export type SessionReaderId = (typeof SESSION_READER_IDS)[number];
+
 export interface AgentProfile {
   readonly id: AgentId;
   readonly displayName: string;
@@ -21,6 +25,12 @@ export interface AgentProfile {
   readonly projectDirEnv: string;
   /** 会话 id 环境变量名;agent 不提供时为 null。 */
   readonly sessionIdEnv: string | null;
+  /** 会话文件目录相对家目录的路径段(如 `['.claude','projects']`);agent 会话文件不在固定位置时为 null。 */
+  readonly sessionsDir: readonly string[] | null;
+  /** 会话目录可被环境变量挪走时的变量名(sessionsDirEnv 设了以它为根拼 sessionsDir);没有为 null。 */
+  readonly sessionsDirEnv: string | null;
+  /** 会话文件读取器标识。 */
+  readonly sessionReader: SessionReaderId;
   /** 用于 PATH 检测的 CLI 命令名。 */
   readonly cliCommands: readonly string[];
   /** 写类工具名(task PostToolUse 匹配用)。 */
