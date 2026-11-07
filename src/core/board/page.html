@@ -1,0 +1,372 @@
+<!doctype html>
+<!-- 看板页面(2026-11-06-agent看板 plan C-14;spec D3、D11)。
+  单文件:内联 CSS、JS,无框架、无外部资源;只请求 /api/board 与 /api/refresh,令牌取自身地址的 ?t=。
+  布局与交互照需求目录的 agent看板-线框-v2.html:左右分栏(左任务右会话),默认选中全局最近活动的任务,
+  点左栏行右栏即换;「全部/收起」切换超过 30 天的任务;「刷新」重补录一次。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 空 data 图标:压掉浏览器自己发 /favicon.ico(不算外部资源) -->
+<link rel="icon" href="data:,">
+<title>agent看板</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: #24292f; background: #f6f8fa; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 16px; background: #fff; border-bottom: 1px solid #d0d7de; }
+  header h1 { font-size: 15px; margin: 0; }
+  .actions { display: flex; gap: 8px; }
+  button { font: inherit; font-size: 13px; padding: 3px 12px; border: 1px solid #8c959f; background: #fff; color: #24292f; border-radius: 6px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #f3f4f6; }
+  button:disabled { color: #8c959f; cursor: default; }
+  .note { border-left: 3px solid #0969da; background: #ddf4ff; padding: 4px 10px; margin: 10px 16px 0; font-size: 13px; }
+  .board { padding: 14px 16px; }
+  .split { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 760px) { .split { grid-template-columns: minmax(0, 1fr); } }
+  .left, .right { min-width: 0; }
+  .left { border-right: 1px dashed #d0d7de; padding-right: 12px; }
+  .right { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  .proj { font-weight: 600; margin: 0 0 4px; }
+  .proj small { display: block; font-weight: 400; color: #57606a; word-break: break-all; }
+  .pblock { margin-bottom: 18px; }
+  .task { padding: 6px 8px; border-radius: 6px; border-bottom: 1px dotted #c6cbd1; cursor: pointer; }
+  .task:hover { background: #eef1f4; }
+  .task.cur { background: #dde7f0; }
+  .task b { font-weight: 600; }
+  .task.old b { color: #57606a; }
+  .tag { font-size: 12px; color: #57606a; }
+  .group { margin: 12px 0 4px; font-weight: 600; color: #24292f; }
+  .sess { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: space-between; align-items: flex-start; border-bottom: 1px dotted #c6cbd1; padding: 6px 0; font-size: 13px; }
+  .sess .info { flex: 1 1 260px; min-width: 0; word-break: break-word; }
+  .sess .btns { white-space: nowrap; }
+  .sess .btns button { font-size: 12px; padding: 1px 8px; }
+  .sess.muted .info { color: #8c959f; }
+  .id { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .ok { font-size: 12px; color: #1a7f37; margin-left: 4px; }
+  .empty { border: 2px dashed #8c959f; border-radius: 8px; padding: 24px; text-align: center; color: #57606a; margin: 8px 0; }
+  .fallback { margin-top: 12px; }
+  .fallback textarea { width: 100%; font: 12px ui-monospace, Menlo, monospace; }
+  .hint { margin: 10px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>agent看板</h1>
+  <div class="actions">
+    <button id="all-toggle" type="button">全部</button>
+    <button id="refresh" type="button">刷新</button>
+  </div>
+</header>
+<div class="note" id="refresh-note" hidden>正在补录…</div>
+<main class="board" id="board">
+  <div class="split" id="split">
+    <nav class="left" id="left"></nav>
+    <section class="right" id="right" aria-live="polite"></section>
+  </div>
+  <!-- 空态①(C-14):一个项目都没有时整块替换,不显示分栏 -->
+  <div class="empty" id="noprojects" hidden>还没有项目:在项目里跑 cgraphx install</div>
+</main>
+
+<script>
+'use strict';
+// ─── 状态 ───────────────────────────────────────────────────────────────────
+// data:GET /api/board 的 BoardData(C-6);sel:当前选中(项目名 + 任务 key,跨刷新保选中);
+// showAll:「全部/收起」;refreshing:本次刷新请求进行中(防本页连点)。
+var data = null;
+var sel = null;
+var showAll = false;
+var refreshing = false;
+
+var TOKEN = '';
+try {
+  TOKEN = new URLSearchParams(location.search).get('t') || '';
+} catch (e) { TOKEN = ''; }
+
+var $left = document.getElementById('left');
+var $right = document.getElementById('right');
+var $split = document.getElementById('split');
+var $noprojects = document.getElementById('noprojects');
+var $note = document.getElementById('refresh-note');
+var $allBtn = document.getElementById('all-toggle');
+var $refreshBtn = document.getElementById('refresh');
+
+// 未归类行的 key(任务行用 featureId,不会撞上)。
+var UNSORTED_KEY = '__unsorted__';
+
+// ─── 小工具 ─────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function pad(n) { return n < 10 ? '0' + n : String(n); }
+// 跨年带年份,否则 MM-DD(C-14:时间 MM-DD,跨年格式局部适配)。
+function fmtDate(ms) {
+  var d = new Date(ms);
+  if (isNaN(d.getTime())) return '-';
+  var core = pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  return d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + '-' + core : core;
+}
+// 任务最近活动、会话窗口用:MM-DD HH:mm(跨年带年份);非法值显示 -。
+function fmtTime(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  return fmtDate(d.getTime()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+// 会话活动窗口(K6 的 from/to):同一天只写一次日期,跨天两端都写全。
+function fmtWindow(from, to) {
+  if (!from && !to) return '-';
+  if (!to) return fmtTime(from);
+  if (!from) return fmtTime(to);
+  var a = new Date(from), b = new Date(to);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return fmtTime(from);
+  var sameDay = a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (!sameDay) return fmtTime(from) + ' ~ ' + fmtTime(to);
+  if (a.getHours() === b.getHours() && a.getMinutes() === b.getMinutes()) return fmtTime(from);
+  return fmtTime(from) + ' ~ ' + pad(b.getHours()) + ':' + pad(b.getMinutes());
+}
+// 编号短显:session- 前缀取前 16 字符,否则前 8(K7:复制的是完整编号)。
+function shortId(id) {
+  return id.indexOf('session-') === 0 ? id.slice(0, 16) : id.slice(0, 8);
+}
+function findProject(name) {
+  if (!data) return null;
+  for (var i = 0; i < data.projects.length; i++) {
+    if (data.projects[i].name === name) return data.projects[i];
+  }
+  return null;
+}
+
+// ─── 选中(默认全局最近活动的任务;项目与任务都已按活动降序排好,仍逐组比对 lastActiveAt)───
+function defaultSelection() {
+  var best = null;
+  for (var pi = 0; pi < data.projects.length; pi++) {
+    var t = data.projects[pi].tasks[0];
+    if (!t) continue;
+    var ts = t.lastActiveAt || '';
+    if (best === null || ts > best.ts) best = { ts: ts, proj: data.projects[pi].name, key: t.featureId };
+  }
+  if (best !== null) return { proj: best.proj, kind: 'task', key: best.key };
+  // 没有任何任务:垫底选第一个有未归类会话的项目
+  for (var pj = 0; pj < data.projects.length; pj++) {
+    if (data.projects[pj].unsorted.length) return { proj: data.projects[pj].name, kind: 'unsorted', key: UNSORTED_KEY };
+  }
+  return null;
+}
+function selectionExists(s) {
+  if (s === null || !data) return false;
+  var p = findProject(s.proj);
+  if (p === null) return false;
+  if (s.kind === 'unsorted') return p.unsorted.length > 0;
+  var i;
+  for (i = 0; i < p.tasks.length; i++) { if (p.tasks[i].featureId === s.key) return true; }
+  // 选中的任务可能刷新后掉进 older(最近活动超过 30 天)——右栏会去 older 找,这里也认
+  for (i = 0; i < p.older.length; i++) { if (p.older[i].featureId === s.key) return true; }
+  return false;
+}
+function applyData() {
+  if (!selectionExists(sel)) sel = defaultSelection();
+  render();
+}
+
+// ─── 左栏:项目分组(名字 + 目录、notice、任务、older 提示、未归类垫底)──────────
+function taskRow(p, t, kind) {
+  // 选中高亮按 项目 + featureId 认(active 与 older 同一任务只此一处;kind 只管 older 的弱化样式)
+  var cur = sel !== null && sel.proj === p.name && sel.kind === 'task' && sel.key === t.featureId;
+  var stage = t.stage === null || t.stage === undefined ? '-' : t.stage;
+  var count = t.fixedCount + ' 个';
+  if (t.maybeCount > 0) count += ',可能相关 ' + t.maybeCount + ' 个';
+  var agents = t.agents.length ? t.agents.join('、') : '-';
+  var last = t.lastActiveAt ? fmtTime(t.lastActiveAt) : '-';
+  return '<div class="task' + (cur ? ' cur' : '') + (kind === 'older' ? ' old' : '') + '" data-proj="' + esc(p.name) + '" data-kind="task" data-key="' + esc(t.featureId) + '">'
+    + '<b>' + esc(t.title) + '</b><br><span class="tag">' + esc(stage) + ' · ' + esc(count) + ' · ' + esc(agents) + ' · ' + esc(last) + '</span></div>';
+}
+function unsortedRow(p) {
+  var cur = sel !== null && sel.proj === p.name && sel.kind === 'unsorted';
+  return '<div class="task' + (cur ? ' cur' : '') + '" data-proj="' + esc(p.name) + '" data-kind="unsorted" data-key="' + UNSORTED_KEY + '"><b>未归类(' + p.unsorted.length + ')</b></div>';
+}
+function renderLeft() {
+  if (data === null) { $left.innerHTML = ''; return; }
+  if (data.projects.length === 0) { $left.innerHTML = ''; return; }
+  var h = '';
+  for (var pi = 0; pi < data.projects.length; pi++) {
+    var p = data.projects[pi];
+    h += '<div class="pblock">';
+    h += '<div class="proj">' + esc(p.name) + '<small>' + p.dirs.map(esc).join('<br>') + '</small></div>';
+    if (p.notice) h += '<div class="note" style="margin:0 0 8px">' + esc(p.notice) + '</div>';
+    if (p.tasks.length === 0) {
+      // 项目无任务:空态文案;older 非空时补一句提示(C-14)
+      h += '<div class="empty">还没有挂上会话的任务'
+        + (p.older.length ? '<br>还有 ' + p.older.length + ' 个超过 30 天,点「全部」看' : '')
+        + '</div>';
+    } else {
+      for (var ti = 0; ti < p.tasks.length; ti++) h += taskRow(p, p.tasks[ti], 'task');
+      if (showAll) {
+        for (var oi = 0; oi < p.older.length; oi++) h += taskRow(p, p.older[oi], 'older');
+      } else if (p.older.length) {
+        h += '<p class="tag" style="margin:4px 0">还有 ' + p.older.length + ' 个超过 30 天,点「全部」看</p>';
+      }
+    }
+    if (p.unsorted.length) h += unsortedRow(p);
+    h += '</div>';
+  }
+  $left.innerHTML = h;
+}
+
+// ─── 右栏:任务详情(定挂/可能相关两组、未归类无依据栏)──────────────────────
+function sessionRow(s, unsorted) {
+  var bits = [shortId(s.id), s.dirLabel, fmtWindow(s.from, s.to)];
+  if (!unsorted && s.reasons.length) bits.push(s.reasons.join('、'));
+  if (!s.fileExists) bits.push('会话文件已不在');
+  return '<div class="sess' + (s.fileExists ? ' muted' : '') + '" data-copy-id="' + esc(s.id) + '" data-copy-title="' + esc(s.title) + '">'
+    + '<div class="info"><b>' + esc(s.agent) + '</b> ' + esc(s.title) + '<br>'
+    + '<span class="tag"><span class="id">' + esc(shortId(s.id)) + '</span>'
+    + bits.slice(1).map(function (b) { return ' · ' + esc(b); }).join('') + '</span></div>'
+    + '<div class="btns"><button type="button" class="copy" data-copy="id">复制编号</button> '
+    + '<button type="button" class="copy" data-copy="title">复制标题</button></div></div>';
+}
+var FALLBACK = '<div class="fallback" id="fallback" hidden>'
+  + '<div class="tag">没能写进剪贴板,手动复制</div>'
+  + '<textarea rows="2" readonly></textarea></div>';
+var COPY_HINT = '<p class="tag hint">点按钮复制完整内容,列表里编号只显示前面一段</p>';
+function renderRight() {
+  if (data === null) {
+    $right.innerHTML = '<div class="empty">看板数据没拿到<br>请从终端打印的带令牌地址打开,或点「刷新」重试</div>';
+    return;
+  }
+  if (data.projects.length === 0) {
+    $right.innerHTML = '<div class="empty">还没有项目:在项目里跑 cgraphx install</div>';
+    return;
+  }
+  if (sel === null) {
+    $right.innerHTML = '<div class="empty">还没有挂上会话的任务</div>';
+    return;
+  }
+  var p = findProject(sel.proj);
+  if (p === null) { $right.innerHTML = ''; return; }
+  var h;
+  if (sel.kind === 'unsorted') {
+    h = '<div class="group" style="margin-top:0"><b>' + esc(p.name) + ' / 未归类(' + p.unsorted.length + ')</b></div>';
+    h += p.unsorted.length
+      ? p.unsorted.map(function (s) { return sessionRow(s, true); }).join('')
+      : '<div class="empty">没有未归类的会话</div>';
+  } else {
+    var t = null;
+    for (var i = 0; i < p.tasks.length; i++) { if (p.tasks[i].featureId === sel.key) t = p.tasks[i]; }
+    if (t === null) {
+      // 选中的任务只在 older 里(如「全部」收起后):去 older 找
+      for (var j = 0; j < p.older.length; j++) { if (p.older[j].featureId === sel.key) t = p.older[j]; }
+    }
+    if (t === null) { $right.innerHTML = ''; return; }
+    h = '<div class="group" style="margin-top:0"><b>' + esc(p.name) + ' / ' + esc(t.title) + '</b></div>';
+    h += '<div class="group">定挂(' + t.fixed.length + ')</div>';
+    h += t.fixed.length ? t.fixed.map(function (s) { return sessionRow(s, false); }).join('') : '<div class="empty">没有定挂的会话</div>';
+    if (t.maybe.length) {
+      h += '<div class="group">可能相关(' + t.maybe.length + ')</div>';
+      h += t.maybe.map(function (s) { return sessionRow(s, false); }).join('');
+    }
+  }
+  h += FALLBACK + COPY_HINT;
+  $right.innerHTML = h;
+}
+function render() {
+  var empty = data !== null && data.projects.length === 0;
+  $split.hidden = empty;
+  $noprojects.hidden = !empty;
+  renderLeft();
+  renderRight();
+}
+
+// ─── 交互 ───────────────────────────────────────────────────────────────────
+document.addEventListener('click', function (e) {
+  var copy = e.target.closest ? e.target.closest('.copy') : null;
+  if (copy) { doCopy(copy); return; }
+  var row = e.target.closest ? e.target.closest('[data-key]') : null;
+  if (row && row.dataset.proj !== undefined) {
+    sel = { proj: row.dataset.proj, kind: row.dataset.kind === 'unsorted' ? 'unsorted' : 'task', key: row.dataset.key };
+    render();
+  }
+});
+
+// 复制(D11):127.0.0.1 是安全上下文,走 navigator.clipboard;失败降级为已选中的只读文本框。
+function doCopy(btn) {
+  var sess = btn.closest('.sess');
+  if (sess === null) return;
+  var text = btn.dataset.copy === 'title' ? sess.dataset.copyTitle : sess.dataset.copyId;
+  var write = navigator.clipboard && navigator.clipboard.writeText
+    ? navigator.clipboard.writeText(text)
+    : Promise.reject(new Error('no clipboard'));
+  write.then(function () {
+    var btns = btn.parentElement;
+    if (btns !== null) {
+      var olds = btns.querySelectorAll('.ok');
+      for (var i = 0; i < olds.length; i++) olds[i].remove();
+    }
+    var ok = document.createElement('span');
+    ok.className = 'ok';
+    ok.textContent = '已复制';
+    btn.after(ok);
+  }).catch(function () {
+    var fb = document.getElementById('fallback');
+    if (fb === null) return;
+    fb.hidden = false;
+    var box = fb.querySelector('textarea');
+    box.value = text;
+    box.focus();
+    box.select();
+  });
+}
+
+$allBtn.addEventListener('click', function () {
+  showAll = !showAll;
+  $allBtn.textContent = showAll ? '收起' : '全部';
+  renderLeft();
+});
+
+function showNote(text) { $note.textContent = text; $note.hidden = false; }
+function hideNote() { $note.hidden = true; }
+
+// 刷新(C-14):期间「正在补录…」;完成用返回数据重渲;409 提示正在刷新并保留旧数据。
+$refreshBtn.addEventListener('click', function () {
+  if (refreshing) return;
+  refreshing = true;
+  $refreshBtn.disabled = true;
+  showNote('正在补录…');
+  fetch('/api/refresh?t=' + encodeURIComponent(TOKEN), { method: 'POST' })
+    .then(function (res) {
+      if (res.status === 409) throw { conflict: true };
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(function (fresh) {
+      data = fresh;
+      applyData();
+      hideNote();
+    })
+    .catch(function (err) {
+      if (err && err.conflict) showNote('正在刷新,请稍候');
+      else showNote('刷新没成功,稍后再试');
+    })
+    .then(function () {
+      refreshing = false;
+      $refreshBtn.disabled = false;
+    });
+});
+
+// ─── 首屏 ───────────────────────────────────────────────────────────────────
+fetch('/api/board?t=' + encodeURIComponent(TOKEN), { cache: 'no-store' })
+  .then(function (res) {
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  })
+  .then(function (fresh) {
+    data = fresh;
+    sel = defaultSelection();
+    render();
+  })
+  .catch(function () {
+    renderRight(); // data 为 null:右栏给出人能看懂的错误与出路
+  });
+</script>
+</body>
+</html>
