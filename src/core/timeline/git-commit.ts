@@ -31,7 +31,7 @@ import * as path from 'node:path';
 import { resolveSessionIdFromEnv } from '../agents';
 import { COMMIT_GATE_MARKER } from '../commit-gate';
 import { locateDataAtRoot } from '../data-location';
-import { hookNotice, repairHookSnippets, resolveHooksDir } from '../git-hooks';
+import { clearRepoLocalGitEnv, hookNotice, repairHookSnippets, resolveHooksDir } from '../git-hooks';
 import { listRepoProjects, type RepoProject } from '../repo-projects';
 import {
   CHERRY_PICK_ENV,
@@ -93,6 +93,9 @@ interface CommitShare {
 
 export async function gitCommitHook(): Promise<void> {
   if (isKillSwitchOn()) return;
+  // 钩子带来的 GIT_DIR 等只对提交所在的仓库有效(worktree 里是绝对路径):不清掉,补录时识别别的
+  // 仓库读到的也是这个仓库,别的项目的会话就记进了这个项目。提交信息的 hash / 分支已由片段固定传入。
+  clearRepoLocalGitEnv();
 
   // 钩子在提交当下固定的 hash / 分支(旧版钩子脚本不传 → 退回读 HEAD 与当前分支)
   const info = readGitCommitInfo({
@@ -282,20 +285,20 @@ function isFastForward(info: GitCommitInfo): boolean {
  * 2. 不是 post-merge 调起(post-merge 记的合并提交一律不判);
  * 3. commit-msg 钩子文件里有门禁片段(marker 取 commit-gate 门面)——没重装、片段没装上时
  *    没有门禁可走,不标;
- * 4. 这笔提交的 tree 与前台传来的门禁记号内容(GATE_TREE_ENV)不一致——一致或没传都算走过
- *    门禁(检查超时、跑不起来时 commit-gate 照写记号);
+ * 4. 这笔提交的 tree 与前台传来的门禁记号内容(GATE_TREE_ENV)不一致,没有记号也算不一致——
+ *    `--no-verify` 跳过时门禁没跑,不写记号;门禁只要没打回就写(检查超时、跑不起来也写);
  * 5. 不在 cherry-pick / rebase 进行中(两者都没有 commit-msg 门禁可言);
  * 6. 不是 revert(说明以 `Revert "` 开头且带 `This reverts commit`)。
  *
  * 标记只是附加信息(spec F3):整段包在 try/catch 里,任何一步读不出 → 不标。
  */
-function isGateSkipped(info: GitCommitInfo, isAgentCommit: boolean): boolean {
+export function isGateSkipped(info: GitCommitInfo, isAgentCommit: boolean): boolean {
   try {
     if (!isAgentCommit) return false;
     if (process.env[COMMIT_HOOK_ENV] === 'post-merge') return false;
     if (!hasCommitGateSnippet(info.cwd)) return false;
     const gateTree = (process.env[GATE_TREE_ENV] ?? '').trim();
-    if (gateTree === '' || info.tree === null || info.tree === gateTree) return false;
+    if (info.tree === null || info.tree === gateTree) return false;
     if (process.env[CHERRY_PICK_ENV] === '1' || process.env[REBASE_ENV] === '1') return false;
     if (info.message.startsWith('Revert "') && info.message.includes('This reverts commit')) return false;
     return true;
