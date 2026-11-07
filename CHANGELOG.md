@@ -79,7 +79,9 @@ classifications live in a new user-level `~/.cgraphx/sessions.db`
 (mode 0600) that does not follow a project's data: `project remove`
 records the removal and later ingests only pick up facts from after it,
 and `project name` clears the remembered start directories so they are
-reclassified. The three session-start notices (skill version, auto-memory
+reclassified. A start directory that is not an absolute path on this
+machine (a `D:\...` path in a session file read on macOS) belongs to no
+project. The three session-start notices (skill version, auto-memory
 direction, git hook repair) now print with the first cgraphx command of
 a session, on stderr, once per session (or once per project per day
 outside a session).
