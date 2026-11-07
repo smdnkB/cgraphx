@@ -20,11 +20,13 @@ import type { AgentTarget, Location } from './targets/types';
 import {
   anyAgentInstalled,
   installAgentHooks,
+  installedTargets,
   installedTargetsOrDefault,
   installAgentTargets,
   selectInstallTargets,
   tildify,
   uninstallAgentHooks,
+  unselectedInstalledTargets,
 } from './agent-steps';
 import {
   removeLocalDir,
@@ -89,6 +91,8 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   const location: Location = 'local';
 
   // Step 1:安装对象(spec §4.1)。一个都不选 → 跳过 agent 配置写入,仍初始化 .cgraphx/。
+  //   已装名单要在选、装之前算(spec:2026-11-07-安装只留选中的agent D1),没选的已装 agent 在 ①.1 卸掉。
+  const installedBefore = installedTargets(process.cwd());
   const targets = await selectInstallTargets(clack, opts, useDefaults, location);
 
   // Step 2: install the cgraphx npm package on PATH (only when NOT already
@@ -137,6 +141,14 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   //   ⑧ db-query 模板。
   // ① 逐 agent 写配置;单个 agent 失败只 warn,继续其他 agent 与后续步骤。
   installAgentTargets(clack, targets, location);
+
+  // ①.1 选了哪些就只留哪些(spec:2026-11-07-安装只留选中的agent F1、D3):原来已装、这次没选的,卸掉它的
+  //   cgraphx 配置——和 `uninstall -t <它>` 同一个函数,只删 cgraphx 自带的文件;每家一行,不逐个列文件。
+  for (const r of uninstallTargets(unselectedInstalledTargets(installedBefore, targets, opts.target), location)) {
+    if (r.status === 'removed') {
+      clack.log.success(`${r.displayName}:没选,已卸掉 cgraphx 配置(你自己的文件留着)`);
+    }
+  }
 
   // ①.5 提交门禁片段(spec:2026-11-06-会话文件解析替代hooks D18、F5 ②③):install 选了 agent 就装、
   //     不看「可选子系统」勾选——门禁管的是 agent 的提交,不随 Developer Timeline 勾选走。片段没写入

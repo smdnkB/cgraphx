@@ -12,6 +12,7 @@ import { hookNotice, type HookSnippetResult } from '../../core/git-hooks';
 import {
   defaultAgentProfile,
   isAgentInstalled,
+  parseAgentList,
   selectInstalledAgents,
   type AgentProfile,
 } from '../../core/agents';
@@ -47,6 +48,27 @@ export function installedTargetsOrDefault(projectRoot: string): AgentTarget[] {
   return selectInstalledAgents(projectRoot).map(targetOf);
 }
 
+/**
+ * 这个项目里已装 cgraphx 的 agent,不带「都没装取 claude-code」的兜底(spec:2026-11-07-安装只留选中的agent
+ * D1)。要在选 agent、装配置之前算,装完就分不出原来装没装。
+ */
+export function installedTargets(projectRoot: string): AgentTarget[] {
+  return ALL_TARGETS.filter((t) => isAgentInstalled(projectRoot, t.profile));
+}
+
+/**
+ * 这次安装没选、但原来已装的 agent:要卸掉它的 cgraphx 配置(spec:2026-11-07-安装只留选中的agent K1、D2)。
+ * `-t none` 不动任何 agent 配置 → 空;`-y` 不带 `-t` 时选中的就是全部已装 → 自然为空。
+ */
+export function unselectedInstalledTargets(
+  installed: readonly AgentTarget[],
+  selected: readonly AgentTarget[],
+  targetFlag: string | undefined,
+): AgentTarget[] {
+  if (targetFlag !== undefined && parseAgentList(targetFlag) === 'none') return [];
+  return installed.filter((t) => !selected.some((s) => s.id === t.id));
+}
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -56,6 +78,7 @@ function errorMessage(err: unknown): string {
  *   - 给了 `-t`(不论是否 `-y`)→ 按参数解析;
  *   - 无 `-t` 但 `-y`(upgrade 走这条)→ 全部「已装」的 agent,都没装过时只装 claude-code;
  *   - 交互 → 多选列出全部 agent,默认勾选「检测到」的,都没检测到时勾选 claude-code;可一个都不选。
+ * 选中的就是这次之后留下的全部:原来已装、这次没选的由调用方卸掉(unselectedInstalledTargets)。
  */
 export async function selectInstallTargets(
   clack: Clack,
@@ -69,7 +92,7 @@ export async function selectInstallTargets(
 
   const detected = ALL_TARGETS.filter((t) => t.detect(location).detected).map((t) => t.id);
   const sel = await clack.multiselect({
-    message: '选择要安装 cgraphx 的 agent(回车确认)',
+    message: '选择要安装 cgraphx 的 agent(回车确认;已装的没勾会卸掉它的 cgraphx 配置)',
     options: ALL_TARGETS.map((t) => ({ value: t.id, label: t.displayName })),
     initialValues: detected.length > 0 ? detected : [defaultAgentProfile().id],
     required: false,
