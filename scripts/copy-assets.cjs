@@ -11,6 +11,7 @@
  *
  *   src/core/markdown/schema.sql  → dist/core/markdown/schema.sql
  *   src/core/timeline/schema.sql  → dist/core/timeline/schema.sql
+ *   src/core/board/page.html      → dist/core/board/page.html
  *   assets/claude-template/**     → dist/.claude-template/**
  *
  * What it does NOT copy:
@@ -62,6 +63,13 @@ copyFile(
   path.join(dist, 'core/timeline/schema.sql')
 );
 
+// 看板页面(board 子系统):服务启动时经 __dirname 相对路径读取(server.ts),与上面的 schema
+// 同理要 dist 镜像 src 布局;tsc 不产出 HTML,漏登记 = 装到用户机器上启动报「看板页面缺失」。
+copyFile(
+  path.join(root, 'src/core/board/page.html'),
+  path.join(dist, 'core/board/page.html')
+);
+
 // 2) Claude skill/agent/hooks template — walked recursively.
 const tmplSrc = path.join(root, 'assets/claude-template');
 const tmplDest = path.join(dist, '.claude-template');
@@ -72,4 +80,4 @@ if (fs.existsSync(tmplSrc)) {
   walk(tmplSrc, tmplDest);
 }
 
-console.log('copy-assets: schemas + .claude-template copied into dist/');
+console.log('copy-assets: schemas + board page + .claude-template copied into dist/');
