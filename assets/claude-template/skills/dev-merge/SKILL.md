@@ -9,7 +9,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
 - 副本里做的需求回主目录只走这一条路:冲突在副本里解决,主目录的分支上只有干净的合入。
 - 合进主目录当前所在的分支:开了版本是 dev/<版本号>,没开是 main。跨版本没做完的副本留着,下个版本开了照样 /dev-merge——同步取的、合入的都是主目录那时所在的分支。
-- 主目录在 main 上、却按版本走过还没退出(本地 git 配置 `cgraphx.releaseFlow` 为 true:发完版还没跑 /release-start)→ 合入前先停下问,不直接合进 main。
+- 主目录在 main 上、版本却还没发(本地 git 配置 `cgraphx.releaseFlow` 为 true,且有没合进 main 的版本分支)→ 合入前先停下问,不直接合进 main。版本发完时 /release-review 已退出版本流程,之后在 main 上照默认流程合入,不问。
 - 三种用法:在副本里输入 /dev-merge(同步);在主目录输入 /dev-merge <需求>(合入);在主目录说「删副本 <需求>」(删)。
 - 说法:**主干** = `main`,没有 main、有 master 时用 master;**版本分支** = 名字是 `dev/数字.数字.数字` 的分支(`^dev/[0-9]+\.[0-9]+\.[0-9]+$`);**开了版本** = 主目录当前分支是版本分支;**在副本里** = 项目根下 `.cgraphx/shared` 是符号链接;**版本起点** = 版本分支第一父链上最早一个不在主干里的提交的第一个父提交(没有这样的提交就是版本分支的最新提交),主干合进过版本分支也不变:
 
@@ -63,15 +63,22 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
 1. **找到副本**:`cgraphx replica list --json`,按副本目录名(`name`)、feature-id(`featureId`)或标题(featureId 去掉日期段)找。找不到 → 停下,列出在用的副本,问合哪个;`state` 是 `missing` → 停下:「cgraphx@订单导出 已不在;需求分支还在的话,先 /dev-start 订单导出 接上再合」;`merged` 是 true → 停下「已经合入过了,副本里没有新的提交」(合入后只同步过也算,不造空的「第 2 次」);`merged` 是 false、`ahead` 是 0 → 停下「cgraphx@订单导出 还没有提交,没有可合入的」;`merged` 是 null(git 判断不了)→ 说一句判断不了合没合入,照常往下走。
 
-2. **主干上开过版本**:当前分支是主干,且 `git config --local --get cgraphx.releaseFlow` 输出 `true` → 停下问:
+2. **版本没发完却在主干上**:当前分支是主干,且 `git config --local --get cgraphx.releaseFlow` 输出 `true` → 找还没合进主干的版本分支:
 
-   ```text
-   刚发完版,还没开下个版本。要合进下个版本,先跑 /release-start;这次直接合进 main,说「合进 main」;以后都不按版本走,说「不再按版本走」
+   ```bash
+   git branch --list 'dev/*' --format='%(refname:short)' | grep -E '^dev/[0-9]+\.[0-9]+\.[0-9]+$' | while read -r b; do git merge-base --is-ancestor "$b" main || echo "$b"; done    # → dev/2.0.11
    ```
 
-   - 「合进 main」→ 这次照常往下合进 main,下次在 main 上还会问
-   - 「不再按版本走」→ `cgraphx release guard --remove --json`(卸掉提交拦截,清掉两个记号),回一句「已退出版本流程,以后在 main 上 /dev-merge 不再问」;`status` 是 `unsupported`(拦截那几行是提交在仓库里的,没删)→ 再把 `notice` 原样转告。然后照没开版本的用法往下合
-   - 要先开版本 → 停下,提示跑完 /release-start 再 /dev-merge 订单导出
+   - 没有输出(版本都发完了,记号是旧版 cgraphx 发版后留下的)→ `cgraphx release guard --remove --json`,说一句「上个版本已发完,版本流程已退出」,照常往下合进 main
+   - 有输出 → 停下问:
+
+     ```text
+     2.0.11 还在按版本开发(dev/2.0.11 还没发),主目录却在 main 上。要合进 2.0.11,先把主目录切到 dev/2.0.11 再 /dev-merge 订单导出;这次直接合进 main,说「合进 main」;这个版本不按版本走了,说「不再按版本走」
+     ```
+
+     - 「合进 main」→ 这次照常往下合进 main,下次在 main 上还会问
+     - 「不再按版本走」→ `cgraphx release guard --remove --json`(卸掉提交拦截,清掉两个记号),回一句「已退出版本流程,dev/2.0.11 留着」;`status` 是 `unsupported`(拦截那几行是提交在仓库里的,没删)→ 再把 `notice` 原样转告。然后照没开版本的用法往下合
+     - 要合进版本分支 → 停下,提示切到 dev/2.0.11 再 /dev-merge 订单导出
 
 3. **主目录干净**:`git -c core.quotePath=false status --porcelain --untracked-files=no` 有输出 → 停下,列出文件,提示先提交或收好(没被跟踪的新文件不拦)。
 
@@ -287,7 +294,7 @@ $ cgraphx replica remove cgraphx@订单导出 --json
 | 主目录:副本已不在 | 停下,提示需求分支还在的话先 `/dev-start <需求>` 接上再合 |
 | 主目录:已经合入没有新提交、还没有提交 | 停下,说明情况 |
 | 主目录没有 `refs/heads/<需求分支>` | 停下,提示核对分支是不是被改名或删掉了 |
-| 主目录:在主干上,`cgraphx.releaseFlow` 为 true | 停下问:先 /release-start、这次合进 main、还是不再按版本走 |
+| 主目录:在主干上,`cgraphx.releaseFlow` 为 true,还有没合进主干的版本分支 | 停下问:切到版本分支再合、这次合进 main、还是不再按版本走;版本分支都已合进主干 → 清掉记号,照常合进 main |
 | 主目录:有改了没提交的已跟踪文件 | 停下,提示先提交或收好 |
 | 主目录:副本里有没提交的改动 | 停下,提示先在副本里提交 |
 | 主目录:预演有冲突 | 分支不动,列出冲突文件和撞上的需求,提示到副本里同步 |

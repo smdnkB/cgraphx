@@ -35,7 +35,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | **项目级 · 每项目一次** | `cgraphx install`(建本地 `.cgraphx/` 与用户目录里这个项目的数据目录、并进原来的旧数据 + 部署 skills/commands 到 `.claude/` + 接 context-monitor/statusLine + 装 git 钩子:提交记录片段与提交门禁)、`/init-tech-stack`(新项目先定技术栈,产出 ADR)、`/init-guides`(立项目规范)、`/init-knowledge`(接手陌生项目时建业务知识库)、`/knowledge-migrate`(用过 Claude Code 自动记忆的,每人跑一次:迁进项目,再关掉自动记忆) |
 | **日常做需求 · 必经两步** | `/dev-clarify` 澄清(有分歧的口径先拍板,再把功能点提案写进讨论稿,人审稿式改稿,终确认的就是《需求功能方案》),然后 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完,最后 `/code-review` |
 | **日常做需求 · 复杂按需** | `/dev-wireframe`(涉及界面时画线框)、`/dev-spec`(写技术规格)、`/dev-plan`(大需求拆执行计划)、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
-| **版本发布 · 可选** | `/release-start` 开版本 → 每个需求 `/dev-start` 开副本 → `/dev-merge` 合入 → `/release-review` 审核并合入主干;副本单独也能用 |
+| **版本发布 · 可选** | `/release-start` 开版本 → 每个需求 `/dev-start` 开副本 → `/dev-merge` 合入 → `/release-review` 审核、合入主干、打 tag,发完就退出版本流程;副本单独也能用 |
 | **测试按需 · 三条线** | 接口:`/api-case` → `/api-run`;单元:`/unit-spec` → `/unit-code`;UI:`/ui-case` → `/ui-run` |
 | **安全审计按需** | `/audit-login-security`(登录/认证安全审计:枚举全部认证入口 + 画认证链路,查绕过、越权、凭据、会话、爆破;只报告不修代码,默认不落盘) |
 | **收尾按需** | `/dev-end`(写收口档案,已上线时写发布记录)、`/doc-backfill`(老需求补头部、补单测产物和收口档案) |
@@ -58,7 +58,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/dev-impl-subagent` | 大需求按 plan 执行:一个会话按任务派子 agent,主会话提交、统一验证和修复,最后提示 `/code-review` |
 | `/dev-migrate` | 换技术栈重写整个系统(如 MyBatis → JPA):旧系统当标准答案,盘点行为清单、定目标与表映射,按切片走主链,每片新旧对拍 + 数据对账,最后出切换清单 |
 | `/init-tech-stack` | 新项目起步选型:按 12 层决策树逐层给推荐与优劣,产出 `docs/adr/` 技术栈选型 ADR;系统迁移时由 `/dev-migrate` 提示用户跑 |
-| `/release-start` | 发完一个版本、要按版本开发下一个时,在主干上打上个版本的 tag `v<版本号>`、拉出版本分支 `dev/<下个版本号>` 并装上提交拦截(版本分支上只收合并提交和 `chore(release):` 开头的整版改动) |
+| `/release-start` | 要按版本开发下一个版本时,在主干上拉出版本分支 `dev/<下个版本号>` 并装上提交拦截(版本分支上只收合并提交和 `chore(release):` 开头的整版改动);不跑就照默认流程在主干上开发 |
 | `/dev-start` | 开始做一个需求时(开了版本时每个需求都要),在主目录旁边开出 worktree 副本 `<主目录名>@<文件前缀>`(只带 agent 配置和 `.worktreeinclude` 清单里写的文件,依赖默认不带,第一次要在副本里安装/构建)、拉好需求分支、建好需求目录,给出到副本开新会话的启动语;副本里的会话和提交和主目录记进同一个项目的数据 |
 | `/dev-merge` | 副本里的需求做完、`/code-review` 过了:副本里跑,先同步主目录当前分支、就地解决冲突;主目录里跑 `/dev-merge <需求>`,预演没冲突就以「合入需求：<标题>」合入当前分支 |
 | `/release-review` | 发版那天、改好版本号之后,出发版审核报告 `docs/releases/v<版本号>-发版审核.md` 并提交;你说「发」再合入主干,列出可以清理的副本 |
