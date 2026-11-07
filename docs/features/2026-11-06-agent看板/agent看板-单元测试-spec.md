@@ -26,7 +26,7 @@
 
 - A5 尾部不完整的帧留到下次:砍掉尾帧末尾若干字节,consumedBytes 不越过它;补齐后下趟读出(依据: 验收 3、D13)
 - A6 增量趟挂起的工具调用(轮次边界后无结果)留到下次:consumedBytes 收回其所在帧,重读配对(依据: D13 与 claude/codebuddy 同口径)
-- A7 `DSH_HOME` 设了以它为根,未设用家目录拼 `.dsh/sessions`(依据: D13、C-1)
+- A7 `DSH_HOME` 设了读 `$DSH_HOME/sessions`(它指 `~/.dsh` 这一层),未设用家目录拼 `.dsh/sessions`(依据: D13、C-1)
 - A8 不认识的行类型跳过不算错误,不产事实(依据: D13)
 
 异常:

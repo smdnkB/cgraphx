@@ -86,7 +86,10 @@ export function listSessionFiles(sessionsRoot: string): string[] {
  *  (timeline 的读取器)共用这一份——只在这里改,别处不会漂移。 */
 export const DEEPSEEK_SESSION_FILENAME = 'session.v4.jsonl.zstd';
 
-/** DeepSeek 家目录环境变量(设了且非空以它为根,否则家目录);会话在 `<根>/.dsh/sessions/`。 */
+/**
+ * DeepSeek 家目录环境变量:和 DeepSeek 自己的约定一致,它指的就是 `~/.dsh` 这一层。设了且非空 →
+ * 会话在 `$DSH_HOME/sessions/`;没设 → `~/.dsh/sessions/`。
+ */
 const DEEPSEEK_HOME_ENV = 'DSH_HOME';
 
 /**
@@ -130,7 +133,7 @@ const DEEPSEEK_SOURCE: SessionSource = {
   displayName: 'DeepSeek',
   sessionsRoot: () => {
     const override = process.env[DEEPSEEK_HOME_ENV]?.trim();
-    return path.join(override ? override : os.homedir(), '.dsh', 'sessions');
+    return override ? path.join(override, 'sessions') : path.join(os.homedir(), '.dsh', 'sessions');
   },
   listFiles: listDeepSeekSessionFiles,
   sessionReader: 'deepseek-session',

@@ -129,9 +129,10 @@ class RunningBoardServer implements BoardServer {
     } else if (req.method === 'GET' && url.pathname === '/api/board') {
       this.sendJson(res, 200, this.current);
     } else if (req.method === 'POST' && url.pathname === '/api/refresh') {
-      // Origin 头存在才校验:同源 fetch 会带,非浏览器客户端(如 curl)没有不算失败。
+      // 刷新会补录、写库:Origin 必须是看板自己的地址(页面里的刷新是同源 POST,浏览器一定带);
+      // 没带也不放行(spec D2)。localhost 和 Host 校验一样算本机。
       const origin = req.headers.origin;
-      if (origin !== undefined && origin !== `http://127.0.0.1:${this.port}`) {
+      if (origin !== `http://127.0.0.1:${this.port}` && origin !== `http://localhost:${this.port}`) {
         this.forbidden(res);
         return;
       }

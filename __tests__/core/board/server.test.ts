@@ -68,7 +68,7 @@ describe('createBoardServer (spec D2, D3; acceptance #1)', () => {
     expect(board.status).toBe(200);
     expect(JSON.parse(board.body)).toEqual({ projects: [] });
 
-    const refresh = await request(port, 'POST', `/api/refresh?t=${token}`);
+    const refresh = await request(port, 'POST', `/api/refresh?t=${token}`, { Origin: `http://127.0.0.1:${port}` });
     expect(refresh.status).toBe(200);
     expect(JSON.parse(refresh.body).projects[0]?.name).toBe('after-refresh');
     // 刷新成功后 GET 拿到新数据
@@ -90,6 +90,16 @@ describe('createBoardServer (spec D2, D3; acceptance #1)', () => {
     expect((await request(port, 'GET', `/unknown?t=${token}`)).status).toBe(404); // 其余 404,无路径参数
   });
 
+  it('E2b: refresh without an Origin header → 403; the localhost origin of the same port → 200 (spec D2)', async () => {
+    expect((await request(port, 'POST', `/api/refresh?t=${token}`)).status).toBe(403);
+    expect(
+      (await request(port, 'POST', `/api/refresh?t=${token}`, { Origin: `http://localhost:${port + 1}` })).status,
+    ).toBe(403); // 端口不对
+    expect(
+      (await request(port, 'POST', `/api/refresh?t=${token}`, { Origin: `http://localhost:${port}` })).status,
+    ).toBe(200);
+  });
+
   it('E3: concurrent refresh → 409 while the first one is running; GET keeps serving old data (spec D3)', async () => {
     let release: (() => void) | null = null;
     const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -102,9 +112,10 @@ describe('createBoardServer (spec D2, D3; acceptance #1)', () => {
     const slowPort = Number(url.port);
     const slowToken = url.searchParams.get('t') ?? '';
     try {
-      const first = request(slowPort, 'POST', `/api/refresh?t=${slowToken}`);
+      const origin = { Origin: `http://127.0.0.1:${slowPort}` };
+      const first = request(slowPort, 'POST', `/api/refresh?t=${slowToken}`, origin);
       await new Promise((r) => setTimeout(r, 50)); // 让第一个请求先进刷新中
-      const second = await request(slowPort, 'POST', `/api/refresh?t=${slowToken}`);
+      const second = await request(slowPort, 'POST', `/api/refresh?t=${slowToken}`, origin);
       expect(second.status).toBe(409);
       const board = await request(slowPort, 'GET', `/api/board?t=${slowToken}`);
       expect(board.status).toBe(200); // 刷新期间 GET 照常
