@@ -9,7 +9,9 @@
  *   2. 项目库 timeline_meta 已有 rebuilt_at(等锁期间别的进程刚重建完)→ 不再重建
  *   3. removed_projects 有这个项目(K3 删过数据)→ 只写 rebuilt_at、不全量解析——旧会话不补回,
  *      之后的增量只收删除之后的事实
- *   4. 全量解析这个项目的会话文件(归属判定与事实映射复用 ingest.ts 同一套函数,路径升序:主文件先于
+ *   4. 全量解析这个项目的会话文件(经 agents 门面的 listSessionSources() 枚举各来源——claude-code、
+ *      codebuddy、deepseek,读不了的来源跳过、提示由随后的增量补一趟;归属判定与事实映射复用
+ *      ingest.ts 同一套函数,路径升序:主文件先于
  *      subagents/,session_head 先到先得),事件写进项目数据目录下的临时库 rebuild.tmp.db(先删残留再建,
  *      应用 timeline schema)。sessions.db 里已记到别的项目、偏移又大于 0 的文件不从头读(交给增量,
  *      免得改名后新项目把旧历史再解析一遍)。解析期间不碰项目库——「整个解析放一个事务」是 spec 明确
@@ -28,7 +30,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { agentSessionsRoot, listAgentProfiles, type AgentProfile } from '../../agents';
+import { listSessionSources, type SessionSource } from '../../agents';
 import { findProjectRoot, locateDataAtRoot } from '../../data-location';
 import { DatabaseConnection, DATABASE_FILENAME, type SqliteDatabase } from '../../db';
 import { listReplicas } from '../../replica';
@@ -44,7 +46,7 @@ import {
   mapFacts,
   noteUnparsed,
   releaseIngestLock,
-  sessionFileId,
+  rowSessionId,
   statOrNull,
   subagentMainPath,
   unparsedNotices,
@@ -55,7 +57,7 @@ import {
   type FileStat,
   type UnparsedMap,
 } from './ingest';
-import { listSessionFiles, sessionFactsReader } from './reader';
+import { sessionFactsReader } from './reader';
 import type { SessionFact, SessionFileReadResult } from './types';
 
 /** 重建结果;rebuildTimeline 返回 null 表示不用重建(已重建过 / 这个目录没有项目库)。 */
@@ -92,10 +94,10 @@ const TURNS_DIRNAME = 'turns';
 /** 全量解析进临时库后要推进的进度(项目库提交之后才写 sessions.db,D4)。 */
 interface ParsedFileRow {
   file: string;
-  profile: AgentProfile;
+  source: SessionSource;
   stat: FileStat;
-  /** 会话编号(主文件是文件名;subagents/ 下的文件跟主会话,ingest.ts 同款认法)。 */
-  sessionId: string;
+  /** 会话编号(claude/codebuddy 按路径规则;deepseek 记事实所属的主会话,ingest.ts 同款认法)。 */
+  sessionId: string | null;
   startCwd: string;
   consumedBytes: number;
 }
@@ -173,7 +175,7 @@ function knownStartCwd(
 /** 一文件的事实写进临时库(同增量 writeFacts 的落库部分,但不推进进度——进度等项目库提交之后统一写)。 */
 function writeParsedFacts(
   file: string,
-  profile: AgentProfile,
+  source: SessionSource,
   stat: FileStat,
   result: SessionFileReadResult,
   startCwd: string,
@@ -182,7 +184,7 @@ function writeParsedFacts(
   mapCtx: FactMappingContext,
   unparsed: UnparsedMap,
 ): void {
-  const events = mapFacts(result.facts, profile, startCwd, mapCtx);
+  const events = mapFacts(result.facts, source, startCwd, mapCtx);
   if (events.length > 0) {
     const store = new TimelineStore(tmpDb);
     tmpDb.transaction(() => {
@@ -190,14 +192,14 @@ function writeParsedFacts(
       upsertRoot(tmpDb, cls.root, events);
     })();
   }
-  noteUnparsed(unparsed, file, profile, stat, result, true); // 全量读,fullRead 恒真
+  noteUnparsed(unparsed, file, source, stat, result, true); // 全量读,fullRead 恒真
 }
 
 /** 推进这个项目一个文件的进度(偏移到本次读到的地方,不取文件当前大小,见头注释第 6 步)。 */
 function saveParsedRow(sessionIndex: SessionIndex, row: ParsedFileRow, projectDirName: string): void {
   sessionIndex.saveSessionFile({
     path: row.file,
-    agent: row.profile.id,
+    agent: row.source.id,
     session_id: row.sessionId,
     start_cwd: row.startCwd,
     project_dir: projectDirName,
@@ -332,10 +334,12 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
     const parsedRows: ParsedFileRow[] = [];
     const parsedStartCwd = new Map<string, string>();
 
-    for (const profile of listAgentProfiles()) {
-      const agentRoot = agentSessionsRoot(profile);
-      if (agentRoot === null) continue;
-      for (const file of listSessionFiles(agentRoot)) {
+    for (const source of listSessionSources()) {
+      const sourceRoot = source.sessionsRoot();
+      if (sourceRoot === null) continue;
+      // 读不了的来源(如 Node 没有 zstd API 的 deepseek)不解析;提示由紧随其后的增量那一趟加(D12)
+      if (source.unavailableReason() !== null) continue;
+      for (const file of source.listFiles(sourceRoot)) {
         const stat = statOrNull(file);
         if (stat === null) continue; // 文件没了(F1 ⑤):已记进时间线的留着
         // 循环开头取一次,后面判断跳过与 knownStartCwd 共用(同一个文件不查两遍 sessions.db)
@@ -353,7 +357,7 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
         let startCwd = knownStartCwd(file, recorded, sessionIndex, parsedStartCwd);
         let result: SessionFileReadResult | null = null;
         if (startCwd === null) {
-          result = await sessionFactsReader(profile.sessionReader)(file, 0);
+          result = await sessionFactsReader(source.sessionReader)(file, 0);
           const head = firstSessionHead(result.facts);
           if (head === null) continue; // 一条带 cwd 的行都没有:留给增量按它的口径记空行
           startCwd = head.startCwd;
@@ -361,13 +365,13 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
         parsedStartCwd.set(file, startCwd);
         const cls = classifyStartDir(startCwd, classifyCtx);
         if (cls.dirName !== classifyCtx.currentDirName) continue; // 别的项目的 / 没认出来的:不动,别家自己补
-        if (result === null) result = await sessionFactsReader(profile.sessionReader)(file, 0); // 全量:一律从头读
-        writeParsedFacts(file, profile, stat, result, startCwd, cls, tmpDb, mapCtx, unparsed);
+        if (result === null) result = await sessionFactsReader(source.sessionReader)(file, 0); // 全量:一律从头读
+        writeParsedFacts(file, source, stat, result, startCwd, cls, tmpDb, mapCtx, unparsed);
         parsedRows.push({
           file,
-          profile,
+          source,
           stat,
-          sessionId: sessionFileId(file),
+          sessionId: rowSessionId(source, file, result.facts, recorded?.session_id ?? null),
           startCwd,
           consumedBytes: result.consumedBytes,
         });

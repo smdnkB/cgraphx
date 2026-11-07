@@ -5,7 +5,7 @@
  * (user prompts, tool calls, commits), not code-graph nodes. See spec §0.1.
  */
 
-import type { AgentId } from '../agents';
+import type { SessionSourceId } from '../agents';
 
 export type EventType =
   | 'user_prompt'
@@ -34,8 +34,8 @@ export interface TimelineEventInput {
   turn_id?: string | null;
   commit_insertions?: number | null;
   commit_deletions?: number | null;
-  /** 来源 agent;git_commit 未归属会话时为 null。 */
-  agent?: AgentId | null;
+  /** 来源 agent(已登记 agent 或只读会话来源如 deepseek);git_commit 未归属会话时为 null。 */
+  agent?: SessionSourceId | null;
   /**
    * 去重键(spec:2026-11-06-会话文件解析替代hooks D5):解析补录的事件按它 INSERT OR IGNORE,
    * 重读同一事实不多记;hook 路径与 git_commit 不带(部分唯一索引只盖非空行,行为不变)。
@@ -61,8 +61,8 @@ export interface TimelineEvent {
   turn_id: string | null;
   commit_insertions: number | null;
   commit_deletions: number | null;
-  /** 来源 agent;旧事件可能为 null(按默认 agent 处理)。 */
-  agent?: AgentId | null;
+  /** 来源 agent(含只读来源如 deepseek);旧事件可能为 null(按默认 agent 处理)。 */
+  agent?: SessionSourceId | null;
 }
 
 export interface TimelineQueryFilter {
