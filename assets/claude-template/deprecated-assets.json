@@ -42,7 +42,7 @@
     "skills/iboc-check",
     "skills/visual-explain",
     "skills/dev-handoff",
-    "agents/task-history",
+    "agents/task-history.md",
     "commands/end.md",
     "hooks/precommit-check"
   ]

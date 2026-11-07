@@ -210,3 +210,29 @@ describe('cleanDeprecatedAssets(升级清理已废弃资产)', () => {
     expect(fs.existsSync(path.join(claudeDir, 'skills', 'user-custom', 'SKILL.md'))).toBe(true);
   });
 });
+
+describe('cleanDeprecatedAssets with the shipped deprecated-assets.json', () => {
+  let claudeDir: string;
+  const shippedTemplate = path.join(__dirname, '..', '..', '..', 'assets', 'claude-template');
+
+  beforeEach(() => {
+    claudeDir = tmpDir('cg-claude-shipped-');
+  });
+  afterEach(() => {
+    fs.rmSync(claudeDir, { recursive: true, force: true });
+  });
+
+  it('removes the task-history agent file and the dev-handoff skill deployed by 2.0.13', () => {
+    fs.mkdirSync(path.join(claudeDir, 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'agents', 'task-history.md'), 'old agent');
+    fs.writeFileSync(path.join(claudeDir, 'agents', 'knowledge-recall.md'), 'current agent');
+    fs.mkdirSync(path.join(claudeDir, 'skills', 'dev-handoff'), { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'skills', 'dev-handoff', 'SKILL.md'), 'old skill');
+
+    cleanDeprecatedAssets(claudeDir, shippedTemplate);
+
+    expect(fs.existsSync(path.join(claudeDir, 'agents', 'task-history.md'))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, 'skills', 'dev-handoff'))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, 'agents', 'knowledge-recall.md'))).toBe(true);
+  });
+});

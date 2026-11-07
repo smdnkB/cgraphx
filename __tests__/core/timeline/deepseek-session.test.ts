@@ -176,13 +176,13 @@ describe('readDeepSeekSessionFacts (spec D13)', () => {
     expect(second.facts.filter((f) => f.kind === 'tool')).toHaveLength(1);
   });
 
-  it('A7: deepseek source root honors DSH_HOME (agents/sources)', () => {
+  it('A7: DSH_HOME is the .dsh directory itself, as DeepSeek defines it (agents/sources)', () => {
     const deepseek = listSessionSources().find((s) => s.id === 'deepseek');
     expect(deepseek).toBeDefined();
     const prev = process.env.DSH_HOME;
     try {
       process.env.DSH_HOME = path.join(root, 'dsh-home');
-      expect(deepseek?.sessionsRoot()).toBe(path.join(root, 'dsh-home', '.dsh', 'sessions'));
+      expect(deepseek?.sessionsRoot()).toBe(path.join(root, 'dsh-home', 'sessions'));
       delete process.env.DSH_HOME;
       expect(deepseek?.sessionsRoot()).toBe(path.join(os.homedir(), '.dsh', 'sessions'));
     } finally {

@@ -238,13 +238,15 @@ function writePassMark(cwd: string): void {
  * 收进变量、只有退出码 3 才回显打回原文并 exit 1(command not found、旧版报未知命令、任何异常都
  * 放行)。命令替换后接 `|| 赋值`:钩子是 `#!/bin/sh -e` 这类写法时命令失败不会让整个钩子提前
  * 退出,同现有片段;会话变量探针带 `:-` 默认值,`set -u` 下也不炸。没有任何已登记变量时探针串
- * 为空,`[ -n "" ]` 恒假,node 永远不起。每行带 marker,重装按 marker 先删旧行(基础层负责)。
+ * 为空,`[ -n "" ]` 恒假,node 永远不起。每行带 marker,重装按 marker 先删旧行(基础层负责)——
+ * 所以一行片段里不能有真的换行:shell 里的 `\n` 要写成 `\\n`,否则拆成两行、只有后一行带 marker,
+ * 重装删不掉前一行,留下半句 shell,钩子语法错误、每次提交都失败。
  */
 function commitGateSnippetLines(sessionVars: readonly string[]): string[] {
   const probe = sessionVars.map((name) => `\${${name}:-}`).join('');
   return [
     `${COMMIT_GATE_MARKER} — agent 提交的门禁(版本分支拦截 + 产物检查 + 提交说明自查);没有任何会话变量时不起 node`,
-    `if [ -n "${probe}" ]; then __cgx_gate=0; __cgx_msg=$(cgraphx ${COMMIT_GATE_HOOK_COMMAND} "$1" 2>&1) || __cgx_gate=$?; if [ "$__cgx_gate" -eq 3 ]; then printf '%s\n' "$__cgx_msg" >&2; exit 1; fi; fi ${COMMIT_GATE_MARKER}`,
+    `if [ -n "${probe}" ]; then __cgx_gate=0; __cgx_msg=$(cgraphx ${COMMIT_GATE_HOOK_COMMAND} "$1" 2>&1) || __cgx_gate=$?; if [ "$__cgx_gate" -eq 3 ]; then printf '%s\\n' "$__cgx_msg" >&2; exit 1; fi; fi ${COMMIT_GATE_MARKER}`,
   ];
 }
 
