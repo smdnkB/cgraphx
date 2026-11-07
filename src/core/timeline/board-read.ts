@@ -25,10 +25,12 @@ import type { BoardTimelineData } from './types';
 const TITLES_TABLE = 'timeline_session_titles';
 
 /** json 文本列安全取键:列不是合法 JSON(旧数据、截断行)时按 NULL;多个键按顺序 coalesce
- *  (NotebookEdit 的参数键是 notebook_path,与 post-tool-summary 同款兜底)。 */
+ *  (NotebookEdit 的参数键是 notebook_path,与 post-tool-summary 同款兜底)。单键不包 coalesce
+ *  ——SQLite 的 coalesce 要求至少两个参数。 */
 function jsonExtract(col: string, ...keys: string[]): string {
-  const extracts = keys.map((k) => `json_extract(${col}, '${k}')`).join(', ');
-  return `CASE WHEN json_valid(${col}) THEN coalesce(${extracts}) ELSE NULL END`;
+  const extracts = keys.map((k) => `json_extract(${col}, '${k}')`);
+  const value = extracts.length > 1 ? `coalesce(${extracts.join(', ')})` : (extracts[0] ?? 'NULL');
+  return `CASE WHEN json_valid(${col}) THEN ${value} ELSE NULL END`;
 }
 
 /** 表有没有这一列(PRAGMA,不扫表;未应用 schema 的旧库可能缺 agent 列)。 */
