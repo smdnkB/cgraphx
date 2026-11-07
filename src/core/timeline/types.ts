@@ -123,3 +123,57 @@ export interface TimelineMerger {
   mergeTail(afterId: number, attributionRoots: readonly string[]): void;
   stats(): TimelineMergeStats;
 }
+
+// ─── 看板只读查询(2026-11-06-agent看板 D14;plan C-5)────────────────────────
+
+/** 看板要用的一个会话头:session_start 事件(session_id、agent、cwd、ts)。 */
+export interface BoardSessionHead {
+  /** 会话编号(session_id;deepseek 是主会话编号) */
+  id: string;
+  /** 来源 id(SessionSourceId;旧事件可能为 null 已在读取侧兜底) */
+  agent: string;
+  /** 会话开始目录(session_start 的 cwd) */
+  startCwd: string;
+  ts: string;
+}
+
+/** 看板要用的提问:user_prompt 事件的 ts、session_id、prompt_text。 */
+export interface BoardPrompt {
+  ts: string;
+  sessionId: string;
+  text: string;
+}
+
+/** 看板要用的提交:commit_files 已在读取侧解析成路径数组;branch 取 metadata 的 $.branch。 */
+export interface BoardCommit {
+  ts: string;
+  /** DeepSeek 的提交、早就记下的提交没有会话编号 → null(认不到会话上) */
+  sessionId: string | null;
+  files: string[];
+  branch: string | null;
+}
+
+/** 看板要用的工具事件:写 / 读 / Skill 六种;Bash 不取(K11 天然成立)。 */
+export interface BoardToolEvent {
+  ts: string;
+  sessionId: string;
+  tool: string;
+  /** tool_args 的 $.file_path;取不出为 null */
+  filePath: string | null;
+  /** 仅 Skill:tool_args 的 $.args;其余为 null */
+  args: string | null;
+}
+
+/**
+ * 一个项目库的看板数据(plan C-5):session_start、user_prompt、git_commit 与写读类工具事件,
+ * 外加标题表全表;各数组按 ts 升序(同 ts 按 id)。列集合钉死在 plan——除这些列外不取大列
+ * (tool_result_summary、整段 tool_args 不出库),Bash 事件不进查询。
+ */
+export interface BoardTimelineData {
+  sessions: BoardSessionHead[];
+  prompts: BoardPrompt[];
+  commits: BoardCommit[];
+  tools: BoardToolEvent[];
+  /** timeline_session_titles 全表(形状同 store.ts 的 SessionTitle) */
+  titles: Array<{ sessionId: string; title: string; kind: string; ts: string }>;
+}

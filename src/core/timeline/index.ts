@@ -19,6 +19,15 @@ export type { TimelineRoot, TimelineDataSummary } from './types';
 // 会话标题(2026-11-06-agent看板 D8):项目库 timeline_session_titles 的按目录只读读取(看板用)
 export { readSessionTitlesInDataDir } from './store';
 export type { SessionTitle, SessionTitleKind } from './store';
+// 看板只读查询(2026-11-06-agent看板 D14;plan C-5):认任务要用的最小列集合,按 dataDir 只读打开
+export { readTimelineBoardData } from './board-read';
+export type {
+  BoardTimelineData,
+  BoardSessionHead,
+  BoardPrompt,
+  BoardCommit,
+  BoardToolEvent,
+} from './types';
 // 并旧数据(spec D27、D28;D20 后只并提交记录与 timeline_roots):project 子系统编排
 export { createTimelineMerger, maxTimelineEventId } from './merge';
 export type { TimelineMergeStats, TimelineMerger } from './types';
