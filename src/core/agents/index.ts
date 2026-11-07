@@ -2,7 +2,6 @@
  * agents 门面:timeline / task / cli 统一经此读取 agent 差异。
  * 本模块不依赖任何其它 core 子系统,也不依赖 cli / web。
  */
-import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AGENT_PROFILES } from './profiles';
@@ -172,23 +171,11 @@ export function isAgentInstalled(projectRoot: string, profile: AgentProfile): bo
   return instructions !== null && instructions.includes(CGRAPHX_SECTION_START);
 }
 
-/** 命令是否在 PATH 上;检测失败视为不存在。 */
-function commandOnPath(cmd: string): boolean {
-  const probe = process.platform === 'win32' ? `where ${cmd}` : `command -v ${cmd}`;
+/** 检测到:项目内存在该 agent 的配置目录。CLI 装在机器上不算——那会导致交互安装默认全选、误装项目没用过的 agent(spec:2026-11-07-安装默认勾选已配置的agent K1)。 */
+export function isAgentDetected(projectRoot: string, profile: AgentProfile): boolean {
   try {
-    const out = execSync(probe, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, encoding: 'utf-8' });
-    return out.trim().length > 0;
+    return fs.existsSync(agentConfigDir(projectRoot, profile));
   } catch {
     return false;
   }
-}
-
-/** 检测到:项目内存在配置目录,或任一 CLI 命令在 PATH 上。 */
-export function isAgentDetected(projectRoot: string, profile: AgentProfile): boolean {
-  try {
-    if (fs.existsSync(agentConfigDir(projectRoot, profile))) return true;
-  } catch {
-    // 忽略,继续 PATH 检测
-  }
-  return profile.cliCommands.some(commandOnPath);
 }

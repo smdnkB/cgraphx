@@ -17,7 +17,6 @@ const CLAUDE_CODE: AgentProfile = {
   sessionsDir: ['.claude', 'projects'],
   sessionsDirEnv: 'CLAUDE_CONFIG_DIR',
   sessionReader: 'claude-transcript',
-  cliCommands: ['claude'],
   capabilities: { statusLine: true, contextMonitor: true },
   assetReplacements: [],
 };
@@ -25,7 +24,6 @@ const CLAUDE_CODE: AgentProfile = {
 /**
  * CodeBuddy 描述:部署到 .codebuddy/,不支持 statusLine 与 context-monitor。
  * - sessionIdEnv:实测 CodeBuddy 2.167.0 向 Bash 子进程注入 CODEBUDDY_SESSION_ID(值即会话文件的 session_id)。
- * - cliCommands:实测命令名为 codebuddy。
  */
 const CODEBUDDY: AgentProfile = {
   id: 'codebuddy',
@@ -40,7 +38,6 @@ const CODEBUDDY: AgentProfile = {
   sessionsDir: ['.codebuddy', 'projects'],
   sessionsDirEnv: null,
   sessionReader: 'codebuddy-transcript',
-  cliCommands: ['codebuddy'],
   capabilities: { statusLine: false, contextMonitor: false },
   // 顺序即替换顺序:先替换目录路径,再替换指引文件名与环境变量
   assetReplacements: [
