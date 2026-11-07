@@ -91,6 +91,37 @@ const HOOK_FILE_MODE = 0o755;
 const REGISTRY_DIR = 'cgraphx';
 const REGISTRY_FILE = 'hook-snippets.json';
 
+/**
+ * 只对当前仓库有效的 git 环境变量,即 `git rev-parse --local-env-vars` 列出的那些。git 跑钩子时会带上
+ * 其中几个(在 worktree 里提交时 `GIT_DIR` 是绝对路径),钩子调起的进程继承后,对别的目录跑的 git
+ * 命令读到的仍是这个仓库。
+ */
+const REPO_LOCAL_GIT_ENV_VARS = [
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CONFIG',
+  'GIT_CONFIG_PARAMETERS',
+  'GIT_CONFIG_COUNT',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_IMPLICIT_WORK_TREE',
+  'GIT_GRAFT_FILE',
+  'GIT_INDEX_FILE',
+  'GIT_NO_REPLACE_OBJECTS',
+  'GIT_REPLACE_REF_BASE',
+  'GIT_PREFIX',
+  'GIT_SHALLOW_FILE',
+  'GIT_COMMON_DIR',
+] as const;
+
+/**
+ * 删掉 env 里只对当前仓库有效的 git 环境变量。钩子调起、之后要对多个目录跑 git 的进程(提交记录的
+ * 后台进程:补录时逐个识别会话所在的仓库)启动时先调它,git 才按各自的目录找仓库。
+ */
+export function clearRepoLocalGitEnv(env: NodeJS.ProcessEnv = process.env): void {
+  for (const name of REPO_LOCAL_GIT_ENV_VARS) delete env[name];
+}
+
 /** 在 cwd 下跑 git,返回 stdout;出错(不在仓库、没装 git、非零退出等)一律 → null。 */
 function runGit(cwd: string, args: readonly string[]): string | null {
   try {
