@@ -93,10 +93,10 @@ export function skillVersionNotice(projectRoot: string, profile: AgentProfile, s
     if (cli === null) return null;
     const recorded = readSkillVersion(projectRoot, profile);
     if (recorded === null) {
-      return `${NOTICE_PREFIX}这个项目的 cgraphx skill 是 ${FIRST_RECORDED_VERSION} 之前装的,本机 cgraphx 已经是 ${cli}。${NOTICE_UPDATE_HINT}`;
+      return `${NOTICE_PREFIX}这个项目里 ${profile.displayName} 的 cgraphx skill 是 ${FIRST_RECORDED_VERSION} 之前装的,本机 cgraphx 已经是 ${cli}。${NOTICE_UPDATE_HINT}`;
     }
     if (compareVersions(recorded, cli) >= 0) return null;
-    return `${NOTICE_PREFIX}这个项目的 cgraphx skill 还是 ${recorded},本机 cgraphx 已经是 ${cli}。${NOTICE_UPDATE_HINT}`;
+    return `${NOTICE_PREFIX}这个项目里 ${profile.displayName} 的 cgraphx skill 还是 ${recorded},本机 cgraphx 已经是 ${cli}。${NOTICE_UPDATE_HINT}`;
   } catch {
     return null;
   }

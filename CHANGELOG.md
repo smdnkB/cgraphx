@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Changed — install keeps only the selected agents
+
+`cgraphx install` now leaves exactly the agents you selected. An agent that
+already had cgraphx installed but is unchecked in the interactive list, or
+left out of `-t`, has its cgraphx config removed — the same files
+`cgraphx uninstall -t <agent>` removes; your own files in that agent's
+directory, the local `.cgraphx/`, project data and the git hook snippets
+stay. `install -y` without `-t` (what `cgraphx upgrade` runs) still updates
+every installed agent, and `-t none` leaves agent configs alone. The
+"skill is behind" notice now names the agent it is about.
+
 ### Changed — replicas are git worktrees
 
 A replica is now a git worktree (`git worktree add`) next to the main

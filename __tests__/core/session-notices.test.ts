@@ -74,7 +74,7 @@ describe('skill version notice', () => {
 
   it('reports the recorded version when the installed skill is older than the CLI', () => {
     const root = claudeProject('older', '2.0.1');
-    expect(noticesAt(root, { CLAUDE_CODE_SESSION_ID: 'old-s1' })).toContain('还是 2.0.1');
+    expect(noticesAt(root, { CLAUDE_CODE_SESSION_ID: 'old-s1' })).toContain('Claude Code 的 cgraphx skill 还是 2.0.1');
     expect(noticesAt(root)).toContain('还是 2.0.1'); // 终端里自己跑:看装过的各家
   });
 
