@@ -530,8 +530,10 @@ function classifyGoneDir(cwd: string, ctx: ClassificationContext): DirClassifica
 /**
  * 开始目录归属(D3、K1、K3):开始目录还在就现认(改名、换项目目录后这里才对得上),只有目录不在了
  * 才用 start_dirs 缓存。结果按 cwd 记进本趟记忆,并写一行 start_dirs(目录将来被删时靠它兜底)。
+ * 不是本机绝对路径的开始目录(如会话文件里的 `D:\...`)不归任何项目:不现认、不读也不写 start_dirs。
  */
 export function classifyStartDir(cwd: string, ctx: ClassificationContext): DirClassification {
+  if (!path.isAbsolute(cwd)) return { dirName: null, root: null, name: null };
   const remembered = ctx.classified.get(cwd);
   if (remembered !== undefined) return remembered;
 

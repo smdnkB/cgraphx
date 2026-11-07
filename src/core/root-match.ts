@@ -73,7 +73,8 @@ function toPosix(rel: string): string {
 /**
  * 取包含 absPath 的最长的根:先按原样路径逐级往上查根表,对不上再取 absPath 所在目录的 realpath(带缓存,目录不在
  * 取最近一级在的上级)逐级查根的 realpath 表;allowSelf 为假时 absPath 等于根不算。返回的 root 是传入的根
- * path.resolve 后的写法;同一个根传了几次(含 realpath 相同的)取第一次的。
+ * path.resolve 后的写法;同一个根传了几次(含 realpath 相同的)取第一次的。不是本机绝对路径的(别的系统记下的
+ * `D:\...`、相对路径)不落在任何根里,不按进程当前目录解析。
  */
 export function createRootMatcher(roots: readonly string[]): RootMatcher {
   const byRoot = new Map<string, string>();
@@ -86,6 +87,7 @@ export function createRootMatcher(roots: readonly string[]): RootMatcher {
   }
   return {
     match(absPath: string, opts?: { allowSelf?: boolean }): RootMatch | null {
+      if (!path.isAbsolute(absPath)) return null;
       const allowSelf = opts?.allowSelf === true;
       const resolved = path.resolve(absPath);
       const hit =
