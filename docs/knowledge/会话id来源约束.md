@@ -11,8 +11,9 @@ aliases:
   - session_id
   - 会话 id
 tags:
-  - task
   - timeline
+  - ingest
+  - commit-gate
   - claude-code
   - codebuddy
   - 隐式约束
@@ -23,69 +24,67 @@ owners:
 related_code:
   - src/core/agents/profiles.ts
   - src/core/agents/index.ts
-  - src/core/timeline/hooks.ts
-  - src/core/task/binding.ts
-  - src/core/task/hooks.ts
+  - src/core/timeline/ingest/types.ts
+  - src/core/timeline/git-commit.ts
+  - src/core/session-notices.ts
+  - src/core/commit-gate/gate.ts
 related_documents:
-  - docs/knowledge/开发任务绑定.md
+  - docs/knowledge/开发时间线工具事件契约.md
   - docs/knowledge/git提交记录须在钩子当下固定hash.md
   - docs/knowledge/agent适配.md
 created: 2026-10-14
-updated: 2026-10-15
+updated: 2026-11-06
 ---
 
 # 会话 id 来源约束
 
 ## Summary
 
-cgraphx 获取 agent 会话 id(session_id)有两条路。
+cgraphx 获取 agent 会话 id(session_id)的来源,2026-11-06 起**主力是会话文件行内**:每行自带 sessionId,解析补录的事件(提问、工具、轮次结束、会话开始)全部用它,分叉文件开头拷来的旧会话行也归原会话,不再依赖 hook payload(hook 体系已删)。
 
-- **hook 进程**:从 stdin 的 payload 里读,这条路有文档保证。
-- **普通 CLI 进程和 git post-commit 钩子**:比如 `cgraphx task use`,只能读宿主注入给 Bash 子进程的环境变量。
-  - Claude Code 注入 `CLAUDE_CODE_SESSION_ID`,CodeBuddy 注入 `CODEBUDDY_SESSION_ID`。
-  - 两者都是实测得出的,**没有官方文档保证**。
+**会话环境变量**(宿主注入给 Bash 子进程的 `CLAUDE_CODE_SESSION_ID` / `CODEBUDDY_SESSION_ID`,实测得出、**没有官方文档保证**)还在三处用:
 
-依赖环境变量的地方都必须有降级路径:拿不到时显式报错,让用户传 `--session`,或者记为未归属,绝不猜测。
+- git post-commit 钩子:提交的会话归属(`git_commit` 的 session_id 与来源 agent;终端手动提交没有,记为未归属);
+- commit-msg 门禁片段:判断「是不是 agent 提交」——一个会话变量都没有就不起 node(人手动提交不等约 90ms),判定「跳过门禁」也要先认得出会话;
+- 会话提示的频控 scope:有会话变量按 `session:<会话编号>`(每会话一次),没有按 `day:<项目根>:<本地日期>`(每项目每天一次)。
+
+依赖环境变量的地方都必须有降级路径:拿不到时记为未归属或退到 day scope,绝不猜测。
 
 两个 agent 嵌套启动时,两个变量会同时存在,这时按 agent 登记顺序取 Claude Code 的变量。
 
 ## Context
 
-开发任务绑定需要在 agent 执行的 CLI 命令里知道「当前是哪个会话」,commit 归属需要在 git 钩子里知道同一件事,而这两类进程都没有 hook 的 stdin payload。
+hook 时代,普通 CLI 进程和 git 钩子没有 stdin payload,只能读宿主注入的环境变量;时间线事件则由 hook 从 payload 拿。hook 退役后,事件侧的会话 id 改从会话文件行内取(补录解析),环境变量只剩提交归属、门禁与提示三处消费方。
 
 ## Findings
 
 - 2026-10-14 在 desktop 版 Claude Code(2.1.295)里实测:
-  - Bash 子进程环境里有 `CLAUDE_CODE_SESSION_ID`,值等于 hook payload 里的 session_id。
+  - Bash 子进程环境里有 `CLAUDE_CODE_SESSION_ID`,值等于会话文件行内的 session_id。
   - agent 在会话内执行 `git commit` 时,post-commit 钩子能继承到这个变量,即使钩子在后台运行。
 - 2026-10-15 在 CodeBuddy 2.167.0 里实测:
-  - Bash 子进程环境里有 `CODEBUDDY_SESSION_ID`,值等于 hook payload 里的 session_id。
+  - Bash 子进程环境里有 `CODEBUDDY_SESSION_ID`,值等于会话文件行内的 session_id(注意:子 agent 文件行内是**独立子会话编号**,与主会话不同;时间线按文件布局把子 agent 事实归主会话,见「开发时间线工具事件契约」)。
   - CodeBuddy 还会把 `CLAUDE_SESSION_ID` 设成同一个值。注意它不是 `CLAUDE_CODE_SESSION_ID`,cgraphx 不读它。
-  - CodeBuddy 会话里的 commit 能正确归属到该会话。
 - 用户在自己的终端里运行命令或 commit 时,两个变量都没有。
 - 在 Claude Code 会话的 Bash 里启动 CodeBuddy 时,CodeBuddy 会继承 Claude 的 `CLAUDE_CODE_SESSION_ID`,这时两个变量同时存在。
-- 依赖这些变量的地方有两处:
-  - `cgraphx task` 的会话判定:`--session` 优先,其次读环境变量。
-  - git_commit 事件的 session_id 和来源 agent。
+- 补录侧的归属不用会话 id:会话文件按 start_cwd(开始目录)认项目,认过缓存在 `~/.cgraphx/sessions.db` 的 `start_dirs`,与 session_id 无关。
 
 ## Evidence
 
 - 每个 agent 的会话变量名只在 `src/core/agents/profiles.ts` 的 agent 描述里定义,字段是 `sessionIdEnv`。
 - 统一读取入口是 agents 门面的 `resolveSessionIdFromEnv`,它按登记顺序取第一个非空值,同时返回所属 agent。
-- 读取点:`src/core/timeline/hooks.ts`(`gitCommitHook`)、`src/core/task/binding.ts`(`resolveSessionId`)。
-- 2026-10-15 之前,变量名定义在 timeline 的 `CLAUDE_SESSION_ID_ENV`。多 agent 适配时删除了这个常量,统一改由 agents 描述提供。
+- 读取点:`src/core/timeline/git-commit.ts`(提交归属与「跳过门禁」判定)、`src/core/session-notices.ts`(提示 scope)、`src/core/commit-gate/gate.ts`(门禁片段的会话变量名单,来自各 agent 描述的 `sessionIdEnv`)。
+- 事件侧:`src/core/timeline/ingest/types.ts`——每条事实都带 sessionId(行内自带)。
 
 ## Impact For Future Changes
 
-- 新功能要在非 hook 进程里拿会话 id 时,复用 agents 门面的 `resolveSessionIdFromEnv` 和 task 的 `resolveSessionId`,不要另写变量名。
-- 接入新 agent 时,先实测它是否向 Bash 子进程注入会话变量,再写进描述的 `sessionIdEnv`。没有这类变量时,该 agent 的 `task use` 和 commit 归属会退化,需要另定方案。
-- 降级方案已经做进去了:会话开始时,task hook 总会把当前会话 id 写进给 agent 的上下文,不论是否绑定。agent 读不到环境变量时,可以用 `--session` 传入。改动这段注入文案时,不要删掉会话 id。
-- 如果宿主改名或取消这个变量:绑定命令会以退出码 3 退出并提示 `--session`,commit 会全部变成未归属。功能退化,但不会写出错误数据。
+- 新功能要在非 hook 进程里拿会话 id 时,复用 agents 门面的 `resolveSessionIdFromEnv`,不要另写变量名。
+- 接入新 agent 时,先实测它是否向 Bash 子进程注入会话变量,再写进描述的 `sessionIdEnv`。没有这类变量时,该 agent 的 commit 归属会退化、门禁片段不会为它起 node,需要另定方案。
+- 如果宿主改名或取消这个变量:commit 变成未归属、门禁判不了「跳过」、提示退到按天。功能退化,但不会写出错误数据。
 - agent 的 Bash 会加载用户的 shell 配置,PATH 里排在前面的是全局安装的 `cgraphx`。所以新读取逻辑要等全局 cgraphx 升级后,才会在 agent 会话里生效。
 
 ## Reuse Guidance
 
-排查「commit 没归属到任务」「task use 报无法确定当前会话」时先看这里。
+排查「commit 没归属到会话」「门禁没拦住 agent 提交」「提示每条命令都重复出」时先看这里。
 
 升级 Claude Code 或 CodeBuddy 后,在对应 agent 的会话里执行 `env | grep -i session`,复核变量是否还在。
 

@@ -20,7 +20,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { execSync } from 'node:child_process';
 
-import { readGitCommitInfo } from '../../../src/core/timeline/hooks';
+import { readGitCommitInfo } from '../../../src/core/timeline/git-commit';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

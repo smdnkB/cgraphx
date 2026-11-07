@@ -17,13 +17,26 @@ import {
   DISABLED_ENV,
 } from '../../../src/core/dbquery/constants';
 import { ConfigNotFoundError } from '../../../src/core/dbquery/errors';
+import { DatabaseConnection, getLocalDatabasePath } from '../../../src/core/db';
 
 const PREV_ENV = { ...process.env };
 const PREV_HOME = process.env.HOME;
 const PREV_USERPROFILE = process.env.USERPROFILE;
 
-function makeTmpProject(): string {
+function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dbq-cfg-'));
+}
+
+/** 临时项目:装过、有旧库(本地库里有 timeline_meta 表),数据位置就是本地 .cgraphx/,写在那里的项目级配置读得到。 */
+function makeTmpProject(): string {
+  const dir = makeTmpDir();
+  const conn = DatabaseConnection.open(getLocalDatabasePath(dir));
+  try {
+    conn.getDb().exec('CREATE TABLE IF NOT EXISTS timeline_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  } finally {
+    conn.close();
+  }
+  return dir;
 }
 
 function writeConfig(dir: string, content: unknown): string {
@@ -53,7 +66,7 @@ describe('config: three-tier load order (spec §2.2, §9.1 #8)', () => {
   beforeEach(() => {
     clearEnv();
     tmpProject = makeTmpProject();
-    fakeHome = makeTmpProject();
+    fakeHome = makeTmpDir();
     setUserGlobalRoot(fakeHome);
   });
 

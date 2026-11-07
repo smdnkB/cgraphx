@@ -1,5 +1,266 @@
 # Changelog
 
+## Unreleased
+
+### Changed — replicas are git worktrees
+
+A replica is now a git worktree (`git worktree add`) next to the main
+directory instead of a copy-on-write copy of the whole directory. Only what
+an agent needs is carried over: each agent's config directory, instructions
+file and extra config (Claude Code's `.mcp.json`), plus the files listed in
+the project's `.worktreeinclude` (gitignore syntax, paths relative to the
+project root; cgraphx neither creates nor commits it). Dependencies and
+build output are not copied — install and build once inside the replica.
+The carried files are hidden from git in the replica through a per-worktree
+`core.excludesFile` (the main repository gains
+`extensions.worktreeConfig`), so the carried files stay out of the
+replica's `git status` while the main directory still sees them; the shared `.git/info/exclude` is
+no longer written. A main directory with uncommitted tracked changes no
+longer blocks replica creation — it only produces a warning. Merging and
+syncing use the requirement branch from the same repository
+(`refs/heads/<branch>`), so the `git fetch` steps are gone. Deleting a
+replica removes the worktree with `git worktree remove --force` and keeps
+the branch when it still has unmerged commits; opening the same
+requirement again reattaches to that branch and keeps the original base
+commit.
+
+**Breaking:** `--full-copy` and the `no_cow` / `dirty_main` error codes are
+gone, and copy-on-write replicas created by an older version are not
+supported. Remove them with the previous version's `cgraphx replica remove`
+before upgrading: for an old replica the branch does not exist in the main
+repository, so the new commands report it as undecided and refuse to delete
+it rather than deleting the wrong thing.
+
+### Changed — projects are recognized by name
+
+A project is now identified by its name alone; the remote address no longer
+takes part in deciding whether two directories are the same project.
+`cgraphx install` asks for the name once per project (with `-y`, or when
+`upgrade` re-runs it, the suggested default is used and written back) and
+stores it in the local git config (`cgraphx.projectName`, or
+`cgraphx.<subdir>.projectName` for a project in a subdirectory of the
+repository; a directory outside git keeps it in `.cgraphx/project.json`).
+Changing the remote, forking, or cloning from a different URL no longer
+splits a project's history. The project directory is named after the
+project (`~/.cgraphx/projects/cgraphx/`), so directories with the same name
+share one timeline and the same project-level connection profiles. A
+directory that meets an existing project with that name gets one notice (on
+stderr, and inside `install`) while the data is still recorded; rename with
+`cgraphx project name`. `identity.json` moves to version 2 (`name` plus the
+`origins` used only by that notice). Removal records and duplicate checks
+live in `~/.cgraphx/sessions.db`, the latter in a new `dirs_checked` table.
+A start directory that still exists is classified on the spot, so changing
+the remote no longer makes ingestion miss new events; a rebuild no longer
+re-parses session files already recorded to another project.
+
+### Changed — the timeline is parsed from agent session files instead of hooks
+
+cgraphx no longer records agent events through hooks in the agent's
+configuration. The seven hidden `timeline-*-hook` commands and the
+`precommit-check` PreToolUse hook are deleted, and `cgraphx install` /
+`uninstall` remove their dead entries from agent settings; the seven
+timeline commands stay registered as hidden no-op commands that read
+stdin and exit 0, so a project that upgraded but has not re-run install
+sees no errors. Events now come from the session files the agents
+themselves leave behind: before a timeline query, after a commit (the
+post-commit hook's background process), and after `install` merges old
+data, cgraphx parses whatever is new in Claude Code's
+`~/.claude/projects` (`CLAUDE_CONFIG_DIR` wins) and CodeBuddy's
+`~/.codebuddy/projects` transcripts — each agent has one reader that
+produces uniform session facts — and appends the events to the project's
+database. A tool event is one row per call: timestamp from the result
+line, cwd from the call line (the directory before the command ran), and
+duration as the difference between the two
+(`metadata.duration_source: "transcript"`); the turn number is the uuid
+of the turn's question. `pre_tool_use` and `session_end` are no longer
+recorded — `--type` still accepts them, but the hook-era data is gone
+after the rebuild below. Per-file offsets and start-directory
+classifications live in a new user-level `~/.cgraphx/sessions.db`
+(mode 0600) that does not follow a project's data: `project remove`
+records the removal and later ingests only pick up facts from after it,
+and `project name` clears the remembered start directories so they are
+reclassified. A start directory that is not an absolute path on this
+machine (a `D:\...` path in a session file read on macOS) belongs to no
+project. The three session-start notices (skill version, auto-memory
+direction, git hook repair) now print with the first cgraphx command of
+a session, on stderr, once per session (or once per project per day
+outside a session).
+
+The first `cgraphx install` (or first timeline query) after upgrading
+wipes the events the hooks recorded and rebuilds the timeline from
+session files in one pass — commits, which the git hooks recorded, are
+kept, and the merge of old data now copies only commits and
+`timeline_roots`. A project rebuilds once and only once. **Sessions whose
+files are gone cannot come back**: agents clean up their session files
+after about 30 days, so on a machine where those files were already
+cleaned up the history before the upgrade is lost.
+
+### Changed — the commit gate moved into the git commit-msg hook
+
+Agent commits are gated by a `commit-msg` git hook snippet now — a new
+hidden `commit-gate-hook` command with exit 0 (pass, including any
+failure to run the checks) and exit 3 (reject, message on stderr) —
+instead of the PreToolUse hook in the agent's settings. The snippet only
+starts the check when a session variable is set, so a person's manual
+commits wait for nothing. Version-branch interception, the
+`features check` artifact check and the message self-check run in the
+same place, under the same rules. The gate's own failure never blocks a
+commit: `command not found`, a timeout, any error passes. `--no-verify`
+now skips the gate — it could not skip the PreToolUse hook before. A
+commit that skipped the gate is marked `metadata.gate = "skipped"` in
+the timeline (「跳过门禁」 in human-readable output), and the release
+review lists such commits.
+
+### Changed — data lives per project under the user directory
+
+Until now every directory recorded into its own `.cgraphx/cgraphx.db`. Only
+a copy opened by `/dev-start` recorded into the main directory, through its
+`shared` link; another clone, a git worktree or a directory copied by hand
+kept separate records of the same project. Events were filed under the
+directory they happened in, so a session that also worked in an additional
+directory was split across two projects.
+
+Data now lives per project in `~/.cgraphx/projects/<dir>/`. A session
+belongs to the project of the directory it started in — worked out once at
+session start and kept in `~/.cgraphx/sessions/` — and stays there wherever
+it goes; a commit belongs to the project of its work tree. A project is
+recognized by its normalized origin (`git@github.com:smdnkB/cgraphx.git`
+and `https://github.com/smdnkB/cgraphx/` are both
+`github.com/smdnkB/cgraphx`, kept in `github.com-smdnkB-cgraphx/`), by a
+project name in the local git config (`cgraphx.projectName`) when the
+repository has no origin, or by both for a project in a subdirectory
+(`github.com/org/platform#server`). `cgraphx install` asks for that name;
+with `-y` it takes the directory's name. Clones, worktrees and copies of a
+project therefore record into the same data, including directories where
+cgraphx was never installed, once the project has data on this machine.
+When one repository holds several projects — cgraphx installed in its
+subdirectories — a commit is split between them by the files it changed.
+The knowledge-base index and `my-features.md` stay in each directory's
+`.cgraphx/`, and a `/dev-start` copy's `shared` link no longer decides
+where data goes. `CGRAPHX_DIR` moves only that per-directory `.cgraphx/`;
+the user directory is always `~/.cgraphx/`.
+
+`cgraphx install` moves the directory's old data over. It first backs up
+the old database and files into the project's `backups/`, then merges
+events, task bindings, sync state and the db-query connection file and log.
+Events the project already has — from a directory copied by hand, for
+instance — are kept once, and sync's reporting progress carries over, so
+reporting picks up where it left off. A db-query connection file or
+platform connection that differs from the project's is not merged; it
+stays in the backup and install says so. Afterwards the local database
+holds only the knowledge-base index, and installing again reports that the
+directory was already merged. Until `cgraphx install` runs in a directory,
+it keeps recording into its local database as before; this version only
+adds the `timeline_roots` table there, so older versions can still open it.
+
+New `cgraphx project show | name | list | remove`. `show` prints which
+project this directory belongs to and how it is recognized, where the data
+is, whether the directory still has old data to merge, and every directory
+the project was seen in on this machine with its last activity. `name`
+renames the project for this repository: new records go under the new
+name, existing ones stay under the old name, and a name that already has
+data is joined. A clone recognized by its origin becomes a project of its
+own when renamed; the other clones keep recording under the origin.
+Renaming is refused while the directory still has old data to merge.
+`list` shows every project in `~/.cgraphx/projects/` with its size, last
+activity, backups and directories; `show` and `list` take `--json`.
+`remove <dir>` deletes a project's data — or only its backups, with
+`--backups` — after listing what goes and asking for confirmation; without
+a terminal it needs `--yes`. It deletes nothing but a real directory right
+under `~/.cgraphx/projects/`, and names the directories that still have
+cgraphx installed, since they record again once worked in.
+
+`cgraphx uninstall` now uninstalls only the directory it runs in. The
+project's data stays in `~/.cgraphx/projects/<dir>/`, and the git hooks
+stay while another directory of the same repository still has cgraphx
+installed, so its commits keep being recorded. `timeline uninstall --purge`
+no longer deletes data; it points to `cgraphx project remove`. Sync now
+reports under the origin saved by `sync connect` — a connection made by an
+earlier version saves the current one on its next run — so every directory
+of a project reports as the same repository. Running `sync connect` where
+the origin differs says so, and `--force` switches to that origin, clearing
+the reporting progress so everything is reported again.
+
+### Removed — local web viewer, platform sync, and dev-task tracking
+
+cgraphx no longer has the parts that existed only to report to an R&D
+management platform or to browse data in a browser. The `cgraphx web` local
+read-only viewer, the `cgraphx sync` reporting subsystem with its hidden
+`sync-worker` command, and the `cgraphx task` binding of sessions to
+development tasks are deleted; typing those commands now prints
+`error: unknown command` and exits 1. The `/dev-handoff` session-handoff
+skill and the `task-history` agent are retired with them, and both joined
+the `deprecated-assets.json` list, so `cgraphx install` deletes a copy an
+earlier release deployed. What cgraphx records now stays on this machine —
+nothing is reported to any platform.
+
+`cgraphx install` also cleans up after the removal, on install and
+uninstall alike. The dead reporting and task hooks an earlier release wrote
+into agent configurations — `sync-session-start-hook`, `sync-stop-hook`,
+`task-session-start-hook`, `task-stop-hook`, `task-post-tool-use-hook` —
+are removed whatever subsystems were ticked, and hooks that are not
+cgraphx's are left alone. The thirteen `sync_*` and `task_*` tables are
+dropped and the four run files (`sync.lock`, `sync-trigger`,
+`sync-worker.pid`, `task-source.json`) deleted from the project's data
+directory and the local `.cgraphx/`; the backup taken while merging old
+data is kept. Five hidden no-op commands named after the dead hooks stay
+registered, so a project that upgraded the package but has not re-run
+`cgraphx install` sees no errors from old hook entries: they read stdin,
+print nothing and exit 0.
+
+`features check` accepts only the built-in artifact types — the platform's
+type table went with sync — and its `unknown_type` warning now says to use
+a built-in type. `features show` renames its 「平台环节」 heading to
+「需求环节(按默认类型表)」 and closes with 「实现、知识经验:由提交和
+会话承载,不按产物算」. A spec's `> 任务:` header line is no longer read,
+shown or checked; the line in an old spec is left alone and raises no new
+warning. `cgraphx replica create` refuses to open a second copy of a
+requirement that already has one (`feature_has_replica`: split the
+requirement into several requirement directories to parallelize). The
+`/dev-end` closing record keeps a single 历时 line — 立项 · 完成 · 日历跨度,
+taken from the first and last commit of the range — instead of dispatching
+`task-history` for the per-task actual effort.
+
+### Added — `cgraphx board`, a local read-only task board
+
+Running `cgraphx board` in any directory first catches every project's
+timeline up (parsing what is new in the agents' session files, one line
+per project), then starts a server that listens on 127.0.0.1 with a
+random port and a random token, prints the tokened URL and opens it in
+the browser. The left column lists projects with their requirement
+tasks — `docs/features/` directories that carry a spec or a feature-plan
+draft, plus replica registrations — and the right column lists the
+sessions attached to the selected task, matched on the fly each
+refresh: the session started inside the task's replica, a commit on the
+task's branch, a commit or a write touching `docs/features/<id>/`, a
+flow command naming the task, or a prompt mentioning the task's path or
+title, each row showing why it matched ("definitely" vs. "maybe").
+Copy a session's title or full id from the page and jump back to the
+agent app to reopen it. This is not the removed `cgraphx web` viewer
+coming back: the board writes nothing but ingestion, serves no
+directory listing, validates the token and Host on every request,
+and additionally validates Origin on the refresh endpoint.
+
+The timeline gains a third read-only session source: DeepSeek Harness
+(`~/.dsh/sessions/`, or `$DSH_HOME/.dsh/sessions/` when `DSH_HOME` is
+set). Its files are concatenated zstd frames of JSONL; a third reader
+splits the frames, maps the lines to the same session facts as the
+other two readers, and merges subagent sessions into their main session
+(continuations count as their own session). DeepSeek never enters the
+installer, the replica carry-over or the commit gate — `AGENT_PROFILES`
+is untouched; the events' agent column simply gains `deepseek`. Reading
+it requires Node 22.15+ (`zlib.zstdDecompressSync`); on older Node the
+source is skipped with a notice and everything else works.
+
+Claude Code and DeepSeek session titles (custom beats AI beats agent,
+newest wins within a rank) now live in a per-project
+`timeline_session_titles` table — one row per session, created with
+`IF NOT EXISTS` without bumping the schema version. Sessions recorded
+before this version are backfilled once per project (marker
+`session_titles_at` in `timeline_meta`), titles only, without touching
+events or offsets; CodeBuddy has no titles and keeps falling back to
+the first prompt as the display title.
+
 ## 2.0.13 - 2026-11-01
 
 ### Changed — clarification drops feature cards and writes straight into the draft

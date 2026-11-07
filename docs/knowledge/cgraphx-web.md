@@ -15,7 +15,7 @@ tags:
   - entity
   - architecture
   - web
-status: active
+status: deprecated
 source_type: work_context
 owners:
   - liulongfei
@@ -33,14 +33,14 @@ related_code:
 related_documents:
   - docs/knowledge/开发任务浏览.md
 created: 2026-07-31
-updated: 2026-10-15
+updated: 2026-11-05
 ---
 
 # cgraphx web
 
 ## Summary
 
-cgraphx web 是 cgraphx 2.0 `src/web/` 层的首个实装:`cgraphx web [project-path]` 顶层命令启动的**本地、只读、面向浏览器**的服务,让团队成员在浏览器里浏览目标项目的 docs 知识库、timeline 开发事件流、模型知识库(表结构)、系统地图(代码地图)与开发任务(又称 web 本地服务 / web 端 / 本地浏览服务)。服务对象是**人**,不是程序——不为 HTTP API 设计稳定契约,不是 1.x 被移除的 MCP server 的复活。与 CLI 的边界:web 与 CLI 是 core 的两个平行消费方,共享同一个 `.cgraphx/cgraphx.db`,web 不调用 CLI 进程。
+2.0.14 起已下掉,见 `docs/features/2026-11-05-下掉web与平台同步/`。cgraphx web 是 cgraphx 2.0 `src/web/` 层的首个实装:`cgraphx web [project-path]` 顶层命令启动的**本地、只读、面向浏览器**的服务,让团队成员在浏览器里浏览目标项目的 docs 知识库、timeline 开发事件流、模型知识库(表结构)、系统地图(代码地图)与开发任务(又称 web 本地服务 / web 端 / 本地浏览服务)。服务对象是**人**,不是程序——不为 HTTP API 设计稳定契约,不是 1.x 被移除的 MCP server 的复活。与 CLI 的边界:web 与 CLI 是 core 的两个平行消费方,读同一份数据(知识库读本地 `.cgraphx/cgraphx.db`,时间线、任务读这个项目的库,旧库模式下两者是同一个文件;项目库不在时按没有数据显示),web 不调用 CLI 进程。
 
 ## 命名与边界
 

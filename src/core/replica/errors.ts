@@ -6,14 +6,17 @@
  * 非 ReplicaError → 1。用户可修复的错误,消息带修复提示。
  */
 
-/** C-5 的十个 code。 */
+/**
+ * 副本流程的十个 code(plan C-4;feature_has_replica 来自 2026-11-05-下掉web与平台同步 spec D13)。
+ * worktree_failed:开 git worktree 失败,消息带 git 的原话;这时主目录没动,副本里也什么都不留。
+ */
 export const REPLICA_ERROR_CODES = [
   'invalid_args',
   'not_main_dir',
-  'dirty_main',
-  'no_cow',
+  'worktree_failed',
   'target_exists',
   'name_taken',
+  'feature_has_replica',
   'unsupported_platform',
   'dirty',
   'not_found',
@@ -24,10 +27,8 @@ export type ReplicaErrorCode = (typeof REPLICA_ERROR_CODES)[number];
 
 /** 附加字段:`--json` 失败输出时平铺进对象。 */
 export interface ReplicaErrorDetails {
-  /** dirty_main、dirty:改了没提交的文件(仓库相对路径) */
+  /** dirty:改了没提交的文件(仓库相对路径) */
   files?: string[];
-  /** no_cow:整份复制需要的字节数 */
-  requiredBytes?: number;
 }
 
 export class ReplicaError extends Error {

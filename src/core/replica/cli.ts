@@ -2,7 +2,7 @@
  * replica 子系统的 CLI 接线。
  *
  * 导出 `registerReplicaCommands(program)`,由主 CLI(src/cli/index.ts)调用一次。命令面:
- *   - cgraphx replica create <feature-id> --prefix <文件前缀> --branch <分支> [--full-copy] [--json]
+ *   - cgraphx replica create <feature-id> --prefix <文件前缀> --branch <分支> [--json]
  *   - cgraphx replica list [--all] [--json]
  *   - cgraphx replica remove <副本目录名或 feature-id> [--json]
  *
@@ -29,7 +29,6 @@ interface JsonOption {
 interface CreateOptions extends JsonOption {
   prefix?: string;
   branch?: string;
-  fullCopy?: boolean;
 }
 
 interface ListOptions extends JsonOption {
@@ -49,7 +48,7 @@ function writeErr(msg: string): void {
   process.stderr.write(`[replica] ${msg}\n`);
 }
 
-/** 失败输出 + 退出码;--json 时附加字段(files、requiredBytes)平铺进对象。 */
+/** 失败输出 + 退出码;--json 时附加字段(files)平铺进对象。 */
 function reportError(err: unknown, json: boolean): void {
   process.exitCode = exitCodeForError(err);
   const message = err instanceof Error ? err.message : String(err);
@@ -126,12 +125,9 @@ function mergeLabel(s: ReplicaStatus): string {
 }
 
 function printCreate(r: CreateReplicaResult): void {
-  if (!r.created) {
-    writeOut(`需求 ${r.featureId} 的副本已经有了:${r.path}(分支 ${r.branch}),没重建`);
-    return;
-  }
   writeOut(`已开副本 ${r.name}:${r.path}`);
   writeOut(`  需求 ${r.featureId},分支 ${r.branch}(从 ${r.baseBranch} 拉出)`);
+  if (r.reattached) writeOut(`  接上了留下的分支 ${r.branch}`);
   if (r.movedFiles.length > 0) {
     writeOut('  移进副本的文件:');
     for (const file of r.movedFiles) writeOut(`    ${file}`);
@@ -156,28 +152,36 @@ function printList(rows: readonly ReplicaStatus[], all: boolean): void {
   }
 }
 
+/** 分支结果补的那一行(C-7):删了 / 留着(提交还在)/ 主目录里没有这个引用。 */
+function branchLine(branch: RemoveReplicaResult['branch']): string {
+  if (branch.state === 'deleted') return `分支 ${branch.name} 已删除`;
+  if (branch.tip !== '') return `分支 ${branch.name} 留着,提交还在`;
+  return `分支 ${branch.name} 不在主目录里,没有可处理的分支`;
+}
+
 function printRemove(r: RemoveReplicaResult): void {
   writeOut(
     r.state === 'removed'
-      ? `已删除副本 ${r.name};登记和副本里的会话、提交记录都留在主目录`
+      ? `已删副本 ${r.name};登记留在主目录,副本里记下的会话和提交在项目的数据里`
       : `副本 ${r.name} 的目录已经不在了,已在登记里记为删除`,
   );
+  writeOut(branchLine(r.branch));
+  for (const warning of r.warnings) writeErr(warning);
 }
 
 /** 把 `replica` 命令组挂到 commander 程序上。主 CLI 调用一次。 */
 export function registerReplicaCommands(program: Command): void {
   const replica = program
     .command('replica')
-    .description('需求副本 — 在主目录旁开、列、删写时复制的整仓副本,登记在主目录 .cgraphx/replicas/');
+    .description('需求副本 — 在主目录旁开、列、删 git worktree 副本,登记在主目录 .cgraphx/replicas/');
 
   replica
     .command('create <feature-id>')
     .description(
-      '开副本 <主目录名>@<文件前缀>:复制整个主目录,副本里从主目录当前分支拉出需求分支并登记(只在主目录执行)',
+      '开副本 <主目录名>@<文件前缀>:在主目录旁开 git worktree,带上 agent 配置与 .worktreeinclude 里的文件,副本里接上需求分支并登记(只在主目录执行)',
     )
     .option('--prefix <prefix>', '文件前缀(必填):feature-id 去掉日期段,如 订单导出')
     .option('--branch <branch>', '需求分支(必填):feat/<文件前缀>,bug 修复用 fix/<文件前缀>')
-    .option('--full-copy', '不用写时复制,整份复制(磁盘不支持写时复制时,问过用户再带)')
     .option('--json', '输出机器可读 JSON')
     .action((featureId: string, opts: CreateOptions) => {
       const projectRoot = resolveProjectRoot(process.cwd());
@@ -188,7 +192,6 @@ export function registerReplicaCommands(program: Command): void {
             featureId,
             prefix: opts.prefix ?? '',
             branch: opts.branch ?? '',
-            fullCopy: opts.fullCopy === true,
           }),
         (result) => result,
         printCreate,
@@ -213,7 +216,7 @@ export function registerReplicaCommands(program: Command): void {
 
   replica
     .command('remove <name-or-feature-id>')
-    .description('删副本:核对是本主目录的副本、没有没提交的改动后删掉目录,登记留下(只在主目录执行)')
+    .description('删 worktree;按合入情况删/留需求分支,登记留下(只在主目录执行)')
     .option('--json', '输出机器可读 JSON')
     .action((nameOrFeatureId: string, opts: JsonOption) => {
       const projectRoot = resolveProjectRoot(process.cwd());

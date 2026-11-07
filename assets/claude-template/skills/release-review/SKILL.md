@@ -1,6 +1,6 @@
 ---
 name: release-review
-description: 发版审核与合入主干:发版那天在版本分支 dev/<版本号> 上改好版本号,输入 /release-review,以上个版本的 tag 为起点出审核报告——按需求列提交、文件、增删行和测试,查疑似夹带、已声明的版本级提交、同步主干、两个需求都改了的文件、敏感改动、和主干的合并预演、缺陷、版本号、不在本版本的需求,给出结论(可以发 / 有风险 / 不能直接合),存成 docs/releases/v<版本号>-发版审核.md 并提交到版本分支;用户说「发」再用合并提交合入主干,列出可以清理的副本问删不删。不打 tag、不发布、不推送。Use when 发版审核、出审核报告、准备发版、发版前检查、发吧、合入主干、release review。
+description: 发版审核与合入主干:发版那天在版本分支 dev/<版本号> 上改好版本号,输入 /release-review,以上个版本的 tag 为起点出审核报告——按需求列提交、文件、增删行和测试,查疑似夹带、跳过门禁的提交、已声明的版本级提交、同步主干、两个需求都改了的文件、敏感改动、和主干的合并预演、缺陷、版本号、不在本版本的需求,给出结论(可以发 / 有风险 / 不能直接合),存成 docs/releases/v<版本号>-发版审核.md 并提交到版本分支;用户说「发」再用合并提交合入主干,列出可以清理的副本问删不删。不打 tag、不发布、不推送。Use when 发版审核、出审核报告、准备发版、发版前检查、发吧、合入主干、release review。
 ---
 
 # 发版审核与合入主干 (release-review)
@@ -54,6 +54,7 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
    | 开版本前已进主干 | `git log --format='%h %s' <起点 tag>..<起点>` |
    | 不在本版本的需求 | `cgraphx replica list --json` 里在用、`merged` 不是 true 的 |
    | 疑似夹带是哪个会话提交的 | `cgraphx timeline query --type git_commit --since <起点日期> --limit 10000` 按 hash 对 session_id;对不上不写 |
+   | 跳过门禁的提交 | 同一条 `cgraphx timeline query --type git_commit --since <起点日期> --limit 10000 --format=json` 里 `metadata.gate` 是 `skipped` 的(agent 提交带 `--no-verify` 跳过门禁的):提交号、说明、session_id;再与 `<起点>..dev/2.0.11` 的提交对照,不在版本分支里的不写 |
 
    - 每次合入的数字一次取齐:
 
@@ -91,7 +92,7 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
    - 和主干的预演有冲突 →「不能直接合」,写出冲突文件和涉及的需求
    - 否则「风险」一节不空 →「有风险」,后面接风险各条
    - 否则 →「可以发」
-   - 进「风险」的只有:版本号没改(提示以「chore(release): 版本号 2.0.10→2.0.11」提交)、需求缺测试、测试报告里有没通过的用例、疑似夹带。敏感改动、两个需求都改了的文件、未关联需求目录、未声明范围只列出,不进风险
+   - 进「风险」的只有:版本号没改(提示以「chore(release): 版本号 2.0.10→2.0.11」提交)、需求缺测试、测试报告里有没通过的用例、疑似夹带、跳过门禁的提交。敏感改动、两个需求都改了的文件、未关联需求目录、未声明范围只列出,不进风险
 
 8. **提交报告**,只提交这一个文件:
 
@@ -100,7 +101,7 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
    git commit -m "chore(release): 2.0.11 发版审核报告" -- docs/releases/v2.0.11-发版审核.md
    ```
 
-   提交门禁拦下时,按提示自查暂存的这个文件,说明不改,带 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重试。
+   git 提交门禁(commit-msg 钩子)拦下时,按提示自查暂存的这个文件,说明不改,带 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重试。
 
 9. **对话里给结论和摘要**(见范例),等用户说「发」或「先不发」;说「先不发」→ 什么都不动。
 
@@ -130,7 +131,11 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
 
    「cgraphx@订单导出、cgraphx@积分发放 已合入,可以删;cgraphx@导出优化 还差 2 个提交没合入，留着，跟到下个版本;cgraphx@会员积分 还没有提交，留着;删掉这 2 个已合入的副本吗?」
 
-   用户说删 → 逐个 `cgraphx replica remove <副本目录名> --json`(已不在的也跑,只补登记,不报错);返回 `"code": "dirty"` → 不删,报「cgraphx@订单导出 有 2 个文件没提交」并列出 `files`。
+   用户说删 → 逐个 `cgraphx replica remove <副本目录名> --json`(已不在的也跑,只补登记,不报错),按返回的 `state` 和 `branch.state` 回报:
+   - `"state": "removed"` → 「已删 cgraphx@订单导出(分支 feat/订单导出 已删除)」,分支留着时换成「(分支 feat/订单导出 留着,提交还在)」;后面接一句「登记留着,副本里记下的会话和提交在项目的数据里」
+   - `"state": "missing"` → 「cgraphx@订单导出 已不在」,同样带上分支结果
+   - `warnings` 逐条转告
+   - 返回 `"code": "dirty"` → 不删,报「cgraphx@订单导出 有 2 个文件没提交」并列出 `files`
 8. **提示**:「发布照你们现在的流程走;发完跑 /release-start」
 
 ## 范例
@@ -146,7 +151,7 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
 
 ## 结论
 
-有风险:积分发放缺测试;退款有 2 个接口测试用例没通过;疑似夹带 2 处(9a8b7c6 直接提交在 dev/2.0.11 上;订单导出的合入改了 src/points/award.ts,它的 plan 只写了 src/order/)。
+有风险:积分发放缺测试;退款有 2 个接口测试用例没通过;疑似夹带 2 处(9a8b7c6 直接提交在 dev/2.0.11 上;订单导出的合入改了 src/points/award.ts,它的 plan 只写了 src/order/);跳过门禁的提交 1 笔(5a8b2c3)。
 
 ## 本版本的需求
 
@@ -161,6 +166,10 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
 
 - 9a8b7c6 feat(points): 积分过期提醒——直接提交在 dev/2.0.11 上,不是 chore(release): 开头(绕过了拦截)
 - 订单导出的合入 a1c3e5f 改了 src/points/award.ts——它的 plan 涉及范围只有 src/order/;是 7b3c2d1 feat(order): 导出带上积分列 改的,会话 4f2a9c1e-7b1d-4c3e-9a2f-1d2c3b4a5e6f
+
+## 跳过门禁的提交
+
+- 5a8b2c3 fix(order): 导出文件名兜底——`--no-verify` 跳过门禁,会话 4f2a9c1e-7b1d-4c3e-9a2f-1d2c3b4a5e6f
 
 ## 已声明的版本级提交
 
@@ -208,6 +217,7 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
 - 积分发放缺测试
 - 退款有 2 个接口测试用例没通过
 - 疑似夹带 2 处:9a8b7c6 直接提交在 dev/2.0.11 上;订单导出的合入改了 src/points/award.ts,它的 plan 只写了 src/order/
+- 跳过门禁的提交 1 笔:5a8b2c3 fix(order): 导出文件名兜底(--no-verify,会话 4f2a9c1e-7b1d-4c3e-9a2f-1d2c3b4a5e6f)
 ```
 
 ### 审核完的回复
@@ -219,6 +229,7 @@ dev/2.0.11 审核完了,报告已提交:docs/releases/v2.0.11-发版审核.md(ch
 - 积分发放缺测试
 - 退款有 2 个接口测试用例没通过
 - 疑似夹带 2 处:9a8b7c6 直接提交在 dev/2.0.11 上;订单导出的合入改了 src/points/award.ts,它的 plan 只写了 src/order/
+- 跳过门禁的提交 1 笔:5a8b2c3 fix(order): 导出文件名兜底(--no-verify)
 
 摘要:合入 订单导出(2 次)、积分发放、退款,另有未关联需求目录的 fix/登录超时;和 main 合并预演没有冲突;版本号已改成 2.0.11;导出优化 还在副本里,差 2 个提交,不在本版本。
 
@@ -254,7 +265,7 @@ cgraphx@订单导出、cgraphx@积分发放、cgraphx@退款 已合入,可以删
 用户说删,cgraphx@积分发放 返回 `dirty`:
 
 ```text
-已删 cgraphx@订单导出、cgraphx@退款,登记和数据都留着。cgraphx@积分发放 有 2 个文件没提交,没删:src/points/expire.ts、src/points/expire.test.ts。
+已删 cgraphx@订单导出、cgraphx@退款(分支 feat/订单导出、feat/退款 已删除),登记留着,副本里记下的会话和提交在项目的数据里。cgraphx@积分发放 有 2 个文件没提交,没删:src/points/expire.ts、src/points/expire.test.ts。
 
 发布照你们现在的流程走;发完跑 /release-start
 ```

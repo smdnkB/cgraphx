@@ -1,24 +1,22 @@
 /**
- * One-time data migrations for the shared `.cgraphx/cgraphx.db`.
+ * 本地库的一次性数据迁移。
  *
- * 2.0 removed the code-graph layer that gave cgraphx its 1.x name. Projects
- * initialized under 1.x still carry the graph tables — now orphaned, and often
- * large: `nodes` / `edges` / `files` / `unresolved_refs`, the `nodes_fts` FTS5
- * index (and its shadow tables), plus the graph layer's `project_metadata` and
- * bare `schema_versions`. `dropLegacyGraphTables` removes exactly those,
- * preserving the 2.0 `markdown_*` / `timeline_*` data (2.0 versioning uses the
- * prefixed `markdown_schema_versions` / `timeline_schema_versions`, never the
- * bare `schema_versions`).
+ * 2.0 移除了 cgraphx 1.x 得名所由来的代码图谱层。1.x 下初始化的项目,本地 `.cgraphx/cgraphx.db` 里还留着
+ * 图谱表——已无人读写,而且往往很大:`nodes` / `edges` / `files` / `unresolved_refs`、FTS5 索引 `nodes_fts`
+ * (连同它的影子表),以及图谱层的 `project_metadata` 和不带前缀的 `schema_versions`。`dropLegacyGraphTables`
+ * 只删这几张,2.0 的 `markdown_*` 等前缀表原样保留(2.0 的版本表都带前缀,如 `markdown_schema_versions`、
+ * `timeline_schema_versions`,从不用不带前缀的 `schema_versions`)。
+ *
+ * 1.x 遗留表只会在本地库里(数据位置改到用户目录之前,库都在本地),所以固定清本地库(spec:2026-11-05-
+ * 数据按项目放用户目录 D8)。
  */
 
-import * as fs from 'fs';
-import { DatabaseConnection, getDatabasePath } from './index';
+import * as fs from 'node:fs';
+import { DatabaseConnection, getLocalDatabasePath } from './index';
 
 /**
- * The 1.x code-graph tables, orphaned by the 2.0 rebuild (from the removed
- * `src/db/schema.sql`). `nodes_fts` is an FTS5 virtual table — listed FIRST so
- * it's dropped before its content table (`nodes`); DROP TABLE on it cascades to
- * its shadow tables (nodes_fts_data / _idx / _content / _docsize / _config).
+ * 2.0 重构后无人读写的 1.x 图谱表(出自已删除的 `src/db/schema.sql`)。`nodes_fts` 是 FTS5 虚表,排在最前,
+ * 先于它的内容表 `nodes` 删除;DROP TABLE 它会连带删掉影子表(nodes_fts_data / _idx / _content / _docsize / _config)。
  */
 const LEGACY_GRAPH_TABLES = [
   'nodes_fts',
@@ -31,23 +29,20 @@ const LEGACY_GRAPH_TABLES = [
 ] as const;
 
 export interface LegacyGraphCleanup {
-  /** Graph tables that actually existed and were dropped. */
+  /** 原本在、已删掉的图谱表。 */
   dropped: string[];
 }
 
 /**
- * Drop the orphaned 1.x code-graph tables from a project's `.cgraphx/cgraphx.db`.
+ * 删掉项目本地 `.cgraphx/cgraphx.db` 里无人读写的 1.x 图谱表。
  *
- * Idempotent and cheap — a no-op once the tables are gone, and a no-op for
- * projects 2.0 created (they never had them). Only the known graph table names
- * are ever dropped (never a blanket "drop everything non-2.0"), so current and
- * future `markdown_*` / `timeline_*` / subsystem tables are safe.
+ * 幂等且开销小——表删过以后、以及 2.0 新建的项目(本来就没有)都是空操作。只删已知的图谱表名(从不「删光所有
+ * 非 2.0 的表」),现在和以后的 `markdown_*` / 各子系统前缀表都安全。
  *
- * @returns The graph tables that were present and dropped (empty when none,
- *          or when the project has no `.cgraphx/cgraphx.db` yet).
+ * @returns 原本在、已删掉的图谱表(一张都没有,或项目还没有本地 `.cgraphx/cgraphx.db` 时为空)。
  */
 export function dropLegacyGraphTables(projectRoot: string): LegacyGraphCleanup {
-  const dbPath = getDatabasePath(projectRoot);
+  const dbPath = getLocalDatabasePath(projectRoot);
   if (!fs.existsSync(dbPath)) return { dropped: [] };
 
   const conn = DatabaseConnection.open(dbPath);
@@ -55,8 +50,7 @@ export function dropLegacyGraphTables(projectRoot: string): LegacyGraphCleanup {
     const db = conn.getDb();
     const dropped: string[] = [];
     for (const table of LEGACY_GRAPH_TABLES) {
-      // `table` comes from the fixed LEGACY_GRAPH_TABLES const — safe to inline
-      // (no user input, no injection surface).
+      // table 来自固定的 LEGACY_GRAPH_TABLES 常量,直接拼进 SQL 是安全的(没有用户输入)
       const row = db.prepare(
         `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${table}'`,
       ).get() as { name: string } | undefined;

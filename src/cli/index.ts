@@ -31,23 +31,21 @@ import * as fs from 'node:fs';
 import { registerDocsCommands } from '../core/markdown/cli';
 import { registerDbCommands } from '../core/dbquery/cli';
 import { registerTimelineCommands } from '../core/timeline/cli';
+import { registerCommitGateCommands } from '../core/commit-gate/cli';
 import { registerFeaturesCommands } from '../core/features/cli';
-import { readCachedProjectArtifactTypes } from '../core/sync';
-import { registerTaskCommands } from '../core/task/cli';
-import { registerSyncCommands } from '../core/sync/cli';
 import { registerReportCommands } from '../core/report/cli';
 import { registerReplicaCommands } from '../core/replica/cli';
 import { registerReleaseCommands } from '../core/release/cli';
-// 组合根例外(仅此一处):cli/index.ts 作为组装入口可经 web 门面接入
-// `cgraphx web`;src/web/ 自身只依赖 src/core/,不反向依赖 cli。
-import { registerWebCommand } from '../web';
+import { registerProjectCommands } from '../core/project/cli';
+import { registerBoardCommands } from '../core/board/cli';
+import { checkDuplicateName } from '../core/project';
+import { registerLegacyHookCommands } from './legacy-hook-commands';
+import { emitSessionNotices } from '../core/session-notices';
 
 import { buildNodeTooOldBanner, MIN_NODE_MAJOR } from './node-version-check';
 import { installFatalHandlers } from './fatal-handler';
 import {
   getCodeGraphDir,
-  resolveDataDir,
-  resolveProjectRoot,
   unsafeIndexRootReason,
 } from '../core/directory';
 
@@ -116,27 +114,6 @@ async function confirmProjectInstall(message: string): Promise<boolean> {
   }
 }
 
-/**
- * 副本关联的主目录不在了(spec D31):stderr 提示一句,命令照常执行。只看带子命令的调用;
- * hook(`*-hook`)和后台的 `sync-worker` 输出没人看,只带选项的(`--help`、`--version`)
- * 不碰数据,都不提示。
- */
-function warnIfMainRootMissing(subcommand: string | undefined): void {
-  if (subcommand === undefined || subcommand.startsWith('-')) return;
-  if (subcommand.endsWith('-hook') || subcommand === 'sync-worker') return;
-  let cwd: string;
-  try {
-    cwd = process.cwd();
-  } catch {
-    // 当前目录已被删掉:没有可提示的项目,命令照常执行(version、help 这类不碰数据的命令不该因此崩)
-    return;
-  }
-  const dataDir = resolveDataDir(resolveProjectRoot(cwd));
-  if (dataDir.state === 'main-missing') {
-    process.stderr.write(`[cgraphx] 副本关联的主项目不在 ${dataDir.mainRoot} 了\n`);
-  }
-}
-
 function main(): void {
   const program = new Command();
 
@@ -192,17 +169,16 @@ function main(): void {
   registerDocsCommands(program);
   registerDbCommands(program);
   registerTimelineCommands(program);
-  registerFeaturesCommands(program, {
-    readProjectArtifactTypes: readCachedProjectArtifactTypes,
-  });
-  registerTaskCommands(program);
-  registerSyncCommands(program);
+  // 隐藏的 commit-gate-hook 命令(commit-msg 门禁片段经 PATH 调起)
+  registerCommitGateCommands(program);
+  registerFeaturesCommands(program);
   registerReportCommands(program);
   registerReplicaCommands(program);
   registerReleaseCommands(program);
-
-  // web — 本地只读浏览服务(顶层命令,经 web 门面注册;组合根例外见上方 import)。
-  registerWebCommand(program);
+  registerProjectCommands(program);
+  registerBoardCommands(program);
+  // 已下掉功能的兼容空命令(隐藏,读完 stdin 不做任何事):平台同步、开发任务 5 条 + 时间线 hook 7 条
+  registerLegacyHookCommands(program);
 
   // ===========================================================================
   // (init / status / uninit were folded into install / uninstall — see the
@@ -312,7 +288,10 @@ function main(): void {
     .description('Remove cgraphx from the current project (skills, config, .cgraphx/)')
     .option('-t, --target <ids>', 'Target agent id(s), comma-separated (e.g. claude-code), or all / none')
     .option('-y, --yes', 'Non-interactive: no prompts (also deletes .cgraphx/ without confirming)')
-    .option('--keep-data', 'Keep the .cgraphx/ data directory (default: remove it)')
+    .option(
+      '--keep-data',
+      "Keep this directory's .cgraphx/ (knowledge index and my-features); project data in ~/.cgraphx/projects/ is never removed by uninstall",
+    )
     .action(
       async (opts: {
         target?: string;
@@ -335,8 +314,52 @@ function main(): void {
       },
     );
 
-  // 解析命令前:副本的主目录不在了先提示(不带参数的交互安装器入口不走 main,不做这个判断)
-  warnIfMainRootMissing(firstArg);
+  // ===========================================================================
+  // 会话提示的统一挂点(spec F4 / D16):每条命令 action 完成后出一次提示,只写 stderr。
+  // 不在任何子系统的 cli 里各调一次——漏一个就不提示(D16 没选)。调 process.exit 的命令
+  // 路径(upgrade、install/uninstall 出错)拿不到 postAction,不提示,下一条补上(已知接受项)。
+  // 这里挂两个提示:会话提示(emitSessionNotices)+ 重名提示(checkDuplicateName);都只写 stderr、
+  // 都各自整体 try/catch——提示不得影响命令结果与退出码(spec 全局约束 2)。
+  // ===========================================================================
+
+  // 不算一条的命令名(C-9):隐藏命令、git 钩子调起的命令、`version`(`--help`、`--version`、
+  // `help` 不走 action,天然不算)。commander 没有公开的 hidden 读取口,按命令名静态列全
+  // (名单实现方式是 plan 允许的局部适配):
+  // - timeline-git-commit-hook(git post-commit / post-merge 片段调起)
+  // - commit-gate-hook(commit-msg 门禁片段调起)、guard(release 的 commit-msg 拦截片段调起)
+  // - 已下掉功能的 12 个兼容空命令(旧 agent 配置调起:平台同步、开发任务 5 条 + 时间线 hook 7 条)
+  // - version(裸名词形式的 --version)
+  const NON_SESSION_COMMAND_NAMES = new Set([
+    'timeline-user-prompt-hook',
+    'timeline-pre-tool-use-hook',
+    'timeline-post-tool-use-hook',
+    'timeline-post-tool-use-failure-hook',
+    'timeline-stop-hook',
+    'timeline-session-start-hook',
+    'timeline-session-end-hook',
+    'timeline-git-commit-hook',
+    'commit-gate-hook',
+    'guard',
+    'sync-session-start-hook',
+    'sync-stop-hook',
+    'task-session-start-hook',
+    'task-stop-hook',
+    'task-post-tool-use-hook',
+    'version',
+  ]);
+
+  program.hook('postAction', (_thisCommand: Command, actionCommand: Command) => {
+    if (NON_SESSION_COMMAND_NAMES.has(actionCommand.name())) return;
+    // 提示绝不影响命令:emitSessionNotices 内部整体 try/catch,失败只是不出提示
+    emitSessionNotices(process.cwd());
+    // 重名提示(spec F3、C-8):这个目录第一次判断,重名才往 stderr 写一行;--json 的 stdout 不混提示
+    try {
+      const notice = checkDuplicateName(process.cwd());
+      if (notice !== null) process.stderr.write(`${notice}\n`);
+    } catch {
+      // 判断失败不影响命令结果与退出码,下次再判断
+    }
+  });
 
   program.parse();
 }

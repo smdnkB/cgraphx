@@ -1,17 +1,18 @@
 /**
- * TimelineStore — low-level persistence for the timeline subsystem.
+ * TimelineStore —— timeline 子系统的底层读写(spec §2 数据模型、§3 记事件、§5 查询)。
  *
- * Spec §2 (data model) + §3 (event recording) + §5 (query).
- *
- * Wraps a single SqliteDatabase (the shared .cgraphx/cgraphx.db) and
- * touches only `timeline_*` tables. The DB handle is owned by the caller
- * (hook entry or CLI) and closed when the caller is done.
+ * 包着一个 SqliteDatabase(数据位置那份库:没并过的旧库是本地 `.cgraphx/cgraphx.db`,其余是用户目录里这个项目的
+ * 库),只碰 `timeline_*` 表。连接由调用方(hook 入口、CLI、门面)打开和关闭;读的一方用只读打开的连接,表在不在
+ * 由门面先查(见 indexer.ts)。统计的主体在 stats.ts,这里的 stats 是调它的薄方法。
  *
  * Field-size caps (spec §2.3) are applied here so callers can pass arbitrary
  * payloads without worrying about DB bloat.
  */
 
-import type { SqliteDatabase } from '../db';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { DatabaseConnection, DATABASE_FILENAME, type SqliteDatabase } from '../db';
 import {
   RESULT_SUMMARY_MAX_BYTES,
   SUMMARY_FIELD_MAX_BYTES,
@@ -24,8 +25,6 @@ import {
   ARGS_FIELD_MAX_BYTES,
   DEFAULT_QUERY_LIMIT,
   MAX_QUERY_LIMIT,
-  READ_FILE_TOOLS,
-  WRITE_FILE_TOOLS,
 } from './constants';
 import {
   type EventType,
@@ -36,6 +35,8 @@ import {
 } from './types';
 import { StoreInsertError, StoreQueryError } from './errors';
 import { capJsonValue, truncateUtf8 } from './json-cap';
+import { hasTable } from './roots';
+import { computeTimelineStats, parseCommitFiles, tryParseJson } from './stats';
 
 // ─── Field-size enforcement ────────────────────────────────────────────────
 
@@ -138,21 +139,6 @@ interface EventRow {
   agent?: string | null;
 }
 
-/**
- * commit_files 列:一般是路径数组;超过 COMMIT_FILES_MAX 截断时存成 `{ files, _truncated_count }`
- * (见 insert),读的一方都按数组用,这里统一成数组。
- */
-function parseCommitFiles(raw: string | null): string[] {
-  if (!raw) return [];
-  const parsed = tryParseJson<unknown>(raw);
-  const list = Array.isArray(parsed)
-    ? parsed
-    : parsed !== null && typeof parsed === 'object' && Array.isArray((parsed as { files?: unknown }).files)
-      ? (parsed as { files: unknown[] }).files
-      : [];
-  return list.filter((f): f is string => typeof f === 'string');
-}
-
 function rowToEvent(row: EventRow): TimelineEvent {
   const args = row.tool_args ? tryParseJson(row.tool_args) : null;
   const files = parseCommitFiles(row.commit_files);
@@ -179,15 +165,17 @@ function rowToEvent(row: EventRow): TimelineEvent {
   };
 }
 
-function tryParseJson<T>(s: string): T | null {
-  try { return JSON.parse(s) as T; } catch { return null; }
-}
-
 // ─── Store ─────────────────────────────────────────────────────────────────
 
 export class TimelineStore {
   constructor(private readonly db: SqliteDatabase) {}
 
+  /**
+   * 写一条事件。带 source_key 的行按部分唯一索引去重:键撞上时静默跳过(INSERT OR IGNORE,
+   * 补录重读同一事实不多记,spec 2026-11-06-会话文件解析替代hooks D5);不带键的行(hook 路径、
+   * git_commit)不进部分索引,行为与原来相同。被跳过时返回的 id 是连接上最近一次成功写入的 id,
+   * 只作信息用。
+   */
   insert(input: TimelineEventInput): number {
     const ts = input.ts ?? new Date().toISOString();
     const cwd = input.cwd ?? process.cwd();
@@ -216,12 +204,12 @@ export class TimelineStore {
     try {
       const result = this.db
         .prepare(
-          `INSERT INTO timeline_events (
+          `INSERT OR IGNORE INTO timeline_events (
              ts, session_id, event_type, tool_name, tool_args,
              tool_result_summary, prompt_text, duration_ms,
              commit_hash, commit_message, commit_files, cwd, metadata,
-             turn_id, commit_insertions, commit_deletions, agent
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             turn_id, commit_insertions, commit_deletions, agent, source_key
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           ts,
@@ -241,6 +229,7 @@ export class TimelineStore {
           input.commit_insertions ?? null,
           input.commit_deletions ?? null,
           input.agent ?? null,
+          input.source_key ?? null,
         );
       const id = (result as unknown as { lastInsertRowid: number }).lastInsertRowid;
       return typeof id === 'number' ? id : Number(id);
@@ -299,88 +288,6 @@ export class TimelineStore {
     }
   }
 
-  /** 每个会话的最大事件 id(session_id 为空的事件不计)。 */
-  listSessionMaxIds(): Array<{ sessionId: string; maxId: number }> {
-    try {
-      const rows = this.db
-        .prepare(
-          'SELECT session_id, max(id) AS max_id FROM timeline_events WHERE session_id IS NOT NULL GROUP BY session_id',
-        )
-        .all() as Array<{ session_id: string; max_id: number }>;
-      return rows.map((r) => ({ sessionId: r.session_id, maxId: Number(r.max_id) }));
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline 会话水位查询失败:${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /** 指定会话中 id 大于 afterId 的全部事件,按 id 升序,不设上限(不同于 query 的 limit + ts 倒序)。 */
-  listSessionEventsAfter(sessionId: string, afterId: number): TimelineEvent[] {
-    try {
-      const rows = this.db
-        .prepare('SELECT * FROM timeline_events WHERE session_id = ? AND id > ? ORDER BY id ASC')
-        .all(sessionId, afterId) as EventRow[];
-      return rows.map(rowToEvent);
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline 会话增量事件查询失败:${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /** 全部 git_commit 事件(含 session_id 为空的终端 commit),按 ts、id 升序,不设上限。 */
-  listCommitEvents(): TimelineEvent[] {
-    try {
-      const rows = this.db
-        .prepare("SELECT * FROM timeline_events WHERE event_type = 'git_commit' ORDER BY ts ASC, id ASC")
-        .all() as EventRow[];
-      return rows.map(rowToEvent);
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline commit 事件查询失败:${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  /**
-   * Find the most recent pre_tool_use event matching the given filter.
-   *
-   * Used by B-2's duration_ms enricher to compute post.ts - pre.ts for
-   * write-tool post events within a turn. Filters on turn_id + tool_name +
-   * session_id; session_id null is matched via `IS NULL` (the schema allows
-   * NULL session_id for events Claude Code couldn't attribute to a session).
-   *
-   * Uses idx_timeline_turn_id (turn_id index) plus the ORDER BY ts DESC
-   * LIMIT 1 pattern to keep the lookup sub-millisecond at scale.
-   *
-   * @returns the matching event, or null if none exists.
-   */
-  getMostRecentPre(filter: {
-    turn_id: string;
-    tool_name: string;
-    session_id: string | null;
-  }): TimelineEvent | null {
-    const sessionClause = filter.session_id === null
-      ? 'AND session_id IS NULL'
-      : 'AND session_id = ?';
-    const sql = `SELECT * FROM timeline_events
-                 WHERE turn_id = ? AND tool_name = ? ${sessionClause}
-                   AND event_type = 'pre_tool_use'
-                 ORDER BY ts DESC, id DESC LIMIT 1`;
-    const params = filter.session_id === null
-      ? [filter.turn_id, filter.tool_name]
-      : [filter.turn_id, filter.tool_name, filter.session_id];
-    try {
-      const row = this.db.prepare(sql).get(...params) as EventRow | undefined;
-      return row ? rowToEvent(row) : null;
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline getMostRecentPre failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
   /**
    * Aggregate stats for a single session (B-6).
    *
@@ -431,157 +338,113 @@ export class TimelineStore {
     }
   }
 
+  /** 时间窗内的统计(主体在 stats.ts;文件排行按项目根换算路径,spec D12)。 */
   stats(filter: TimelineQueryFilter): TimelineStats {
-    const since = resolveTimeBound(filter.since);
-    const until = resolveTimeBound(filter.until, true);
+    return computeTimelineStats(this.db, {
+      since: resolveTimeBound(filter.since),
+      until: resolveTimeBound(filter.until, true),
+    });
+  }
+}
 
-    const baseClauses: string[] = [];
-    const baseParams: Array<string | number> = [];
-    if (since) { baseClauses.push('ts >= ?'); baseParams.push(since); }
-    if (until) { baseClauses.push('ts <= ?'); baseParams.push(until); }
-    const where = baseClauses.length ? `WHERE ${baseClauses.join(' AND ')}` : '';
+// ─── 会话标题(spec 2026-11-06-agent看板 D8)──────────────────────────────────
 
-    try {
-      const totalRow = this.db
-        .prepare(`SELECT COUNT(*) AS c FROM timeline_events ${where}`)
-        .get(...baseParams) as { c: number } | undefined;
-      const totalEvents = totalRow?.c ?? 0;
+/** 标题种类:custom = 用户起的(claude custom-title 行)、ai = 自动起的(claude ai-title 行)、agent = deepseek 起的。 */
+export type SessionTitleKind = 'custom' | 'ai' | 'agent';
 
-      const byTypeRows = this.db
-        .prepare(
-          `SELECT event_type, COUNT(*) AS c FROM timeline_events ${where} GROUP BY event_type`,
-        )
-        .all(...baseParams) as Array<{ event_type: string; c: number }>;
-      const byType: Record<EventType, number> = {
-        user_prompt: 0,
-        auto_message: 0,
-        pre_tool_use: 0,
-        post_tool_use: 0,
-        stop: 0,
-        git_commit: 0,
-        session_start: 0,
-        session_end: 0,
-      };
-      for (const r of byTypeRows) {
-        byType[r.event_type as EventType] = r.c;
-      }
+/** 一个会话的标题(plan C-5 的 titles 形状;kind 在读取侧放宽成 string,容忍库里将来的新种类)。 */
+export interface SessionTitle {
+  readonly sessionId: string;
+  readonly title: string;
+  readonly kind: string;
+  readonly ts: string;
+}
 
-      const byToolRows = this.db
-        .prepare(
-          `SELECT tool_name, COUNT(*) AS c FROM timeline_events
-           ${where} ${where ? 'AND' : 'WHERE'} tool_name IS NOT NULL
-           GROUP BY tool_name ORDER BY c DESC LIMIT 20`,
-        )
-        .all(...baseParams) as Array<{ tool_name: string; c: number }>;
+/** 标题表写入行(ts 是 ISO 字符串,补录管线换算好;标题截断在写入时做)。 */
+export interface SessionTitleUpsert {
+  readonly sessionId: string;
+  readonly title: string;
+  readonly kind: SessionTitleKind;
+  readonly ts: string;
+}
 
-      const byDayRows = this.db
-        .prepare(
-          // Group by *local* day. ts is stored as UTC ISO TEXT; datetime(ts,
-          // 'localtime') shifts it to the process timezone before substr takes
-          // the YYYY-MM-DD prefix. Without this, work in local hours 00:00–08:00
-          // (UTC+N) gets bucketed into the previous UTC day.
-          `SELECT substr(datetime(ts, 'localtime'), 1, 10) AS day, COUNT(*) AS c
-           FROM timeline_events ${where} GROUP BY day ORDER BY day DESC LIMIT 366`,
-        )
-        .all(...baseParams) as Array<{ day: string; c: number }>;
+/** 库里的原始行(列名与表列一一对应,snake_case)。 */
+interface SessionTitleRow {
+  session_id: string;
+  title: string;
+  kind: string;
+  ts: string;
+}
 
-      // Top files, split into read vs written. Pulls event_type/tool_name/
-      // tool_args/commit_files for every row in the window and classifies in
-      // JS — simpler and more reliable than per-row SQL LIKE, and lets us keep
-      // READ_FILE_TOOLS / WRITE_FILE_TOOLS as the single source of truth.
-      //
-      // Read: Read/Grep/Glob pre/post events. Only Read actually carries a
-      // single file_path worth counting; Grep's tool_args is {pattern, path}
-      // (a directory, not a file) and Glob's is a glob pattern — extractRead-
-      // FileRefs therefore returns [] for those tools, so they contribute no
-      // entries to topFilesRead even though READ_FILE_TOOLS.has() is true.
-      // Written: Edit/Write/MultiEdit/NotebookEdit pre/post + commit_files
-      // (files in a git commit were modified, hence written).
-      const fileRows = this.db
-        .prepare(
-          `SELECT event_type, tool_name, tool_args, commit_files
-           FROM timeline_events ${where}`,
-        )
-        .all(...baseParams) as Array<{
-          event_type: string;
-          tool_name: string | null;
-          tool_args: string | null;
-          commit_files: string | null;
-        }>;
-      const readCounts = new Map<string, number>();
-      const writeCounts = new Map<string, number>();
-      for (const r of fileRows) {
-        if (r.tool_name && READ_FILE_TOOLS.has(r.tool_name)) {
-          for (const f of extractReadFileRefs(r.tool_name, r.tool_args)) {
-            readCounts.set(f, (readCounts.get(f) ?? 0) + 1);
-          }
-        }
-        if (r.tool_name && WRITE_FILE_TOOLS.has(r.tool_name)) {
-          for (const f of extractWrittenFileRefs(r.tool_name, r.tool_args)) {
-            writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
-          }
-        }
-        for (const f of parseCommitFiles(r.commit_files)) writeCounts.set(f, (writeCounts.get(f) ?? 0) + 1);
-      }
+/** kind 的优先级表达式(custom > ai > agent,数字大者胜);col 传 'excluded.kind' 或表列。 */
+const kindRank = (col: string): string => `CASE ${col} WHEN 'custom' THEN 2 WHEN 'ai' THEN 1 ELSE 0 END`;
 
-      const topFilesRead = Array.from(readCounts.entries())
-        .map(([file, count]) => ({ file, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 20);
-      const topFilesWritten = Array.from(writeCounts.entries())
-        .map(([file, count]) => ({ file, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 20);
+/**
+ * 未知时间的哨兵(claude 的标题行行内不带时间戳,增量趟窗口里又没有带时间的行时,管线把 ts 归一成
+ * 它)。会话文件只追加:读到未知 ts 的标题行,说明它排在库中已有标题(来自更早的文件位置)之后,
+ * 同级一律覆盖;全量读里排在它后面的已知 ts 标题也天然能再盖回来(已知 >= 哨兵恒真)。
+ */
+export const UNKNOWN_TITLE_TS = '1970-01-01T00:00:00.000Z';
 
-      return {
-        totalEvents,
-        byType,
-        byTool: byToolRows.map(r => ({ tool: r.tool_name, count: r.c })),
-        byDay: byDayRows.map(r => ({ day: r.day, count: r.c })),
-        topFilesRead,
-        topFilesWritten,
-        windowStart: since,
-        windowEnd: until,
-      };
-    } catch (err) {
-      throw new StoreQueryError(
-        `Timeline stats failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+/**
+ * 写一个会话的标题,一个会话只留一行(D8):优先级 custom > ai > agent(用户起的永远不被自动起的
+ * 盖掉);同级 ts 新者胜,相等也覆盖——claude 的标题行在同一文件里反复追加,后读到的算新;传入
+ * ts 是未知哨兵(UNKNOWN_TITLE_TS)时同级一律覆盖(见该常量的注释)。条件不满足时 ON CONFLICT
+ * 静默跳过(不抛错,补录的事实批次不受影响)。标题按摘要预览字段同款上限截断(json-cap 的
+ * truncateUtf8),不让一行超长标题撑爆库。
+ */
+const UPSERT_TITLE_SQL =
+  'INSERT INTO timeline_session_titles (session_id, title, kind, ts) VALUES (?, ?, ?, ?) ' +
+  'ON CONFLICT(session_id) DO UPDATE SET title = excluded.title, kind = excluded.kind, ts = excluded.ts ' +
+  `WHERE ${kindRank('excluded.kind')} > ${kindRank('timeline_session_titles.kind')} ` +
+  `   OR (${kindRank('excluded.kind')} = ${kindRank('timeline_session_titles.kind')} ` +
+  '       AND (excluded.ts >= timeline_session_titles.ts OR excluded.ts = \'' + UNKNOWN_TITLE_TS + '\'))';
+
+export function upsertSessionTitle(db: SqliteDatabase, row: SessionTitleUpsert): void {
+  try {
+    db.prepare(UPSERT_TITLE_SQL).run(
+      row.sessionId,
+      truncateUtf8(row.title, SUMMARY_FIELD_MAX_BYTES),
+      row.kind,
+      row.ts,
+    );
+  } catch (err) {
+    throw new StoreInsertError(
+      `Session title upsert failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/** 标题表全表(按会话编号排序,结果稳定),给拿着库连接的调用方(并库前核对、看板读取)。 */
+export function readSessionTitles(db: SqliteDatabase): SessionTitle[] {
+  try {
+    const rows = db
+      .prepare('SELECT session_id, title, kind, ts FROM timeline_session_titles ORDER BY session_id')
+      .all() as SessionTitleRow[];
+    return rows.map((r) => ({ sessionId: r.session_id, title: r.title, kind: r.kind, ts: r.ts }));
+  } catch (err) {
+    throw new StoreQueryError(
+      `Session titles read failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
 /**
- * Extract file references for read-counting from a tool_args JSON blob.
- *
- * Only Read carries a single concrete file (`file_path`). Grep's tool_args is
- * `{ pattern, path }` where `path` is a *directory* (not a file), and Glob's
- * is `{ pattern }` (a glob, not a file) — neither is counted as a read file,
- * so this function returns [] for them even though READ_FILE_TOOLS lists them.
- *
- * @param toolName the tool that produced the args (drives extraction logic).
+ * 按数据目录只读读标题(看板用,D8 / plan C-5):库文件不在 → 空数组;不应用 schema、不建目录、
+ * 不写表(打开写法同 roots.ts 的 readDbFile);旧库可能还没有这张表,表不在按空,不报错。
  */
-function extractReadFileRefs(toolName: string, argsJson: string | null): string[] {
-  if (toolName !== 'Read' || !argsJson) return [];
-  const parsed = tryParseJson<Record<string, unknown>>(argsJson);
-  if (!parsed) return [];
-  const fp = parsed['file_path'];
-  return typeof fp === 'string' && fp.length > 0 ? [fp] : [];
-}
-
-/**
- * Extract the target file reference for write-counting from a tool_args JSON blob.
- *
- * Edit/Write/MultiEdit/NotebookEdit all carry a top-level `file_path` that is
- * the file being modified. Only that field is counted — MultiEdit's inner
- * `edits[]` array holds old_string/new_string pairs, not additional files.
- *
- * @param toolName the tool that produced the args (drives extraction logic).
- */
-function extractWrittenFileRefs(toolName: string, argsJson: string | null): string[] {
-  if (!WRITE_FILE_TOOLS.has(toolName) || !argsJson) return [];
-  const parsed = tryParseJson<Record<string, unknown>>(argsJson);
-  if (!parsed) return [];
-  const fp = parsed['file_path'];
-  return typeof fp === 'string' && fp.length > 0 ? [fp] : [];
+export function readSessionTitlesInDataDir(dataDir: string): SessionTitle[] {
+  const dbPath = path.join(dataDir, DATABASE_FILENAME);
+  if (!fs.existsSync(dbPath)) return [];
+  const conn = DatabaseConnection.open(dbPath);
+  try {
+    const db = conn.getDb();
+    return hasTable(db, 'timeline_session_titles') ? readSessionTitles(db) : [];
+  } finally {
+    try {
+      conn.close();
+    } catch {
+      // 关不上不影响结果(句柄随进程退出释放)
+    }
+  }
 }

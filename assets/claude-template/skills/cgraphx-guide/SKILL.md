@@ -32,16 +32,17 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | 阶段 | 命令 / skill |
 |---|---|
 | **机器级 · 每机器一次** | `npm install -g cgraphx` |
-| **项目级 · 每项目一次** | `cgraphx install`(建 `.cgraphx/` 数据目录 + 部署 skills/commands 到 `.claude/` + 写 hooks/statusLine)、`/init-tech-stack`(新项目先定技术栈,产出 ADR)、`/init-guides`(立项目规范)、`/init-knowledge`(接手陌生项目时建业务知识库)、`/knowledge-migrate`(用过 Claude Code 自动记忆的,每人跑一次:迁进项目,再关掉自动记忆) |
+| **项目级 · 每项目一次** | `cgraphx install`(建本地 `.cgraphx/` 与用户目录里这个项目的数据目录、并进原来的旧数据 + 部署 skills/commands 到 `.claude/` + 接 context-monitor/statusLine + 装 git 钩子:提交记录片段与提交门禁)、`/init-tech-stack`(新项目先定技术栈,产出 ADR)、`/init-guides`(立项目规范)、`/init-knowledge`(接手陌生项目时建业务知识库)、`/knowledge-migrate`(用过 Claude Code 自动记忆的,每人跑一次:迁进项目,再关掉自动记忆) |
 | **日常做需求 · 必经两步** | `/dev-clarify` 澄清(有分歧的口径先拍板,再把功能点提案写进讨论稿,人审稿式改稿,终确认的就是《需求功能方案》),然后 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完,最后 `/code-review` |
-| **日常做需求 · 复杂按需** | `/dev-wireframe`(涉及界面时画线框)、`/dev-handoff`(探索或澄清结束、要开新会话继续时)、`/dev-spec`(写技术规格)、`/dev-plan`(大需求拆执行计划)、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
+| **日常做需求 · 复杂按需** | `/dev-wireframe`(涉及界面时画线框)、`/dev-spec`(写技术规格)、`/dev-plan`(大需求拆执行计划)、`/knowledge-write`(沉淀到 `docs/knowledge/`) |
 | **版本发布 · 可选** | `/release-start` 开版本 → 每个需求 `/dev-start` 开副本 → `/dev-merge` 合入 → `/release-review` 审核并合入主干;副本单独也能用 |
 | **测试按需 · 三条线** | 接口:`/api-case` → `/api-run`;单元:`/unit-spec` → `/unit-code`;UI:`/ui-case` → `/ui-run` |
 | **安全审计按需** | `/audit-login-security`(登录/认证安全审计:枚举全部认证入口 + 画认证链路,查绕过、越权、凭据、会话、爆破;只报告不修代码,默认不落盘) |
 | **收尾按需** | `/dev-end`(写收口档案,已上线时写发布记录)、`/doc-backfill`(老需求补头部、补单测产物和收口档案) |
+| **找回会话 · 按需** | `cgraphx board`(任意目录打开本机任务看板:左栏项目与需求任务、右栏该任务的会话,自动按副本目录、需求分支、提交、流程命令等依据把会话挂到任务;复制会话标题或完整编号,回到对应软件里找回;只读) |
 | **发布后按需** | `/doc-delivery`(需求文档、设计文档、接口文档,运行时选) |
 | **工作回顾按需** | `/doc-report`(日/周/月报)、`/doc-workload`(工作量汇报)、`/doc-monthly-report`(月底填报表) |
-| **卸载 · 可选** | `cgraphx uninstall`(按清单清 `.claude/` 内包自带 skills 和配置 + 删 `.cgraphx/`,`--keep-data` 保留数据)、`npm uninstall -g cgraphx` |
+| **卸载 · 可选** | `cgraphx uninstall`(按清单清 `.claude/` 内包自带 skills 和配置 + 删这个目录的 `.cgraphx/`;项目的数据留在 `~/.cgraphx/projects/`,要删用 `cgraphx project remove`)、`npm uninstall -g cgraphx` |
 
 ## 各 skill 导航
 
@@ -51,7 +52,6 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 |---|---|
 | `/dev-clarify` | 接到模糊需求,先探索项目现实、有分歧的口径先拍板,再以功能点为单位把提案写进 PlantUML 讨论稿(功能清单 + 每个功能点的图和口径表),人审稿式改稿;经对抗审核、人终确认的讨论稿就是《需求功能方案》 |
 | `/dev-wireframe` | 需求涉及界面时画低保真 HTML 线框,看着界面确认布局交互或发现业务问题 |
-| `/dev-handoff` | 探索或澄清结束、要开新会话继续时,确认产出目录、写交接文件(指向讨论稿,拆多个会话按功能点分)、给出启动语 |
 | `/dev-spec` | 环节二:第一节原样收录功能方案,主体写怎么实现——每个功能点出设计决策表(机制选型/数据模型/接口契约)供人评审,🔒 难回头的等确认 |
 | `/dev-plan` | 大需求拆执行计划:index 加一个任务一个文件,给一句 `/dev-impl-subagent` 启动语 |
 | `/dev-impl` | 小需求按 plan 或当前上下文实现代码 |
@@ -59,7 +59,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/dev-migrate` | 换技术栈重写整个系统(如 MyBatis → JPA):旧系统当标准答案,盘点行为清单、定目标与表映射,按切片走主链,每片新旧对拍 + 数据对账,最后出切换清单 |
 | `/init-tech-stack` | 新项目起步选型:按 12 层决策树逐层给推荐与优劣,产出 `docs/adr/` 技术栈选型 ADR;系统迁移时由 `/dev-migrate` 提示用户跑 |
 | `/release-start` | 发完一个版本、要按版本开发下一个时,在主干上打上个版本的 tag `v<版本号>`、拉出版本分支 `dev/<下个版本号>` 并装上提交拦截(版本分支上只收合并提交和 `chore(release):` 开头的整版改动) |
-| `/dev-start` | 开始做一个需求时(开了版本时每个需求都要),在主目录旁边写时复制出副本 `<主目录名>@<文件前缀>`、拉好需求分支、建好需求目录,给出到副本开新会话的启动语;副本里的会话和提交记进主目录 |
+| `/dev-start` | 开始做一个需求时(开了版本时每个需求都要),在主目录旁边开出 worktree 副本 `<主目录名>@<文件前缀>`(只带 agent 配置和 `.worktreeinclude` 清单里写的文件,依赖默认不带,第一次要在副本里安装/构建)、拉好需求分支、建好需求目录,给出到副本开新会话的启动语;副本里的会话和提交和主目录记进同一个项目的数据 |
 | `/dev-merge` | 副本里的需求做完、`/code-review` 过了:副本里跑,先同步主目录当前分支、就地解决冲突;主目录里跑 `/dev-merge <需求>`,预演没冲突就以「合入需求：<标题>」合入当前分支 |
 | `/release-review` | 发版那天、改好版本号之后,出发版审核报告 `docs/releases/v<版本号>-发版审核.md` 并提交;你说「发」再合入主干,列出可以清理的副本 |
 | `/api-case` | 从 spec 接口契约生成 bruno 测试接口(.bru + 断言 + 真实参数 + 多环境配置) |
@@ -98,28 +98,30 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 
 ```bash
 npm install -g cgraphx               # 装 CLI(Node ≥ 22.5 且 < 27)
-cd /your/project && cgraphx install  # 建 .cgraphx/ + 部署 skills/commands 到 .claude/ + 写 hooks/statusLine
+cd /your/project && cgraphx install  # 建 .cgraphx/ 与项目数据目录 + 部署 skills/commands 到 .claude/ + 接 context-monitor/statusLine + 装 git 钩子(提交记录 + 提交门禁)
 ```
 
-`cgraphx install` 只作用于当前项目(项目级,写项目内 `.claude/` 与 `.cgraphx/`);升级用 `cgraphx upgrade`,在项目目录内执行——自动更新 CLI 并刷新当前项目;其他项目各自 cd 进去跑一次。
+`cgraphx install` 只作用于当前项目(项目级,写项目内 `.claude/`、`.cgraphx/`,项目的数据放 `~/.cgraphx/projects/<目录名>/`);升级用 `cgraphx upgrade`,在项目目录内执行——自动更新 CLI 并刷新当前项目;其他项目各自 cd 进去跑一次。
 
 接手陌生项目时可选第四步:`/init-knowledge` 派子 agent 自动探索、建业务知识库到 `docs/knowledge/`。
 
 ## 背后自动(agent 跑的,用户无感)
 
-- timeline 自动记录开发事件(无需手动跑)
+- timeline 自动记录开发事件:查时间线前自动补录 agent 的会话文件(Claude Code、CodeBuddy、DeepSeek Harness 三家),不需要 agent 支持 hook,只要能读会话文件;提交记录经 git 钩子记入(无需手动跑)
+- 要找回某个需求当时用的会话,任意目录跑 `cgraphx board`:本机只读看板,打开前先自动补录,会话自动挂到任务,复制标题或完整编号回对应软件里找回
 - agent 经 knowledge-recall 自动查业务知识
 - agent 经 `db-query` 自动查数据库
 - `status` / `docs` / `db` / `timeline` 等 CLI 子命令由 agent / skill 调用,人类日常不主动跑
+- 项目按名称认,名字相同就是一个项目;`install` 时记下名字,主目录、别的 clone、worktree、需求副本都记进同一份数据,项目级数据库连接配置也共用;新目录碰上重名会提示一句(不是同一个项目就 `cgraphx project name <名称>`)。`cgraphx project show` 看这个目录属于哪个项目、数据在哪,认错了用 `cgraphx project name <名称>` 改,`cgraphx project list` / `cgraphx project remove <目录名>` 列出、删除项目数据
 
 ## 卸载
 
 ```bash
-cgraphx uninstall         # 按清单清 .claude/ 内包自带 skills/配置 + 删 .cgraphx/
+cgraphx uninstall         # 按清单清 .claude/ 内包自带 skills/配置 + 删这个目录的 .cgraphx/
 npm uninstall -g cgraphx  # 卸载 CLI
 ```
 
-`cgraphx uninstall` 在项目目录内执行;加 `--keep-data` 保留 `.cgraphx/` 数据。
+`cgraphx uninstall` 在项目目录内执行;加 `--keep-data` 保留这个目录的 `.cgraphx/`;项目的数据不随卸载删除,用 `cgraphx project list` 列出、`cgraphx project remove <目录名>` 删除。
 
 ## 视觉版
 

@@ -2,7 +2,7 @@
 
 本地优先的 AI agent 研发系统 · skill 流程 + 知识库 / 数据库 / 时间线
 
-最后更新:2026-10-31
+最后更新:2026-11-07
 
 每个 skill 怎么用,见同目录的 [skill 一览](skills.html):一个 skill 一行,默认折叠,可搜索。
 
@@ -21,23 +21,23 @@ cd your-project
 cgraphx install
 ```
 
-一条命令全做:建 `.cgraphx/` 数据目录(知识库 + timeline)+ 部署 skills/commands 到 `.claude/` + 接入 hooks/statusLine + 写工作方式到 `.claude/CLAUDE.md`。重启 Claude Code 即可。
+一条命令全做:建本地 `.cgraphx/`(知识库索引)和用户目录里这个项目的数据目录(timeline;同一项目的各个目录共用),并问一次项目名称(项目按名称认,同名的目录记进同一份数据;地址只用来取默认名字)+ 把原来的旧数据并过去 + 部署 skills/commands 到 `.claude/` + 接 context-monitor/statusLine + 装 git 钩子(提交记录 + 提交门禁)+ 写工作方式到 `.claude/CLAUDE.md`。重启 Claude Code 即可。
 
 ### 升级
 
 ```bash
-cgraphx upgrade           # 在项目目录内执行:npm 自更新 + 自动刷新本项目 skills/hooks(自动清理已改名/移除的旧 skill)
+cgraphx upgrade           # 在项目目录内执行:npm 自更新 + 自动刷新本项目 skills/git 钩子(自动清理已改名/移除的旧 skill)
                           # 其他项目各自 cd 进去跑一次;只换包不动项目:cgraphx upgrade --no-install
 ```
 
 ### 卸载 · 可选
 
 ```bash
-cgraphx uninstall         # 按清单清 .claude/ 内包自带 skills/配置 + 删 .cgraphx/
+cgraphx uninstall         # 按清单清 .claude/ 内包自带 skills/配置 + 删这个目录的 .cgraphx/
 npm uninstall -g cgraphx  # 卸载 CLI
 ```
 
-加 `--keep-data` 保留 `.cgraphx/` 数据。
+加 `--keep-data` 保留这个目录的 `.cgraphx/`;项目的数据不随卸载删除,用 `cgraphx project list` 列出、`cgraphx project remove <目录名>` 删除。
 
 ---
 
@@ -108,7 +108,7 @@ knowledge-recall(自动召回)
 /doc-delivery(需求文档、设计文档、接口文档)
 ```
 
-日常默认两步:**澄清 + 实现**。大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完;复杂需求按需补规格和测试。timeline 自动记录开发事件,你不需要主动跑命令。
+日常默认两步:**澄清 + 实现**。大需求先 `/dev-plan`,再 `/dev-impl-subagent` 一个会话跑完;复杂需求按需补规格和测试。timeline 从 agent 的会话文件自动补录开发事件(不需要 agent 支持 hook),你不需要主动跑命令。
 
 **版本发布 · 可选**:`/release-start` 开版本 → 每个需求 `/dev-start` 开副本 → `/dev-merge` 合入 → `/release-review` 审核并合入主干;副本单独也能用。不用就照旧在当前分支上开发。
 
@@ -127,7 +127,7 @@ knowledge-recall(自动召回)
 
 > 日常默认 2 步:澄清 + 实现。spec 是唯一契约——「没有任何业务义务存在于 spec 之外」,变更时只改 spec 一处,下游重新派生。
 
-> **交付收尾**:实现收尾会提示沉淀知识(`/knowledge-write`)和平台环节缺口;需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录。
+> **交付收尾**:实现收尾会提示沉淀知识(`/knowledge-write`)和需求环节缺口;需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录。
 
 ---
 
@@ -136,11 +136,11 @@ knowledge-recall(自动召回)
 按版本发版、每个需求在自己的副本里做时用;不用就照旧在当前分支上开发。
 
 - `/release-start` 开版本:在主干上打上个版本的 tag `v<版本号>`、拉出版本分支 `dev/<下个版本号>`、装上提交拦截——发完一个版本、要开发下一个时跑
-- `/dev-start` 开副本:在主目录旁边写时复制出 `<主目录名>@<文件前缀>`,拉好需求分支、建好需求目录,给出到副本开新会话的启动语——开始做一个需求时跑,开了版本时每个需求都要
+- `/dev-start` 开副本:在主目录旁边开出 worktree 副本 `<主目录名>@<文件前缀>`(只带 agent 配置和 `.worktreeinclude` 清单里写的文件,依赖默认不带),拉好需求分支、建好需求目录,给出到副本开新会话的启动语——开始做一个需求时跑,开了版本时每个需求都要
 - `/dev-merge` 合入:副本里跑,先同步主目录当前分支、就地解决冲突;主目录里跑 `/dev-merge <需求>`,预演没冲突就以「合入需求：<标题>」合入当前分支——需求做完、`/code-review` 过了之后
 - `/release-review` 发版审核:出 `docs/releases/v<版本号>-发版审核.md` 并提交,你说「发」再合入主干、列出可以清理的副本——发版那天改好版本号之后
 
-> 版本分支上直接提交会被拦下,只放行合并提交和以 `chore(release):` 开头的整版改动;副本里的会话、提交、任务归属记进主目录,知识库索引和「我的需求」索引各目录各建各的。副本单独也能用:没开版本时 `/dev-start` 从主目录当前分支拉,`/dev-merge` 合回这个分支,合完问要不要删副本。需要 git 2.38 以上;副本只支持 macOS、Linux。
+> 版本分支上直接提交会被拦下,只放行合并提交和以 `chore(release):` 开头的整版改动;副本里的会话和提交和主目录记进同一个项目的数据,知识库索引和「我的需求」索引各目录各建各的。副本单独也能用:没开版本时 `/dev-start` 从主目录当前分支拉,`/dev-merge` 合回这个分支,合完问要不要删副本。需要 git 2.38 以上;副本只支持 macOS、Linux。
 
 ---
 
@@ -203,6 +203,7 @@ knowledge-recall(自动召回)
 - `/doc-report` 从自动记录的开发事件流生成日报/周报/月报/阶段总结/使用习惯分析
 - `/doc-workload` 产出需求工作量汇报,按功能点 × 工作内容拆工时(内部对账/甲方结款依据)
 - `/doc-monthly-report` 月底把工作台日报汇总成「月底日报」填报表(每行 ≤100 字,只在会话里输出)
+- `cgraphx board` 任意目录打开本机任务看板:左栏项目与需求任务、右栏该任务的会话(自动挂上,标注命中依据),复制会话标题或完整编号,回到对应软件里找回;只读,打开前先自动补录
 
 ---
 
@@ -272,4 +273,4 @@ docs/
 
 ---
 
-cgraphx 使用说明 · 2026-10-31
+cgraphx 使用说明 · 2026-11-07

@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS timeline_events (
   turn_id TEXT,
   commit_insertions INTEGER,
   commit_deletions INTEGER,
-  agent TEXT
+  agent TEXT,
+  source_key TEXT
 );
 
 CREATE INDEX IF NOT EXISTS timeline_events_ts_idx ON timeline_events(ts);
@@ -40,9 +41,29 @@ CREATE INDEX IF NOT EXISTS timeline_events_tool_name_idx ON timeline_events(tool
 CREATE INDEX IF NOT EXISTS timeline_events_session_idx ON timeline_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_turn_id ON timeline_events(turn_id);
 
+-- 解析事件的去重键(spec 2026-11-06-会话文件解析替代hooks D5):部分唯一索引,无键的行
+-- (hook 路径、git_commit)不进索引、行为不变。只加列不升版本号(同上面 timeline_meta 的取舍),
+-- 旧库补列与索引见 schema-bootstrap.ts 的 ensureSourceKeyColumn。
+CREATE UNIQUE INDEX IF NOT EXISTS timeline_events_source_key_uidx ON timeline_events(source_key) WHERE source_key IS NOT NULL;
+
 -- 迁移水位等内部状态(如 auto_message 存量改记的扫描进度)。键值表,不占版本号:
 -- 升版本号会让比它旧的全局 cgraphx 打开库时报错、hook 不再记录(spec 2026-10-31)。
 CREATE TABLE IF NOT EXISTS timeline_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- 项目在本机出现过的根(K4)和各自最近一次活动(K16):hook 每记一条事件 upsert 一次。
+-- 只加表、不升版本号:旧库模式下新版也会给旧库建这张表,退回旧版时旧库仍要能打开。
+CREATE TABLE IF NOT EXISTS timeline_roots (
+  root TEXT PRIMARY KEY,   -- 装过的目录或工作区根的绝对路径,不放会话 cd 进去的子目录
+  first_ts TEXT NOT NULL,
+  last_ts TEXT NOT NULL
+);
+
+-- 会话标题(agent 自己起的,spec 2026-11-06-agent看板 D8):一个会话一行,写入按
+-- custom > ai > agent、同级取新(store.ts 的 upsertSessionTitle);标题不是事件,不进 timeline_events。
+-- 只加表、不升版本号——取舍同上面 timeline_meta / timeline_roots:升版本号会让比它旧的
+-- cgraphx 打开库时报错;CREATE IF NOT EXISTS 由 schema-bootstrap 每次打开幂等应用,
+-- 旧库升级后第一次补录就有这张表,旧版打开新库也不受影响。
+CREATE TABLE IF NOT EXISTS timeline_session_titles (session_id TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL, ts TEXT NOT NULL);

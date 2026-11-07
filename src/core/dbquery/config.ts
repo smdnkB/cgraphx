@@ -3,7 +3,7 @@
  *
  * Spec §2.2 — three-tier load order (first wins for path source):
  *   1. CGRAPHX_DB_PROFILES_PATH env var (custom file path; ONLY this file)
- *   2. <projectRoot>/.cgraphx/db-profiles.json (project-local)
+ *   2. 项目级:数据位置里的 db-profiles.json(并过的目录在 ~/.cgraphx/projects/<目录名>/,没并过的在 .cgraphx/)
  *   3. ~/.cgraphx/db-profiles.json (user-global)
  *
  * Merge semantics:
@@ -40,7 +40,7 @@ import {
   type ConfigSource,
 } from './types';
 import { ConfigNotFoundError } from './errors';
-import { getDataDir } from '../directory';
+import { getDataDir } from '../data-location';
 
 const VALID_DRIVERS: ReadonlySet<DriverKind> = new Set(['mysql', 'postgres', 'http']);
 
@@ -76,9 +76,13 @@ function userGlobalConfigPath(): string {
   return path.join(os.homedir(), '.cgraphx', PROFILES_FILENAME);
 }
 
-/** 项目级连接配置:在数据目录里,副本读的是主目录那份(与 init.ts 写入同一路径)。 */
-function projectLocalConfigPath(projectRoot: string): string {
-  return path.join(getDataDir(projectRoot), PROFILES_FILENAME);
+/**
+ * 项目级连接配置:数据位置里的 db-profiles.json(与 init.ts 写入同一路径)。拿不到数据位置 → null,
+ * 只读环境变量与用户级两层。只读:不建目录、不写并过记号。
+ */
+function projectLocalConfigPath(projectRoot: string): string | null {
+  const dataDir = getDataDir(projectRoot);
+  return dataDir === null ? null : path.join(dataDir, PROFILES_FILENAME);
 }
 
 function envConfigPath(): string | null {
@@ -186,8 +190,9 @@ export function loadProfiles(projectRoot?: string): ProfilesConfig {
   if (envPath) {
     filesToRead.push({ source: 'env', path: envPath });
   } else {
-    if (projectRoot) {
-      filesToRead.push({ source: 'project-local', path: projectLocalConfigPath(projectRoot) });
+    const projectPath = projectRoot ? projectLocalConfigPath(projectRoot) : null;
+    if (projectPath !== null) {
+      filesToRead.push({ source: 'project-local', path: projectPath });
     }
     filesToRead.push({ source: 'user-global', path: userGlobalConfigPath() });
   }
@@ -244,9 +249,9 @@ export function loadProfiles(projectRoot?: string): ProfilesConfig {
   const hasAnyFile = loaded.some(f => f.existed);
   if (!hasAnyFile) {
     throw new ConfigNotFoundError(
-      `No db-profiles.json found. Create .cgraphx/db-profiles.json in ` +
-        `the project root, or ~/.cgraphx/db-profiles.json globally, or set ` +
-        `the ${PROFILES_PATH_ENV} environment variable.`,
+      `No db-profiles.json found. Run \`cgraphx db init\` to create the project-level config ` +
+        `(it lives in the project data dir shown by \`cgraphx project show\`), or create ` +
+        `~/.cgraphx/db-profiles.json globally, or set ${PROFILES_PATH_ENV}.`,
       { searchedPaths: loaded.map(f => f.path) },
     );
   }

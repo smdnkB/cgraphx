@@ -5,6 +5,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['__tests__/**/*.test.ts'],
+    // 每个测试文件换一个临时 HOME,测试不碰真实家目录下的 ~/.cgraphx/
+    setupFiles: ['__tests__/setup-home.ts'],
     env: {
       /**
        * Pin the timezone so date/timezone-sensitive assertions (timeline

@@ -1,8 +1,9 @@
 /**
  * Tests for the project-local installer — spec §9.1 #14 #15.
  *
- * Verifies idempotency, full reversibility, and that unrelated user hooks
- * are left intact.
+ * 装卸只碰 git 钩子目录里的提交记录片段(post-commit / post-merge),不再读写 agent 配置
+ * (会话事件改由会话文件解析补录,spec:2026-11-06-会话文件解析替代hooks D18)。验证幂等、
+ * 可完全回退,以及用户自己的钩子内容原样保留、settings 不被碰。
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -10,8 +11,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { execSync } from 'node:child_process';
+import { Command } from 'commander';
 
 import { installTimelineHooks, uninstallTimelineHooks } from '../../../src/core/timeline/installer';
+import { registerTimelineCommands } from '../../../src/core/timeline/cli';
 import { DatabaseConnection } from '../../../src/core/db';
 import { createDirectory } from '../../../src/core/directory';
 import { ensureTimelineSchema } from '../../../src/core/timeline/schema-bootstrap';
@@ -20,6 +23,32 @@ function makeTmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-tl-inst-'));
   execSync('git init -q', { cwd: dir });
   return dir;
+}
+
+/** 在 cwd 里跑 `cgraphx timeline <args>`(进程内注册命令),收下 stdout、stderr。 */
+async function runTimelineCli(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  const program = new Command();
+  program.exitOverride();
+  registerTimelineCommands(program);
+  const out: string[] = [];
+  const err: string[] = [];
+  const text = (chunk: string | Uint8Array): string => (typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString());
+  const originalOut = process.stdout.write.bind(process.stdout);
+  const originalErr = process.stderr.write.bind(process.stderr);
+  const prevCwd = process.cwd();
+  const prevExitCode = process.exitCode;
+  process.stdout.write = ((chunk: string | Uint8Array) => { out.push(text(chunk)); return true; }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => { err.push(text(chunk)); return true; }) as typeof process.stderr.write;
+  try {
+    process.chdir(cwd);
+    await program.parseAsync(['node', 'cgraphx', 'timeline', ...args]);
+  } finally {
+    process.chdir(prevCwd);
+    process.stdout.write = originalOut;
+    process.stderr.write = originalErr;
+    process.exitCode = prevExitCode;
+  }
+  return { stdout: out.join(''), stderr: err.join('') };
 }
 
 function readSettings(projectRoot: string): Record<string, unknown> {
@@ -40,18 +69,6 @@ describe('installTimelineHooks', () => {
   beforeEach(() => { project = makeTmpProject(); });
   afterEach(() => { fs.rmSync(project, { recursive: true, force: true }); });
 
-  it('writes 6 hook events into .claude/settings.json', () => {
-    const report = installTimelineHooks(project);
-    expect(report.writtenHookEvents).toEqual(
-      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']),
-    );
-    const settings = readSettings(project);
-    const hooks = settings.hooks as Record<string, unknown>;
-    expect(Object.keys(hooks)).toEqual(
-      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']),
-    );
-  });
-
   it('writes git post-commit hook', () => {
     installTimelineHooks(project);
     const hook = readGitHook(project);
@@ -59,43 +76,30 @@ describe('installTimelineHooks', () => {
     expect(hook).toContain('cgraphx-timeline-hook');
   });
 
-  it('is idempotent — running twice results in single hook per event', () => {
-    installTimelineHooks(project);
-    const second = installTimelineHooks(project);
-    expect(second.writtenHookEvents).toEqual([]);
-    expect(second.skipped).toEqual(
-      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']),
-    );
-
-    const settings = readSettings(project);
-    const hooks = settings.hooks as Record<string, Array<{ hooks: Array<{ command: string }> }>>;
-    for (const event of ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']) {
-      const commands = hooks[event]!.flatMap(g => g.hooks.map(h => h.command));
-      const timelineCmds = commands.filter(c => c.includes('timeline-'));
-      expect(timelineCmds).toHaveLength(1);
-    }
-  });
-
-  it('preserves unrelated user hooks in same event', () => {
-    // Pre-populate with a user's own hook
+  it('不写 agent 配置:settings.json 保持不存在,已有的用户 hooks 原样不动', () => {
+    // 预置用户自己的 hook,install 之后必须一个字节都不变
     const settingsPath = path.join(project, '.claude', 'settings.json');
     fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-    fs.writeFileSync(settingsPath, JSON.stringify({
+    const seeded = JSON.stringify({
       hooks: {
         PreToolUse: [
           { hooks: [{ type: 'command', command: '/usr/local/bin/user-tool' }] },
         ],
       },
-    }));
+    }, null, 2);
+    fs.writeFileSync(settingsPath, seeded);
 
     installTimelineHooks(project);
 
-    const settings = readSettings(project);
-    const groups = (settings.hooks as Record<string, Array<{ hooks: Array<{ command: string }> }>>)
-      .PreToolUse;
-    const commands = groups!.flatMap(g => g.hooks.map(h => h.command));
-    expect(commands).toContain('/usr/local/bin/user-tool');
-    expect(commands.some(c => c.includes('timeline-'))).toBe(true);
+    expect(fs.readFileSync(settingsPath, 'utf8')).toBe(seeded);
+  });
+
+  it('is idempotent — running twice keeps a single snippet', () => {
+    installTimelineHooks(project);
+    const first = readGitHook(project);
+    const second = installTimelineHooks(project);
+    expect(second.gitHookWritten).toBe(false);
+    expect(readGitHook(project)).toBe(first);
   });
 
   it('preserves unrelated git post-commit content', () => {
@@ -121,18 +125,15 @@ describe('uninstallTimelineHooks', () => {
     installTimelineHooks(project);
     const report = uninstallTimelineHooks(project);
 
-    expect(report.removedHookEvents).toEqual(
-      expect.arrayContaining(['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionStart', 'SessionEnd']),
-    );
     expect(report.gitHookRemoved).toBe(true);
-
-    const settings = readSettings(project);
-    expect(settings.hooks).toBeUndefined();
 
     expect(readGitHook(project)).toBe('');
   });
 
-  it('leaves unrelated user hooks intact', () => {
+  it('uninstall keeps user hook content and user settings intact', () => {
+    const gitHookPath = path.join(project, '.git', 'hooks', 'post-commit');
+    fs.mkdirSync(path.dirname(gitHookPath), { recursive: true });
+    fs.writeFileSync(gitHookPath, '#!/bin/sh\necho user hook\n', { mode: 0o755 });
     const settingsPath = path.join(project, '.claude', 'settings.json');
     fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
     fs.writeFileSync(settingsPath, JSON.stringify({
@@ -146,16 +147,23 @@ describe('uninstallTimelineHooks', () => {
     installTimelineHooks(project);
     uninstallTimelineHooks(project);
 
-    const settings = readSettings(project);
-    const groups = (settings.hooks as Record<string, Array<{ hooks: Array<{ command: string }> }>>)
-      .PreToolUse;
-    const commands = groups!.flatMap(g => g.hooks.map(h => h.command));
+    const content = readGitHook(project);
+    expect(content).toContain('echo user hook');
+    expect(content).not.toContain('timeline-git-commit-hook');
+    const settings = readSettings(project) as { hooks?: Record<string, Array<{ hooks: Array<{ command: string }> }>> };
+    const commands = settings.hooks!.PreToolUse!.flatMap(g => g.hooks.map(h => h.command));
     expect(commands).toContain('/usr/local/bin/user-tool');
-    expect(commands.some(c => c.includes('timeline-'))).toBe(false);
   });
 
-  it('--purge drops timeline_* tables from the DB', () => {
-    // init cgraphx + populate one event first
+  it('-t(部分卸载)不动 git 片段', () => {
+    installTimelineHooks(project);
+    const report = uninstallTimelineHooks(project, { keepGitHook: true });
+
+    expect(report.gitHookRemoved).toBe(false);
+    expect(readGitHook(project)).toContain('timeline-git-commit-hook');
+  });
+
+  it('--purge 不再删数据:timeline 表还在,stderr 提示用 cgraphx project remove 删(spec D31,M14)', async () => {
     execSync('git config user.email test@test', { cwd: project });
     execSync('git config user.name test', { cwd: project });
     // `cgraphx init` was folded into `install`; initialize the data dir directly
@@ -169,14 +177,17 @@ describe('uninstallTimelineHooks', () => {
       initConn.close();
     }
 
-    // Insert one event
     const dbPath = path.join(project, '.cgraphx', 'cgraphx.db');
     expect(fs.existsSync(dbPath)).toBe(true);
 
     installTimelineHooks(project);
-    uninstallTimelineHooks(project, { purgeData: true });
+    const { stdout, stderr } = await runTimelineCli(project, ['uninstall', '--purge']);
 
-    expect(reportTablesExist(project)).toBe(false);
+    expect(reportTablesExist(project)).toBe(true);
+    // stdout 照旧只有 JSON 报告
+    expect(() => JSON.parse(stdout)).not.toThrow();
+    // 本地库还有旧表(没并过),项目目录不在:提示不写路径
+    expect(stderr).toContain('[timeline] 项目的数据要删用 cgraphx project remove');
   });
 });
 

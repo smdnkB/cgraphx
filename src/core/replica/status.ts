@@ -91,45 +91,31 @@ export function uncommittedFiles(replicaRoot: string): string[] | null {
   return [...tracked, ...untracked];
 }
 
-/** 副本里需求分支的最新提交;分支不存在 → '';ls-remote 失败 → null。 */
-function replicaBranchTip(mainRoot: string, entry: ReplicaEntry): string | null {
-  const ref = `refs/heads/${entry.branch}`;
-  const r = runGit(mainRoot, ['ls-remote', entry.path, ref]);
-  if (r.status !== 0) return null;
-  // ls-remote 的模式按尾部匹配,只认引用名完全相同的那一行
-  for (const line of r.stdout.split('\n')) {
-    const [sha, name] = line.split('\t');
-    if (name === ref && sha !== undefined && sha !== '') return sha;
-  }
-  return '';
+/** 主目录里需求分支的最新提交;分支不在、git 出错或没有输出 → ''。 */
+function replicaBranchTip(mainRoot: string, entry: ReplicaEntry): string {
+  const r = runGit(mainRoot, ['rev-parse', '-q', '--verify', `refs/heads/${entry.branch}`]);
+  if (r.status !== 0) return '';
+  return r.stdout.replace(/\r?\n$/, '');
 }
 
 /**
  * K3(只对目录在的副本):需求分支自己做的提交,是否都已在主目录当前分支里。比较对象用 HEAD
- * ——在分支上时就是当前分支。主目录里还没有最新提交就先 fetch 对象(不写引用、不写
- * FETCH_HEAD,也不连带去取子模块)。副本里分支不存在、git 判不了 → 都为 null。
+ * ——在分支上时就是当前分支。副本和主目录在同一个仓库里,需求分支就在主目录的本地分支
+ * (`refs/heads/<分支>`)上,直接读它,不再跨仓库取远程对象。分支不在、git 判不了 → 都为 null
+ * (旧版副本的提交不在主目录,走到这里)。
  *
  * 自己做的提交 = 从登记的 baseCommit 起、沿需求分支第一父链、不算合并提交(同步进来的别人的提交在
  * 合并的第二个父提交那边,不在其中):一个都没有 → 还没有提交(merged false、ahead 0);其中还不在 HEAD
  * 里的个数就是 ahead。副本只用 /dev-merge 同步(合并提交),快进同步过时同步进来的主干提交落在第一父链上,
  * 会被当成自己做的(spec K3)。登记里没有 baseCommit(旧登记)→ 照旧只看最新提交。
  */
-function mergeState(mainRoot: string, entry: ReplicaEntry): { merged: boolean | null; ahead: number | null } {
+export function mergeStateOf(
+  mainRoot: string,
+  entry: ReplicaEntry,
+): { merged: boolean | null; ahead: number | null } {
   const undecided = { merged: null, ahead: null };
   const tip = replicaBranchTip(mainRoot, entry);
-  if (tip === null || tip === '') return undecided;
-
-  if (runGit(mainRoot, ['cat-file', '-e', `${tip}^{commit}`]).status !== 0) {
-    const fetched = runGit(mainRoot, [
-      'fetch',
-      '--no-tags',
-      '--no-write-fetch-head',
-      '--no-recurse-submodules',
-      entry.path,
-      `refs/heads/${entry.branch}`,
-    ]);
-    if (fetched.status !== 0) return undecided;
-  }
+  if (tip === '') return undecided;
 
   if (entry.baseCommit !== null) return ownCommitsState(mainRoot, entry.baseCommit, tip);
 
@@ -172,7 +158,7 @@ function statusOf(mainRoot: string, entry: ReplicaEntry): ReplicaStatus {
   if (!isDirectory(entry.path)) {
     return { ...entry, state: 'missing', merged: null, ahead: null, dirty: [] };
   }
-  const { merged, ahead } = mergeState(mainRoot, entry);
+  const { merged, ahead } = mergeStateOf(mainRoot, entry);
   return { ...entry, state: 'present', merged, ahead, dirty: uncommittedFiles(entry.path) ?? [] };
 }
 

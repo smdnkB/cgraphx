@@ -11,7 +11,7 @@ import { HEADER_SCAN_LINES } from './constants';
 import type { ArtifactHeader } from './types';
 
 /** 头部字段行:半角/全角冒号都认。 */
-const HEADER_FIELD_PATTERN = /^>\s*(产物|负责人|任务|依据)\s*[:：]\s*(.*?)\s*$/;
+const HEADER_FIELD_PATTERN = /^>\s*(产物|负责人|依据)\s*[:：]\s*(.*?)\s*$/;
 
 /** 一级标题:`#` 后必须紧跟空白。 */
 const H1_PATTERN = /^#\s+\S/;
@@ -22,9 +22,9 @@ const H2_PATTERN = /^##\s+(.+?)\s*#*\s*$/;
 /** 代码块围栏。 */
 const FENCE_PATTERN = /^\s*```/;
 
-/** 新建四个字段全为 null 的头部。 */
+/** 新建三个字段全为 null 的头部。 */
 function emptyHeader(): ArtifactHeader {
-  return { typeRaw: null, owner: null, task: null, basis: null };
+  return { typeRaw: null, owner: null, basis: null };
 }
 
 /** 去 BOM 后按行拆分(兼容 CRLF)。 */
@@ -77,9 +77,6 @@ function applyHeaderLine(
       break;
     case '负责人':
       header.owner = value === '' ? null : value;
-      break;
-    case '任务':
-      header.task = value === '' ? null : value;
       break;
     case '依据':
       header.basis = value === '' ? null : value;

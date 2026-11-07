@@ -19,8 +19,6 @@
                         │       ▼ 涉及 UI 时,可在 clarify 前后、spec 后来回迭代
                         │   dev-wireframe(低保真 HTML 线框 v1、v2…)
                         │
-                        ├── 要开新会话 → dev-handoff
-                        │   (确认产出目录 + 交接文件;指向讨论稿,按功能点拆 1 到 N 个)
                         ▼
                     dev-spec ◄── 唯一契约(声明负责人;第一节收录功能方案,主体写怎么实现——设计决策表,🔒 难回头的人确认;引用已确认的线框版本)
                         │
@@ -36,7 +34,7 @@
         ▼               ▼                        ▼
   api-case         unit-spec                交付收尾:
   → api-run        → unit-code              沉淀提示 → knowledge-write
-  (接口测试)     (单元测试,代码完成后)     平台环节缺口提醒
+  (接口测试)     (单元测试,代码完成后)     需求环节缺口提醒
                                            需求做完 → /dev-end(收口档案;已上线时写发布记录)
   ↓ 推荐(非硬前置)                          commit 门禁 → features check + git-standards.md
   ui-case
@@ -58,11 +56,11 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 
 ## 设计流程
 
-- **链**:`/dev-clarify` → `/dev-spec` →(小需求可跳过 `/dev-plan`,大需求必走);涉及 UI → `/dev-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框);探索或澄清结束要开新会话 → `/dev-handoff`(交接文件指向讨论稿,拆多个会话按功能点分)
+- **链**:`/dev-clarify` → `/dev-spec` →(小需求可跳过 `/dev-plan`,大需求必走);涉及 UI → `/dev-wireframe` 可插在 clarify 前、clarify 与 spec 之间、或 spec 后,与 clarify 来回迭代(看界面才能定业务交互的项目先画线框)
 - **前置**:knowledge-recall 先聊相关概念(clarify 第 1 步内置提示);新项目先走「新项目启动流程」(技术栈、规范),已有技术栈的项目跳过 `/init-tech-stack`
 - **分工**:clarify 锁业务(探索现实 → 口径分歧 → 逐点写讨论稿、改稿,体验变体上浮);spec 是唯一契约:第一节原样收录功能方案,其余是**环节二细节方案设计**(设计决策表:机制选型/数据模型/接口契约,人挑错式评审;改变业务可观察行为 → 回跳 clarify);plan 只拆解编排,不重新选型,选型缺口回 spec 补决策
 - **人工确认点**:《需求功能方案》(讨论稿:功能清单、各功能点的图和口径表;经对抗审核后人说对了才写 spec);线框(涉及 UI 时),人看着界面确认布局和交互;spec 标 🔒 的难回头决策,人确认后才往下走;plan index「设计预览」的落点表,人确认后才进实现;没有 spec 和 plan 的小需求,dev-impl 动代码前确认难回头的改动。
-- **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、`<前缀>-交接提示词.md`、功能方案讨论稿 `<前缀>-功能方案-v<N>.md`(clarify ④ 起就有,不登记)、`plan/<前缀>-index.md` 加一个任务一个文件;spec / 交接文件头部声明 `> 负责人:`(也是任务负责人判定依据),会话按读写的产出目录自动关联任务;收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
+- **产物**:`docs/features/<feature-id>/<前缀>-spec.md`、功能方案讨论稿 `<前缀>-功能方案-v<N>.md`(clarify ④ 起就有,不登记)、`plan/<前缀>-index.md` 加一个任务一个文件;spec 头部声明 `> 负责人:`(「我的需求」检索以此为准);收尾自动进个人需求索引(`cgraphx features list --mine` 按人找需求)
 - **事后文档不在主链上**:`/doc-delivery` 发布后按需执行,写的是实际交付的行为。
 
 ## 开发流程
@@ -70,15 +68,16 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 - **链**:小需求一个会话跑 `/dev-impl`;大需求先 `/dev-plan`,再 `/dev-impl-subagent` 在一个会话里按任务派子 agent 跑完,全部做完统一验证,最后提示跑 `/code-review`。判断看需求规模(预估变更文件 ≥10,且跨 ≥3 个相互独立的模块),不看任务量;拿不准先 `/dev-plan`。
 - **前置**:spec 必有;大需求要有 plan。
 - **强制读**:规范由 plan 打「强制引用」标注(dev-plan 按任务类型机械标:schema → data-standards.md;接口 → interface-standards.md;动码 → coding-standards.md);有 plan 时 dev-impl 只读标注,无 plan 时 dev-impl 自行识别;**缺失 → 中断,先 `/init-guides` 补齐**
-- **提交**:任务文件写提交点。大需求由 dev-impl-subagent 的主会话按提交点提交,不构建、不测试,全部做完统一验证;小需求由 dev-impl 按 plan 的提交点提交。`git-standards.md` 的提交规范结晶进 index「提交规范」节,precommit 门禁兜底;push 永远归用户。
-- **收尾**:沉淀提示(新增或变更的实体、新定的业务口径、坑、隐式约束,走 `/knowledge-write`);平台环节缺口提醒(按 `cgraphx features show`,只提醒不拦);需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录;commit 门禁由 precommit-check hook 先跑 `cgraphx features check --staged`(产物不合格必须改对),再指向 `docs/guides/git-standards.md` 自查。
+- **提交**:任务文件写提交点。大需求由 dev-impl-subagent 的主会话按提交点提交,不构建、不测试,全部做完统一验证;小需求由 dev-impl 按 plan 的提交点提交。`git-standards.md` 的提交规范结晶进 index「提交规范」节,git 提交门禁(commit-msg 钩子)兜底;push 永远归用户。
+- **收尾**:沉淀提示(新增或变更的实体、新定的业务口径、坑、隐式约束,走 `/knowledge-write`);需求环节缺口提醒(按 `cgraphx features show`,只提醒不拦);需求做完跑 `/dev-end` 写收口档案,已上线时写发布记录;commit 门禁(git commit-msg 钩子)先跑 `cgraphx features check --staged`(产物不合格必须改对),再指向 `docs/guides/git-standards.md` 自查。
 
 ## 版本流程(可选)
 
-- **链**:`/release-start`(主干上打 tag `v<版本号>`、拉版本分支 `dev/<下个版本号>`、装提交拦截)→ 每个需求 `/dev-start <需求>`(开副本 `<主目录名>@<文件前缀>`)→ 副本里照常 `/dev-clarify` 到 `/code-review` → 副本里 `/dev-merge`(同步版本分支,冲突就地解决)→ 主目录 `/dev-merge <需求>`(合入版本分支,说明「合入需求：<标题>」)→ 发版那天以 `chore(release): 版本号 <旧>→<新>` 改好版本号 → `/release-review`(出审核报告并提交)→ 说「发」合入主干、清理已合入的副本 → 照现有流程发布 → `/release-start` 开下一个版本
+- **链**:`/release-start`(主干上打 tag `v<版本号>`、拉版本分支 `dev/<下个版本号>`、装提交拦截)→ 每个需求 `/dev-start <需求>`(开 worktree 副本 `<主目录名>@<文件前缀>`)→ 副本里照常 `/dev-clarify` 到 `/code-review` → 副本里 `/dev-merge`(同步版本分支,冲突就地解决)→ 主目录 `/dev-merge <需求>`(合入版本分支,说明「合入需求：<标题>」)→ 发版那天以 `chore(release): 版本号 <旧>→<新>` 改好版本号 → `/release-review`(出审核报告并提交)→ 说「发」合入主干、清理已合入的副本 → 照现有流程发布 → `/release-start` 开下一个版本
 - **副本单独用**:没开版本时 `/dev-start` 从主目录当前分支拉,`/dev-merge` 合回这个分支,合完问要不要删副本
+- **带什么**:agent 配置(配置目录、指引文件、`.mcp.json`,只带没被 git 跟踪的部分)和 `.worktreeinclude` 里写的文件;依赖、构建产物默认不带,第一次在副本里安装、构建
 - **前置**:git 2.38 以上;副本只支持 macOS、Linux
-- **数据**:副本里的会话、提交、任务归属记进主目录;知识库索引和「我的需求」索引各目录各建各的(副本里新写的知识,合入、同步之后别处才召回得到)
+- **数据**:副本里的会话和提交和主目录记进同一个项目的数据(`~/.cgraphx/projects/<目录名>/`);知识库索引和「我的需求」索引各目录各建各的(副本里新写的知识,合入、同步之后别处才召回得到)
 - **产物**:`docs/releases/v<版本号>-发版审核.md`(不登记)
 - **退出**:发完版不再跑 `/release-start`;之后在 main 上 `/dev-merge` 停下问时,回答「不再按版本走」(卸掉提交拦截,以后不再问)
 - **不用就照旧**:不跑 `/release-start`、`/dev-start` 的项目在当前分支上开发,不装提交拦截;开了版本后,版本分支上不直接做需求——`/dev-impl`、`/dev-impl-subagent` 开跑前停下提示先 `/dev-start`,直接提交会被拦下,只放行合并提交和以 `chore(release):` 开头的整版改动(改版本号、主目录里写的知识库和 DDL 知识、发版审核报告)
@@ -145,7 +144,7 @@ guides:dev-plan 读取并结晶,任务打「强制引用」标注(dev-impl 执�
 | `interface-standards.md` | 接口任务 |
 | `coding-standards.md` | 所有任务(契约部分) |
 | `testing-standards.md` | plan 不读;`unit-code` 执行前自读(内容全是单测向);接口测试规范由 `api-case` 读 `interface-standards.md` 送达 |
-| `git-standards.md` | 结晶进 index「提交规范」节(plan 级,一次)+ precommit-check 门禁兜底(deny → 按已结晶的检查点自查) |
+| `git-standards.md` | 结晶进 index「提交规范」节(plan 级,一次)+ git 提交门禁(commit-msg 钩子)兜底(打回 → 按已结晶的检查点自查) |
 - **执行期**:有 plan 时 dev-impl 只读任务的「强制引用」标注,没有 plan 时自己识别;api-case 执行前自读 `interface-standards.md`;unit-code 执行前自读 `testing-standards.md`;`git-standards.md` 由 plan 结晶进 index「提交规范」节,门禁兜底。
 
 ## 事后文档(发布后 · 按需,不在开发主链)

@@ -49,6 +49,6 @@
 - **只读铁律,不可破** —— `cgraphx db` 子系统内置禁止 DELETE/UPDATE/INSERT/DROP/ALTER,**你也不要尝试绕过**(即使主 agent 让你写,你也拒绝)
 - **必须带 LIMIT** —— 自定义 SQL 显式 `LIMIT N`,默认 100,上限 1000
 - **陌生 schema 探索"先问后试"** —— 不确定表关系时,**在返回里建议主 agent 问用户**,**不要埋头反复试错**(试错既浪费 token,也可能拿错数据误导主 agent 判断)
-- **不要修改任何文件** —— 特别**不要修改 docs/schema-knowledge/ 下任何文件 或 .cgraphx/db-profiles.json**(DISCOVERED 块的 append 由主 agent 决定后再走;你只在返回里建议)
+- **不要修改任何文件** —— 特别**不要修改 docs/schema-knowledge/ 下任何文件 或项目的 db-profiles.json(在项目数据目录,`cgraphx project show` 可看)**(DISCOVERED 块的 append 由主 agent 决定后再走;你只在返回里建议)
 - **不要假设主 agent 知道你的中间步骤** —— 你的 final message 就是它看到的全部
 - **不要建议主 agent 派第二次子 agent** —— 一次没答完整就再探索几次,超出能力直接说

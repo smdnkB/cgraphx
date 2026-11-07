@@ -11,7 +11,6 @@ import * as path from 'node:path';
 
 import {
   FEATURES_DIR_POSIX,
-  TASK_VALUE_PATTERN,
   basisMatches,
   classifyArtifactByPath,
   featureIdOf,
@@ -31,8 +30,6 @@ import type { CheckFinding, CheckReport } from './types';
 
 /** checkFeatures 的可选项。 */
 export interface CheckOptions {
-  /** 本项目类型表(平台缓存);null / 未提供时只按内置类型判未知类型。 */
-  projectTypes?: readonly string[] | null;
   /** 只检查暂存区里 docs/features/ 下新增和修改的文件(提交门禁用)。 */
   staged?: boolean;
 }
@@ -280,7 +277,6 @@ export function checkFeatures(
       ? collectStagedFiles(projectRoot)
       : collectFiles(projectRoot, targets);
   const headSet = readHeadFiles(projectRoot);
-  const projectTypes = opts.projectTypes ?? null;
   const metaCache = new Map<string, FeatureMeta>();
 
   let gitUser: string | null | undefined;
@@ -403,18 +399,6 @@ export function checkFeatures(
         }
       }
 
-      if (
-        isMain &&
-        header?.task != null &&
-        !TASK_VALUE_PATTERN.test(header.task)
-      ) {
-        fail(
-          'invalid_task',
-          `\`> 任务:\` 不是平台任务编号:${header.task}`,
-          '改为平台任务编号 `T-<n>`;不关联平台任务就删掉这一行',
-        );
-      }
-
       if (identity !== null) {
         const heading = firstScreenHeadingOf(identity, projectRelPath);
         if (heading !== null && readFirstH2Heading(absPath) !== heading) {
@@ -441,17 +425,6 @@ export function checkFeatures(
           `依据改为 \`spec@${fp7 ?? '<主 spec 指纹>'}\``,
         );
       }
-      if (
-        isMain &&
-        header?.task != null &&
-        !TASK_VALUE_PATTERN.test(header.task)
-      ) {
-        fail(
-          'invalid_task',
-          `\`> 任务:\` 不是平台任务编号:${header.task}`,
-          '改为平台任务编号 `T-<n>`;不关联平台任务就删掉这一行',
-        );
-      }
     }
 
     // ─── 警告:过期 / 未知类型 / 头部与路径不一致 ──────────────────────────
@@ -474,16 +447,11 @@ export function checkFeatures(
       }
 
       if (identity !== null && identity.via === 'header' && !identity.builtin) {
-        const inProjectTypes =
-          projectTypes !== null && projectTypes.includes(identity.type);
-        if (!inProjectTypes) {
-          warn(
-            'unknown_type',
-            `未知类型 ${identity.type}:不是内置类型` +
-              (projectTypes !== null ? ',也不在本项目类型表' : ''),
-            `改用内置类型标识;确需自定义类型,请项目管理员在平台配置 \`${identity.type}\``,
-          );
-        }
+        warn(
+          'unknown_type',
+          `未知类型 ${identity.type}:不是内置类型`,
+          '改用内置类型标识',
+        );
       }
 
       if (

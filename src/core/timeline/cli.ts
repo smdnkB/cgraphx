@@ -9,9 +9,9 @@
  *   - cgraphx timeline install
  *   - cgraphx timeline uninstall
  *
- * 隐藏 hook 入口(spec §3.3):Claude Code hook 子命令按 HOOK_EVENTS_TO_COMMANDS
- * 逐项注册(user-prompt / pre-tool-use / post-tool-use / stop / session-start /
- * session-end),另加 git post-commit、post-merge 共用的 timeline-git-commit-hook。
+ * 隐藏 hook 入口只剩 git post-commit、post-merge 共用的 timeline-git-commit-hook;
+ * 7 条 agent hook 子命令已随会话文件解析替代 hooks 撤掉(spec:2026-11-06-会话文件解析替代hooks
+ * D17),空命令兼容在 cli/legacy-hook-commands.ts。
  *
  * Exit codes (spec §5.5):
  *   0  success (incl. "no matching events")
@@ -23,50 +23,37 @@
 import type { Command } from 'commander';
 
 import { queryEvents, getEventById, getEventStats } from './indexer';
+import { ensureTimelineUpToDate, describeSyncOutcome } from './ingest/ingest';
 import { installTimelineHooks, uninstallTimelineHooks, type InstallReport } from './installer';
+import { locateData } from '../data-location';
 import { resolveProjectRoot } from '../directory';
 import { hookNotice } from '../git-hooks';
 import { TimelineSchemaError, StoreQueryError } from './errors';
-import { assertEventType } from './payload';
-import { HOOK_EVENTS_TO_COMMANDS, GIT_COMMIT_SUBCOMMAND, type HookEventName } from './constants';
+import { GIT_COMMIT_SUBCOMMAND } from './constants';
 import { describeEvent, truncate } from './describe';
 import type { EventType, TimelineEvent, TimelineStats } from './types';
-import {
-  AGENT_OPTION_FLAG,
-  DEFAULT_AGENT_ID,
-  parseAgentList,
-  resolveHookAgent,
-  selectInstalledAgents,
-  type AgentId,
-  type AgentProfile,
-} from '../agents';
-import {
-  userPromptHook,
-  preToolUseHook,
-  postToolUseHook,
-  postToolUseFailureHook,
-  stopHook,
-  sessionStartHook,
-  sessionEndHook,
-  gitCommitHook,
-} from './hooks';
+import { gitCommitHook } from './git-commit';
 
 // 摘要逻辑已移至 describe.ts(门面同源导出);此处保留再导出,兼容既有直接引用。
 export { describeEvent } from './describe';
 
 /**
- * Claude Code hook 事件名 → 处理函数;子命令名只从 HOOK_EVENTS_TO_COMMANDS 取。
- * 键类型由 HOOK_EVENTS_TO_COMMANDS 推出,新增事件漏配处理函数时编译期报错。
+ * `--type` 校验(原 payload.ts,随 hook 体系删除挪进本文件):pre_tool_use / session_end
+ * 不再写新数据(spec C-10),类型仍认——旧数据照查,只是查不到新的。
  */
-const HOOK_HANDLERS: Record<HookEventName, (agent: AgentId) => Promise<void>> = {
-  UserPromptSubmit: userPromptHook,
-  PreToolUse: preToolUseHook,
-  PostToolUse: postToolUseHook,
-  PostToolUseFailure: postToolUseFailureHook,
-  Stop: stopHook,
-  SessionStart: sessionStartHook,
-  SessionEnd: sessionEndHook,
-};
+function assertEventType(s: string): EventType | null {
+  const valid: EventType[] = [
+    'user_prompt',
+    'auto_message',
+    'pre_tool_use',
+    'post_tool_use',
+    'stop',
+    'git_commit',
+    'session_start',
+    'session_end',
+  ];
+  return (valid as string[]).includes(s) ? (s as EventType) : null;
+}
 
 /** `--type` 可接受的事件类型(帮助文本与报错共用)。 */
 const EVENT_TYPES_HELP = 'user_prompt | auto_message | pre_tool_use | post_tool_use | stop | git_commit | session_start | session_end';
@@ -176,6 +163,21 @@ function exitCodeForError(err: unknown): number {
   return 1;
 }
 
+/**
+ * 查询前自动补录(spec F1):四个查询命令在查询之前调,会话文件里新增的部分先解析进库。
+ * 补录的任何失败只写 stderr——不碰查询的退出码与 stdout,`--json` 的结果不混提示
+ * (ensureTimelineUpToDate 自己不抛,这里再兜一层)。
+ */
+async function backfillBeforeQuery(): Promise<void> {
+  try {
+    const outcome = await ensureTimelineUpToDate(process.cwd());
+    for (const line of describeSyncOutcome(outcome)) process.stderr.write(`[timeline] ${line}\n`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[timeline] 时间线补录失败:${msg},结果可能缺最近的\n`);
+  }
+}
+
 function renderError(err: unknown): void {
   if (err instanceof TimelineSchemaError || err instanceof StoreQueryError) {
     process.stderr.write(`[timeline] ${err.message}\n`);
@@ -215,6 +217,7 @@ export function registerTimelineCommands(program: Command): void {
       limit?: number;
       format?: string;
     }) => {
+      await backfillBeforeQuery();
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
@@ -245,6 +248,7 @@ export function registerTimelineCommands(program: Command): void {
     .command('show <id>')
     .description('Show full detail for one event by id')
     .action(async (idArg: string) => {
+      await backfillBeforeQuery();
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
@@ -271,6 +275,7 @@ export function registerTimelineCommands(program: Command): void {
     .option('--by <field>', 'Group by: day | event_type | tool_name (default: all)')
     .option('--format <format>', 'json (default) | table', 'json')
     .action(async (opts: { since?: string; until?: string; by?: string; format?: string }) => {
+      await backfillBeforeQuery();
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
@@ -312,6 +317,7 @@ export function registerTimelineCommands(program: Command): void {
     .option('--limit <n>', 'Default 20', v => parseInt(v, 10))
     .option('--format <format>', 'json (default) | table', 'json')
     .action(async (opts: { limit?: number; format?: string }) => {
+      await backfillBeforeQuery();
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
@@ -330,19 +336,18 @@ export function registerTimelineCommands(program: Command): void {
 
   timeline
     .command('install')
-    .description('Install timeline hooks into this project\'s .claude/settings.json and git 钩子目录')
-    .option('--purge-first', 'Remove existing timeline hooks before installing (clean slate)')
-    .option('-t, --target <ids>', `Comma-separated agent ids, or all / none (default: installed agents, else ${DEFAULT_AGENT_ID})`)
+    .description('装 git 提交记录片段(post-commit / post-merge);会话事件改由会话文件解析补录,不再接 agent hook')
+    .option('--purge-first', '先删已有片段再装(clean slate)')
+    // 保留选项,旧脚本带着它不报错(片段与 agent 无关,装一次)
+    .option('-t, --target <ids>', '兼容保留:片段与 agent 无关,参数被忽略')
     .action(async (opts: { purgeFirst?: boolean; target?: string }) => {
+      void opts.target;
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
-        const profiles = selectAgents(projectRoot, opts.target);
-        const reports = profiles.map((p) =>
-          installTimelineHooks(projectRoot, { purgeFirst: opts.purgeFirst === true, agent: p.id }),
-        );
-        writeReports(reports);
-        writeGitHookNotices(reports);
+        const report = installTimelineHooks(projectRoot, { purgeFirst: opts.purgeFirst === true });
+        writeReports([report]);
+        writeGitHookNotices([report]);
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
@@ -351,38 +356,31 @@ export function registerTimelineCommands(program: Command): void {
 
   timeline
     .command('uninstall')
-    .description('Remove timeline hooks from this project')
-    .option('--purge', 'Also DROP all timeline_* tables (data loss)')
-    .option('-t, --target <ids>', `Comma-separated agent ids, or all / none (default: installed agents, else ${DEFAULT_AGENT_ID})`)
+    .description('卸掉 git 提交记录片段(post-commit / post-merge)')
+    // 保留选项,旧脚本带着它不报错(spec D31)
+    .option('--purge', '已不再删数据;项目的数据用 cgraphx project remove 删')
+    .option('-t, --target <ids>', '兼容保留:给了 -t 视为部分卸载,不动 git 片段;不给才删片段')
     .action(async (opts: { purge?: boolean; target?: string }) => {
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
-        const profiles = selectAgents(projectRoot, opts.target);
-        // 给了 -t 只卸指定 agent 的配置,不动 git post-commit 钩子(spec §5)
-        const keepGitHook = opts.target !== undefined;
-        const reports = profiles.map((p) =>
-          uninstallTimelineHooks(projectRoot, { purgeData: opts.purge === true, agent: p.id, keepGitHook }),
-        );
-        writeReports(reports);
-        for (const line of new Set(reports.flatMap((r) => r.gitHookNotices))) process.stderr.write(`[timeline] ${line}\n`);
+        // 给了 -t 视为部分卸载,不动 git 片段(spec §5)
+        const report = uninstallTimelineHooks(projectRoot, { keepGitHook: opts.target !== undefined });
+        // stdout 照旧只有 JSON 报告,提示一律打在 stderr
+        writeReports([report]);
+        for (const line of report.gitHookNotices) process.stderr.write(`[timeline] ${line}\n`);
+        if (report.gitHookKeptFor.length > 0) {
+          process.stderr.write(`[timeline] ${report.gitHookKeptFor.join('、')} 还装着 cgraphx,git 钩子留着\n`);
+        }
+        if (opts.purge === true) process.stderr.write(`[timeline] ${purgeNotice(projectRoot)}\n`);
       } catch (err) {
         renderError(err);
         process.exitCode = exitCodeForError(err);
       }
     });
 
-  // ─── 隐藏 hook 入口(spec §3) ─────────────────────────────────────────
-  // 全部 await 到写库完成再退出,退出码恒为 0。
-
-  for (const { event, subcommand } of HOOK_EVENTS_TO_COMMANDS) {
-    const handler = HOOK_HANDLERS[event];
-    program
-      .command(subcommand, { hidden: true })
-      .option(`${AGENT_OPTION_FLAG} <id>`, `Source agent id (unknown → ${DEFAULT_AGENT_ID})`)
-      // --agent 缺省或无法识别时按默认 agent 处理,不报错(spec §12)
-      .action(async (opts: { agent?: string }) => { await handler(resolveHookAgent(opts.agent).id); });
-  }
+  // ─── 隐藏 hook 入口 ────────────────────────────────────────────────────
+  // git post-commit、post-merge 片段后台调起;await 到写库完成再退出,退出码恒为 0。
 
   program
     .command(GIT_COMMIT_SUBCOMMAND, { hidden: true })
@@ -390,19 +388,19 @@ export function registerTimelineCommands(program: Command): void {
 }
 
 /**
- * 选出 timeline install/uninstall 作用的 agent(spec §4.3,规则同 `install -y`,见 agents 门面):
- * 给了 -t 按 `parseAgentList` 解析(`all` / `none` / id 列表;未知 id 报参数错误);
- * 没给则取已装的 agent,一个都没装时只取默认 agent。
+ * `--purge` 不再删数据(spec D31,M14):告诉人项目的数据在哪、用什么删。目录名取这个目录数据位置的项目目录名;
+ * 项目目录还不在(含没并过的旧库)时不写路径。
  */
-function selectAgents(projectRoot: string, target: string | undefined): AgentProfile[] {
-  if (target === undefined) return selectInstalledAgents(projectRoot);
-  let parsed: AgentProfile[] | 'none';
+function purgeNotice(projectRoot: string): string {
+  let dirName: string | null = null;
   try {
-    parsed = parseAgentList(target);
-  } catch (err) {
-    throw new ArgError(err instanceof Error ? err.message : String(err));
+    dirName = locateData(projectRoot).projectDirName;
+  } catch {
+    // 认不出数据位置只影响提示里写不写路径
   }
-  return parsed === 'none' ? [] : parsed;
+  return dirName !== null
+    ? `项目的数据在 ~/.cgraphx/projects/${dirName}/,要删用 cgraphx project remove`
+    : '项目的数据要删用 cgraphx project remove';
 }
 
 /** 单个 agent 输出单个报告对象(与改造前一致);多个输出报告数组。 */

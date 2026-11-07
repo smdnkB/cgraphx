@@ -224,7 +224,7 @@ export function registerDbCommands(program: Command): void {
 
   db
     .command('init')
-    .description('Create .cgraphx/db-profiles.json template with example MySQL + PostgreSQL profiles')
+    .description('Create the project-level db-profiles.json template (in the project data dir, see `cgraphx project show`)')
     .option('--force', 'Overwrite the file if it already exists')
     .action((options: { force?: boolean }) => {
       const projectRoot = resolveProjectRoot(process.cwd());

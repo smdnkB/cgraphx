@@ -11,11 +11,8 @@
  * 多个时按文件名长度升序、同长按字典序,取第一个读得出负责人的。
  *
  * 日期:主 spec 头部的 `> 日期:`(沿用 readHeaderMeta),否则 plan/index
- * 文件头部,再否则目录名。带 `> 产物:` 的文件,负责人 / 任务只从注册表
+ * 文件头部,再否则目录名。带 `> 产物:` 的文件,负责人只从注册表
  * 头部读;没有 `> 产物:` 的旧文件沿用原有前 30 行口径。
- *
- * 主 spec 头部的任务声明(`> 任务: <值>`)由 readFeatureTask / scanFeatureTasks 单独读取,
- * 不进 FeatureEntry。
  *
  * 需求阶段不读状态,由产物存在性经注册表里程碑派生(deriveFeatureStage):
  * 有测试报告 → 已验证,有 plan/index → 已规划,有顶层规格类文件 → 已规格,都没有 → null。
@@ -72,28 +69,6 @@ function absolutePath(projectRoot: string, projectRelPath: string): string {
 }
 
 /**
- * 旧文件(没有 `> 产物:` 行)的任务声明:前 30 行内第一条 `> 任务:` 行,
- * 空值等同于未声明。读不了 → null。
- */
-const TASK_HEADER_PATTERN = /^>\s*任务\s*[:：]\s*(.*?)\s*$/;
-
-function readLegacyTaskLine(file: string): string | null {
-  let text: string;
-  try {
-    text = fs.readFileSync(file, 'utf-8');
-  } catch {
-    return null;
-  }
-  for (const line of text.split('\n').slice(0, HEADER_SCAN_LINES)) {
-    const m = TASK_HEADER_PATTERN.exec(line);
-    if (!m) continue;
-    const value = (m[1] ?? '').trim();
-    return value === '' ? null : value;
-  }
-  return null;
-}
-
-/**
  * 读文件声明的负责人:有 `> 产物:` 行时只认注册表头部;否则沿用旧口径
  * (前 30 行内最后一条 `> 负责人:`)。读不了 → null。
  */
@@ -102,17 +77,6 @@ function ownerOf(projectRoot: string, projectRelPath: string): string | null {
   const header = readArtifactHeader(absPath);
   if (header !== null && header.typeRaw !== null) return header.owner;
   return readHeaderMeta(absPath).owner;
-}
-
-/**
- * 读文件声明的任务:有 `> 产物:` 行时只认注册表头部;否则沿用旧口径
- * (前 30 行内第一条 `> 任务:`)。读不了 → null。
- */
-function taskOf(projectRoot: string, projectRelPath: string): string | null {
-  const absPath = absolutePath(projectRoot, projectRelPath);
-  const header = readArtifactHeader(absPath);
-  if (header !== null && header.typeRaw !== null) return header.task;
-  return readLegacyTaskLine(absPath);
 }
 
 /**
@@ -314,7 +278,7 @@ export function scanFeature(
 /**
  * 扫描 <projectRoot>/docs/features/,每个子目录解析为一个 FeatureEntry。
  * 目录不存在或不可读 → 返回空数组(不是错误:项目可能没用 features 流程)。
- * 负责人只认主 spec → 交接文件(readFeatureOwner,与任务负责人同一口径),
+ * 负责人只认主 spec → 交接文件(readFeatureOwner),
  * 所以只有交接文件的目录也进「我的需求」;只有 plan 的目录负责人为 null。
  * 结果按日期倒序、标题升序排好。
  */
@@ -359,48 +323,4 @@ export function readFeatureOwner(
     if (handoffRel !== undefined) return ownerOf(projectRoot, handoffRel);
   }
   return null;
-}
-
-/**
- * 读需求目录主 spec 头部声明的任务值(spec §5、§6.1)。
- *
- * 主 spec 的认定与读负责人相同(findMainSpecRel),不回退到 plan/index——
- * 任务只在主 spec 里声明。头部 30 行内只认第一条 `> 任务:` 行;
- * 值为空等同于未声明。目录 / spec 不存在或读不了 → null。
- */
-export function readFeatureTask(
-  projectRoot: string,
-  featureId: string,
-): string | null {
-  if (!isPlainFeatureId(featureId)) return null;
-  const mainSpecRel = findMainSpecRel(projectRoot, featureId);
-  if (mainSpecRel === null) return null;
-  return taskOf(projectRoot, mainSpecRel);
-}
-
-/**
- * 扫描 docs/features/ 下所有主 spec 声明了任务的需求目录(只列有声明的)。
- * path 为仓库相对 POSIX 路径(与 FeatureEntry.path 同格式)。目录不存在 → 空数组。
- */
-export function scanFeatureTasks(
-  projectRoot: string,
-): Array<{ featureId: string; path: string; task: string }> {
-  let dirNames: string[];
-  try {
-    dirNames = fs
-      .readdirSync(path.join(projectRoot, FEATURES_DIR), { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name)
-      .sort();
-  } catch {
-    return [];
-  }
-  const result: Array<{ featureId: string; path: string; task: string }> = [];
-  for (const name of dirNames) {
-    const task = readFeatureTask(projectRoot, name);
-    if (task !== null) {
-      result.push({ featureId: name, path: `${FEATURES_DIR_POSIX}/${name}`, task });
-    }
-  }
-  return result;
 }

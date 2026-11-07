@@ -210,7 +210,7 @@ footer p { margin: 0 0 6px; }
 <dt>怎么用</dt><dd>直接说需求,如「想给订单列表加个导出」;要拷问就说「拷问一下这个方案」。</dd>
 <dt>要你拍板</dt><dd>功能点清单增删;有分歧的业务口径(哪些数据算、按哪个时间、怎么算)二选一;讨论稿里每个功能点的图和口径表采纳或改具体值;体验变体二选一;整份《需求功能方案》你说「对了」才算完。</dd>
 <dt>产出</dt><dd>PlantUML 讨论稿 <code>&lt;前缀&gt;-功能方案-v&lt;N&gt;.md</code>:功能清单(F1、F2…)+ 每个功能点按场景配一张图 + 图下每一步的口径表(K1、K2…);终确认的那一版就是《需求功能方案》,spec 会原样收录。</dd>
-<dt>前后</dt><dd>之前可以先用 knowledge-recall 对齐概念;之后 <code>/dev-spec</code>,要换会话用 <code>/dev-handoff</code>。</dd>
+<dt>前后</dt><dd>之前可以先用 knowledge-recall 对齐概念;之后 <code>/dev-spec</code>。</dd>
 </dl></div>
 </details>
 
@@ -222,17 +222,6 @@ footer p { margin: 0 0 6px; }
 <dt>要你拍板</dt><dd>先确认要画哪些页面和状态;看着线框定下版本,或发现业务问题回去改澄清。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-线框-v&lt;N&gt;.html</code>,浏览器直接打开,能点击跳转、切换正常/空态/异常;改一次出一版。</dd>
 <dt>前后</dt><dd>和 <code>/dev-clarify</code> 来回迭代;你确认的版本由 spec 引用后才算数。</dd>
-</dl></div>
-</details>
-
-<details class="skill" id="dev-handoff">
-<summary><span class="name">/dev-handoff</span><span class="oneline">换新会话接着干,或按功能点拆成几个会话</span><span class="how how-say">说话就行</span></summary>
-<div class="body"><dl>
-<dt>什么时候用</dt><dd>探索或澄清结束、上下文太长要开新会话;一个需求要分给几个会话做。</dd>
-<dt>怎么用</dt><dd>说「交接一下」「拆成两个会话」。</dd>
-<dt>要你拍板</dt><dd>哪几个功能点归哪个会话;每个会话的需求目录名;主任务和负责人。</dd>
-<dt>产出</dt><dd>每个会话一份 <code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-交接提示词.md</code>(指向讨论稿,写明新会话收哪几部分),外加一句启动语,贴给新会话。</dd>
-<dt>前后</dt><dd>之前 <code>/dev-clarify</code>;新会话里接着 <code>/dev-spec</code>。</dd>
 </dl></div>
 </details>
 
@@ -311,12 +300,12 @@ footer p { margin: 0 0 6px; }
 </details>
 
 <details class="skill" id="dev-start">
-<summary><span class="name">/dev-start</span><span class="oneline">给需求开一个写时复制副本,在副本里单独做</span><span class="how how-say">说话就行</span></summary>
+<summary><span class="name">/dev-start</span><span class="oneline">给需求开一个 worktree 副本,在副本里单独做</span><span class="how how-say">说话就行</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>开始做一个需求,不想和别的需求挤在同一个分支上;开了版本时每个需求都先开副本,没开版本也能单独用。</dd>
 <dt>怎么用</dt><dd>在主目录的会话里敲 <code>/dev-start 订单导出</code>,再照给出的启动语到副本目录开新会话。</dd>
-<dt>要你拍板</dt><dd>需求目录名(业务 ID、标题);这块盘不能写时复制时,要不要整份复制;主目录有改了没提交的文件时会停下,先提交或收好。</dd>
-<dt>产出</dt><dd>主目录旁边的副本 <code>&lt;主目录名&gt;@&lt;文件前缀&gt;</code>:从主目录当前分支拉好 <code>feat/&lt;文件前缀&gt;</code>(bug 修复用 <code>fix/</code>)、建好需求目录,这个需求还没提交的讨论稿移进去;外加一句启动语「在 &lt;副本路径&gt; 开新会话，输入 /dev-clarify」(已经澄清过的输入 /dev-spec)。副本里的会话和提交记进主目录。</dd>
+<dt>要你拍板</dt><dd>需求目录名(业务 ID、标题);带哪些本地文件写进 <code>.worktreeinclude</code>(gitignore 语法,依赖默认不带,第一次在副本里安装、构建)。</dd>
+<dt>产出</dt><dd>主目录旁边的 worktree 副本 <code>&lt;主目录名&gt;@&lt;文件前缀&gt;</code>(是 worktree,依赖和构建产物没带过来,第一次要在这里安装、构建):从主目录当前分支拉好 <code>feat/&lt;文件前缀&gt;</code>(bug 修复用 <code>fix/</code>)、建好需求目录,这个需求还没提交的讨论稿移进去;外加一句启动语「在 &lt;副本路径&gt; 开新会话，输入 /dev-clarify」(已经澄清过的输入 /dev-spec)。副本里的会话和提交和主目录记进同一个项目的数据。</dd>
 <dt>前后</dt><dd>开了版本时在 <code>/release-start</code> 之后;副本里照常 <code>/dev-clarify</code> 到 <code>/code-review</code>,做完 <code>/dev-merge</code>。</dd>
 </dl></div>
 </details>
@@ -478,7 +467,7 @@ footer p { margin: 0 0 6px; }
 <summary><span class="name">db-query</span><span class="oneline">查数据、看表结构,优先读本地 DDL</span><span class="how how-auto">自动</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>要验证数据假设、找测试数据、看表结构。</dd>
-<dt>怎么用</dt><dd>agent 自己调;连库配置在 <code>.cgraphx/db-profiles.json</code>,支持 MySQL、PostgreSQL 直连,或经 HTTP 只读接口。</dd>
+<dt>怎么用</dt><dd>agent 自己调;连库配置在项目数据目录的 <code>db-profiles.json</code>(<code>cgraphx project show</code> 可看),支持 MySQL、PostgreSQL 直连,或经 HTTP 只读接口。</dd>
 <dt>要你拍板</dt><dd>连哪个库不确定时问你;表关系弄不清先问你,不瞎试。</dd>
 <dt>产出</dt><dd>只读查询结果;探索出的字段含义、隐式关系写回 <code>docs/schema-knowledge/&lt;工程&gt;/ddl/&lt;表&gt;.sql</code> 的 DISCOVERED 块。</dd>
 <dt>前后</dt><dd>先跑 <code>/init-ddl</code> 建好本地 DDL,大部分查结构不用连库。</dd>

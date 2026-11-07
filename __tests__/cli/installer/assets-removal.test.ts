@@ -16,6 +16,7 @@ import * as os from 'node:os';
 
 import { removeClaudeAssets, cleanDeprecatedAssets, deployClaudeAssets } from '../../../src/cli/installer/claude-assets';
 import { ensureProjectInitialized } from '../../../src/cli/installer/index';
+import { DatabaseConnection } from '../../../src/core/db';
 
 function tmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -87,10 +88,22 @@ describe('ensureProjectInitialized (init folded into install)', () => {
   beforeEach(() => { project = tmpDir('cg-proj-'); });
   afterEach(() => { fs.rmSync(project, { recursive: true, force: true }); });
 
-  it('creates .cgraphx/cgraphx.db on first run', async () => {
+  it('creates .cgraphx/cgraphx.db on first run, with only the knowledge-base (markdown) schema', async () => {
     const outcome = await ensureProjectInitialized(project);
     expect(outcome).toBe('initialized');
-    expect(fs.existsSync(path.join(project, '.cgraphx', 'cgraphx.db'))).toBe(true);
+    const dbPath = path.join(project, '.cgraphx', 'cgraphx.db');
+    expect(fs.existsSync(dbPath)).toBe(true);
+
+    // timeline、task、sync 的表建在项目库;本地库里有了会被当成没并过的旧库
+    const conn = DatabaseConnection.open(dbPath);
+    try {
+      const tables = (conn.getDb().prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[])
+        .map((r) => r.name);
+      expect(tables).toContain('markdown_schema_versions');
+      expect(tables.filter((t) => /^(timeline|task|sync)_/.test(t))).toEqual([]);
+    } finally {
+      conn.close();
+    }
   });
 
   it('is a no-op (no throw) when already initialized', async () => {
@@ -195,5 +208,31 @@ describe('cleanDeprecatedAssets(升级清理已废弃资产)', () => {
     expect(removed).toEqual(['.claude/skills/new-skill', '.claude/skills/old-skill']);
     expect(fs.existsSync(path.join(claudeDir, 'skills', 'old-skill'))).toBe(false);
     expect(fs.existsSync(path.join(claudeDir, 'skills', 'user-custom', 'SKILL.md'))).toBe(true);
+  });
+});
+
+describe('cleanDeprecatedAssets with the shipped deprecated-assets.json', () => {
+  let claudeDir: string;
+  const shippedTemplate = path.join(__dirname, '..', '..', '..', 'assets', 'claude-template');
+
+  beforeEach(() => {
+    claudeDir = tmpDir('cg-claude-shipped-');
+  });
+  afterEach(() => {
+    fs.rmSync(claudeDir, { recursive: true, force: true });
+  });
+
+  it('removes the task-history agent file and the dev-handoff skill deployed by 2.0.13', () => {
+    fs.mkdirSync(path.join(claudeDir, 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'agents', 'task-history.md'), 'old agent');
+    fs.writeFileSync(path.join(claudeDir, 'agents', 'knowledge-recall.md'), 'current agent');
+    fs.mkdirSync(path.join(claudeDir, 'skills', 'dev-handoff'), { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'skills', 'dev-handoff', 'SKILL.md'), 'old skill');
+
+    cleanDeprecatedAssets(claudeDir, shippedTemplate);
+
+    expect(fs.existsSync(path.join(claudeDir, 'agents', 'task-history.md'))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, 'skills', 'dev-handoff'))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, 'agents', 'knowledge-recall.md'))).toBe(true);
   });
 });

@@ -61,10 +61,10 @@ export interface FeatureArtifactRow {
   basis: BasisState;
 }
 
-/** show 的五个平台环节(知识经验不入环节)。 */
+/** show 的五个需求环节(知识经验不入环节)。 */
 export type FeaturePhase = 'design' | 'plan' | 'test' | 'release' | 'delivery';
 
-/** show 平台环节的一行。paths 为产出目录内相对路径。 */
+/** show 需求环节的一行。paths 为产出目录内相对路径。 */
 export interface FeaturePhaseRow {
   phase: FeaturePhase;
   name: string;
@@ -78,7 +78,6 @@ export interface FeatureDetail {
   /** docs/features/<featureId> */
   path: string;
   owner: string | null;
-  task: string | null;
   stage: FeatureStage | null;
   /** 产出目录内相对路径。 */
   mainSpec: string | null;
@@ -86,7 +85,6 @@ export interface FeatureDetail {
   specFingerprint: string | null;
   artifacts: FeatureArtifactRow[];
   phases: FeaturePhaseRow[];
-  customTypes: Array<{ type: string; paths: string[] }>;
   /** 产出目录内相对路径。 */
   otherFiles: string[];
 }
@@ -100,7 +98,6 @@ export type CheckCode =
   | 'missing_owner'
   | 'missing_basis'
   | 'invalid_basis'
-  | 'invalid_task'
   | 'first_screen'
   | 'stale'
   | 'unknown_type'
