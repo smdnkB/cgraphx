@@ -24,7 +24,7 @@ export type TargetId = AgentId;
 
 /**
  * `target.detect(location)` 的结果。
- * - `detected`:项目内存在该 agent 的配置目录,或其 CLI 在 PATH 上(交互安装默认勾选依据)。
+ * - `detected`:项目内存在该 agent 的配置目录(交互安装默认勾选依据;CLI 装在机器上不算)。
  * - `installed`:该 agent 已装过 cgraphx(`-y` / upgrade 的安装对象依据)。
  */
 export interface DetectionResult {

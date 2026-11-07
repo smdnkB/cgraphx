@@ -10,7 +10,6 @@ import { ALL_TARGETS, getTarget, resolveTargetFlag } from './targets/registry';
 import type { AgentTarget, Location } from './targets/types';
 import { hookNotice, type HookSnippetResult } from '../../core/git-hooks';
 import {
-  defaultAgentProfile,
   isAgentInstalled,
   parseAgentList,
   selectInstalledAgents,
@@ -77,7 +76,9 @@ function errorMessage(err: unknown): string {
  * 决定本次安装的 agent(spec §4.1):
  *   - 给了 `-t`(不论是否 `-y`)→ 按参数解析;
  *   - 无 `-t` 但 `-y`(upgrade 走这条)→ 全部「已装」的 agent,都没装过时只装 claude-code;
- *   - 交互 → 多选列出全部 agent,默认勾选「检测到」的,都没检测到时勾选 claude-code;可一个都不选。
+ *   - 交互 → 多选列出全部 agent,默认勾选「项目内已有配置目录」的(检测口径见 isAgentDetected),一个
+ *     都没有时也不兜底、全不勾——严格「未配置不选」,避免把项目没用过的 agent 误装进来(spec:2026-11-07-
+ *     安装默认勾选已配置的agent K1、体验决策);选项后标「项目已配置 / 未配置」(K3)。
  * 选中的就是这次之后留下的全部:原来已装、这次没选的由调用方卸掉(unselectedInstalledTargets)。
  */
 export async function selectInstallTargets(
@@ -90,11 +91,15 @@ export async function selectInstallTargets(
 
   if (useDefaults) return installedTargetsOrDefault(process.cwd());
 
-  const detected = ALL_TARGETS.filter((t) => t.detect(location).detected).map((t) => t.id);
+  const detectedIds = new Set(ALL_TARGETS.filter((t) => t.detect(location).detected).map((t) => t.id));
   const sel = await clack.multiselect({
     message: '选择要安装 cgraphx 的 agent(回车确认;已装的没勾会卸掉它的 cgraphx 配置)',
-    options: ALL_TARGETS.map((t) => ({ value: t.id, label: t.displayName })),
-    initialValues: detected.length > 0 ? detected : [defaultAgentProfile().id],
+    options: ALL_TARGETS.map((t) => ({
+      value: t.id,
+      label: t.displayName,
+      hint: detectedIds.has(t.id) ? '项目已配置' : '未配置',
+    })),
+    initialValues: [...detectedIds],
     required: false,
   });
   if (clack.isCancel(sel)) {
