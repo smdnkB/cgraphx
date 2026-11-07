@@ -16,6 +16,9 @@ export {
 // 项目在本机出现过的根、按目录的汇总、受影响的根下的事件数(spec D10、D11、D19、D32、D33)
 export { listTimelineRoots, readTimelineSummary, countEventsUnderRoots } from './roots';
 export type { TimelineRoot, TimelineDataSummary } from './types';
+// 会话标题(2026-11-06-agent看板 D8):项目库 timeline_session_titles 的按目录只读读取(看板用)
+export { readSessionTitlesInDataDir } from './store';
+export type { SessionTitle, SessionTitleKind } from './store';
 // 并旧数据(spec D27、D28;D20 后只并提交记录与 timeline_roots):project 子系统编排
 export { createTimelineMerger, maxTimelineEventId } from './merge';
 export type { TimelineMergeStats, TimelineMerger } from './types';

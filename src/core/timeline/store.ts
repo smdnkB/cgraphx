@@ -9,7 +9,10 @@
  * payloads without worrying about DB bloat.
  */
 
-import type { SqliteDatabase } from '../db';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { DatabaseConnection, DATABASE_FILENAME, type SqliteDatabase } from '../db';
 import {
   RESULT_SUMMARY_MAX_BYTES,
   SUMMARY_FIELD_MAX_BYTES,
@@ -32,6 +35,7 @@ import {
 } from './types';
 import { StoreInsertError, StoreQueryError } from './errors';
 import { capJsonValue, truncateUtf8 } from './json-cap';
+import { hasTable } from './roots';
 import { computeTimelineStats, parseCommitFiles, tryParseJson } from './stats';
 
 // ─── Field-size enforcement ────────────────────────────────────────────────
@@ -340,5 +344,99 @@ export class TimelineStore {
       since: resolveTimeBound(filter.since),
       until: resolveTimeBound(filter.until, true),
     });
+  }
+}
+
+// ─── 会话标题(spec 2026-11-06-agent看板 D8)──────────────────────────────────
+
+/** 标题种类:custom = 用户起的(claude custom-title 行)、ai = 自动起的(claude ai-title 行)、agent = deepseek 起的。 */
+export type SessionTitleKind = 'custom' | 'ai' | 'agent';
+
+/** 一个会话的标题(plan C-5 的 titles 形状;kind 在读取侧放宽成 string,容忍库里将来的新种类)。 */
+export interface SessionTitle {
+  readonly sessionId: string;
+  readonly title: string;
+  readonly kind: string;
+  readonly ts: string;
+}
+
+/** 标题表写入行(ts 是 ISO 字符串,补录管线换算好;标题截断在写入时做)。 */
+export interface SessionTitleUpsert {
+  readonly sessionId: string;
+  readonly title: string;
+  readonly kind: SessionTitleKind;
+  readonly ts: string;
+}
+
+/** 库里的原始行(列名与表列一一对应,snake_case)。 */
+interface SessionTitleRow {
+  session_id: string;
+  title: string;
+  kind: string;
+  ts: string;
+}
+
+/** kind 的优先级表达式(custom > ai > agent,数字大者胜);col 传 'excluded.kind' 或表列。 */
+const kindRank = (col: string): string => `CASE ${col} WHEN 'custom' THEN 2 WHEN 'ai' THEN 1 ELSE 0 END`;
+
+/**
+ * 写一个会话的标题,一个会话只留一行(D8):优先级 custom > ai > agent(用户起的永远不被自动起的
+ * 盖掉);同级 ts 新者胜,相等也覆盖——claude 的标题行在同一文件里反复追加,后读到的算新。
+ * 条件不满足时 ON CONFLICT 静默跳过(不抛错,补录的事实批次不受影响)。标题按摘要预览字段同款
+ * 上限截断(json-cap 的 truncateUtf8),不让一行超长标题撑爆库。
+ */
+const UPSERT_TITLE_SQL =
+  'INSERT INTO timeline_session_titles (session_id, title, kind, ts) VALUES (?, ?, ?, ?) ' +
+  'ON CONFLICT(session_id) DO UPDATE SET title = excluded.title, kind = excluded.kind, ts = excluded.ts ' +
+  `WHERE ${kindRank('excluded.kind')} > ${kindRank('timeline_session_titles.kind')} ` +
+  `   OR (${kindRank('excluded.kind')} = ${kindRank('timeline_session_titles.kind')} ` +
+  '       AND excluded.ts >= timeline_session_titles.ts)';
+
+export function upsertSessionTitle(db: SqliteDatabase, row: SessionTitleUpsert): void {
+  try {
+    db.prepare(UPSERT_TITLE_SQL).run(
+      row.sessionId,
+      truncateUtf8(row.title, SUMMARY_FIELD_MAX_BYTES),
+      row.kind,
+      row.ts,
+    );
+  } catch (err) {
+    throw new StoreInsertError(
+      `Session title upsert failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/** 标题表全表(按会话编号排序,结果稳定),给拿着库连接的调用方(并库前核对、看板读取)。 */
+export function readSessionTitles(db: SqliteDatabase): SessionTitle[] {
+  try {
+    const rows = db
+      .prepare('SELECT session_id, title, kind, ts FROM timeline_session_titles ORDER BY session_id')
+      .all() as SessionTitleRow[];
+    return rows.map((r) => ({ sessionId: r.session_id, title: r.title, kind: r.kind, ts: r.ts }));
+  } catch (err) {
+    throw new StoreQueryError(
+      `Session titles read failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/**
+ * 按数据目录只读读标题(看板用,D8 / plan C-5):库文件不在 → 空数组;不应用 schema、不建目录、
+ * 不写表(打开写法同 roots.ts 的 readDbFile);旧库可能还没有这张表,表不在按空,不报错。
+ */
+export function readSessionTitlesInDataDir(dataDir: string): SessionTitle[] {
+  const dbPath = path.join(dataDir, DATABASE_FILENAME);
+  if (!fs.existsSync(dbPath)) return [];
+  const conn = DatabaseConnection.open(dbPath);
+  try {
+    const db = conn.getDb();
+    return hasTable(db, 'timeline_session_titles') ? readSessionTitles(db) : [];
+  } finally {
+    try {
+      conn.close();
+    } catch {
+      // 关不上不影响结果(句柄随进程退出释放)
+    }
   }
 }

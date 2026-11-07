@@ -5,7 +5,8 @@
  *
  * 流程:
  *   1. 开关关闭 → skipped-disabled;这个目录的旧数据还没并过(K25)→ skipped-legacy,都不碰库;
- *      这个项目还没重建过(timeline_meta 无 rebuilt_at)→ 先全量重建(F6,见 rebuild.ts)再增量
+ *      这个项目还没重建过(timeline_meta 无 rebuilt_at)→ 先全量重建(F6,见 rebuild.ts)再增量;
+ *      重建之后、增量之前,老会话标题回填一次(D9,见 backfillSessionTitles)
  *   2. 经 agents 门面的 listSessionSources() 列出各来源会话根目录下的全部会话文件(claude-code、
  *      codebuddy、deepseek;读不了的来源跳过并提示一次,D12);路径升序:同一会话的主文件排在它的
  *      subagents/ 文件前面,先到先写的 session_head 才保得住「会话开始取本会话第一条消息」;大小和
@@ -41,11 +42,11 @@ import { readRootRows } from '../roots';
 import { ensureTimelineSchema } from '../schema-bootstrap';
 import { summarizeToolResponse } from '../post-tool-summary';
 import { sanitizeToolArgs } from '../tool-args';
-import { TimelineStore } from '../store';
+import { TimelineStore, upsertSessionTitle, type SessionTitleUpsert } from '../store';
 import type { TimelineEventInput } from '../types';
 import { rebuildTimeline } from './rebuild';
 import { sessionFactsReader } from './reader';
-import type { SessionFact, SessionFactTs, SessionFileReadResult } from './types';
+import type { SessionFact, SessionFactTs, SessionFactsReader, SessionFileReadResult } from './types';
 
 // ─── 结果形状(plan C-4)──────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ export interface TimelineSyncOutcome {
   reason?: string;
 }
 
-/** 门面入口(C-4)。内部顺序:开关关闭 → 旧数据没并过 → F6 重建(T-4,只一次)→ 增量补录。 */
+/** 门面入口(C-4)。内部顺序:开关关闭 → 旧数据没并过 → F6 重建(T-4,只一次)→ 老会话标题回填(D9,只一次)→ 增量补录。 */
 export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyncOutcome> {
   try {
     // F1 ④:开关关了不补录、不碰库,也不提示
@@ -83,6 +84,9 @@ export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyn
     if (rebuilt !== null && rebuilt.status === 'failed') {
       return { status: 'failed', reason: rebuilt.reason, notices: [] };
     }
+    // D9 老会话标题回填:装上这版之前的补录只写过事件、没写过标题,补一次;拿不到锁静默下次再来,
+    // 不影响随后的增量与查询。重建自己从头读过全部文件(commitRebuild 已写记号),这里自然跳过
+    await backfillSessionTitles(start);
     const outcome = await ingestIncremental(start);
     if (rebuilt === null || rebuilt.status === 'mark-only') return outcome;
     // 重建的汇总在前(F6 图「记下重建过了、输出重建了多少」);增量紧随其后几乎总是空趟(偏移刚推进
@@ -116,6 +120,89 @@ export function describeSyncOutcome(outcome: TimelineSyncOutcome): string[] {
       ];
     case 'synced':
       return outcome.notices;
+  }
+}
+
+// ─── 老会话标题回填(D9,plan C-2)────────────────────────────────────────────
+
+/** timeline_meta 里「老会话标题回填过了」的键(D9);值 = 写入时间(ISO)。重建在 commitRebuild 的
+ *  并库短事务里写(重建从头读过全部文件,不再回填),回填在 backfillSessionTitles 写。 */
+export const SESSION_TITLES_AT_KEY = 'session_titles_at';
+
+/** timeline_meta 读一个键;没有 → null。 */
+export function readMetaValue(db: SqliteDatabase, key: string): string | null {
+  const row = db.prepare('SELECT value FROM timeline_meta WHERE key = ?').get(key) as
+    | { value: string }
+    | undefined;
+  return row === undefined ? null : row.value;
+}
+
+/** timeline_meta 写一个键(值取当前时间;键已在我们这条链上定义)。 */
+export function writeMetaNow(db: SqliteDatabase, key: string): void {
+  db.prepare('INSERT OR REPLACE INTO timeline_meta (key, value) VALUES (?, ?)').run(key, new Date().toISOString());
+}
+
+/**
+ * 老会话标题回填(D9):装上这版之前的补录只写事件、没写标题——项目库 timeline_meta 无
+ * session_titles_at 时,把 sessions.db 里 `project_dir` 等于本项目目录的全部文件从偏移 0 重读
+ * 一遍,只取 session_title 事实写标题表;不写事件、不推进偏移、不改 size/mtime 行(否则下次
+ * 增量会整段重读)。一个项目只回填一次;和全量重建同一把 ingest.lock,拿不到(别的进程在补录)
+ * 就静默跳过、下次再来。任何失败也只跳过——记号没写,下次重试,不影响查询。
+ */
+async function backfillSessionTitles(start: string): Promise<void> {
+  const root = findProjectRoot(start);
+  if (root === null) return;
+  const loc = locateDataAtRoot(root);
+  // 同增量的静默分支:项目目录不在就没有可回填的库;库文件不在 = 还没记过任何数据,也不建库
+  if (loc.mode !== 'project' || loc.dataDir === null || loc.projectDirName === null) return;
+  const dataDir = loc.dataDir;
+  const dbPath = path.join(dataDir, DATABASE_FILENAME);
+  if (!fs.existsSync(dbPath)) return;
+  const sessionIndex = openSessionIndex();
+  let conn: DatabaseConnection | null = null;
+  try {
+    // 同全量重建一把锁(D9):拿不到(别的进程在补录)就下次再来
+    if (!acquireIngestLock(dataDir)) return;
+    conn = DatabaseConnection.open(dbPath);
+    const db = conn.getDb();
+    ensureTimelineSchema(db); // 旧库补上标题表(幂等)
+    // 等锁期间可能已被别的进程回填过:重查一次记号
+    if (readMetaValue(db, SESSION_TITLES_AT_KEY) !== null) return;
+    // 逐来源读本项目已归属的文件(sessions.db 按 agent 列,全部来源并起来就是全部行)
+    for (const source of listSessionSources()) {
+      // 读不了的来源(如 Node 没有 zstd API 的 deepseek)解析不出标题,跳过
+      if (source.unavailableReason() !== null) continue;
+      const reader = sessionFactsReader(source.sessionReader);
+      for (const row of sessionIndex.listSessionFiles(source.id)) {
+        if (row.project_dir !== loc.projectDirName) continue;
+        const titles = await readTitleFacts(reader, row.path);
+        if (titles.length === 0) continue;
+        db.transaction(() => {
+          for (const title of titles) upsertSessionTitle(db, title);
+        })();
+      }
+    }
+    writeMetaNow(db, SESSION_TITLES_AT_KEY);
+  } catch {
+    // 回填失败不影响查询:记号没写,下次再来
+  } finally {
+    try {
+      conn?.close();
+    } catch {
+      // 关不上不影响结果
+    }
+    releaseIngestLock(dataDir); // 只删本进程拿的锁,没拿到时是 no-op
+    sessionIndex.close();
+  }
+}
+
+/** 从偏移 0 读一个会话文件,只取标题事实;文件没了 / 读失败只丢这一个文件,不拖垮整个回填。 */
+async function readTitleFacts(reader: SessionFactsReader, file: string): Promise<SessionTitleUpsert[]> {
+  try {
+    const result = await reader(file, 0);
+    return titleUpserts(result.facts);
+  } catch {
+    return [];
   }
 }
 
@@ -369,6 +456,8 @@ async function processFile(
 /**
  * 把一文件本趟读到的事实落库(D4):项目库一个事务写完提交,之后才更新 sessions.db 的偏移。
  * prevSessionId 是上一行的会话编号(本趟一条事实都没读到时进度行沿用,C-4)。
+ * 标题事实不是事件,不进 mapFacts:单独按 C-2 优先级写标题表,和事件同一个事务(D8);只有
+ * 标题的批次(如 claude 只追加标题行)也要开库写。
  */
 function writeFacts(
   file: string,
@@ -382,12 +471,14 @@ function writeFacts(
   prevSessionId: string | null,
 ): void {
   const events = mapFacts(result.facts, source, startCwd, ctx);
-  if (events.length > 0) {
+  const titles = titleUpserts(result.facts);
+  if (events.length > 0 || titles.length > 0) {
     const db = ctx.projectDb();
     const store = new TimelineStore(db);
     db.transaction(() => {
       for (const event of events) store.insert(event);
       upsertRoot(db, cls.root, events);
+      for (const title of titles) upsertSessionTitle(db, title);
     })();
   }
   saveRow(ctx, file, source, stat, {
@@ -741,6 +832,21 @@ export function mapFacts(
     if (event.session_id !== null && event.session_id !== undefined) ctx.sessionsWritten.add(event.session_id);
   }
   return events;
+}
+
+/**
+ * 标题事实 → 标题表写入行(C-2):标题不是事件,不走 mapFacts;ts 统一在这里归一成 ISO
+ * (deepseek 的 epoch 毫秒换算,claude 标题行「前面最近一条带时间行」的兜底 0 同理)。
+ */
+export function titleUpserts(facts: readonly SessionFact[]): SessionTitleUpsert[] {
+  const out: SessionTitleUpsert[] = [];
+  for (const fact of facts) {
+    if (fact.kind !== 'session_title') continue;
+    const ts = factIso(fact.ts);
+    if (ts === null) continue;
+    out.push({ sessionId: fact.sessionId, title: fact.title, kind: fact.titleKind, ts });
+  }
+  return out;
 }
 
 // ─── ingest.lock(D9:写法沿用 project/merge-files.ts 的 merge.lock)──────────

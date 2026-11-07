@@ -10,16 +10,15 @@
  * 损坏(魔数不对等)抛错交补录层报 failed。帧按行边界写,但行切分仍做跨帧拼接(防御)。
  *
  * 行类型(session 文件头、user/message、tool/call、tool/result、turn/end、session/title 等 20 余种,
- * 在增加):不认识的行类型跳过不算错误(K11);`session/title` 行 T-1 按「不认识的行类型」跳过,
- * 标题映射归 T-2。行内不带会话编号与工作目录——会话编号看文件头,所以偏移大于 0 的增量趟也先读
- * 一次文件头(只读第一帧)定归属。
+ * 在增加):不认识的行类型跳过不算错误(K11)。行内不带会话编号与工作目录——会话编号看文件头,所以
+ * 偏移大于 0 的增量趟也先读一次文件头(只读第一帧)定归属。
  *
  * 子会话与续接(实测):**子会话的判定标记是文件头 `origin === 'subagent'`**(delegationDepth 1、
  * 目录名裸 uuid、parentSession 指主会话),不能只看「带 parentSession」——续接主会话(isSeeded=true、
  * delegationDepth=0)也带 parentSession,但按 spec K4「续接后换了编号的,各算一行」各自独立。子会话
  * 全部事实的 sessionId 按 parentSession 链归到根主会话(父仍是子会话时沿链再找,本机实测只有一层;
- * 父文件不在 / 读不出时停在那一级),会话头的 startCwd 取子会话文件自己的开始目录;子会话只产会话头
- * 与工具事实(提问与轮次结束不产,与 claude 侧链行、codebuddy 子 agent 文件同口径),工具事实带
+ * 父文件不在 / 读不出时停在那一级),会话头的 startCwd 取子会话文件自己的开始目录;子会话只产会话头、
+ * 工具与标题事实(提问与轮次结束不产,与 claude 侧链行、codebuddy 子 agent 文件同口径),工具事实带
  * subagent.id = 子会话自己的编号。
  * 已知限制(plan C-4,记录不修):deepseek 文件按路径排序不保证主文件在子会话文件前,主会话的
  * session_start 事件先写者可能取到子会话的开始目录——子会话与主会话同仓,对匹配与展示无实害。
@@ -37,6 +36,12 @@
  * 工具名是小写,映射 read→Read、write→Write、edit→Edit、bash→Bash、grep→Grep、glob→Glob、
  * skill→Skill(下游净化 / 摘要 / 看板查询按 Claude 工具名),不在映射表的原样传(如 web_fetch、
  * todo_write、subagent)。
+ *
+ * 标题(spec 2026-11-06-agent看板 D8、K5,实测 2026-11-07 核对全部 208 个文件):`session/title` 行
+ * 192 个文件有,形态 `{ type, seq, time, data: { title, messageSeqs, source } }`(source.kind 是
+ * fallback / provider,标题质量不同但不分库,统一 titleKind 'agent')。产 session_title 事实,
+ * ts 取行内 time(epoch 毫秒);子会话的标题同样按 parentSession 链归到根主会话(plan C-4
+ * 「全部事实(含标题)」)。
  *
  * 轮次结束:`turn/end` 行(子会话不产);messageId 用 `<会话编号>:<seq>`——seq 只在本文件内唯一,
  * 拼上会话编号保 source_key 全局唯一。
@@ -424,6 +429,15 @@ function handleTurnEnd(obj: Record<string, unknown>, frame: ZstdFrameRange, s: S
   s.boundaryEnd = frame.end;
 }
 
+/** 标题行(D8、K5):data.title 是标题、time 是起标题的时间;归属根主会话(子会话的标题同样归并,C-4)。 */
+function handleSessionTitle(obj: Record<string, unknown>, s: ScanState): void {
+  const data = asRecord(obj['data']);
+  const title = data !== null ? str(data['title']) : undefined;
+  const ts = msOf(obj['time']);
+  if (title === undefined || ts === undefined || s.rootSessionId === null) return;
+  s.facts.push({ kind: 'session_title', sessionId: s.rootSessionId, ts, title, titleKind: 'agent' });
+}
+
 function handleLine(
   obj: Record<string, unknown>,
   frame: ZstdFrameRange,
@@ -442,7 +456,8 @@ function handleLine(
   else if (type === 'tool/call') handleToolCall(obj, frame, s);
   else if (type === 'tool/result') handleToolResult(obj, s);
   else if (type === 'turn/end') handleTurnEnd(obj, frame, s);
-  // 其余行类型(session/title 等)不认识,跳过不算错误(K11)
+  else if (type === 'session/title') handleSessionTitle(obj, s);
+  // 其余行类型不认识,跳过不算错误(K11)
 }
 
 /** 从 from 起读到文件末尾(单 buffer;本机 DeepSeek 会话文件最大几 MB,不做分块流式)。 */

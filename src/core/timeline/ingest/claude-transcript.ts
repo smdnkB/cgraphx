@@ -34,6 +34,13 @@
  * 轮次结束(K6):stop_reason === 'end_turn' 且非侧链的 assistant 行,取该行 ts 与
  * message.id(msg_…)。侧链(子 agent)回复不产轮次结束。
  *
+ * 标题(spec 2026-11-06-agent看板 D8、K5,实测 2026-11-07 全量核对 25,914 行):type 为
+ * `custom-title` / `ai-title` 的行,形态 `{ type, customTitle|aiTitle, sessionId }`——不带
+ * timestamp 与 cwd,sessionId 全有、标题仅 1 例为空(跳过);同一条标题在文件里反复追加
+ * (抽样最近 400 个主会话:92 个有 custom、204 个有 ai、4 个两种都有),只出现在主文件,
+ * 子 agent 文件里没有。产 session_title 事实('custom' / 'ai');行内没有时间,ts 取文件里
+ * 它前面最近一条带时间行的时间(见 handleTitleRow)。
+ *
  * 增量与「留到下次」:按字节偏移读到最后一个完整行;还没有结果的工具调用不产事实——
  * 调用行位于最后一个轮次边界(提问行 / end_turn 行)之后的,consumedBytes 收在它前面,
  * 下一趟重读配对(重读产生的重复事实由 C-2 的 source_key 去重);边界之前仍没有结果的
@@ -114,6 +121,8 @@ interface ScanState {
   readonly userTexts: Set<string>;
   readonly pendingCalls: Map<string, PendingCall>;
   readonly queuedCommands: QueuedCommand[];
+  /** 最近一条带 timestamp 的行的时间:标题行不带时间,ts 取它(见 handleTitleRow)。 */
+  lastTimestamp: string | null;
   /** 最后一个轮次边界(提问行 / end_turn 行)的行尾偏移;之后的挂起调用留到下一趟。 */
   boundaryEnd: number;
   lastLineEnd: number;
@@ -243,6 +252,19 @@ function pushPrompt(
   s.boundaryEnd = boundaryLineEnd;
 }
 
+/**
+ * 标题行(D8、K5):`custom-title` / `ai-title`,标题字段名随类型(customTitle / aiTitle)。
+ * 行内不带时间,ts 取文件里它前面最近一条带时间行的时间(一条都还没有 → 0,只作同级比较,
+ * 输给任何真实时间);同一条标题在文件里反复追加,由管线「同级取新」收敛成一个会话一行。
+ * 增量趟只产已消费偏移之后的行,与「读到最后一个完整行」语义一致。
+ */
+function handleTitleRow(obj: Record<string, unknown>, titleKind: 'custom' | 'ai', s: ScanState): void {
+  const title = str(obj[titleKind === 'custom' ? 'customTitle' : 'aiTitle']);
+  const sessionId = str(obj['sessionId']);
+  if (title === undefined || sessionId === undefined) return;
+  s.facts.push({ kind: 'session_title', sessionId, ts: s.lastTimestamp ?? 0, title, titleKind });
+}
+
 /** 读 Claude Code 会话文件,产出本趟新增的会话事实(契约见 types.ts 与本文件头注释)。 */
 export async function readClaudeSessionFacts(filePath: string, fromByteOffset: number): Promise<SessionFileReadResult> {
   const s: ScanState = {
@@ -251,6 +273,7 @@ export async function readClaudeSessionFacts(filePath: string, fromByteOffset: n
     userTexts: new Set(),
     pendingCalls: new Map(),
     queuedCommands: [],
+    lastTimestamp: null,
     boundaryEnd: 0,
     lastLineEnd: fromByteOffset,
   };
@@ -279,9 +302,14 @@ export async function readClaudeSessionFacts(filePath: string, fromByteOffset: n
       if (type === 'user') handleUserRow(obj, line, s);
       else if (type === 'assistant') handleAssistantRow(obj, line, s);
       else if (type === 'attachment') handleAttachmentRow(obj, s);
+      else if (type === 'custom-title') handleTitleRow(obj, 'custom', s);
+      else if (type === 'ai-title') handleTitleRow(obj, 'ai', s);
     } catch {
       // 跳过该行
     }
+
+    // 标题行不带时间:记住最近一条带时间行的时间,给它后面出现的标题行当 ts(handleTitleRow)
+    if (ts !== undefined) s.lastTimestamp = ts;
   });
 
   // queued_command 附件:文本没有对应用户行的才算一条(D6)

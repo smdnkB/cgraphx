@@ -60,3 +60,10 @@ CREATE TABLE IF NOT EXISTS timeline_roots (
   first_ts TEXT NOT NULL,
   last_ts TEXT NOT NULL
 );
+
+-- 会话标题(agent 自己起的,spec 2026-11-06-agent看板 D8):一个会话一行,写入按
+-- custom > ai > agent、同级取新(store.ts 的 upsertSessionTitle);标题不是事件,不进 timeline_events。
+-- 只加表、不升版本号——取舍同上面 timeline_meta / timeline_roots:升版本号会让比它旧的
+-- cgraphx 打开库时报错;CREATE IF NOT EXISTS 由 schema-bootstrap 每次打开幂等应用,
+-- 旧库升级后第一次补录就有这张表,旧版打开新库也不受影响。
+CREATE TABLE IF NOT EXISTS timeline_session_titles (session_id TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL, ts TEXT NOT NULL);
