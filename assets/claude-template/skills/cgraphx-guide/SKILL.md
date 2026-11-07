@@ -39,6 +39,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | **测试按需 · 三条线** | 接口:`/api-case` → `/api-run`;单元:`/unit-spec` → `/unit-code`;UI:`/ui-case` → `/ui-run` |
 | **安全审计按需** | `/audit-login-security`(登录/认证安全审计:枚举全部认证入口 + 画认证链路,查绕过、越权、凭据、会话、爆破;只报告不修代码,默认不落盘) |
 | **收尾按需** | `/dev-end`(写收口档案,已上线时写发布记录)、`/doc-backfill`(老需求补头部、补单测产物和收口档案) |
+| **找回会话 · 按需** | `cgraphx board`(任意目录打开本机任务看板:左栏项目与需求任务、右栏该任务的会话,自动按副本目录、需求分支、提交、流程命令等依据把会话挂到任务;复制会话标题或完整编号,回到对应软件里找回;只读) |
 | **发布后按需** | `/doc-delivery`(需求文档、设计文档、接口文档,运行时选) |
 | **工作回顾按需** | `/doc-report`(日/周/月报)、`/doc-workload`(工作量汇报)、`/doc-monthly-report`(月底填报表) |
 | **卸载 · 可选** | `cgraphx uninstall`(按清单清 `.claude/` 内包自带 skills 和配置 + 删这个目录的 `.cgraphx/`;项目的数据留在 `~/.cgraphx/projects/`,要删用 `cgraphx project remove`)、`npm uninstall -g cgraphx` |
@@ -106,7 +107,8 @@ cd /your/project && cgraphx install  # 建 .cgraphx/ 与项目数据目录 + 部
 
 ## 背后自动(agent 跑的,用户无感)
 
-- timeline 自动记录开发事件:查时间线前自动补录 agent 的会话文件,不需要 agent 支持 hook,只要能读会话文件;提交记录经 git 钩子记入(无需手动跑)
+- timeline 自动记录开发事件:查时间线前自动补录 agent 的会话文件(Claude Code、CodeBuddy、DeepSeek Harness 三家),不需要 agent 支持 hook,只要能读会话文件;提交记录经 git 钩子记入(无需手动跑)
+- 要找回某个需求当时用的会话,任意目录跑 `cgraphx board`:本机只读看板,打开前先自动补录,会话自动挂到任务,复制标题或完整编号回对应软件里找回
 - agent 经 knowledge-recall 自动查业务知识
 - agent 经 `db-query` 自动查数据库
 - `status` / `docs` / `db` / `timeline` 等 CLI 子命令由 agent / skill 调用,人类日常不主动跑

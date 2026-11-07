@@ -221,6 +221,46 @@ requirement into several requirement directories to parallelize). The
 taken from the first and last commit of the range — instead of dispatching
 `task-history` for the per-task actual effort.
 
+### Added — `cgraphx board`, a local read-only task board
+
+Running `cgraphx board` in any directory first catches every project's
+timeline up (parsing what is new in the agents' session files, one line
+per project), then starts a server that listens on 127.0.0.1 with a
+random port and a random token, prints the tokened URL and opens it in
+the browser. The left column lists projects with their requirement
+tasks — `docs/features/` directories that carry a spec or a feature-plan
+draft, plus replica registrations — and the right column lists the
+sessions attached to the selected task, matched on the fly each
+refresh: the session started inside the task's replica, a commit on the
+task's branch, a commit or a write touching `docs/features/<id>/`, a
+flow command naming the task, or a prompt mentioning the task's path or
+title, each row showing why it matched ("definitely" vs. "maybe").
+Copy a session's title or full id from the page and jump back to the
+agent app to reopen it. This is not the removed `cgraphx web` viewer
+coming back: the board writes nothing but ingestion, serves no
+directory listing, and validates token, Host and Origin on every
+request.
+
+The timeline gains a third read-only session source: DeepSeek Harness
+(`~/.dsh/sessions/`, or `$DSH_HOME/.dsh/sessions/` when `DSH_HOME` is
+set). Its files are concatenated zstd frames of JSONL; a third reader
+splits the frames, maps the lines to the same session facts as the
+other two readers, and merges subagent sessions into their main session
+(continuations count as their own session). DeepSeek never enters the
+installer, the replica carry-over or the commit gate — `AGENT_PROFILES`
+is untouched; the events' agent column simply gains `deepseek`. Reading
+it requires Node 22.15+ (`zlib.zstdDecompressSync`); on older Node the
+source is skipped with a notice and everything else works.
+
+Claude Code and DeepSeek session titles (custom beats AI beats agent,
+newest wins within a rank) now live in a per-project
+`timeline_session_titles` table — one row per session, created with
+`IF NOT EXISTS` without bumping the schema version. Sessions recorded
+before this version are backfilled once per project (marker
+`session_titles_at` in `timeline_meta`), titles only, without touching
+events or offsets; CodeBuddy has no titles and keeps falling back to
+the first prompt as the display title.
+
 ## 2.0.13 - 2026-11-01
 
 ### Changed — clarification drops feature cards and writes straight into the draft
