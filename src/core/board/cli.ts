@@ -35,7 +35,7 @@ function writeErr(msg: string): void {
 
 /**
  * 逐项目进度行(C-8):synced/rebuilt 打「已补录 X 个会话」(X 取 outcome.sessions,undefined 按 0);
- * busy/skipped-*/failed 打 C-13 对应文案;目录全不在没补录的(outcome 为 null)打 C-9 那句。
+ * busy、skipped 系列、failed 打 C-13 对应文案;目录全不在没补录的(outcome 为 null)打 C-9 那句。
  */
 function syncLine(item: BoardSyncItem): string {
   const name = `  ${item.group.name}  `;
