@@ -380,17 +380,25 @@ interface SessionTitleRow {
 const kindRank = (col: string): string => `CASE ${col} WHEN 'custom' THEN 2 WHEN 'ai' THEN 1 ELSE 0 END`;
 
 /**
+ * 未知时间的哨兵(claude 的标题行行内不带时间戳,增量趟窗口里又没有带时间的行时,管线把 ts 归一成
+ * 它)。会话文件只追加:读到未知 ts 的标题行,说明它排在库中已有标题(来自更早的文件位置)之后,
+ * 同级一律覆盖;全量读里排在它后面的已知 ts 标题也天然能再盖回来(已知 >= 哨兵恒真)。
+ */
+export const UNKNOWN_TITLE_TS = '1970-01-01T00:00:00.000Z';
+
+/**
  * 写一个会话的标题,一个会话只留一行(D8):优先级 custom > ai > agent(用户起的永远不被自动起的
- * 盖掉);同级 ts 新者胜,相等也覆盖——claude 的标题行在同一文件里反复追加,后读到的算新。
- * 条件不满足时 ON CONFLICT 静默跳过(不抛错,补录的事实批次不受影响)。标题按摘要预览字段同款
- * 上限截断(json-cap 的 truncateUtf8),不让一行超长标题撑爆库。
+ * 盖掉);同级 ts 新者胜,相等也覆盖——claude 的标题行在同一文件里反复追加,后读到的算新;传入
+ * ts 是未知哨兵(UNKNOWN_TITLE_TS)时同级一律覆盖(见该常量的注释)。条件不满足时 ON CONFLICT
+ * 静默跳过(不抛错,补录的事实批次不受影响)。标题按摘要预览字段同款上限截断(json-cap 的
+ * truncateUtf8),不让一行超长标题撑爆库。
  */
 const UPSERT_TITLE_SQL =
   'INSERT INTO timeline_session_titles (session_id, title, kind, ts) VALUES (?, ?, ?, ?) ' +
   'ON CONFLICT(session_id) DO UPDATE SET title = excluded.title, kind = excluded.kind, ts = excluded.ts ' +
   `WHERE ${kindRank('excluded.kind')} > ${kindRank('timeline_session_titles.kind')} ` +
   `   OR (${kindRank('excluded.kind')} = ${kindRank('timeline_session_titles.kind')} ` +
-  '       AND excluded.ts >= timeline_session_titles.ts)';
+  '       AND (excluded.ts >= timeline_session_titles.ts OR excluded.ts = \'' + UNKNOWN_TITLE_TS + '\'))';
 
 export function upsertSessionTitle(db: SqliteDatabase, row: SessionTitleUpsert): void {
   try {

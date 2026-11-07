@@ -45,7 +45,9 @@ import {
   acquireIngestLock,
   classifyStartDir,
   mapFacts,
+  noteReadFailed,
   noteUnparsed,
+  readFailedNotices,
   releaseIngestLock,
   rowSessionId,
   SESSION_TITLES_AT_KEY,
@@ -58,6 +60,7 @@ import {
   type ClassificationContext,
   type DirClassification,
   type FactMappingContext,
+  type ReadFailedMap,
   type FileStat,
   type UnparsedMap,
 } from './ingest';
@@ -349,6 +352,7 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
       sessionsWritten: new Set<string>(),
     };
     const unparsed: UnparsedMap = new Map();
+    const readFailed: ReadFailedMap = new Map();
     const parsedRows: ParsedFileRow[] = [];
     const parsedStartCwd = new Map<string, string>();
 
@@ -360,39 +364,45 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
       for (const file of source.listFiles(sourceRoot)) {
         const stat = statOrNull(file);
         if (stat === null) continue; // 文件没了(F1 ⑤):已记进时间线的留着
-        // 循环开头取一次,后面判断跳过与 knownStartCwd 共用(同一个文件不查两遍 sessions.db)
-        const recorded = sessionIndex.getSessionFile(file);
-        // D5:已记到别的项目、内容也读过的文件不在重建里从头读——偏移留着交给增量,否则改名后
-        // 新项目会把旧历史再解析一遍。没记过 / 归本项目 / 偏移还是 0 的照旧从头读
-        if (
-          recorded !== null &&
-          recorded.project_dir !== null &&
-          recorded.project_dir !== loc.projectDirName &&
-          recorded.byte_offset > 0
-        ) {
-          continue;
+        // 单文件隔离:读取器抛错(坏帧、读不出会话头等)只丢这一个文件,不卡住排序在后的文件、
+        // 不让整个重建永久 failed(rebuilt_at 不写,别的进程下次又从头来一遍还是死在同一个文件上)
+        try {
+          // 循环开头取一次,后面判断跳过与 knownStartCwd 共用(同一个文件不查两遍 sessions.db)
+          const recorded = sessionIndex.getSessionFile(file);
+          // D5:已记到别的项目、内容也读过的文件不在重建里从头读——偏移留着交给增量,否则改名后
+          // 新项目会把旧历史再解析一遍。没记过 / 归本项目 / 偏移还是 0 的照旧从头读
+          if (
+            recorded !== null &&
+            recorded.project_dir !== null &&
+            recorded.project_dir !== loc.projectDirName &&
+            recorded.byte_offset > 0
+          ) {
+            continue;
+          }
+          let startCwd = knownStartCwd(file, recorded, sessionIndex, parsedStartCwd);
+          let result: SessionFileReadResult | null = null;
+          if (startCwd === null) {
+            result = await sessionFactsReader(source.sessionReader)(file, 0);
+            const head = firstSessionHead(result.facts);
+            if (head === null) continue; // 一条带 cwd 的行都没有:留给增量按它的口径记空行
+            startCwd = head.startCwd;
+          }
+          parsedStartCwd.set(file, startCwd);
+          const cls = classifyStartDir(startCwd, classifyCtx);
+          if (cls.dirName !== classifyCtx.currentDirName) continue; // 别的项目的 / 没认出来的:不动,别家自己补
+          if (result === null) result = await sessionFactsReader(source.sessionReader)(file, 0); // 全量:一律从头读
+          writeParsedFacts(file, source, stat, result, startCwd, cls, tmpDb, mapCtx, unparsed);
+          parsedRows.push({
+            file,
+            source,
+            stat,
+            sessionId: rowSessionId(source, file, result.facts, recorded?.session_id ?? null),
+            startCwd,
+            consumedBytes: result.consumedBytes,
+          });
+        } catch (err) {
+          noteReadFailed(readFailed, source, err);
         }
-        let startCwd = knownStartCwd(file, recorded, sessionIndex, parsedStartCwd);
-        let result: SessionFileReadResult | null = null;
-        if (startCwd === null) {
-          result = await sessionFactsReader(source.sessionReader)(file, 0);
-          const head = firstSessionHead(result.facts);
-          if (head === null) continue; // 一条带 cwd 的行都没有:留给增量按它的口径记空行
-          startCwd = head.startCwd;
-        }
-        parsedStartCwd.set(file, startCwd);
-        const cls = classifyStartDir(startCwd, classifyCtx);
-        if (cls.dirName !== classifyCtx.currentDirName) continue; // 别的项目的 / 没认出来的:不动,别家自己补
-        if (result === null) result = await sessionFactsReader(source.sessionReader)(file, 0); // 全量:一律从头读
-        writeParsedFacts(file, source, stat, result, startCwd, cls, tmpDb, mapCtx, unparsed);
-        parsedRows.push({
-          file,
-          source,
-          stat,
-          sessionId: rowSessionId(source, file, result.facts, recorded?.session_id ?? null),
-          startCwd,
-          consumedBytes: result.consumedBytes,
-        });
       }
     }
 
@@ -416,7 +426,7 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
       status: 'rebuilt',
       sessions: counts.sessions,
       events: counts.events,
-      notices: unparsedNotices(unparsed),
+      notices: [...unparsedNotices(unparsed), ...readFailedNotices(readFailed)],
     };
   } catch (err) {
     // 清和写在短事务里一起撤销过,时间线还是旧的;临时库在 finally 里删

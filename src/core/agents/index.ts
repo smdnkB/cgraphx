@@ -10,7 +10,7 @@ import type { AgentId, AgentProfile, SessionFromEnv } from './types';
 
 export { AGENT_IDS, SESSION_READER_IDS } from './types';
 export type { AgentId, AgentProfile, SessionFromEnv, SessionReaderId, SessionSource, SessionSourceId } from './types';
-export { agentSessionsRoot, listSessionSources } from './sources';
+export { agentSessionsRoot, DEEPSEEK_SESSION_FILENAME, listSessionSources } from './sources';
 
 export const DEFAULT_AGENT_ID: AgentId = 'claude-code';
 export const AGENT_OPTION_FLAG = '--agent' as const;

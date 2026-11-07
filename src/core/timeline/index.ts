@@ -37,6 +37,8 @@ export { installTimelineHooks, uninstallTimelineHooks } from './installer';
 export { ensureTimelineUpToDate, describeSyncOutcome } from './ingest/ingest';
 export type { TimelineSyncOutcome, TimelineSyncStatus } from './ingest/ingest';
 export { isKillSwitchOn } from './kill-switch';
+// 工具名单源(看板查询与认任务共用,2026-11-06-agent看板):写类工具 + 看板取的工具列表
+export { BOARD_TOOL_NAMES, WRITE_FILE_TOOLS } from './constants';
 export { describeEvent } from './describe';
 export type {
   EventType,

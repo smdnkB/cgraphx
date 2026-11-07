@@ -57,14 +57,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
+import { DEEPSEEK_SESSION_FILENAME } from '../../agents';
 import { classifyAutoMessage, type AutoMessageSource } from '../auto-message';
 import type { PromptSource, SessionFact, SessionFactTs, SessionFileReadResult } from './types';
 
 /** zstd 帧魔数(小端读)。 */
 const ZSTD_MAGIC = 0xfd2fb528;
-
-/** DeepSeek 会话文件名(会话目录下固定这个名字)。 */
-const SESSION_FILENAME = 'session.v4.jsonl.zstd';
 
 /** 读文件头时预读的字节数(第一帧里的头一行很短,256KB 足够;读不完整按没有头处理)。 */
 const HEADER_PROBE_BYTES = 256 * 1024;
@@ -266,7 +264,7 @@ function readHeaderOf(
   try {
     for (const group of fs.readdirSync(rootDir, { withFileTypes: true })) {
       if (!group.isDirectory()) continue;
-      const file = path.join(rootDir, group.name, sessionId, SESSION_FILENAME);
+      const file = path.join(rootDir, group.name, sessionId, DEEPSEEK_SESSION_FILENAME);
       try {
         if (!fs.statSync(file).isFile()) continue;
       } catch {
@@ -504,10 +502,15 @@ export async function readDeepSeekSessionFacts(
     pendingCalls: new Map(),
     boundaryEnd: start,
   };
-  // 增量趟:行内不带会话编号,先读文件头定归属(不重产会话头事实,它在读偏移 0 的那趟产过)
+  // 增量趟:行内不带会话编号,先读文件头定归属(不重产会话头事实,它在读偏移 0 的那趟产过)。
+  // 头读不出(首帧损坏、超出探测窗、格式改版)时抛错交补录层按单文件失败隔离——偏移不推进、
+  // 下一趟重试;静默返回空事实的话,这趟新增的内容会被丢掉且偏移照常越过(K11 对增量趟不触发)
   if (start > 0) {
     const header = readFirstHeader(filePath);
-    if (header !== null) adoptHeader(header, s, rootDir, headerCache, false);
+    if (header === null) {
+      throw new Error('DeepSeek 会话文件读不出会话头(首帧损坏或超出探测窗),无法定归属');
+    }
+    adoptHeader(header, s, rootDir, headerCache, false);
   }
 
   let carry = ''; // 帧尾没有换行时,行在下一帧续(实测帧按行边界写,纯防御)

@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { DatabaseConnection, DATABASE_FILENAME, type SqliteDatabase } from '../db';
+import { BOARD_TOOL_NAMES } from './constants';
 import { StoreQueryError } from './errors';
 import { EVENTS_TABLE, hasTable } from './roots';
 import { parseCommitFiles } from './stats';
@@ -23,12 +24,11 @@ import type { BoardTimelineData } from './types';
 /** 标题表名(与 schema.sql 一致;这里只查它在不在)。 */
 const TITLES_TABLE = 'timeline_session_titles';
 
-/** 看板取的工具事件(K9④ 写类 + K10 读 + K9⑤ Skill;Bash 不取,见文件头)。 */
-const BOARD_TOOL_NAMES = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Read', 'Skill'];
-
-/** json 文本列安全取键:列不是合法 JSON(旧数据、截断行)时按 NULL。 */
-function jsonExtract(col: string, key: string): string {
-  return `CASE WHEN json_valid(${col}) THEN json_extract(${col}, '${key}') ELSE NULL END`;
+/** json 文本列安全取键:列不是合法 JSON(旧数据、截断行)时按 NULL;多个键按顺序 coalesce
+ *  (NotebookEdit 的参数键是 notebook_path,与 post-tool-summary 同款兜底)。 */
+function jsonExtract(col: string, ...keys: string[]): string {
+  const extracts = keys.map((k) => `json_extract(${col}, '${k}')`).join(', ');
+  return `CASE WHEN json_valid(${col}) THEN coalesce(${extracts}) ELSE NULL END`;
 }
 
 /** 表有没有这一列(PRAGMA,不扫表;未应用 schema 的旧库可能缺 agent 列)。 */
@@ -95,7 +95,7 @@ function readTools(db: SqliteDatabase): BoardTimelineData['tools'] {
   const rows = db
     .prepare(
       'SELECT ts, session_id, tool_name, ' +
-        `${jsonExtract('tool_args', '$.file_path')} AS file_path, ` +
+        `${jsonExtract('tool_args', '$.file_path', '$.notebook_path')} AS file_path, ` +
         `CASE WHEN tool_name = 'Skill' AND json_valid(tool_args) ` +
         `THEN json_extract(tool_args, '$.args') ELSE NULL END AS args ` +
         'FROM timeline_events ' +

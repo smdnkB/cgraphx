@@ -254,9 +254,11 @@ function pushPrompt(
 
 /**
  * 标题行(D8、K5):`custom-title` / `ai-title`,标题字段名随类型(customTitle / aiTitle)。
- * 行内不带时间,ts 取文件里它前面最近一条带时间行的时间(一条都还没有 → 0,只作同级比较,
- * 输给任何真实时间);同一条标题在文件里反复追加,由管线「同级取新」收敛成一个会话一行。
- * 增量趟只产已消费偏移之后的行,与「读到最后一个完整行」语义一致。
+ * 行内不带时间,ts 取本趟窗口里它前面最近一条带时间行的时间;窗口里还没有(增量趟只读新增字节,
+ * 改名行常是窗口第一条)→ 0,管线归一成未知哨兵(store.ts 的 UNKNOWN_TITLE_TS),写入时同级
+ * 一律覆盖——会话文件只追加,未知 ts 的标题行必然排在库中已有标题之后。同一条标题在文件里反复
+ * 追加,由管线「同级取新」收敛成一个会话一行。增量趟只产已消费偏移之后的行,与「读到最后一个
+ * 完整行」语义一致。
  */
 function handleTitleRow(obj: Record<string, unknown>, titleKind: 'custom' | 'ai', s: ScanState): void {
   const title = str(obj[titleKind === 'custom' ? 'customTitle' : 'aiTitle']);

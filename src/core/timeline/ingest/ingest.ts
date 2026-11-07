@@ -85,17 +85,19 @@ export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyn
       return { status: 'failed', reason: rebuilt.reason, notices: [] };
     }
     // D9 老会话标题回填:装上这版之前的补录只写过事件、没写过标题,补一次;拿不到锁静默下次再来,
-    // 不影响随后的增量与查询。重建自己从头读过全部文件(commitRebuild 已写记号),这里自然跳过
-    await backfillSessionTitles(start);
+    // 不影响随后的增量与查询。重建自己从头读过全部文件(commitRebuild 已写记号),这里自然跳过;
+    // 失败的提示随本次结果一起出
+    const backfillNotices = await backfillSessionTitles(start);
     const outcome = await ingestIncremental(start);
-    if (rebuilt === null || rebuilt.status === 'mark-only') return outcome;
+    const merged = { ...outcome, notices: [...backfillNotices, ...outcome.notices] };
+    if (rebuilt === null || rebuilt.status === 'mark-only') return merged;
     // 重建的汇总在前(F6 图「记下重建过了、输出重建了多少」);增量紧随其后几乎总是空趟(偏移刚推进
     // 到位),就算有也是重建期间新追加的内容,数字直接相加
     return {
       status: 'rebuilt',
-      sessions: (rebuilt.sessions ?? 0) + (outcome.sessions ?? 0),
-      events: (rebuilt.events ?? 0) + (outcome.events ?? 0),
-      notices: [...rebuilt.notices, ...outcome.notices],
+      sessions: (rebuilt.sessions ?? 0) + (merged.sessions ?? 0),
+      events: (rebuilt.events ?? 0) + (merged.events ?? 0),
+      notices: [...rebuilt.notices, ...merged.notices],
     };
   } catch (err) {
     return { status: 'failed', reason: errorMessage(err), notices: [] };
@@ -110,7 +112,7 @@ export function describeSyncOutcome(outcome: TimelineSyncOutcome): string[] {
     case 'skipped-legacy':
       return ['这个目录还没装新版,时间线停在升级前;运行 cgraphx install 补齐'];
     case 'busy':
-      return ['时间线正在补录,结果可能缺最近的'];
+      return ['时间线正在补录,结果可能缺最近的', ...outcome.notices];
     case 'failed':
       return [`时间线补录失败:${outcome.reason ?? '未知原因'},结果可能缺最近的`];
     case 'rebuilt':
@@ -147,27 +149,28 @@ export function writeMetaNow(db: SqliteDatabase, key: string): void {
  * session_titles_at 时,把 sessions.db 里 `project_dir` 等于本项目目录的全部文件从偏移 0 重读
  * 一遍,只取 session_title 事实写标题表;不写事件、不推进偏移、不改 size/mtime 行(否则下次
  * 增量会整段重读)。一个项目只回填一次;和全量重建同一把 ingest.lock,拿不到(别的进程在补录)
- * 就静默跳过、下次再来。任何失败也只跳过——记号没写,下次重试,不影响查询。
+ * 就静默跳过、下次再来。失败提示一次返回给调用方(记号没写,下一趟会重试)——不静默吞掉:
+ * 标题可能已写进、唯独记号写不进的持续故障下,每次查询都会重做整套回填,得让人看得见。
  */
-async function backfillSessionTitles(start: string): Promise<void> {
+async function backfillSessionTitles(start: string): Promise<string[]> {
   const root = findProjectRoot(start);
-  if (root === null) return;
+  if (root === null) return [];
   const loc = locateDataAtRoot(root);
   // 同增量的静默分支:项目目录不在就没有可回填的库;库文件不在 = 还没记过任何数据,也不建库
-  if (loc.mode !== 'project' || loc.dataDir === null || loc.projectDirName === null) return;
+  if (loc.mode !== 'project' || loc.dataDir === null || loc.projectDirName === null) return [];
   const dataDir = loc.dataDir;
   const dbPath = path.join(dataDir, DATABASE_FILENAME);
-  if (!fs.existsSync(dbPath)) return;
+  if (!fs.existsSync(dbPath)) return [];
   const sessionIndex = openSessionIndex();
   let conn: DatabaseConnection | null = null;
   try {
     // 同全量重建一把锁(D9):拿不到(别的进程在补录)就下次再来
-    if (!acquireIngestLock(dataDir)) return;
+    if (!acquireIngestLock(dataDir)) return [];
     conn = DatabaseConnection.open(dbPath);
     const db = conn.getDb();
     ensureTimelineSchema(db); // 旧库补上标题表(幂等)
     // 等锁期间可能已被别的进程回填过:重查一次记号
-    if (readMetaValue(db, SESSION_TITLES_AT_KEY) !== null) return;
+    if (readMetaValue(db, SESSION_TITLES_AT_KEY) !== null) return [];
     // 逐来源读本项目已归属的文件(sessions.db 按 agent 列,全部来源并起来就是全部行)
     for (const source of listSessionSources()) {
       // 读不了的来源(如 Node 没有 zstd API 的 deepseek)解析不出标题,跳过
@@ -183,8 +186,10 @@ async function backfillSessionTitles(start: string): Promise<void> {
       }
     }
     writeMetaNow(db, SESSION_TITLES_AT_KEY);
-  } catch {
-    // 回填失败不影响查询:记号没写,下次再来
+    return [];
+  } catch (err) {
+    // 回填失败不影响查询:记号没写,下一趟重试;提示一次让人看得见
+    return [`老会话标题回填失败:${shortReason(err)},下一趟会重试`];
   } finally {
     try {
       conn?.close();
@@ -233,6 +238,37 @@ export interface UnparsedTally {
 
 export type UnparsedMap = Map<string, UnparsedTally>;
 
+/** 读取器抛错的文件(增量与重建共用):按来源显示名 + 原因首行计数,单文件隔离不拖垮整趟。 */
+export interface ReadFailedTally {
+  display: string;
+  reason: string;
+  count: number;
+}
+
+export type ReadFailedMap = Map<string, ReadFailedTally>;
+
+/** 原因取错误消息的第一行、截到 80 字,提示不被长堆栈撑爆。 */
+function shortReason(err: unknown): string {
+  const first = errorMessage(err).split('\n')[0] ?? '';
+  return [...first].slice(0, 80).join('');
+}
+
+/** 记一个读取失败的文件(按显示名 + 原因聚合)。 */
+export function noteReadFailed(map: ReadFailedMap, source: SessionSource, err: unknown): void {
+  const reason = shortReason(err);
+  const key = `${source.displayName}\0${reason}`;
+  const cur = map.get(key);
+  if (cur === undefined) map.set(key, { display: source.displayName, reason, count: 1 });
+  else cur.count += 1;
+}
+
+/** 读取失败的人读提示:偏移没推进,文件修复 / 删除后下一趟自动重试。 */
+export function readFailedNotices(map: ReadFailedMap): string[] {
+  return [...map.values()].map(
+    (f) => `${f.display} 的会话文件有 ${f.count} 个读取失败(${f.reason}),时间线可能不全;文件修复或删除后会自动重试`,
+  );
+}
+
 /** 归属判定要用的上下文(增量与重建共用;重建的 fallbackMatcher 读项目库记过的根)。 */
 export interface ClassificationContext {
   /** 当前项目(查询所在)的项目目录名 */
@@ -263,6 +299,8 @@ interface IngestContext extends ClassificationContext, FactMappingContext {
   readonly rows: Map<string, SessionFileRow>;
   /** K11:整份读不出事实的文件,按 agent 显示名 + 行内 version 计数 */
   readonly unparsed: UnparsedMap;
+  /** 读取器抛错的文件(坏帧、读不出会话头等),按来源显示名 + 原因计数;偏移不推进,下一趟重试 */
+  readonly readFailed: ReadFailedMap;
 }
 
 function errorMessage(err: unknown): string {
@@ -320,7 +358,8 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
     const notices = unavailableNotice !== null ? [unavailableNotice] : [];
     if (pending.length === 0) return { status: 'synced', notices };
 
-    if (!acquireIngestLock(dataDir)) return { status: 'busy', notices: [] };
+    // busy 也带上来源不可用提示(如「DeepSeek 会话要 Node 22.15 以上」):别让它只在无锁竞争的趟出现
+    if (!acquireIngestLock(dataDir)) return { status: 'busy', notices };
     try {
       const removedAtMs = (() => {
         const removedAt = sessionIndex.removedProjectAt(loc.identity);
@@ -344,6 +383,7 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
         rows,
         removedAtMs,
         unparsed: new Map(),
+        readFailed: new Map(),
         sessionsWritten: new Set(),
         classified: new Map(),
         projectDb,
@@ -364,7 +404,13 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
           rows.set(item.file, fresh);
           if (fresh.size === item.stat.size && fresh.mtime_ms === item.stat.mtimeMs) continue;
         }
-        await processFile(item.file, item.source, item.stat, fresh ?? null, ctx);
+        // 单文件隔离:读取器抛错(坏帧、读不出会话头等)只丢这一个文件,不卡住排序在后的文件、
+        // 不拖垮整趟;偏移不推进(saveRow 没执行),文件修复或删除后下一趟自动重试
+        try {
+          await processFile(item.file, item.source, item.stat, fresh ?? null, ctx);
+        } catch (err) {
+          noteReadFailed(ctx.readFailed, item.source, err);
+        }
       }
 
       const dbConn = openConn();
@@ -373,7 +419,7 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
         status: 'synced',
         sessions: ctx.sessionsWritten.size,
         events,
-        notices: [...notices, ...unparsedNotices(ctx.unparsed)],
+        notices: [...notices, ...unparsedNotices(ctx.unparsed), ...readFailedNotices(ctx.readFailed)],
       };
     } finally {
       releaseIngestLock(dataDir);

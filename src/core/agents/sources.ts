@@ -82,8 +82,9 @@ export function listSessionFiles(sessionsRoot: string): string[] {
 
 // ─── DeepSeek Harness 只读来源(spec D13)─────────────────────────────────────────
 
-/** DeepSeek 会话文件名(会话目录下固定这个名字,version 4)。 */
-const DEEPSEEK_SESSION_FILENAME = 'session.v4.jsonl.zstd';
+/** DeepSeek 会话文件名(会话目录下固定这个名字,version 4)。列举(sources)与找父会话头
+ *  (timeline 的读取器)共用这一份——只在这里改,别处不会漂移。 */
+export const DEEPSEEK_SESSION_FILENAME = 'session.v4.jsonl.zstd';
 
 /** DeepSeek 家目录环境变量(设了且非空以它为根,否则家目录);会话在 `<根>/.dsh/sessions/`。 */
 const DEEPSEEK_HOME_ENV = 'DSH_HOME';
