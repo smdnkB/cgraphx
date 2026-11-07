@@ -21,7 +21,7 @@ import { listProjects } from '../project';
 import { listReplicas, replicaLinkOf, type ReplicaEntry } from '../replica';
 import { createRootMatcher } from '../root-match';
 import { DatabaseConnection } from '../db';
-import { SessionIndex } from '../session-index';
+import { SESSIONS_DB_FILENAME, SessionIndex } from '../session-index';
 import { ensureTimelineUpToDate, readTimelineBoardData } from '../timeline';
 import type { BoardTimelineData, TimelineSyncOutcome } from '../timeline';
 import { projectsRoot, userDataRoot } from '../user-data-dir';
@@ -29,7 +29,6 @@ import {
   DOCS_FEATURES_DIR,
   NOTICE_DIRS_GONE,
   PLAN_DISCUSSION_FILE_PATTERN,
-  SESSIONS_DB_FILENAME,
   SPEC_FILE_PATTERN,
   SYNC_NOTICE_BY_STATUS,
   TASK_ACTIVE_WINDOW_MS,
@@ -99,14 +98,20 @@ export async function syncProjects(groups?: readonly BoardProjectGroup[]): Promi
 
 /**
  * sessions.db 只读现查(D10):按来源聚合 session_files,会话编号 → 它的文件还有没有一个在。
- * 库不在(还没补录过)、读不了按「都不知道」(全部 false)处理;不建库、不写表(只读打开,
+ * 库不在(还没补录过)、打开或读不了(文件损坏等)按「都不知道」(全部 false)降级——一个只读
+ * 辅助查询不能拖垮整个看板(同一次启动里项目补录失败也只是 notice);不建库、不写表(只读打开,
  * 不走会建库建表的 openSessionIndex)。
  */
 function readSessionFileExistence(): Map<string, boolean> {
   const out = new Map<string, boolean>();
   const dbPath = path.join(userDataRoot(), SESSIONS_DB_FILENAME);
   if (!fs.existsSync(dbPath)) return out;
-  const conn = DatabaseConnection.open(dbPath);
+  let conn: DatabaseConnection;
+  try {
+    conn = DatabaseConnection.open(dbPath);
+  } catch {
+    return out; // 库打不开(损坏、被锁死等):按「都不知道」处理,不让 board 拒启
+  }
   try {
     const index = new SessionIndex(conn);
     for (const source of listSessionSources()) {
@@ -121,6 +126,8 @@ function readSessionFileExistence(): Map<string, boolean> {
         out.set(row.session_id, (out.get(row.session_id) ?? false) || fs.existsSync(row.path));
       }
     }
+  } catch {
+    return out; // 读一半失败:已算出来的留下,其余按没有
   } finally {
     try {
       conn.close();

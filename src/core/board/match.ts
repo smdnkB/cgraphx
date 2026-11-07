@@ -11,7 +11,7 @@
 import * as path from 'node:path';
 
 import { createRootMatcher, type RootMatcher } from '../root-match';
-import type { BoardCommit, BoardPrompt, BoardSessionHead, BoardToolEvent } from '../timeline';
+import { WRITE_FILE_TOOLS, type BoardCommit, type BoardPrompt, type BoardSessionHead, type BoardToolEvent } from '../timeline';
 import {
   FLOW_COMMAND_PATTERN,
   REASON_COMMIT_BRANCH,
@@ -26,9 +26,6 @@ import {
   featureDirPrefix,
 } from './constants';
 import type { ReplicaRef, TaskMatchInput, TaskMatchOutput, TaskSessionMatch } from './types';
-
-/** K9④:写类工具(filePath 含需求目录前缀即定挂)。 */
-const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
 /** 按码点数标题长度(K10 的「4 个字」)。 */
 function charLength(s: string): number {
@@ -146,7 +143,7 @@ function matchFixedRules(task: TaskContext, ev: SessionEvents): { reasons: Set<s
   }
   // ④ 写类工具的 filePath 含需求目录
   for (const tool of ev.tools) {
-    if (WRITE_TOOLS.has(tool.tool) && tool.filePath !== null && tool.filePath.includes(task.prefix)) {
+    if (WRITE_FILE_TOOLS.has(tool.tool) && tool.filePath !== null && tool.filePath.includes(task.prefix)) {
       reasons.add(REASON_WROTE_FEATURE);
       hitTs.push(tool.ts);
     }

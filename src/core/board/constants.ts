@@ -63,6 +63,3 @@ export const SYNC_NOTICE_BY_STATUS: Readonly<Record<TimelineSyncStatus, string |
   synced: null,
   rebuilt: null,
 };
-
-/** sessions.db 的文件名(session-index.ts 的同名常量未导出;board 只读打开时拼路径用)。 */
-export const SESSIONS_DB_FILENAME = 'sessions.db';

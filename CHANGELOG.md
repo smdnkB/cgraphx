@@ -238,8 +238,8 @@ title, each row showing why it matched ("definitely" vs. "maybe").
 Copy a session's title or full id from the page and jump back to the
 agent app to reopen it. This is not the removed `cgraphx web` viewer
 coming back: the board writes nothing but ingestion, serves no
-directory listing, and validates token, Host and Origin on every
-request.
+directory listing, validates the token and Host on every request,
+and additionally validates Origin on the refresh endpoint.
 
 The timeline gains a third read-only session source: DeepSeek Harness
 (`~/.dsh/sessions/`, or `$DSH_HOME/.dsh/sessions/` when `DSH_HOME` is

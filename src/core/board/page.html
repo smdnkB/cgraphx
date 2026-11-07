@@ -218,7 +218,7 @@ function sessionRow(s, unsorted) {
   var bits = [shortId(s.id), s.dirLabel, fmtWindow(s.from, s.to)];
   if (!unsorted && s.reasons.length) bits.push(s.reasons.join('、'));
   if (!s.fileExists) bits.push('会话文件已不在');
-  return '<div class="sess' + (s.fileExists ? ' muted' : '') + '" data-copy-id="' + esc(s.id) + '" data-copy-title="' + esc(s.title) + '">'
+  return '<div class="sess' + (s.fileExists ? '' : ' muted') + '" data-copy-id="' + esc(s.id) + '" data-copy-title="' + esc(s.title) + '">'
     + '<div class="info"><b>' + esc(s.agent) + '</b> ' + esc(s.title) + '<br>'
     + '<span class="tag"><span class="id">' + esc(shortId(s.id)) + '</span>'
     + bits.slice(1).map(function (b) { return ' · ' + esc(b); }).join('') + '</span></div>'
