@@ -1,16 +1,16 @@
 ---
 name: release-review
-description: 发版审核与合入主干:发版那天在版本分支 dev/<版本号> 上改好版本号,输入 /release-review,以上个版本的 tag 为起点出审核报告——按需求列提交、文件、增删行和测试,查疑似夹带、跳过门禁的提交、已声明的版本级提交、同步主干、两个需求都改了的文件、敏感改动、和主干的合并预演、缺陷、版本号、不在本版本的需求,给出结论(可以发 / 有风险 / 不能直接合),存成 docs/releases/v<版本号>-发版审核.md 并提交到版本分支;用户说「发」再用合并提交合入主干,列出可以清理的副本问删不删。不打 tag、不发布、不推送。Use when 发版审核、出审核报告、准备发版、发版前检查、发吧、合入主干、release review。
+description: 发版审核与合入主干:发版那天在版本分支 dev/<版本号> 上改好版本号,输入 /release-review,以上个版本的 tag 为起点出审核报告——按需求列提交、文件、增删行和测试,查疑似夹带、跳过门禁的提交、已声明的版本级提交、同步主干、两个需求都改了的文件、敏感改动、和主干的合并预演、缺陷、版本号、不在本版本的需求,给出结论(可以发 / 有风险 / 不能直接合),存成 docs/releases/v<版本号>-发版审核.md 并提交到版本分支;用户说「发」再用合并提交合入主干、在合并提交上打 tag v<版本号>、退出版本流程,列出可以清理的副本问删不删。tag 只打在本地,不发布、不推送。Use when 发版审核、出审核报告、准备发版、发版前检查、发吧、合入主干、release review。
 ---
 
 # 发版审核与合入主干 (release-review)
 
 ## 定位
 
-- 版本流程(可选)的发版一步:/release-start 开版本 → 各需求 /dev-start、/dev-merge → 发版那天先以 `chore(release): 版本号 2.0.10→2.0.11` 改好版本号,再 /release-review → 用户说「发」合入主干 → 发布照项目现有流程,发完 /release-start。
+- 版本流程(可选)的发版一步:/release-start 开版本 → 各需求 /dev-start、/dev-merge → 发版那天先以 `chore(release): 版本号 2.0.10→2.0.11` 改好版本号,再 /release-review → 用户说「发」合入主干、打 tag、退出版本流程 → 发布照项目现有流程。下个版本还要按版本走,再 /release-start;不跑就照默认流程在 main 上开发。
 - 两段:先审核(出报告、提交到版本分支、对话里给结论);用户说「发」才合入主干,说「先不发」什么都不动。
 - 报告摆事实、给结论,不拦发版:有风险发不发由用户定;和主干的预演有冲突时结论是「不能直接合」,这时不合。
-- 在主目录、版本分支上执行。不打 tag、不发布、不推送。
+- 在主目录、版本分支上执行。tag 只打在本地,不发布、不推送。
 - 说法:**主干** = `main`,没有 main、有 master 时用 master;**版本分支** = 名字是 `dev/数字.数字.数字` 的分支(`^dev/[0-9]+\.[0-9]+\.[0-9]+$`);**同步主干** = 版本分支第一父链上、第二个父提交已在主干里的合并(版本开发期间把主干上的热修复合进来),单列一节,不算需求的合入。
 - 输出文件路径的 git 命令都带 `-c core.quotePath=false`,中文路径原样输出,不转成 `"\344\270…"`。
 
@@ -126,8 +126,19 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
    ```
 
    标题按报告「本版本的需求」的顺序,用顿号隔开;主干上没有多出的提交就不带第二个 `-m`。
-6. **不打 tag、不发布、不推送**(版本号已在版本分支上改好)。
-7. **清理副本**:`cgraphx replica list --json`,没有副本就跳过。只有 `merged` 是 true 的放进可以删的那组;其余都留着:`ahead` 大于 0 的说差几个提交、跟到下个版本,`merged` 是 false、`ahead` 是 0 的说还没有提交,`merged` 是 null 的说判断不了合没合入;`state` 是 `missing` 的标「已不在」。照这句问:
+6. **打 tag**:打在刚才的合并提交上,版本号取合入后 `package.json` 的 version(报告「版本号」一节核过):
+
+   ```bash
+   git rev-parse -q --verify refs/tags/v2.0.11 && git log -1 --format='%h %s' v2.0.11    # 有输出 = 已存在
+   git tag -a v2.0.11 -m "发布 2.0.11"                                                   # 没有才打,打在 HEAD
+   ```
+
+   已存在 → 不重打,说「v2.0.11 已经有了,在 9a8b7c6 上,没重打」。不发布、不推送。
+7. **退出版本流程**:`cgraphx release guard --remove --json`(卸掉版本分支的提交拦截,清掉「按版本走」的记号):
+   - `status` 是 `removed`、`absent` → 说一句「版本流程已退出」
+   - `status` 是 `unsupported`(拦截那几行是提交在仓库里的,没删)→ 记号照样清了,再把 `notice` 原样转告
+   - 命令报错 → 把输出原样告诉用户;合入和 tag 照常保留
+8. **清理副本**:`cgraphx replica list --json`,没有副本就跳过。只有 `merged` 是 true 的放进可以删的那组;其余都留着:`ahead` 大于 0 的说差几个提交、跟到下个版本,`merged` 是 false、`ahead` 是 0 的说还没有提交,`merged` 是 null 的说判断不了合没合入;`state` 是 `missing` 的标「已不在」。照这句问:
 
    「cgraphx@订单导出、cgraphx@积分发放 已合入,可以删;cgraphx@导出优化 还差 2 个提交没合入，留着，跟到下个版本;cgraphx@会员积分 还没有提交，留着;删掉这 2 个已合入的副本吗?」
 
@@ -136,7 +147,7 @@ description: 发版审核与合入主干:发版那天在版本分支 dev/<版本
    - `"state": "missing"` → 「cgraphx@订单导出 已不在」,同样带上分支结果
    - `warnings` 逐条转告
    - 返回 `"code": "dirty"` → 不删,报「cgraphx@订单导出 有 2 个文件没提交」并列出 `files`
-8. **提示**:「发布照你们现在的流程走;发完跑 /release-start」
+9. **提示**:「发布照你们现在的流程走;tag 只在本地,推不推远程由你定。下个版本还要按版本走就跑 /release-start」
 
 ## 范例
 
@@ -250,6 +261,14 @@ $ git log --format='%h %s' dev/2.0.11..main
 7e8f9a0 fix: 线上登录页白屏
 $ git checkout main
 $ git merge --no-ff dev/2.0.11 -m "发布 2.0.11:合入 订单导出、积分发放、退款、fix/登录超时" -m "7e8f9a0 fix: 线上登录页白屏"
+$ git rev-parse -q --verify refs/tags/v2.0.11 && git log -1 --format='%h %s' v2.0.11
+$ git tag -a v2.0.11 -m "发布 2.0.11"
+$ cgraphx release guard --remove --json
+{
+  "ok": true,
+  "hookPath": "/Users/smdnk/objects/ai/cgraphx/.git/hooks/commit-msg",
+  "status": "removed"
+}
 $ cgraphx replica list --json
 (cgraphx@订单导出、cgraphx@积分发放、cgraphx@退款 "merged": true;cgraphx@导出优化 "merged": false、"ahead": 2)
 ```
@@ -257,7 +276,7 @@ $ cgraphx replica list --json
 回给用户:
 
 ```text
-已合入 main,合并说明「发布 2.0.11:合入 订单导出、积分发放、退款、fix/登录超时」,正文列了 main 上多出的 1 笔(7e8f9a0 fix: 线上登录页白屏)。没打 tag、没发布、没推送。
+已合入 main,合并说明「发布 2.0.11:合入 订单导出、积分发放、退款、fix/登录超时」,正文列了 main 上多出的 1 笔(7e8f9a0 fix: 线上登录页白屏)。合并提交上打了 v2.0.11;版本流程已退出,main 上照默认流程开发。没发布、没推送。
 
 cgraphx@订单导出、cgraphx@积分发放、cgraphx@退款 已合入,可以删;cgraphx@导出优化 还差 2 个提交没合入，留着，跟到下个版本;删掉这 3 个已合入的副本吗?
 ```
@@ -267,7 +286,7 @@ cgraphx@订单导出、cgraphx@积分发放、cgraphx@退款 已合入,可以删
 ```text
 已删 cgraphx@订单导出、cgraphx@退款(分支 feat/订单导出、feat/退款 已删除),登记留着,副本里记下的会话和提交在项目的数据里。cgraphx@积分发放 有 2 个文件没提交,没删:src/points/expire.ts、src/points/expire.test.ts。
 
-发布照你们现在的流程走;发完跑 /release-start
+发布照你们现在的流程走;tag 只在本地,推不推远程由你定。下个版本还要按版本走就跑 /release-start
 ```
 
 ## 停下问用户
@@ -282,11 +301,12 @@ cgraphx@订单导出、cgraphx@积分发放、cgraphx@退款 已合入,可以删
 | 说「发」时结论是「不能直接合」 | 不合,说明冲突文件和涉及的需求 |
 | 说「发」时报告过期 | 提示重跑 /release-review,这次不合 |
 | 说「发」时有改了没提交的已跟踪文件,或预演有冲突 | 停下,列出文件 |
+| 合入后这个版本的 tag 已存在 | 不重打,说出它在哪个提交上 |
 | 合入主干后有可以删的副本 | 只把已合入的放进可删的那组,问过再删;有没提交的改动的不删,报「cgraphx@订单导出 有 2 个文件没提交」 |
 
 ## 红线
 
-1. ❌ 不打 tag、不发布、不推送。
+1. ❌ 不发布、不推送;tag 只打在本地,已有的不重打。
 2. ❌ 用户没说「发」不合入主干;报告过期、预演有冲突、结论是「不能直接合」时不合。
 3. ❌ 不替用户改版本号:只记进风险,提示以 `chore(release): 版本号 <旧>→<新>` 提交。
 4. ❌ 删副本前必须问。
