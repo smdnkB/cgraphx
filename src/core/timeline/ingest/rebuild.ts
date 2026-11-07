@@ -9,13 +9,16 @@
  *   2. 项目库 timeline_meta 已有 rebuilt_at(等锁期间别的进程刚重建完)→ 不再重建
  *   3. removed_projects 有这个项目(K3 删过数据)→ 只写 rebuilt_at、不全量解析——旧会话不补回,
  *      之后的增量只收删除之后的事实
- *   4. 全量解析这个项目的会话文件(归属判定与事实映射复用 ingest.ts 同一套函数,路径升序:主文件先于
+ *   4. 全量解析这个项目的会话文件(经 agents 门面的 listSessionSources() 枚举各来源——claude-code、
+ *      codebuddy、deepseek,读不了的来源跳过、提示由随后的增量补一趟;归属判定与事实映射复用
+ *      ingest.ts 同一套函数,路径升序:主文件先于
  *      subagents/,session_head 先到先得),事件写进项目数据目录下的临时库 rebuild.tmp.db(先删残留再建,
  *      应用 timeline schema)。sessions.db 里已记到别的项目、偏移又大于 0 的文件不从头读(交给增量,
  *      免得改名后新项目把旧历史再解析一遍)。解析期间不碰项目库——「整个解析放一个事务」是 spec 明确
  *      没选的方案:持写锁十几秒,这期间的提交记录会写失败,而提交记录补不回来
  *   5. 项目库一个短事务(秒级)里:ATTACH 临时库 → 删非提交事件(K24,不备份)→ INSERT SELECT 临时库
- *      事件 → 并 timeline_roots → 写 rebuilt_at → 提交。rebuilt_at 必须写在这个事务里:写在事务外,
+ *      事件 → 并 timeline_roots 与标题表(同命运:清旧、并新)→ 写 rebuilt_at 与 session_titles_at
+ *      (重建从头读过全部文件,标题已齐,不再回填)→ 提交。记号必须写在这个事务里:写在事务外,
  *      中断后会误判「重建过」。失败即回滚,清和写一起撤销,时间线还是旧的;重建中途杀进程同理
  *   6. 提交之后才收尾(单项失败不再报 failed——重建已经成立,顶多留残渣下次再清):推进 sessions.db 里
  *      这个项目全部文件的偏移(读到哪推进到哪,不取文件当前大小:重建期间又被追加的,下一趟增量接着
@@ -28,7 +31,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { agentSessionsRoot, listAgentProfiles, type AgentProfile } from '../../agents';
+import { listSessionSources, type SessionSource } from '../../agents';
 import { findProjectRoot, locateDataAtRoot } from '../../data-location';
 import { DatabaseConnection, DATABASE_FILENAME, type SqliteDatabase } from '../../db';
 import { listReplicas } from '../../replica';
@@ -37,25 +40,31 @@ import { openSessionIndex, type SessionFileRow, type SessionIndex } from '../../
 import { sessionsRoot } from '../../user-data-dir';
 import { readRootRows } from '../roots';
 import { ensureTimelineSchema } from '../schema-bootstrap';
-import { TimelineStore } from '../store';
+import { TimelineStore, upsertSessionTitle } from '../store';
 import {
   acquireIngestLock,
   classifyStartDir,
   mapFacts,
+  noteReadFailed,
   noteUnparsed,
+  readFailedNotices,
   releaseIngestLock,
-  sessionFileId,
+  rowSessionId,
+  SESSION_TITLES_AT_KEY,
   statOrNull,
   subagentMainPath,
+  titleUpserts,
   unparsedNotices,
   upsertRoot,
+  writeMetaNow,
   type ClassificationContext,
   type DirClassification,
   type FactMappingContext,
+  type ReadFailedMap,
   type FileStat,
   type UnparsedMap,
 } from './ingest';
-import { listSessionFiles, sessionFactsReader } from './reader';
+import { sessionFactsReader } from './reader';
 import type { SessionFact, SessionFileReadResult } from './types';
 
 /** 重建结果;rebuildTimeline 返回 null 表示不用重建(已重建过 / 这个目录没有项目库)。 */
@@ -92,10 +101,10 @@ const TURNS_DIRNAME = 'turns';
 /** 全量解析进临时库后要推进的进度(项目库提交之后才写 sessions.db,D4)。 */
 interface ParsedFileRow {
   file: string;
-  profile: AgentProfile;
+  source: SessionSource;
   stat: FileStat;
-  /** 会话编号(主文件是文件名;subagents/ 下的文件跟主会话,ingest.ts 同款认法)。 */
-  sessionId: string;
+  /** 会话编号(claude/codebuddy 按路径规则;deepseek 记事实所属的主会话,ingest.ts 同款认法)。 */
+  sessionId: string | null;
   startCwd: string;
   consumedBytes: number;
 }
@@ -170,10 +179,10 @@ function knownStartCwd(
   return null;
 }
 
-/** 一文件的事实写进临时库(同增量 writeFacts 的落库部分,但不推进进度——进度等项目库提交之后统一写)。 */
+/** 一文件的事实写进临时库(同增量 writeFacts 的落库部分——事件与标题同事务,但不推进进度——进度等项目库提交之后统一写)。 */
 function writeParsedFacts(
   file: string,
-  profile: AgentProfile,
+  source: SessionSource,
   stat: FileStat,
   result: SessionFileReadResult,
   startCwd: string,
@@ -182,22 +191,25 @@ function writeParsedFacts(
   mapCtx: FactMappingContext,
   unparsed: UnparsedMap,
 ): void {
-  const events = mapFacts(result.facts, profile, startCwd, mapCtx);
-  if (events.length > 0) {
+  const events = mapFacts(result.facts, source, startCwd, mapCtx);
+  // 标题不是事件:单独按 C-2 优先级写临时库的标题表,并库时与事件表同命运(commitRebuild,D8)
+  const titles = titleUpserts(result.facts);
+  if (events.length > 0 || titles.length > 0) {
     const store = new TimelineStore(tmpDb);
     tmpDb.transaction(() => {
       for (const event of events) store.insert(event);
       upsertRoot(tmpDb, cls.root, events);
+      for (const title of titles) upsertSessionTitle(tmpDb, title);
     })();
   }
-  noteUnparsed(unparsed, file, profile, stat, result, true); // 全量读,fullRead 恒真
+  noteUnparsed(unparsed, file, source, stat, result, true); // 全量读,fullRead 恒真
 }
 
 /** 推进这个项目一个文件的进度(偏移到本次读到的地方,不取文件当前大小,见头注释第 6 步)。 */
 function saveParsedRow(sessionIndex: SessionIndex, row: ParsedFileRow, projectDirName: string): void {
   sessionIndex.saveSessionFile({
     path: row.file,
-    agent: row.profile.id,
+    agent: row.source.id,
     session_id: row.sessionId,
     start_cwd: row.startCwd,
     project_dir: projectDirName,
@@ -214,7 +226,8 @@ function quoteLiteral(value: string): string {
 
 /**
  * ⑤ 短事务并库(D19):ATTACH 临时库,一个 BEGIN IMMEDIATE 事务里删非提交事件(K24)、INSERT SELECT
- * 临时库事件、并 timeline_roots、写 rebuilt_at,提交后 DETACH(ATTACH / DETACH 都不能在事务里)。
+ * 临时库事件、并 timeline_roots 与标题表(D8:同命运)、写 rebuilt_at 与 session_titles_at,提交后
+ * DETACH(ATTACH / DETACH 都不能在事务里)。
  * 事务只有秒级,持锁期间别的进程写提交记录排队等(busy_timeout 5 秒),等不到的下一趟补录再写。
  * 返回重建写进项目库的会话数与事件数(取自临时库)。
  */
@@ -247,7 +260,15 @@ function commitRebuild(
           `ON CONFLICT(root) DO UPDATE SET first_ts = min(first_ts, excluded.first_ts), ` +
           `last_ts = max(last_ts, excluded.last_ts)`,
       );
+      // 标题表与事件表同命运(D8):删掉旧的、并临时库的(临时库写入时已按优先级收敛,直接搬)
+      projectDb.exec('DELETE FROM timeline_session_titles');
+      projectDb.exec(
+        `INSERT INTO timeline_session_titles (session_id, title, kind, ts) ` +
+          `SELECT session_id, title, kind, ts FROM ${TMP_ALIAS}.timeline_session_titles`,
+      );
       writeRebuiltAt(projectDb);
+      // 重建从头读过全部文件,标题已齐:同事务写「回填过了」,不让随后的回填再读一遍(D9)
+      writeMetaNow(projectDb, SESSION_TITLES_AT_KEY);
       projectDb.exec('COMMIT');
     } catch (err) {
       try {
@@ -297,9 +318,11 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
     // 等锁期间可能已被别的进程重建过(K23 只重建一次):重查一次记号
     if (readRebuiltAt(projectDb) !== null) return null;
 
-    // K23:删过数据的项目不全量解析,只写记号——旧会话不补回,之后的增量只收删除之后的(K3)
+    // K23:删过数据的项目不全量解析,只写记号——旧会话不补回,之后的增量只收删除之后的(K3);
+    // 标题记号一并写:不让随后的老会话回填把这个分支刻意省掉的全量重读又做一遍(标题跟着事件走)
     if (sessionIndex.removedProjectAt(loc.identity) !== null) {
       writeRebuiltAt(projectDb);
+      writeMetaNow(projectDb, SESSION_TITLES_AT_KEY);
       return { status: 'mark-only', notices: [] };
     }
 
@@ -329,48 +352,57 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
       sessionsWritten: new Set<string>(),
     };
     const unparsed: UnparsedMap = new Map();
+    const readFailed: ReadFailedMap = new Map();
     const parsedRows: ParsedFileRow[] = [];
     const parsedStartCwd = new Map<string, string>();
 
-    for (const profile of listAgentProfiles()) {
-      const agentRoot = agentSessionsRoot(profile);
-      if (agentRoot === null) continue;
-      for (const file of listSessionFiles(agentRoot)) {
+    for (const source of listSessionSources()) {
+      const sourceRoot = source.sessionsRoot();
+      if (sourceRoot === null) continue;
+      // 读不了的来源(如 Node 没有 zstd API 的 deepseek)不解析;提示由紧随其后的增量那一趟加(D12)
+      if (source.unavailableReason() !== null) continue;
+      for (const file of source.listFiles(sourceRoot)) {
         const stat = statOrNull(file);
         if (stat === null) continue; // 文件没了(F1 ⑤):已记进时间线的留着
-        // 循环开头取一次,后面判断跳过与 knownStartCwd 共用(同一个文件不查两遍 sessions.db)
-        const recorded = sessionIndex.getSessionFile(file);
-        // D5:已记到别的项目、内容也读过的文件不在重建里从头读——偏移留着交给增量,否则改名后
-        // 新项目会把旧历史再解析一遍。没记过 / 归本项目 / 偏移还是 0 的照旧从头读
-        if (
-          recorded !== null &&
-          recorded.project_dir !== null &&
-          recorded.project_dir !== loc.projectDirName &&
-          recorded.byte_offset > 0
-        ) {
-          continue;
+        // 单文件隔离:读取器抛错(坏帧、读不出会话头等)只丢这一个文件,不卡住排序在后的文件、
+        // 不让整个重建永久 failed(rebuilt_at 不写,别的进程下次又从头来一遍还是死在同一个文件上)
+        try {
+          // 循环开头取一次,后面判断跳过与 knownStartCwd 共用(同一个文件不查两遍 sessions.db)
+          const recorded = sessionIndex.getSessionFile(file);
+          // D5:已记到别的项目、内容也读过的文件不在重建里从头读——偏移留着交给增量,否则改名后
+          // 新项目会把旧历史再解析一遍。没记过 / 归本项目 / 偏移还是 0 的照旧从头读
+          if (
+            recorded !== null &&
+            recorded.project_dir !== null &&
+            recorded.project_dir !== loc.projectDirName &&
+            recorded.byte_offset > 0
+          ) {
+            continue;
+          }
+          let startCwd = knownStartCwd(file, recorded, sessionIndex, parsedStartCwd);
+          let result: SessionFileReadResult | null = null;
+          if (startCwd === null) {
+            result = await sessionFactsReader(source.sessionReader)(file, 0);
+            const head = firstSessionHead(result.facts);
+            if (head === null) continue; // 一条带 cwd 的行都没有:留给增量按它的口径记空行
+            startCwd = head.startCwd;
+          }
+          parsedStartCwd.set(file, startCwd);
+          const cls = classifyStartDir(startCwd, classifyCtx);
+          if (cls.dirName !== classifyCtx.currentDirName) continue; // 别的项目的 / 没认出来的:不动,别家自己补
+          if (result === null) result = await sessionFactsReader(source.sessionReader)(file, 0); // 全量:一律从头读
+          writeParsedFacts(file, source, stat, result, startCwd, cls, tmpDb, mapCtx, unparsed);
+          parsedRows.push({
+            file,
+            source,
+            stat,
+            sessionId: rowSessionId(source, file, result.facts, recorded?.session_id ?? null),
+            startCwd,
+            consumedBytes: result.consumedBytes,
+          });
+        } catch (err) {
+          noteReadFailed(readFailed, source, err);
         }
-        let startCwd = knownStartCwd(file, recorded, sessionIndex, parsedStartCwd);
-        let result: SessionFileReadResult | null = null;
-        if (startCwd === null) {
-          result = await sessionFactsReader(profile.sessionReader)(file, 0);
-          const head = firstSessionHead(result.facts);
-          if (head === null) continue; // 一条带 cwd 的行都没有:留给增量按它的口径记空行
-          startCwd = head.startCwd;
-        }
-        parsedStartCwd.set(file, startCwd);
-        const cls = classifyStartDir(startCwd, classifyCtx);
-        if (cls.dirName !== classifyCtx.currentDirName) continue; // 别的项目的 / 没认出来的:不动,别家自己补
-        if (result === null) result = await sessionFactsReader(profile.sessionReader)(file, 0); // 全量:一律从头读
-        writeParsedFacts(file, profile, stat, result, startCwd, cls, tmpDb, mapCtx, unparsed);
-        parsedRows.push({
-          file,
-          profile,
-          stat,
-          sessionId: sessionFileId(file),
-          startCwd,
-          consumedBytes: result.consumedBytes,
-        });
       }
     }
 
@@ -394,7 +426,7 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
       status: 'rebuilt',
       sessions: counts.sessions,
       events: counts.events,
-      notices: unparsedNotices(unparsed),
+      notices: [...unparsedNotices(unparsed), ...readFailedNotices(readFailed)],
     };
   } catch (err) {
     // 清和写在短事务里一起撤销过,时间线还是旧的;临时库在 finally 里删

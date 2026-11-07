@@ -37,6 +37,7 @@ import { registerReportCommands } from '../core/report/cli';
 import { registerReplicaCommands } from '../core/replica/cli';
 import { registerReleaseCommands } from '../core/release/cli';
 import { registerProjectCommands } from '../core/project/cli';
+import { registerBoardCommands } from '../core/board/cli';
 import { checkDuplicateName } from '../core/project';
 import { registerLegacyHookCommands } from './legacy-hook-commands';
 import { emitSessionNotices } from '../core/session-notices';
@@ -175,6 +176,7 @@ function main(): void {
   registerReplicaCommands(program);
   registerReleaseCommands(program);
   registerProjectCommands(program);
+  registerBoardCommands(program);
   // 已下掉功能的兼容空命令(隐藏,读完 stdin 不做任何事):平台同步、开发任务 5 条 + 时间线 hook 7 条
   registerLegacyHookCommands(program);
 

@@ -1,0 +1,281 @@
+<!doctype html>
+<!--
+  > 产物: wireframe
+  线框 v2 · agent看板(低保真)
+  feature-id: 2026-11-06-agent看板
+  v1 → v2 变化:
+  - 定了左右分栏:左边任务、右边会话,去掉「任务下的会话」「未归类」两个独立页和方案对照开关(用户选 B)
+  - 打开后默认选中最近活动的任务
+  依据:讨论稿 agent看板-功能方案-v3.md 的 F1、F2、F3 和各边界。
+  示例数据:项目名、需求名、阶段、会话标题、会话编号、开始目录、时间都取自本机真实数据
+  (docs/features、~/.claude/projects、~/.dsh/sessions 与 session_projcache,2026-11-07 读取)。
+  依据一栏和「可能相关」的归属是照口径手工判的示意,认任务的程序还没写;「N」和终端里的数字是占位。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>线框 v2 · agent看板</title>
+<style>
+  /* 低保真:只用灰度,不用项目设计令牌;注意力放在布局与交互上 */
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: #222; background: #f4f4f4; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 16px; background: #fff; border-bottom: 1px solid #ccc; }
+  header h1 { font-size: 15px; margin: 0; }
+  .states button, .pages a { font: inherit; padding: 3px 10px; border: 1px solid #999; background: #fff; color: #222; cursor: pointer; text-decoration: none; border-radius: 3px; }
+  .states button[aria-pressed="true"], .pages a.on { background: #333; color: #fff; border-color: #333; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; padding: 16px; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .frame { background: #fff; border: 2px solid #555; min-height: 480px; min-width: 0; }
+  .main { padding: 14px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; border-bottom: 1px solid #ccc; padding-bottom: 8px; margin-bottom: 10px; }
+  .bar button, .copy { font: inherit; font-size: 12px; padding: 1px 8px; border: 1px solid #888; background: #fff; border-radius: 3px; cursor: pointer; white-space: nowrap; }
+  .split { display: grid; grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); gap: 14px; }
+  @media (max-width: 720px) { .split { grid-template-columns: minmax(0, 1fr); } }
+  .left { border-right: 1px dashed #999; padding-right: 12px; min-width: 0; }
+  .right { min-width: 0; overflow-x: auto; }
+  .proj { font-weight: 600; margin-bottom: 4px; }
+  .proj small { display: block; font-weight: 400; color: #555; }
+  .task { padding: 6px; border-bottom: 1px dotted #bbb; cursor: pointer; }
+  .task:hover { background: #eee; }
+  .task.cur { background: #ddd; }
+  .task b { font-weight: 600; }
+  .tag { font-size: 12px; color: #555; }
+  .group { margin: 12px 0 4px; font-weight: 600; color: #333; }
+  .sess { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: space-between; align-items: flex-start; border-bottom: 1px dotted #bbb; padding: 6px 0; font-size: 13px; }
+  .sess .info { flex: 1 1 260px; min-width: 0; }
+  .sess .btns { white-space: nowrap; }
+  .sess.muted .info { color: #888; }
+  .id { font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: nowrap; }
+  .ok { font-size: 12px; color: #333; margin-left: 4px; }
+  .mono { font-family: ui-monospace, Menlo, monospace; white-space: pre; font-size: 12px; background: #eee; padding: 10px; overflow-x: auto; }
+  .note { border-left: 4px solid #777; background: #f0f0f0; padding: 4px 10px; margin: 4px 0 8px; font-size: 13px; }
+  .empty { border: 2px dashed #999; padding: 28px; text-align: center; color: #555; margin-bottom: 10px; }
+  .fallback { margin-top: 10px; }
+  .fallback textarea { width: 100%; font: 12px ui-monospace, Menlo, monospace; }
+  .n { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: #222; color: #fff; font-size: 11px; margin-left: 4px; vertical-align: middle; font-weight: 400; }
+  aside { background: #fff; border: 1px solid #ccc; padding: 12px; }
+  aside h2 { font-size: 13px; margin: 0 0 8px; }
+  aside ol { padding-left: 18px; }
+  aside li { margin-bottom: 6px; }
+  /* 页面 / 状态切换:隐藏规则一律写成 .main [...],只作用于内容区 */
+  .main section[data-page] { display: none; }
+  .main section[data-page].on { display: block; }
+  .main [data-state] { display: none; }
+  body[data-cur="normal"] .main [data-state~="normal"],
+  body[data-cur="empty"] .main [data-state~="empty"],
+  body[data-cur="error"] .main [data-state~="error"] { display: block; }
+  body[data-all="0"] .main .old { display: none; }
+</style>
+</head>
+<body data-cur="normal" data-all="0">
+<header>
+  <h1>线框 v2 · agent看板</h1>
+  <nav class="pages" aria-label="页面"><a href="#board">看板</a><a href="#terminal">终端</a></nav>
+  <div class="states" role="group" aria-label="状态">
+    <button data-to="normal" aria-pressed="true">正常</button>
+    <button data-to="empty" aria-pressed="false">空态</button>
+    <button data-to="error" aria-pressed="false">异常</button>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="frame">
+    <div class="main">
+      <section data-page="board">
+        <div class="bar">
+          <b>agent看板</b>
+          <span><button data-all-toggle>全部</button><span class="n">3</span> <button data-refresh>刷新</button><span class="n">4</span></span>
+        </div>
+        <div class="note" data-refresh-note hidden>正在补录 1 个项目…</div>
+
+        <div data-state="normal error">
+          <div class="split">
+            <div class="left">
+              <div class="proj">cgraphx<span class="n">1</span><small>/Users/smdnk/objects/ai/cgraphx</small></div>
+              <div class="note" data-state="error">这个目录还没跑新版 cgraphx install,没有补录<span class="n">6</span><br><span class="tag">其他写法:「正在补录,可能缺最新的会话」;「CGRAPHX_NO_TIMELINE 开着,没有补录」;「补录失败,可能缺最新的会话」</span></div>
+              <div data-tasks></div>
+              <p class="tag">还有 N 个超过 30 天,点「全部」看</p>
+              <div data-state="error">
+                <div class="proj" style="margin-top:12px">某个项目<small>目录已不在,列不出任务</small><span class="n">7</span></div>
+                <div class="task"><b>未归类(N)</b></div>
+              </div>
+            </div>
+            <div class="right" data-right></div>
+          </div>
+        </div>
+
+        <div data-state="empty">
+          <div class="empty">还没有项目:在项目里跑 cgraphx install</div>
+          <div class="proj">cgraphx</div>
+          <div class="empty">还没有挂上会话的任务<br>还有 N 个超过 30 天,点「全部」看</div>
+        </div>
+      </section>
+
+      <section data-page="terminal">
+        <div class="bar"><b>终端:任意目录启动</b></div>
+        <div data-state="normal empty"><div class="mono">$ cgraphx board
+正在补录 1 个项目…
+  cgraphx  已补录 12 个会话
+看板已打开:http://127.0.0.1:53127
+按 Ctrl+C 退出</div></div>
+        <div data-state="error"><div class="mono">$ cgraphx board
+正在补录 1 个项目…
+  cgraphx  已补录 12 个会话
+浏览器没打开,手动访问 http://127.0.0.1:53127
+按 Ctrl+C 退出</div></div>
+        <p class="tag">数字和端口是占位。第一次要补录全部老会话,这里要显示进度。<span class="n">12</span></p>
+      </section>
+    </div>
+  </div>
+
+  <aside>
+    <h2>交互说明</h2>
+    <ol data-for="board">
+      <li>① 左栏按项目分组,任务按最近活动排;本机现在只有 cgraphx 一个项目</li>
+      <li>② 默认选中最近活动的任务,点一行右栏就换,不用返回</li>
+      <li>③ 「全部」多显示超过 30 天的任务,再点收起</li>
+      <li>④ 「刷新」再补录一次</li>
+      <li>⑤ 未归类固定在每个项目最后,右栏没有依据这一栏</li>
+      <li>⑥ 切到「异常」看:没能补录时写原因,已有数据照常显示</li>
+      <li>⑦ 目录都不在的项目列不出任务,只有未归类</li>
+      <li>⑧ 右栏上面定挂、下面可能相关;点「版本流程与需求副本」看只有可能相关的任务</li>
+      <li>⑨ 点按钮复制完整编号,旁边显示「已复制」</li>
+      <li>⑩ 切到「异常」再点复制:浏览器不让写剪贴板时,显示选中内容的文本框</li>
+      <li>⑪ 切到「异常」看:会话文件被清理的会话照样列出</li>
+    </ol>
+    <ol data-for="terminal" start="12">
+      <li>⑫ 补录完才打开浏览器;切到「异常」看浏览器打不开时的提示</li>
+    </ol>
+  </aside>
+</div>
+
+<script>
+  const S = {
+    ds: (title, id, dir, time, why) => ({ agent: 'DeepSeek', title, id, dir, time, why }),
+    cc: (title, id, dir, time, why) => ({ agent: 'Claude Code', title, id, dir, time, why }),
+  };
+  const MAIN = '主目录 cgraphx';
+  const TASKS = [
+    { key: 'wt', name: '副本改用worktree', stage: '已规划', count: '2 个', agents: 'Claude Code、DeepSeek', last: '11-06 21:27',
+      fixed: [
+        S.ds('Dev plan command', 'session-ef6ec8b0-bf92-43c1-b247-ea41223a8d14', '副本 cgraphx@副本改用worktree', '11-06 16:22 ~ 16:57', '开始目录在副本'),
+        S.cc('移除hooks采集,改用会话文件解析', 'd235e1ba-f304-4cd7-877f-e9c7bc837ba4', MAIN, '11-06', '写需求目录、流程命令'),
+      ],
+      maybe: [S.cc('Release start', 'b8f25ec3-98d9-4cb0-9501-bea75455e73a', MAIN, '11-05', '读过需求目录')],
+      gone: S.cc('Timeline 工具项目区分方式', '106c1c89-cecd-415b-b866-b9042bb8c27b', MAIN, '11-05', '会话文件已不在') },
+    { key: 'name', name: '项目按名称认', stage: '已规划', count: '2 个', agents: 'Claude Code、DeepSeek', last: '11-06 21:27',
+      fixed: [
+        S.cc('移除hooks采集,改用会话文件解析', 'd235e1ba-f304-4cd7-877f-e9c7bc837ba4', MAIN, '11-05 ~ 11-06', '写需求目录、流程命令'),
+        S.ds('Plan development command', 'session-178d62ab-96b8-446a-aa77-d6bc7ec2dc3e', '副本 cgraphx@项目按名称认', '11-06 12:58 ~ 13:59', '开始目录在副本'),
+      ], maybe: [] },
+    { key: 'dup', name: '修复重复开副本提示', stage: '-', count: '2 个', agents: 'Claude Code', last: '11-06 21:12',
+      fixed: [
+        S.cc('合入需求:修复重复开副本提示', '6e63f1e1-2a39-40b3-845f-3675b51c8ace', MAIN, '11-06 21:12', '流程命令'),
+        S.cc('移除hooks采集,改用会话文件解析', 'e8d330c3-6fa1-42df-a9a7-bcbb62840475', MAIN, '11-06', '流程命令'),
+      ], maybe: [] },
+    { key: 'art', name: '产物注册表与头部规范', stage: '已规划', count: '2 个', agents: 'Claude Code', last: '11-05 22:58',
+      fixed: [
+        S.cc('实现产物注册表与头部规范', 'bc7c67bd-2460-486b-81df-adf16e5539ff', MAIN, '11-05 22:58', '写需求目录'),
+        S.cc('产物注册表与头部规范:澄清并写 spec', 'c041427e-de38-4e3c-8c58-c40a8adecad6', MAIN, '11-05 11:26', '写需求目录'),
+      ], maybe: [] },
+    { key: 'slim', name: 'skill瘦身', stage: '已规划', count: '4 个', agents: 'DeepSeek', last: '10-20 21:44',
+      fixed: [
+        S.ds('Skill 瘦身计划实现', 'session-3948f846-a38e-41fd-adb7-9e28d33d0095', MAIN, '10-19 22:00 ~ 10-20 21:44', '流程命令'),
+        S.ds('执行 Skill 瘦身 T-19 与 T-20', 'session-f8377807-cf18-4d3d-b44d-293da2678abd', MAIN, '10-19 16:12 ~ 16:37', '消息里有需求路径'),
+        S.ds('Skill瘦身T-16到T-18执行', 'session-6d69f231-8738-4fb8-951d-43abe068989c', MAIN, '10-19 15:48 ~ 16:10', '消息里有需求路径'),
+        S.ds('执行Skill瘦身T-10至T-12', 'session-224f4b30-a0bd-4206-8b2b-c671372049dd', MAIN, '10-19 15:37 ~ 15:41', '消息里有需求路径'),
+      ], maybe: [] },
+    { key: 'ver', name: '版本流程与需求副本', stage: '已规划', count: '0 个,可能相关 1 个', agents: 'Claude Code', last: '11-05 16:11',
+      fixed: [], maybe: [S.cc('Release start', 'b8f25ec3-98d9-4cb0-9501-bea75455e73a', MAIN, '11-05 16:11', '读过需求目录')] },
+    { key: 'old', old: true, name: '超过 30 天的任务(示意)', stage: '-', count: 'N 个', agents: '-', last: 'N', fixed: [], maybe: [] },
+    { key: 'un', unsorted: true, name: '未归类(3)',
+      fixed: [
+        S.cc('AI辅助开发方式探索', '1a7159cb-be26-48fa-b252-7f3be8610e23', MAIN, '11-06', ''),
+        S.cc('Timeline 工具项目区分方式', '106c1c89-cecd-415b-b866-b9042bb8c27b', MAIN, '11-05', ''),
+        S.ds('网络安全技能查找登录渗透风险', 'session-9202b8be-dc04-484b-a075-b26c66126c2b', MAIN, '10-24 19:20 ~ 19:28', ''),
+      ], maybe: [] },
+  ];
+  let curTask = 'wt';
+  const short = (id) => id.startsWith('session-') ? id.slice(0, 16) : id.slice(0, 8);
+  const row = (s, unsorted, muted) => `<div class="sess ${muted ? 'muted' : ''}"><div class="info"><b>${s.agent}</b> ${s.title}<br><span class="tag"><span class="id">${short(s.id)}</span> · ${s.dir} · ${s.time}${unsorted ? '' : ` · ${s.why}`}</span></div><div class="btns"><button class="copy" data-text="${s.id}">复制编号</button> <button class="copy" data-text="${s.title}">复制标题</button></div></div>`;
+  const table = (rows) => rows;
+  const render = () => {
+    document.querySelector('[data-tasks]').innerHTML = TASKS.map((t, i) => `<div class="task ${t.key === curTask ? 'cur' : ''} ${t.old ? 'old' : ''}" data-task="${t.key}">${t.unsorted ? `<b>${t.name}</b><span class="n">5</span>` : `<b>${t.name}</b>${i === 0 ? '<span class="n">2</span>' : ''}<br><span class="tag">${t.stage} · ${t.count} · ${t.agents} · ${t.last}</span>`}</div>`).join('');
+    const t = TASKS.find(x => x.key === curTask);
+    const err = document.body.dataset.cur === 'error';
+    let h = `<div class="bar"><b>cgraphx / ${t.name}</b></div>`;
+    if (t.unsorted) {
+      h += table(t.fixed.map(s => row(s, true)).join(''), true);
+    } else if (t.old) {
+      h += '<div class="empty">示意:超过 30 天的任务,点开后和其他任务一样</div>';
+    } else {
+      h += `<div class="group">定挂(${t.fixed.length})<span class="n">8</span></div>`;
+      const rows = t.fixed.map(s => row(s)).join('') + (err && t.gone ? row(t.gone, false, true) : '');
+      h += rows ? table(rows) : '<div class="empty">没有定挂的会话</div>';
+      if (err && t.gone) h += '<p class="tag">灰色这行:会话文件被 agent 清理了,照样能复制<span class="n">11</span></p>';
+      if (t.maybe.length) h += `<div class="group">可能相关(${t.maybe.length})</div>` + table(t.maybe.map(s => row(s)).join(''));
+    }
+    h += '<div class="fallback" data-fallback hidden><div class="tag">没能写进剪贴板,手动复制<span class="n">10</span></div><textarea rows="2" readonly></textarea></div>';
+    h += '<p class="tag">点按钮复制完整内容,列表里编号只显示前面一段<span class="n">9</span></p>';
+    document.querySelector('[data-right]').innerHTML = h;
+  };
+  const show = (page) => {
+    page = page || 'board';
+    document.querySelectorAll('section[data-page]').forEach(s => s.classList.toggle('on', s.dataset.page === page));
+    document.querySelectorAll('.pages a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + page));
+    document.querySelectorAll('aside ol').forEach(o => { o.hidden = o.dataset.for !== page; });
+  };
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  const goTo = (page) => {
+    show(page);
+    try { history.replaceState(null, '', '#' + page); } catch (_) { /* 预览环境不支持时忽略 */ }
+  };
+  document.addEventListener('click', (e) => {
+    const nav = e.target.closest('.pages a');
+    if (nav) { e.preventDefault(); goTo(nav.getAttribute('href').slice(1)); return; }
+    const copy = e.target.closest('.copy');
+    if (copy) {
+      // 线框不碰真实剪贴板;「异常」状态演示写不进剪贴板
+      if (document.body.dataset.cur === 'error') {
+        const fb = document.querySelector('[data-fallback]');
+        fb.hidden = false;
+        const box = fb.querySelector('textarea');
+        box.value = copy.dataset.text;
+        box.select();
+      } else {
+        copy.parentElement.querySelectorAll('.ok').forEach(x => x.remove());
+        const ok = document.createElement('span');
+        ok.className = 'ok';
+        ok.textContent = '已复制';
+        copy.after(ok);
+      }
+      return;
+    }
+    const task = e.target.closest('[data-task]');
+    if (task) { curTask = task.dataset.task; render(); return; }
+    const all = e.target.closest('[data-all-toggle]');
+    if (all) {
+      const on = document.body.dataset.all === '1';
+      document.body.dataset.all = on ? '0' : '1';
+      all.textContent = on ? '全部' : '收起';
+      return;
+    }
+    if (e.target.closest('[data-refresh]')) {
+      const note = document.querySelector('[data-refresh-note]');
+      note.hidden = false;
+      setTimeout(() => { note.hidden = true; }, 1200);
+      return;
+    }
+    const st = e.target.closest('[data-to]');
+    if (st) {
+      document.body.dataset.cur = st.dataset.to;
+      document.querySelectorAll('[data-to]').forEach(b => b.setAttribute('aria-pressed', String(b === st)));
+      render();
+    }
+  });
+  render();
+  show(location.hash.slice(1));
+</script>
+</body>
+</html>

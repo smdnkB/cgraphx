@@ -5,10 +5,12 @@
  *
  * 流程:
  *   1. 开关关闭 → skipped-disabled;这个目录的旧数据还没并过(K25)→ skipped-legacy,都不碰库;
- *      这个项目还没重建过(timeline_meta 无 rebuilt_at)→ 先全量重建(F6,见 rebuild.ts)再增量
- *   2. 列出各家 agent 会话根目录下的全部会话文件(路径升序:同一会话的主文件排在它的 subagents/
- *      文件前面,先到先写的 session_head 才保得住「会话开始取本会话第一条消息」);大小和 mtime 都
- *      没变的直接跳过(实测 3,221 个文件几十毫秒),一个都没变就不开库、不拿锁
+ *      这个项目还没重建过(timeline_meta 无 rebuilt_at)→ 先全量重建(F6,见 rebuild.ts)再增量;
+ *      重建之后、增量之前,老会话标题回填一次(D9,见 backfillSessionTitles)
+ *   2. 经 agents 门面的 listSessionSources() 列出各来源会话根目录下的全部会话文件(claude-code、
+ *      codebuddy、deepseek;读不了的来源跳过并提示一次,D12);路径升序:同一会话的主文件排在它的
+ *      subagents/ 文件前面,先到先写的 session_head 才保得住「会话开始取本会话第一条消息」;大小和
+ *      mtime 都没变的直接跳过(实测 3,221 个文件几十毫秒),一个都没变就不开库、不拿锁
  *   3. 有要处理的先拿项目数据目录的 ingest.lock(写法沿用 project/merge-files.ts:wx 独占创建、
  *      pid 不活或超 2 小时算陈旧;最多等 3 秒,等不到 → busy,查询照常执行)
  *   4. 逐文件:认 start_cwd(新文件读会话头;subagents/ 下的文件跟主会话)。开始目录还在就现认
@@ -26,7 +28,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { agentSessionsRoot, listAgentProfiles, type AgentProfile } from '../../agents';
+import { listSessionSources, type SessionSource } from '../../agents';
 import { findProjectRoot, locateDataAtRoot } from '../../data-location';
 import { DatabaseConnection, DATABASE_FILENAME, type SqliteDatabase } from '../../db';
 import { identityOfRoot } from '../../project-identity';
@@ -40,11 +42,11 @@ import { readRootRows } from '../roots';
 import { ensureTimelineSchema } from '../schema-bootstrap';
 import { summarizeToolResponse } from '../post-tool-summary';
 import { sanitizeToolArgs } from '../tool-args';
-import { TimelineStore } from '../store';
+import { TimelineStore, upsertSessionTitle, type SessionTitleUpsert } from '../store';
 import type { TimelineEventInput } from '../types';
 import { rebuildTimeline } from './rebuild';
-import { listSessionFiles, sessionFactsReader } from './reader';
-import type { SessionFact, SessionFactTs, SessionFileReadResult } from './types';
+import { sessionFactsReader } from './reader';
+import type { SessionFact, SessionFactTs, SessionFactsReader, SessionFileReadResult } from './types';
 
 // ─── 结果形状(plan C-4)──────────────────────────────────────────────────────
 
@@ -68,7 +70,7 @@ export interface TimelineSyncOutcome {
   reason?: string;
 }
 
-/** 门面入口(C-4)。内部顺序:开关关闭 → 旧数据没并过 → F6 重建(T-4,只一次)→ 增量补录。 */
+/** 门面入口(C-4)。内部顺序:开关关闭 → 旧数据没并过 → F6 重建(T-4,只一次)→ 老会话标题回填(D9,只一次)→ 增量补录。 */
 export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyncOutcome> {
   try {
     // F1 ④:开关关了不补录、不碰库,也不提示
@@ -82,15 +84,20 @@ export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyn
     if (rebuilt !== null && rebuilt.status === 'failed') {
       return { status: 'failed', reason: rebuilt.reason, notices: [] };
     }
+    // D9 老会话标题回填:装上这版之前的补录只写过事件、没写过标题,补一次;拿不到锁静默下次再来,
+    // 不影响随后的增量与查询。重建自己从头读过全部文件(commitRebuild 已写记号),这里自然跳过;
+    // 失败的提示随本次结果一起出
+    const backfillNotices = await backfillSessionTitles(start);
     const outcome = await ingestIncremental(start);
-    if (rebuilt === null || rebuilt.status === 'mark-only') return outcome;
+    const merged = { ...outcome, notices: [...backfillNotices, ...outcome.notices] };
+    if (rebuilt === null || rebuilt.status === 'mark-only') return merged;
     // 重建的汇总在前(F6 图「记下重建过了、输出重建了多少」);增量紧随其后几乎总是空趟(偏移刚推进
     // 到位),就算有也是重建期间新追加的内容,数字直接相加
     return {
       status: 'rebuilt',
-      sessions: (rebuilt.sessions ?? 0) + (outcome.sessions ?? 0),
-      events: (rebuilt.events ?? 0) + (outcome.events ?? 0),
-      notices: [...rebuilt.notices, ...outcome.notices],
+      sessions: (rebuilt.sessions ?? 0) + (merged.sessions ?? 0),
+      events: (rebuilt.events ?? 0) + (merged.events ?? 0),
+      notices: [...rebuilt.notices, ...merged.notices],
     };
   } catch (err) {
     return { status: 'failed', reason: errorMessage(err), notices: [] };
@@ -105,7 +112,7 @@ export function describeSyncOutcome(outcome: TimelineSyncOutcome): string[] {
     case 'skipped-legacy':
       return ['这个目录还没装新版,时间线停在升级前;运行 cgraphx install 补齐'];
     case 'busy':
-      return ['时间线正在补录,结果可能缺最近的'];
+      return ['时间线正在补录,结果可能缺最近的', ...outcome.notices];
     case 'failed':
       return [`时间线补录失败:${outcome.reason ?? '未知原因'},结果可能缺最近的`];
     case 'rebuilt':
@@ -115,6 +122,92 @@ export function describeSyncOutcome(outcome: TimelineSyncOutcome): string[] {
       ];
     case 'synced':
       return outcome.notices;
+  }
+}
+
+// ─── 老会话标题回填(D9,plan C-2)────────────────────────────────────────────
+
+/** timeline_meta 里「老会话标题回填过了」的键(D9);值 = 写入时间(ISO)。重建在 commitRebuild 的
+ *  并库短事务里写(重建从头读过全部文件,不再回填),回填在 backfillSessionTitles 写。 */
+export const SESSION_TITLES_AT_KEY = 'session_titles_at';
+
+/** timeline_meta 读一个键;没有 → null。 */
+export function readMetaValue(db: SqliteDatabase, key: string): string | null {
+  const row = db.prepare('SELECT value FROM timeline_meta WHERE key = ?').get(key) as
+    | { value: string }
+    | undefined;
+  return row === undefined ? null : row.value;
+}
+
+/** timeline_meta 写一个键(值取当前时间;键已在我们这条链上定义)。 */
+export function writeMetaNow(db: SqliteDatabase, key: string): void {
+  db.prepare('INSERT OR REPLACE INTO timeline_meta (key, value) VALUES (?, ?)').run(key, new Date().toISOString());
+}
+
+/**
+ * 老会话标题回填(D9):装上这版之前的补录只写事件、没写标题——项目库 timeline_meta 无
+ * session_titles_at 时,把 sessions.db 里 `project_dir` 等于本项目目录的全部文件从偏移 0 重读
+ * 一遍,只取 session_title 事实写标题表;不写事件、不推进偏移、不改 size/mtime 行(否则下次
+ * 增量会整段重读)。一个项目只回填一次;和全量重建同一把 ingest.lock,拿不到(别的进程在补录)
+ * 就静默跳过、下次再来。失败提示一次返回给调用方(记号没写,下一趟会重试)——不静默吞掉:
+ * 标题可能已写进、唯独记号写不进的持续故障下,每次查询都会重做整套回填,得让人看得见。
+ */
+async function backfillSessionTitles(start: string): Promise<string[]> {
+  const root = findProjectRoot(start);
+  if (root === null) return [];
+  const loc = locateDataAtRoot(root);
+  // 同增量的静默分支:项目目录不在就没有可回填的库;库文件不在 = 还没记过任何数据,也不建库
+  if (loc.mode !== 'project' || loc.dataDir === null || loc.projectDirName === null) return [];
+  const dataDir = loc.dataDir;
+  const dbPath = path.join(dataDir, DATABASE_FILENAME);
+  if (!fs.existsSync(dbPath)) return [];
+  const sessionIndex = openSessionIndex();
+  let conn: DatabaseConnection | null = null;
+  try {
+    // 同全量重建一把锁(D9):拿不到(别的进程在补录)就下次再来
+    if (!acquireIngestLock(dataDir)) return [];
+    conn = DatabaseConnection.open(dbPath);
+    const db = conn.getDb();
+    ensureTimelineSchema(db); // 旧库补上标题表(幂等)
+    // 等锁期间可能已被别的进程回填过:重查一次记号
+    if (readMetaValue(db, SESSION_TITLES_AT_KEY) !== null) return [];
+    // 逐来源读本项目已归属的文件(sessions.db 按 agent 列,全部来源并起来就是全部行)
+    for (const source of listSessionSources()) {
+      // 读不了的来源(如 Node 没有 zstd API 的 deepseek)解析不出标题,跳过
+      if (source.unavailableReason() !== null) continue;
+      const reader = sessionFactsReader(source.sessionReader);
+      for (const row of sessionIndex.listSessionFiles(source.id)) {
+        if (row.project_dir !== loc.projectDirName) continue;
+        const titles = await readTitleFacts(reader, row.path);
+        if (titles.length === 0) continue;
+        db.transaction(() => {
+          for (const title of titles) upsertSessionTitle(db, title);
+        })();
+      }
+    }
+    writeMetaNow(db, SESSION_TITLES_AT_KEY);
+    return [];
+  } catch (err) {
+    // 回填失败不影响查询:记号没写,下一趟重试;提示一次让人看得见
+    return [`老会话标题回填失败:${shortReason(err)},下一趟会重试`];
+  } finally {
+    try {
+      conn?.close();
+    } catch {
+      // 关不上不影响结果
+    }
+    releaseIngestLock(dataDir); // 只删本进程拿的锁,没拿到时是 no-op
+    sessionIndex.close();
+  }
+}
+
+/** 从偏移 0 读一个会话文件,只取标题事实;文件没了 / 读失败只丢这一个文件,不拖垮整个回填。 */
+async function readTitleFacts(reader: SessionFactsReader, file: string): Promise<SessionTitleUpsert[]> {
+  try {
+    const result = await reader(file, 0);
+    return titleUpserts(result.facts);
+  } catch {
+    return [];
   }
 }
 
@@ -144,6 +237,37 @@ export interface UnparsedTally {
 }
 
 export type UnparsedMap = Map<string, UnparsedTally>;
+
+/** 读取器抛错的文件(增量与重建共用):按来源显示名 + 原因首行计数,单文件隔离不拖垮整趟。 */
+export interface ReadFailedTally {
+  display: string;
+  reason: string;
+  count: number;
+}
+
+export type ReadFailedMap = Map<string, ReadFailedTally>;
+
+/** 原因取错误消息的第一行、截到 80 字,提示不被长堆栈撑爆。 */
+function shortReason(err: unknown): string {
+  const first = errorMessage(err).split('\n')[0] ?? '';
+  return [...first].slice(0, 80).join('');
+}
+
+/** 记一个读取失败的文件(按显示名 + 原因聚合)。 */
+export function noteReadFailed(map: ReadFailedMap, source: SessionSource, err: unknown): void {
+  const reason = shortReason(err);
+  const key = `${source.displayName}\0${reason}`;
+  const cur = map.get(key);
+  if (cur === undefined) map.set(key, { display: source.displayName, reason, count: 1 });
+  else cur.count += 1;
+}
+
+/** 读取失败的人读提示:偏移没推进,文件修复 / 删除后下一趟自动重试。 */
+export function readFailedNotices(map: ReadFailedMap): string[] {
+  return [...map.values()].map(
+    (f) => `${f.display} 的会话文件有 ${f.count} 个读取失败(${f.reason}),时间线可能不全;文件修复或删除后会自动重试`,
+  );
+}
 
 /** 归属判定要用的上下文(增量与重建共用;重建的 fallbackMatcher 读项目库记过的根)。 */
 export interface ClassificationContext {
@@ -175,6 +299,8 @@ interface IngestContext extends ClassificationContext, FactMappingContext {
   readonly rows: Map<string, SessionFileRow>;
   /** K11:整份读不出事实的文件,按 agent 显示名 + 行内 version 计数 */
   readonly unparsed: UnparsedMap;
+  /** 读取器抛错的文件(坏帧、读不出会话头等),按来源显示名 + 原因计数;偏移不推进,下一趟重试 */
+  readonly readFailed: ReadFailedMap;
 }
 
 function errorMessage(err: unknown): string {
@@ -207,24 +333,33 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
   const openConn = (): DatabaseConnection | null => conn;
   try {
     // 候选文件与快速筛选:大小和 mtime 都没变的跳过(含别的项目的——进度一行一份,别家文件
-    // 变了归别家的运行补,这里只看要不要重新认)
+    // 变了归别家的运行补,这里只看要不要重新认)。读不了的来源(如 Node 没有 zstd API 的
+    // deepseek)跳过列举、提示一次(D12)
     const rows = new Map<string, SessionFileRow>();
-    const pending: Array<{ profile: AgentProfile; file: string; stat: FileStat }> = [];
-    for (const profile of listAgentProfiles()) {
-      const sessionsRoot = agentSessionsRoot(profile);
+    const pending: Array<{ source: SessionSource; file: string; stat: FileStat }> = [];
+    let unavailableNotice: string | null = null;
+    for (const source of listSessionSources()) {
+      const sessionsRoot = source.sessionsRoot();
       if (sessionsRoot === null) continue;
-      for (const row of sessionIndex.listSessionFiles(profile.id)) rows.set(row.path, row);
-      for (const file of listSessionFiles(sessionsRoot)) {
+      const reason = source.unavailableReason();
+      if (reason !== null) {
+        unavailableNotice ??= reason;
+        continue;
+      }
+      for (const row of sessionIndex.listSessionFiles(source.id)) rows.set(row.path, row);
+      for (const file of source.listFiles(sessionsRoot)) {
         const stat = statOrNull(file);
         if (stat === null) continue; // 文件没了(F1 ⑤):已记进时间线的留着,这里跳过
         const known = rows.get(file);
         if (known !== undefined && known.size === stat.size && known.mtime_ms === stat.mtimeMs) continue;
-        pending.push({ profile, file, stat });
+        pending.push({ source, file, stat });
       }
     }
-    if (pending.length === 0) return { status: 'synced', notices: [] };
+    const notices = unavailableNotice !== null ? [unavailableNotice] : [];
+    if (pending.length === 0) return { status: 'synced', notices };
 
-    if (!acquireIngestLock(dataDir)) return { status: 'busy', notices: [] };
+    // busy 也带上来源不可用提示(如「DeepSeek 会话要 Node 22.15 以上」):别让它只在无锁竞争的趟出现
+    if (!acquireIngestLock(dataDir)) return { status: 'busy', notices };
     try {
       const removedAtMs = (() => {
         const removedAt = sessionIndex.removedProjectAt(loc.identity);
@@ -248,6 +383,7 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
         rows,
         removedAtMs,
         unparsed: new Map(),
+        readFailed: new Map(),
         sessionsWritten: new Set(),
         classified: new Map(),
         projectDb,
@@ -268,12 +404,23 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
           rows.set(item.file, fresh);
           if (fresh.size === item.stat.size && fresh.mtime_ms === item.stat.mtimeMs) continue;
         }
-        await processFile(item.file, item.profile, item.stat, fresh ?? null, ctx);
+        // 单文件隔离:读取器抛错(坏帧、读不出会话头等)只丢这一个文件,不卡住排序在后的文件、
+        // 不拖垮整趟;偏移不推进(saveRow 没执行),文件修复或删除后下一趟自动重试
+        try {
+          await processFile(item.file, item.source, item.stat, fresh ?? null, ctx);
+        } catch (err) {
+          noteReadFailed(ctx.readFailed, item.source, err);
+        }
       }
 
       const dbConn = openConn();
       const events = dbConn !== null ? Math.max(0, countEvents(dbConn.getDb()) - (countBefore ?? 0)) : 0;
-      return { status: 'synced', sessions: ctx.sessionsWritten.size, events, notices: unparsedNotices(ctx.unparsed) };
+      return {
+        status: 'synced',
+        sessions: ctx.sessionsWritten.size,
+        events,
+        notices: [...notices, ...unparsedNotices(ctx.unparsed), ...readFailedNotices(ctx.readFailed)],
+      };
     } finally {
       releaseIngestLock(dataDir);
     }
@@ -300,15 +447,16 @@ function countEvents(db: SqliteDatabase): number {
  */
 async function processFile(
   file: string,
-  profile: AgentProfile,
+  source: SessionSource,
   stat: FileStat,
   row: SessionFileRow | null,
   ctx: IngestContext,
 ): Promise<void> {
   let startCwd: string | null = row?.start_cwd ?? null;
 
-  // subagents/ 下的文件跟主会话(spec D2 表注):主会话文件的 start_cwd 已认出就用它的
-  // (本轮先处理主文件,rows 里是最新值);主文件不在 / 没认出时退回自己读头
+  // subagents/ 下的文件跟主会话(spec D2 表注,claude/codebuddy 布局;deepseek 路径没有这一段,
+  // subagentMainPath 自然返回 null,会话头读自己文件里的开始目录):主会话文件的 start_cwd 已认出
+  // 就用它的(本轮先处理主文件,rows 里是最新值);主文件不在 / 没认出时退回自己读头
   const mainPath = subagentMainPath(file);
   if (startCwd === null && mainPath !== null) {
     const mainRow = ctx.rows.get(mainPath) ?? ctx.sessionIndex.getSessionFile(mainPath);
@@ -324,56 +472,68 @@ async function processFile(
     const fromOffset = row?.byte_offset ?? 0;
     // 从头(新文件、上次没认出来、文件截断重写)读的整份没有事实才算 K11
     const fullRead = fromOffset === 0 || stat.size < fromOffset;
-    const result = await sessionFactsReader(profile.sessionReader)(file, fromOffset);
-    writeFacts(file, profile, stat, result, startCwd, cls, ctx, fullRead);
+    const result = await sessionFactsReader(source.sessionReader)(file, fromOffset);
+    writeFacts(file, source, stat, result, startCwd, cls, ctx, fullRead, row?.session_id ?? null);
     return;
   }
 
   // start_cwd 未知:从头读,拿会话头认归属
-  const result = await sessionFactsReader(profile.sessionReader)(file, 0);
+  const result = await sessionFactsReader(source.sessionReader)(file, 0);
   const head = result.facts.find((f): f is Extract<SessionFact, { kind: 'session_head' }> => f.kind === 'session_head');
   if (head === undefined) {
     // 一条带 cwd 的行都没有(spec D3「再不行」):留空不处理;记一行免得每趟重读
-    saveRow(ctx, file, profile, stat, { start_cwd: null, project_dir: null, byte_offset: 0 });
+    saveRow(ctx, file, source, stat, { start_cwd: null, project_dir: null, byte_offset: 0, session_id: null });
     return;
   }
   const cls = classifyStartDir(head.startCwd, ctx);
   if (cls.dirName !== ctx.currentDirName) {
     // 认出来了但不是本项目:记下归属,偏移不代推进(它的项目自己补)
-    saveRow(ctx, file, profile, stat, { start_cwd: head.startCwd, project_dir: cls.dirName, byte_offset: 0 });
+    saveRow(ctx, file, source, stat, {
+      start_cwd: head.startCwd,
+      project_dir: cls.dirName,
+      byte_offset: 0,
+      session_id: rowSessionId(source, file, result.facts, null),
+    });
     return;
   }
-  writeFacts(file, profile, stat, result, head.startCwd, cls, ctx, true);
+  writeFacts(file, source, stat, result, head.startCwd, cls, ctx, true, null);
 }
 
 /**
  * 把一文件本趟读到的事实落库(D4):项目库一个事务写完提交,之后才更新 sessions.db 的偏移。
+ * prevSessionId 是上一行的会话编号(本趟一条事实都没读到时进度行沿用,C-4)。
+ * 标题事实不是事件,不进 mapFacts:单独按 C-2 优先级写标题表,和事件同一个事务(D8);只有
+ * 标题的批次(如 claude 只追加标题行)也要开库写。
  */
 function writeFacts(
   file: string,
-  profile: AgentProfile,
+  source: SessionSource,
   stat: FileStat,
   result: SessionFileReadResult,
   startCwd: string,
   cls: DirClassification,
   ctx: IngestContext,
   fullRead: boolean,
+  prevSessionId: string | null,
 ): void {
-  const events = mapFacts(result.facts, profile, startCwd, ctx);
-  if (events.length > 0) {
+  const events = mapFacts(result.facts, source, startCwd, ctx);
+  const titles = titleUpserts(result.facts);
+  if (events.length > 0 || titles.length > 0) {
     const db = ctx.projectDb();
     const store = new TimelineStore(db);
     db.transaction(() => {
       for (const event of events) store.insert(event);
       upsertRoot(db, cls.root, events);
+      for (const title of titles) upsertSessionTitle(db, title);
     })();
   }
-  saveRow(ctx, file, profile, stat, {
+  saveRow(ctx, file, source, stat, {
     start_cwd: startCwd,
     project_dir: ctx.currentDirName,
     byte_offset: result.consumedBytes,
+    session_id: rowSessionId(source, file, result.facts, prevSessionId),
   });
-  noteUnparsed(ctx.unparsed, file, profile, stat, result, fullRead);
+  noteUnparsed(ctx.unparsed, file, source, stat, result, fullRead);
 }
 
 /** 项目库记下项目在本机出现过的根(spec K1、K10 的写法同 recorder;重建写进临时库,并库时再并)。 */
@@ -400,18 +560,18 @@ export function upsertRoot(db: SqliteDatabase, root: string | null, events: read
   db.prepare(UPSERT_ROOT_SQL).run(realRoot, first, last);
 }
 
-/** 写一行会话文件进度(sessions.db;项目库提交之后才调,见 writeFacts)。 */
+/** 写一行会话文件进度(sessions.db;项目库提交之后才调,见 writeFacts)。session_id 由调用方按来源算好。 */
 function saveRow(
   ctx: IngestContext,
   file: string,
-  profile: AgentProfile,
+  source: SessionSource,
   stat: FileStat,
-  fields: { start_cwd: string | null; project_dir: string | null; byte_offset: number },
+  fields: { start_cwd: string | null; project_dir: string | null; byte_offset: number; session_id: string | null },
 ): void {
   const row: Omit<SessionFileRow, 'updated_at'> = {
     path: file,
-    agent: profile.id,
-    session_id: sessionFileId(file),
+    agent: source.id,
+    session_id: fields.session_id,
     start_cwd: fields.start_cwd,
     project_dir: fields.project_dir,
     byte_offset: fields.byte_offset,
@@ -426,6 +586,21 @@ function saveRow(
 export function sessionFileId(file: string): string {
   const main = subagentMainPath(file);
   return path.basename(main ?? file, '.jsonl');
+}
+
+/**
+ * 进度行的会话编号(claude/codebuddy 布局按路径规则——分叉文件开头拷来的旧会话行归原会话,
+ * 所以不能用行内 sessionId;deepseek 行内不带编号,记本文件事实所属的主会话:读到事实取事实的
+ * sessionId,只读到会话头取头事实的,什么都没读到沿用上一行的值,plan C-4)。
+ */
+export function rowSessionId(
+  source: SessionSource,
+  file: string,
+  facts: readonly SessionFact[],
+  fallback: string | null,
+): string | null {
+  if (source.sessionReader !== 'deepseek-session') return sessionFileId(file);
+  return facts[0]?.sessionId ?? fallback;
 }
 
 /** 子 agent 文件 → 同目录(项目子目录)下不带 subagents/ 段的主会话文件路径;主文件 → null。 */
@@ -470,16 +645,16 @@ function readLineVersion(file: string): string | null {
 export function noteUnparsed(
   unparsed: UnparsedMap,
   file: string,
-  profile: AgentProfile,
+  source: SessionSource,
   stat: FileStat,
   result: SessionFileReadResult,
   fullRead: boolean,
 ): void {
   if (!fullRead || stat.size === 0 || result.facts.length > 0) return;
   const version = readLineVersion(file);
-  const key = `${profile.displayName} ${version ?? ''}`;
+  const key = `${source.displayName} ${version ?? ''}`;
   const cur = unparsed.get(key);
-  if (cur === undefined) unparsed.set(key, { display: profile.displayName, version, count: 1 });
+  if (cur === undefined) unparsed.set(key, { display: source.displayName, version, count: 1 });
   else cur.count += 1;
 }
 
@@ -576,7 +751,7 @@ function factIso(ts: SessionFactTs): string | null {
 
 export function mapFacts(
   facts: readonly SessionFact[],
-  profile: AgentProfile,
+  source: SessionSource,
   startCwd: string,
   ctx: FactMappingContext,
 ): TimelineEventInput[] {
@@ -621,8 +796,8 @@ export function mapFacts(
           session_id: fact.sessionId,
           turn_id: null,
           cwd: fact.startCwd,
-          agent: profile.id,
-          source_key: `${profile.id}:start:${fact.sessionId}`,
+          agent: source.id,
+          source_key: `${source.id}:start:${fact.sessionId}`,
         });
         break;
       }
@@ -639,9 +814,9 @@ export function mapFacts(
           prompt_text: fact.text,
           turn_id: fact.uuid,
           cwd: startCwd,
-          agent: profile.id,
+          agent: source.id,
           metadata: isUser ? undefined : { source: fact.source },
-          source_key: `${profile.id}:prompt:${fact.uuid}`,
+          source_key: `${source.id}:prompt:${fact.uuid}`,
         });
         lastPrompt.set(fact.sessionId, fact.uuid);
         break;
@@ -676,9 +851,9 @@ export function mapFacts(
           duration_ms: duration !== null && duration >= 0 ? duration : undefined,
           turn_id: turnIdOf(fact.sessionId, ts),
           cwd: fact.cwd ?? startCwd,
-          agent: profile.id,
+          agent: source.id,
           metadata: meta,
-          source_key: `${profile.id}:tool:${fact.toolUseId}`,
+          source_key: `${source.id}:tool:${fact.toolUseId}`,
         });
         break;
       }
@@ -692,8 +867,8 @@ export function mapFacts(
           session_id: fact.sessionId,
           turn_id: turnIdOf(fact.sessionId, ts),
           cwd: startCwd,
-          agent: profile.id,
-          source_key: `${profile.id}:stop:${fact.messageId}`,
+          agent: source.id,
+          source_key: `${source.id}:stop:${fact.messageId}`,
         });
         break;
       }
@@ -703,6 +878,21 @@ export function mapFacts(
     if (event.session_id !== null && event.session_id !== undefined) ctx.sessionsWritten.add(event.session_id);
   }
   return events;
+}
+
+/**
+ * 标题事实 → 标题表写入行(C-2):标题不是事件,不走 mapFacts;ts 统一在这里归一成 ISO
+ * (deepseek 的 epoch 毫秒换算,claude 标题行「前面最近一条带时间行」的兜底 0 同理)。
+ */
+export function titleUpserts(facts: readonly SessionFact[]): SessionTitleUpsert[] {
+  const out: SessionTitleUpsert[] = [];
+  for (const fact of facts) {
+    if (fact.kind !== 'session_title') continue;
+    const ts = factIso(fact.ts);
+    if (ts === null) continue;
+    out.push({ sessionId: fact.sessionId, title: fact.title, kind: fact.titleKind, ts });
+  }
+  return out;
 }
 
 // ─── ingest.lock(D9:写法沿用 project/merge-files.ts 的 merge.lock)──────────

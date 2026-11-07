@@ -6,9 +6,29 @@
 export const AGENT_IDS = ['claude-code', 'codebuddy'] as const;
 export type AgentId = (typeof AGENT_IDS)[number];
 
-/** 会话文件读取器标识(每家已登记 agent 一个,读取器在 timeline/ingest/;接新 agent = 加一个读取器)。 */
-export const SESSION_READER_IDS = ['claude-transcript', 'codebuddy-transcript'] as const;
+/** 会话文件读取器标识(每家已登记 agent 与只读来源各一个,读取器在 timeline/ingest/;接新 agent = 加一个读取器)。 */
+export const SESSION_READER_IDS = ['claude-transcript', 'codebuddy-transcript', 'deepseek-session'] as const;
 export type SessionReaderId = (typeof SESSION_READER_IDS)[number];
+
+/**
+ * 会话来源 id:已登记 agent 之外,还有只读会话来源(如 deepseek——只读它的会话文件进时间线,
+ * 不进安装器、部署配置与提交门禁,所以不是 AgentId、没有 AgentProfile,D12)。
+ */
+export type SessionSourceId = AgentId | 'deepseek';
+
+/** 只读会话来源:会话文件在哪、怎么列;补录与重建的会话文件枚举统一经它(sources.ts)。 */
+export interface SessionSource {
+  readonly id: SessionSourceId;
+  readonly displayName: string;
+  /** 会话文件根目录(含环境变量覆盖语义);来源没装 / 没有固定位置 → null(不列举)。 */
+  sessionsRoot(): string | null;
+  /** 列出根目录下全部会话文件(绝对路径,升序)。 */
+  listFiles(root: string): string[];
+  /** 会话文件读取器标识。 */
+  readonly sessionReader: SessionReaderId;
+  /** 本机读不了时的提示(如 Node 没有 zstd API);能读 → null。 */
+  unavailableReason(): string | null;
+}
 
 export interface AgentProfile {
   readonly id: AgentId;

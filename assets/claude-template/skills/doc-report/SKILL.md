@@ -94,6 +94,8 @@ cgraphx timeline query --since=<date-or-range> --until=<date-or-now> --format=ta
 
 查询前 cgraphx 会自动补录 agent 的会话文件(开发事件不靠 hook,agent 用的命令不变);升级后第一次查询会先全量重建一次。补录失败只打 stderr 提示,不影响查询输出。
 
+会话来源有三家:Claude Code、CodeBuddy 和 DeepSeek Harness(第三家是只读来源,不装配置、不进提交门禁,要 Node 22.15 以上)。报告和统计里会出现三家 agent 的事件,事件的 `agent` 列标来源。
+
 按需补充统计:
 
 ```bash

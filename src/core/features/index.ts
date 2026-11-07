@@ -27,6 +27,7 @@ export type {
 export {
   scanFeatures,
   readFeatureOwner,
+  listFeatureFiles,
   FEATURES_DIR,
 } from './scanner';
 export { parseFeatureId } from './feature-id';

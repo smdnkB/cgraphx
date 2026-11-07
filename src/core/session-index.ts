@@ -19,8 +19,8 @@ import { DatabaseConnection, type SqliteDatabase } from './db';
 import type { ProjectIdentity } from './project-identity';
 import { userDataRoot } from './user-data-dir';
 
-/** 库文件名(在 userDataRoot() 下,与旧会话登记目录 `sessions/` 不冲突)。 */
-const SESSIONS_DB_FILENAME = 'sessions.db';
+/** 库文件名(在 userDataRoot() 下,与旧会话登记目录 `sessions/` 不冲突);board 只读打开时也拼它。 */
+export const SESSIONS_DB_FILENAME = 'sessions.db';
 
 /** sessions.db 的权限:里面有项目根路径,只给自己看(Windows 照默认)。 */
 const PRIVATE_FILE_MODE = 0o600;

@@ -88,3 +88,10 @@ export const READ_FILE_TOOLS = new Set(['Read', 'Grep', 'Glob']);
  * File-writing tools (used to split topFiles into read vs written).
  */
 export const WRITE_FILE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+/**
+ * 看板只读查询取的工具事件(2026-11-06-agent看板 K9④ 写类 + K10 Read + K9⑤ Skill;Bash 不取,
+ * K11 天然成立):从 WRITE_FILE_TOOLS 派生,单一定义——board-read 的 SQL IN 列表与 board/match
+ * 的写类判定都从这份来,改一处不会漏另一处。
+ */
+export const BOARD_TOOL_NAMES: readonly string[] = [...WRITE_FILE_TOOLS, 'Read', 'Skill'];
