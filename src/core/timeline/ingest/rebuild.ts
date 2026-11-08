@@ -17,8 +17,9 @@
  *      免得改名后新项目把旧历史再解析一遍)。解析期间不碰项目库——「整个解析放一个事务」是 spec 明确
  *      没选的方案:持写锁十几秒,这期间的提交记录会写失败,而提交记录补不回来
  *   5. 项目库一个短事务(秒级)里:ATTACH 临时库 → 删非提交事件(K24,不备份)→ INSERT SELECT 临时库
- *      事件 → 并 timeline_roots 与标题表(同命运:清旧、并新)→ 写 rebuilt_at 与 session_titles_at
- *      (重建从头读过全部文件,标题已齐,不再回填)→ 提交。记号必须写在这个事务里:写在事务外,
+ *      事件 → 并 timeline_roots 与标题表(同命运:清旧、并新)→ 写 rebuilt_at 与 session_titles_at、
+ *      session_titles_refresh_at(重建从头读过全部文件,标题已齐,回填与 DeepSeek 标题重算都不必再来)
+ *      → 提交。记号必须写在这个事务里:写在事务外,
  *      中断后会误判「重建过」。失败即回滚,清和写一起撤销,时间线还是旧的;重建中途杀进程同理
  *   6. 提交之后才收尾(单项失败不再报 failed——重建已经成立,顶多留残渣下次再清):推进 sessions.db 里
  *      这个项目全部文件的偏移(读到哪推进到哪,不取文件当前大小:重建期间又被追加的,下一趟增量接着
@@ -51,6 +52,7 @@ import {
   releaseIngestLock,
   rowSessionId,
   SESSION_TITLES_AT_KEY,
+  SESSION_TITLES_REFRESH_AT_KEY,
   statOrNull,
   subagentMainPath,
   titleUpserts,
@@ -226,7 +228,8 @@ function quoteLiteral(value: string): string {
 
 /**
  * ⑤ 短事务并库(D19):ATTACH 临时库,一个 BEGIN IMMEDIATE 事务里删非提交事件(K24)、INSERT SELECT
- * 临时库事件、并 timeline_roots 与标题表(D8:同命运)、写 rebuilt_at 与 session_titles_at,提交后
+ * 临时库事件、并 timeline_roots 与标题表(D8:同命运)、写 rebuilt_at 与 session_titles_at,
+ * session_titles_refresh_at,提交后
  * DETACH(ATTACH / DETACH 都不能在事务里)。
  * 事务只有秒级,持锁期间别的进程写提交记录排队等(busy_timeout 5 秒),等不到的下一趟补录再写。
  * 返回重建写进项目库的会话数与事件数(取自临时库)。
@@ -267,8 +270,10 @@ function commitRebuild(
           `SELECT session_id, title, kind, ts FROM ${TMP_ALIAS}.timeline_session_titles`,
       );
       writeRebuiltAt(projectDb);
-      // 重建从头读过全部文件,标题已齐:同事务写「回填过了」,不让随后的回填再读一遍(D9)
+      // 重建从头读过全部文件,标题已齐:同事务写「回填过了」与「DeepSeek 标题重算过了」,不让随后的
+      // 回填 / 重算再读一遍(D9、D10)
       writeMetaNow(projectDb, SESSION_TITLES_AT_KEY);
+      writeMetaNow(projectDb, SESSION_TITLES_REFRESH_AT_KEY);
       projectDb.exec('COMMIT');
     } catch (err) {
       try {
@@ -319,10 +324,12 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
     if (readRebuiltAt(projectDb) !== null) return null;
 
     // K23:删过数据的项目不全量解析,只写记号——旧会话不补回,之后的增量只收删除之后的(K3);
-    // 标题记号一并写:不让随后的老会话回填把这个分支刻意省掉的全量重读又做一遍(标题跟着事件走)
+    // 标题记号一并写:不让随后的老会话回填 / DeepSeek 标题重算把这个分支刻意省掉的全量重读又做一遍
+    // (标题跟着事件走)
     if (sessionIndex.removedProjectAt(loc.identity) !== null) {
       writeRebuiltAt(projectDb);
       writeMetaNow(projectDb, SESSION_TITLES_AT_KEY);
+      writeMetaNow(projectDb, SESSION_TITLES_REFRESH_AT_KEY);
       return { status: 'mark-only', notices: [] };
     }
 
