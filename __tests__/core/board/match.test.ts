@@ -79,7 +79,7 @@ describe.skipIf(process.platform === 'win32')('matchSessionsToTasks (spec K8–K
     expect(out.byTask.get(TASK.featureId)?.[0]).toMatchObject({ fixed: true, reasons: [REASON_WROTE_FEATURE] });
   });
 
-  it('C5: K9⑤ flow command with the feature title in args (/dev-merge 订单导出), or Skill args mentioning it → fixed', () => {
+  it('C5: K9⑤ flow command whose first arg is the task title (/dev-merge 订单导出), or Skill args starting with the title → fixed', () => {
     const byPrompt = matchSessionsToTasks(inputOf(dataOf({
       sessions: [head('s1')],
       prompts: [{ ts: '2026-11-06T09:00:00.000Z', sessionId: 's1', text: '/dev-merge 订单导出' }],
@@ -88,7 +88,7 @@ describe.skipIf(process.platform === 'win32')('matchSessionsToTasks (spec K8–K
 
     const bySkill = matchSessionsToTasks(inputOf(dataOf({
       sessions: [head('s1')],
-      tools: [{ ts: '2026-11-06T09:00:00.000Z', sessionId: 's1', tool: 'Skill', filePath: null, args: '按订单导出 的 spec 写计划' }],
+      tools: [{ ts: '2026-11-06T09:00:00.000Z', sessionId: 's1', tool: 'Skill', filePath: null, args: '订单导出 按 spec 写计划' }],
     })));
     expect(bySkill.byTask.get(TASK.featureId)?.[0]?.reasons).toContain(REASON_FLOW_COMMAND);
   });

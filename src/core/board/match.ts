@@ -32,6 +32,11 @@ function charLength(s: string): number {
   return [...s].length;
 }
 
+/** 取文本的第一个词(C-5:流程命令 / Skill 参数只按首词与名字集合完整相等,不做标点大小写归一化)。 */
+function firstWord(text: string): string {
+  return text.trim().split(/\s+/)[0] ?? '';
+}
+
 /** 一个参与会话的分组事件与全事件窗(K6:只挂一个任务 / K9① / 未归类用)。 */
 interface SessionEvents {
   head: BoardSessionHead;
@@ -54,7 +59,7 @@ interface TaskHitDraft {
   replicaCwd: boolean;
 }
 
-/** 任务级预计算:路径前缀、副本匹配器(K9①)、需求分支集合(K9②)、标题可否用于消息匹配(K10)。 */
+/** 任务级预计算:路径前缀、副本匹配器(K9①)、需求分支集合(K9②)、标题可否用于消息匹配(K10)、流程命令名字集合(K9⑤)。 */
 interface TaskContext {
   featureId: string;
   title: string;
@@ -62,6 +67,8 @@ interface TaskContext {
   replicaMatcher: RootMatcher | null;
   branches: Set<string>;
   mentionable: boolean;
+  /** K9⑤ 认流程命令用的完整名字:任务标题、feature-id、副本目录名(含已删副本);不含文件前缀 */
+  flowNames: ReadonlySet<string>;
 }
 
 function taskContextsOf(
@@ -78,6 +85,7 @@ function taskContextsOf(
       replicaMatcher: own.length > 0 ? createRootMatcher(own.map((r) => r.path)) : null,
       branches: new Set(own.map((r) => r.branch)),
       mentionable: task.title !== '' && charLength(task.title) >= TITLE_MENTION_MIN_CHARS,
+      flowNames: new Set([task.title, task.featureId, ...own.map((r) => r.name)].filter((n) => n !== '')),
     };
   });
 }
@@ -148,16 +156,17 @@ function matchFixedRules(task: TaskContext, ev: SessionEvents): { reasons: Set<s
       hitTs.push(tool.ts);
     }
   }
-  // ⑤ 流程命令:命令参数含任务标题,或 Skill 工具的 args 含任务标题
+  // ⑤ 流程命令:命令的第一个参数等于任务标题 / feature-id / 副本目录名;Skill 参数首词命中,
+  //    或参数里含需求目录路径(`docs/features/<featureId>/`)。只认完整名字,不做前缀匹配。
   for (const prompt of ev.prompts) {
     const params = FLOW_COMMAND_PATTERN.exec(prompt.text)?.[1];
-    if (params !== undefined && params.includes(task.title)) {
+    if (params !== undefined && task.flowNames.has(firstWord(params))) {
       reasons.add(REASON_FLOW_COMMAND);
       hitTs.push(prompt.ts);
     }
   }
   for (const tool of ev.tools) {
-    if (tool.tool === 'Skill' && tool.args !== null && tool.args.includes(task.title)) {
+    if (tool.tool === 'Skill' && tool.args !== null && (task.flowNames.has(firstWord(tool.args)) || tool.args.includes(task.prefix))) {
       reasons.add(REASON_FLOW_COMMAND);
       hitTs.push(tool.ts);
     }
