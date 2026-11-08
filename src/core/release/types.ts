@@ -4,6 +4,27 @@
 
 import type { HookLinkTarget, HookSkipReason } from '../git-hooks';
 
+/** 一个版本分支自己的那一段(spec K15、D16)。 */
+export interface VersionSegment {
+  /** 版本号,如 '2.0.14'(分支名去掉 'dev/') */
+  version: string;
+  /** 分支名,如 'dev/2.0.14' */
+  branch: string;
+  /** 这一段第一父链上的提交(完整 hash) */
+  firstParent: ReadonlySet<string>;
+  /** 这一段的全部提交:git rev-list dev/x.y.z ^B */
+  commits: ReadonlySet<string>;
+  /** 这一段第一父链上「合入需求：」合并说明里取出的标题,去掉「(第 N 次)」后去重 */
+  mergedTitles: readonly string[];
+}
+
+/** 一个仓库的版本历史(spec D16、D17):各版本分支的段 + 打过 tag 的版本。 */
+export interface VersionHistory {
+  segments: readonly VersionSegment[];
+  /** 有 tag `v<版本号>` 的版本号,如 ['2.0.10', …, '2.0.14'] */
+  releasedVersions: readonly string[];
+}
+
 /** 装上 / 卸掉版本分支提交拦截的结果。 */
 export interface GuardResult {
   /** 本次查看的 commit-msg 钩子文件绝对路径;不在 git 仓库时为 null */
