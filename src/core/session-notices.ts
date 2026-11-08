@@ -3,7 +3,8 @@
  * (spec 2026-11-06-会话文件解析替代hooks F4 / D16、K17–K20)。判断函数与提示原文原出自会话开始
  * hook(hook 体系已随本需求整体删除):
  *   ① skill 版本落后(K18):有会话变量看那家 agent,没有看各家;只看在这个项目里装过的,任一家落后出一条(提示里带具体版本);
- *   ② 自动记忆去向(K19):仅 Claude Code 会话且本人本地设置关了自动记忆;终端里自己跑不算;
+ *      只读来源(DeepSeek)没有 agent 描述,版本提示按已装 agent 判断;
+ *   ② 自动记忆去向(K19):仅 Claude Code 会话且本人本地设置关了自动记忆;终端里自己跑不算,没有 agent 描述的不提示;
  *   ③ 按登记补回缺了的 git 钩子片段(K20),补不上的说一次原因(登记已由基础层删掉,不会每次重试)。
  *
  * scope 与频控(C-9):有会话变量 → `session:<会话编号>`,同一会话只提示一次;没有 →
@@ -23,9 +24,9 @@ import { hookNotice, repairHookSnippets } from './git-hooks';
 import {
   agentConfigDir,
   DEFAULT_AGENT_ID,
+  getAgentProfile,
   isAgentInstalled,
   listAgentProfiles,
-  requireAgentProfile,
   resolveSessionIdFromEnv,
   type AgentProfile,
   type SessionFromEnv,
@@ -48,12 +49,13 @@ function noticeScope(session: SessionFromEnv | null, projectRoot: string): strin
 /**
  * 版本落后提示(直接调 skill-version 门面):无需提示或任何异常都 → null,不拖累其他提示。
  * 只看这个项目里装过 cgraphx 的 agent:命令在哪个目录都能跑,没装过的目录、没装过的那家 agent
- * 没有版本记录,不能当成「2.0.11 之前装的」。
+ * 没有版本记录,不能当成「2.0.11 之前装的」。只读来源(DeepSeek)没有 agent 描述,按已装 agent 判断。
  */
 function skillVersionNoticeSafe(session: SessionFromEnv | null, projectRoot: string): string | null {
   try {
     // 命令没有「会话开始类型」一说,source 恒 undefined(按 startup 处理,不静默)。
-    const candidates = session !== null ? [requireAgentProfile(session.agent)] : listAgentProfiles();
+    const own = session !== null ? getAgentProfile(session.agent) : undefined;
+    const candidates = own !== undefined ? [own] : listAgentProfiles();
     const profiles = candidates.filter((profile) => isAgentInstalled(projectRoot, profile));
     for (const profile of profiles) {
       const notice = skillVersionNotice(projectRoot, profile, undefined);
@@ -94,11 +96,12 @@ function autoMemoryOffContext(): string {
   );
 }
 
-/** 自动记忆去向提示:仅 Claude Code 会话且本人关了自动记忆时给出原文;终端里自己跑不算;任何异常 → null。 */
+/** 自动记忆去向提示:仅 Claude Code 会话且本人关了自动记忆时给出原文;终端里自己跑、没有 agent 描述(DeepSeek)的不提示;任何异常 → null。 */
 function autoMemoryOffNotice(session: SessionFromEnv | null, projectRoot: string): string | null {
   if (session === null) return null;
   try {
-    const profile = requireAgentProfile(session.agent);
+    const profile = getAgentProfile(session.agent);
+    if (profile === undefined) return null;
     return isAutoMemoryOff(projectRoot, profile) ? autoMemoryOffContext() : null;
   } catch (err) {
     process.stderr.write(`[cgraphx] auto memory notice failed: ${err instanceof Error ? err.message : String(err)}\n`);
