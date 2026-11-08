@@ -17,8 +17,8 @@
  * 目录名裸 uuid、parentSession 指主会话),不能只看「带 parentSession」——续接主会话(isSeeded=true、
  * delegationDepth=0)也带 parentSession,但按 spec K4「续接后换了编号的,各算一行」各自独立。子会话
  * 全部事实的 sessionId 按 parentSession 链归到根主会话(父仍是子会话时沿链再找,本机实测只有一层;
- * 父文件不在 / 读不出时停在那一级),会话头的 startCwd 取子会话文件自己的开始目录;子会话只产会话头、
- * 工具与标题事实(提问与轮次结束不产,与 claude 侧链行、codebuddy 子 agent 文件同口径),工具事实带
+ * 父文件不在 / 读不出时停在那一级),会话头的 startCwd 取子会话文件自己的开始目录;子会话只产会话头与
+ * 工具事实(提问、轮次结束与标题都不产——标题只由主会话文件产出,spec 2026-11-08 D9),工具事实带
  * subagent.id = 子会话自己的编号。
  * 已知限制(plan C-4,记录不修):deepseek 文件按路径排序不保证主文件在子会话文件前,主会话的
  * session_start 事件先写者可能取到子会话的开始目录——子会话与主会话同仓,对匹配与展示无实害。
@@ -40,8 +40,8 @@
  * 标题(spec 2026-11-06-agent看板 D8、K5,实测 2026-11-07 核对全部 208 个文件):`session/title` 行
  * 192 个文件有,形态 `{ type, seq, time, data: { title, messageSeqs, source } }`(source.kind 是
  * fallback / provider,标题质量不同但不分库,统一 titleKind 'agent')。产 session_title 事实,
- * ts 取行内 time(epoch 毫秒);子会话的标题同样按 parentSession 链归到根主会话(plan C-4
- * 「全部事实(含标题)」)。
+ * ts 取行内 time(epoch 毫秒);子会话文件里的标题行不产事实(spec 2026-11-08 D9:子会话标题不归
+ * 主会话,否则会盖掉主会话自己的标题)。
  *
  * 轮次结束:`turn/end` 行(子会话不产);messageId 用 `<会话编号>:<seq>`——seq 只在本文件内唯一,
  * 拼上会话编号保 source_key 全局唯一。
@@ -427,8 +427,12 @@ function handleTurnEnd(obj: Record<string, unknown>, frame: ZstdFrameRange, s: S
   s.boundaryEnd = frame.end;
 }
 
-/** 标题行(D8、K5):data.title 是标题、time 是起标题的时间;归属根主会话(子会话的标题同样归并,C-4)。 */
+/**
+ * 标题行(D8、K5):data.title 是标题、time 是起标题的时间;只由主会话文件产出——子会话文件里的
+ * 标题行直接跳过(D9:子会话标题不归主会话,不然会盖掉主会话自己的标题)。
+ */
 function handleSessionTitle(obj: Record<string, unknown>, s: ScanState): void {
+  if (s.isChild) return;
   const data = asRecord(obj['data']);
   const title = data !== null ? str(data['title']) : undefined;
   const ts = msOf(obj['time']);

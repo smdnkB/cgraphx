@@ -28,7 +28,7 @@ import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { resolveSessionIdFromEnv } from '../agents';
+import { resolveSessionIdFromEnv, type SessionFromEnv } from '../agents';
 import { COMMIT_GATE_MARKER } from '../commit-gate';
 import { locateDataAtRoot } from '../data-location';
 import { clearRepoLocalGitEnv, hookNotice, repairHookSnippets, resolveHooksDir } from '../git-hooks';
@@ -112,7 +112,7 @@ export async function gitCommitHook(): Promise<void> {
   const agent = fromEnv?.agent ?? null;
 
   // K16 判「跳过门禁」(spec D14):先于记提交单独算,任何一步读不出只当没跳过,绝不影响提交记录。
-  const gateSkipped = isGateSkipped(info, fromEnv !== null);
+  const gateSkipped = isGateSkipped(info, fromEnv);
 
   // 一个项目一条,各记各的:一个项目的库出错不耽误别的项目
   for (const share of sharesOf(info)) {
@@ -281,10 +281,11 @@ function isFastForward(info: GitCommitInfo): boolean {
 /**
  * K16:这笔提交是不是跳过了门禁(spec D14;跳过 = agent 带 `--no-verify` 绕过了 commit-msg 门禁)。
  * 六条全部成立才标:
- * 1. 会话环境变量认得出会话(agent 的提交;终端手动提交不标);
+ * 1. 会话环境变量认得出会话(session 非 null,agent 的提交;终端手动提交不标);
  * 2. 不是 post-merge 调起(post-merge 记的合并提交一律不判);
- * 3. commit-msg 钩子文件里有门禁片段(marker 取 commit-gate 门面)——没重装、片段没装上时
- *    没有门禁可走,不标;
+ * 3. commit-msg 钩子文件里有覆盖**本来源**的门禁片段(marker 取 commit-gate 门面,探针取
+ *    `session.sessionIdEnv`)——没重装、片段没装上时没有门禁可走;装了旧片段(没有本来源探针,
+ *    如旧片段没有 DSH_SESSION_ID)时门禁根本不会为这个来源跑,也不标;
  * 4. 这笔提交的 tree 与前台传来的门禁记号内容(GATE_TREE_ENV)不一致,没有记号也算不一致——
  *    `--no-verify` 跳过时门禁没跑,不写记号;门禁只要没打回就写(检查超时、跑不起来也写);
  * 5. 不在 cherry-pick / rebase 进行中(两者都没有 commit-msg 门禁可言);
@@ -292,11 +293,11 @@ function isFastForward(info: GitCommitInfo): boolean {
  *
  * 标记只是附加信息(spec F3):整段包在 try/catch 里,任何一步读不出 → 不标。
  */
-export function isGateSkipped(info: GitCommitInfo, isAgentCommit: boolean): boolean {
+export function isGateSkipped(info: GitCommitInfo, session: SessionFromEnv | null): boolean {
   try {
-    if (!isAgentCommit) return false;
+    if (session === null) return false;
     if (process.env[COMMIT_HOOK_ENV] === 'post-merge') return false;
-    if (!hasCommitGateSnippet(info.cwd)) return false;
+    if (!hasCommitGateSnippetFor(info.cwd, session.sessionIdEnv)) return false;
     const gateTree = (process.env[GATE_TREE_ENV] ?? '').trim();
     if (info.tree === null || info.tree === gateTree) return false;
     if (process.env[CHERRY_PICK_ENV] === '1' || process.env[REBASE_ENV] === '1') return false;
@@ -307,12 +308,20 @@ export function isGateSkipped(info: GitCommitInfo, isAgentCommit: boolean): bool
   }
 }
 
-/** commit-msg 钩子文件里有没有门禁片段:按 commit-gate 门面导出的 marker 判,不逐字依赖片段内容。不在仓库、文件不在、读不了 → 没有。 */
-function hasCommitGateSnippet(cwd: string): boolean {
+/**
+ * commit-msg 钩子文件里有没有覆盖这个会话来源的门禁片段:要求**同一行**同时带 marker 和
+ * `${<sessionIdEnv>:-}` 探针(片段的说明行和探针行都带 marker,只认 marker 会把旧片段当成
+ * 「过了门禁」)。按 commit-gate 门面导出的 marker 判,不逐字依赖片段其余内容。不在仓库、文件
+ * 不在、读不了 → 没有。
+ */
+function hasCommitGateSnippetFor(cwd: string, sessionIdEnv: string): boolean {
   const hooksDir = resolveHooksDir(cwd);
   if (hooksDir === null) return false;
+  const probe = `\${${sessionIdEnv}:-}`;
   try {
-    return fs.readFileSync(path.join(hooksDir, 'commit-msg'), 'utf8').includes(COMMIT_GATE_MARKER);
+    return fs.readFileSync(path.join(hooksDir, 'commit-msg'), 'utf8')
+      .split(/\r?\n/)
+      .some((line) => line.includes(COMMIT_GATE_MARKER) && line.includes(probe));
   } catch {
     return false;
   }

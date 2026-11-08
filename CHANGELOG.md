@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Fixed — DeepSeek commits pass the gate and are recorded to their session
+
+DeepSeek Harness exports `DSH_SESSION_ID`, and the commit-msg gate snippet now
+probes every session source instead of a fixed list, so a DeepSeek commit is
+gated like one from Claude Code or CodeBuddy and a rejected commit stops with
+the same message. The post-commit hook records the commit to that session; a
+commit made inside a sub-session keeps the sub-session's own id instead of
+being mapped to its parent. Projects that only upgraded cgraphx without
+re-running `cgraphx install` keep the old snippet: their DeepSeek commits are
+not gated, and they are not falsely marked as skipped in the timeline either.
+
+### Fixed — flow commands and session titles attach to the right task
+
+Board flow commands are now matched only by the command's first argument, and
+only when it equals the full task title, feature id or replica directory name;
+a shorter name that used to prefix-match a longer one no longer pulls the
+session into the wrong task. Skill arguments still match by first word, or by
+containing the requirement directory. DeepSeek sub-session titles are no longer
+recorded against their parent session, and the titles already stored for a
+project are recomputed once, so a sub-session title no longer overwrites the
+main session's own.
+
 ### Added — board shows versions and filters by version
 
 Tasks on the board now show the version they belong to: merged versions display

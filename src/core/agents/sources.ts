@@ -2,10 +2,10 @@
  * 只读会话来源(sources 层,plan D12):「有哪些 agent 的会话文件可以读」的统一登记处。
  *
  * 前两项由 AGENT_PROFILES 的已登记 agent 派生(claude-code、codebuddy),第三项 deepseek 是
- * 独立的只读来源——只读它的会话文件进时间线,不进安装器、部署配置与提交门禁,所以没有
- * AgentProfile、AGENT_PROFILES 一行不动。补录与重建(timeline/ingest/)只经 listSessionSources()
- * 枚举会话文件,不再各自拼「描述 + 根目录 + 列举」;claude/codebuddy 的目录布局列举
- * (含 subagents/ 递归)也搬到了这里——agents 不再伸手进 timeline 的内部模块。
+ * 独立的只读来源——只读它的会话文件进时间线,不进安装器 / 副本;会话 id 进提交归属、门禁与会话
+ * 提示,所以没有 AgentProfile、AGENT_PROFILES 一行不动。补录与重建(timeline/ingest/)只经
+ * listSessionSources() 枚举会话文件,不再各自拼「描述 + 根目录 + 列举」;claude/codebuddy 的目录
+ * 布局列举(含 subagents/ 递归)也搬到了这里——agents 不再伸手进 timeline 的内部模块。
  */
 
 import * as fs from 'node:fs';
@@ -136,6 +136,7 @@ const DEEPSEEK_SOURCE: SessionSource = {
     return override ? path.join(override, 'sessions') : path.join(os.homedir(), '.dsh', 'sessions');
   },
   listFiles: listDeepSeekSessionFiles,
+  sessionIdEnv: 'DSH_SESSION_ID',
   sessionReader: 'deepseek-session',
   // zstdDecompressSync 是 Node 22.15+ 才有的实验性 API;engines 下限不抬(全局约束),读不了就跳过并提示
   unavailableReason: () =>
@@ -151,6 +152,7 @@ function profileSource(profile: AgentProfile): SessionSource {
     displayName: profile.displayName,
     sessionsRoot: () => agentSessionsRoot(profile),
     listFiles: listSessionFiles,
+    sessionIdEnv: profile.sessionIdEnv,
     sessionReader: profile.sessionReader,
     unavailableReason: () => null,
   };

@@ -12,7 +12,7 @@ export type SessionReaderId = (typeof SESSION_READER_IDS)[number];
 
 /**
  * 会话来源 id:已登记 agent 之外,还有只读会话来源(如 deepseek——只读它的会话文件进时间线,
- * 不进安装器、部署配置与提交门禁,所以不是 AgentId、没有 AgentProfile,D12)。
+ * 不进安装器 / 副本;会话 id 进提交归属、门禁与会话提示,所以不是 AgentId、没有 AgentProfile,D12)。
  */
 export type SessionSourceId = AgentId | 'deepseek';
 
@@ -24,6 +24,8 @@ export interface SessionSource {
   sessionsRoot(): string | null;
   /** 列出根目录下全部会话文件(绝对路径,升序)。 */
   listFiles(root: string): string[];
+  /** 会话 id 环境变量名(提交归属、门禁片段与提示按它取值);来源不提供时为 null。 */
+  readonly sessionIdEnv: string | null;
   /** 会话文件读取器标识。 */
   readonly sessionReader: SessionReaderId;
   /** 本机读不了时的提示(如 Node 没有 zstd API);能读 → null。 */
@@ -61,4 +63,5 @@ export interface AgentProfile {
   readonly assetReplacements: ReadonlyArray<readonly [from: string, to: string]>;
 }
 
-export interface SessionFromEnv { sessionId: string; agent: AgentId }
+/** 从环境变量解析出的会话:agent 是会话来源 id(含只读来源),sessionIdEnv 是取到值的变量名。 */
+export interface SessionFromEnv { sessionId: string; agent: SessionSourceId; sessionIdEnv: string }

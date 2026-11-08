@@ -6,7 +6,8 @@
  * 流程:
  *   1. 开关关闭 → skipped-disabled;这个目录的旧数据还没并过(K25)→ skipped-legacy,都不碰库;
  *      这个项目还没重建过(timeline_meta 无 rebuilt_at)→ 先全量重建(F6,见 rebuild.ts)再增量;
- *      重建之后、增量之前,老会话标题回填一次(D9,见 backfillSessionTitles)
+ *      重建之后、增量之前,老会话标题回填一次(D9,见 backfillSessionTitles),再把 DeepSeek 已有
+ *      标题按新规则重算一次(D10,见 refreshDeepSeekSessionTitles)
  *   2. 经 agents 门面的 listSessionSources() 列出各来源会话根目录下的全部会话文件(claude-code、
  *      codebuddy、deepseek;读不了的来源跳过并提示一次,D12);路径升序:同一会话的主文件排在它的
  *      subagents/ 文件前面,先到先写的 session_head 才保得住「会话开始取本会话第一条消息」;大小和
@@ -70,7 +71,7 @@ export interface TimelineSyncOutcome {
   reason?: string;
 }
 
-/** 门面入口(C-4)。内部顺序:开关关闭 → 旧数据没并过 → F6 重建(T-4,只一次)→ 老会话标题回填(D9,只一次)→ 增量补录。 */
+/** 门面入口(C-4)。内部顺序:开关关闭 → 旧数据没并过 → F6 重建(T-4,只一次)→ 老会话标题回填(D9,只一次)→ DeepSeek 已有标题重算(D10,只一次)→ 增量补录。 */
 export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyncOutcome> {
   try {
     // F1 ④:开关关了不补录、不碰库,也不提示
@@ -88,8 +89,11 @@ export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyn
     // 不影响随后的增量与查询。重建自己从头读过全部文件(commitRebuild 已写记号),这里自然跳过;
     // 失败的提示随本次结果一起出
     const backfillNotices = await backfillSessionTitles(start);
+    // D10 已有标题重算:老补录把 DeepSeek 子会话标题也归给了主会话,读取器改完后按新规则重算一次;
+    // 同样拿不到锁静默下次再来,失败的提示随本次结果一起出
+    const refreshNotices = await refreshDeepSeekSessionTitles(start);
     const outcome = await ingestIncremental(start);
-    const merged = { ...outcome, notices: [...backfillNotices, ...outcome.notices] };
+    const merged = { ...outcome, notices: [...backfillNotices, ...refreshNotices, ...outcome.notices] };
     if (rebuilt === null || rebuilt.status === 'mark-only') return merged;
     // 重建的汇总在前(F6 图「记下重建过了、输出重建了多少」);增量紧随其后几乎总是空趟(偏移刚推进
     // 到位),就算有也是重建期间新追加的内容,数字直接相加
@@ -130,6 +134,13 @@ export function describeSyncOutcome(outcome: TimelineSyncOutcome): string[] {
 /** timeline_meta 里「老会话标题回填过了」的键(D9);值 = 写入时间(ISO)。重建在 commitRebuild 的
  *  并库短事务里写(重建从头读过全部文件,不再回填),回填在 backfillSessionTitles 写。 */
 export const SESSION_TITLES_AT_KEY = 'session_titles_at';
+
+/** timeline_meta 里「DeepSeek 已有标题按新规则重算过了」的键(D10);值 = 写入时间(ISO)。重建的并库
+ *  短事务与回填都会顺手写上(它们已按新规则写过标题),重算自己在 refreshDeepSeekSessionTitles 写。 */
+export const SESSION_TITLES_REFRESH_AT_KEY = 'session_titles_refresh_at';
+
+/** 标题重算只跑这一个来源(D10):「子会话不产标题」的判据只在 deepseek 读取器里。 */
+const TITLE_REFRESH_SOURCE_ID = 'deepseek';
 
 /** timeline_meta 读一个键;没有 → null。 */
 export function readMetaValue(db: SqliteDatabase, key: string): string | null {
@@ -186,6 +197,9 @@ async function backfillSessionTitles(start: string): Promise<string[]> {
       }
     }
     writeMetaNow(db, SESSION_TITLES_AT_KEY);
+    // 回填已按新规则读过一遍标题(deepseek 子会话的标题本来就不算),顺手写 D10 的重算记号,
+    // 免得随后的重算把同一批文件再读一遍
+    writeMetaNow(db, SESSION_TITLES_REFRESH_AT_KEY);
     return [];
   } catch (err) {
     // 回填失败不影响查询:记号没写,下一趟重试;提示一次让人看得见
@@ -208,6 +222,85 @@ async function readTitleFacts(reader: SessionFactsReader, file: string): Promise
     return titleUpserts(result.facts);
   } catch {
     return [];
+  }
+}
+
+/** 重算时一次 DELETE 带几个会话编号(低于 SQLite 的参数上限;covered 可能上千)。 */
+const TITLE_DELETE_BATCH = 500;
+
+/**
+ * DeepSeek 已有标题一次性重算(D10):装上这版之前的补录把子会话标题也归给了主会话,子会话标题
+ * 可能盖掉了主会话自己的标题。读取器改完后,把 sessions.db 里本项目已归属的 deepseek 文件从偏移 0
+ * 重读一遍,只取标题事实:先删这些文件覆盖到的会话(covered,按会话头算)的标题行,再按新规则
+ * 重写——没有文件的旧会话一行不动,读不出的文件跳过、旧行保留。一个项目只算一次(记号
+ * session_titles_refresh_at);和回填 / 重建同一把 ingest.lock,拿不到就静默下次再来。
+ * deepseek 来源读不了(旧 Node 没有 zstd)时不写记号,等能读时再算(D12)。
+ * 失败提示一次返回给调用方(记号没写,下一趟会重试),不静默吞掉。
+ */
+async function refreshDeepSeekSessionTitles(start: string): Promise<string[]> {
+  const root = findProjectRoot(start);
+  if (root === null) return [];
+  const loc = locateDataAtRoot(root);
+  // 同回填的静默分支:项目目录不在就没有可重算的库;库文件不在 = 还没记过任何数据,也不建库
+  if (loc.mode !== 'project' || loc.dataDir === null || loc.projectDirName === null) return [];
+  const dataDir = loc.dataDir;
+  const dbPath = path.join(dataDir, DATABASE_FILENAME);
+  if (!fs.existsSync(dbPath)) return [];
+  const sessionIndex = openSessionIndex();
+  let conn: DatabaseConnection | null = null;
+  try {
+    // 同回填 / 重建一把锁:拿不到(别的进程在补录)就下次再来
+    if (!acquireIngestLock(dataDir)) return [];
+    conn = DatabaseConnection.open(dbPath);
+    const db = conn.getDb();
+    ensureTimelineSchema(db); // 旧库补上标题表(幂等)
+    // 等锁期间可能已被别的进程算过:重查一次记号
+    if (readMetaValue(db, SESSION_TITLES_REFRESH_AT_KEY) !== null) return [];
+    // 只算 deepseek:别家读取器的标题规则没变;来源读不了就不写记号,等能读时再算
+    const source = listSessionSources().find((s) => s.id === TITLE_REFRESH_SOURCE_ID);
+    if (source === undefined || source.unavailableReason() !== null) return [];
+    const reader = sessionFactsReader(source.sessionReader);
+    // 收集阶段只读不写:全部读完再一个事务里删 + 写,中途失败不留半套标题
+    const covered = new Set<string>();
+    const titles: SessionTitleUpsert[] = [];
+    for (const row of sessionIndex.listSessionFiles(source.id)) {
+      if (row.project_dir !== loc.projectDirName) continue;
+      try {
+        const result = await reader(row.path, 0);
+        for (const fact of result.facts) {
+          if (fact.kind === 'session_head') covered.add(fact.sessionId);
+        }
+        titles.push(...titleUpserts(result.facts));
+      } catch {
+        // 单文件读失败只跳过它:这个会话的旧标题行保留(D10)
+      }
+    }
+    const ids = [...covered];
+    // 这个项目没有 deepseek 会话(最常见)时不开写事务,只写记号
+    if (ids.length > 0 || titles.length > 0) {
+      db.transaction(() => {
+        // 只删读得到的会话(covered),不删全表:文件已不在的旧会话标题保留
+        for (let i = 0; i < ids.length; i += TITLE_DELETE_BATCH) {
+          const batch = ids.slice(i, i + TITLE_DELETE_BATCH);
+          const marks = batch.map(() => '?').join(', ');
+          db.prepare(`DELETE FROM timeline_session_titles WHERE session_id IN (${marks})`).run(...batch);
+        }
+        for (const title of titles) upsertSessionTitle(db, title);
+      })();
+    }
+    writeMetaNow(db, SESSION_TITLES_REFRESH_AT_KEY);
+    return [];
+  } catch (err) {
+    // 重算失败不影响查询:记号没写,下一趟重试;提示一次让人看得见
+    return [`会话标题重算失败:${shortReason(err)},下一趟会重试`];
+  } finally {
+    try {
+      conn?.close();
+    } catch {
+      // 关不上不影响结果
+    }
+    releaseIngestLock(dataDir); // 只删本进程拿的锁,没拿到时是 no-op
+    sessionIndex.close();
   }
 }
 
