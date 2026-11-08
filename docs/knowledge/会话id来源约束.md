@@ -8,6 +8,7 @@ concepts:
 aliases:
   - CLAUDE_CODE_SESSION_ID
   - CODEBUDDY_SESSION_ID
+  - DSH_SESSION_ID
   - session_id
   - 会话 id
 tags:
@@ -16,6 +17,7 @@ tags:
   - commit-gate
   - claude-code
   - codebuddy
+  - deepseek
   - 隐式约束
 status: active
 source_type: work_context
@@ -33,7 +35,7 @@ related_documents:
   - docs/knowledge/git提交记录须在钩子当下固定hash.md
   - docs/knowledge/agent适配.md
 created: 2026-10-14
-updated: 2026-11-06
+updated: 2026-11-08
 ---
 
 # 会话 id 来源约束
@@ -52,6 +54,8 @@ cgraphx 获取 agent 会话 id(session_id)的来源,2026-11-06 起**主力是会
 
 两个 agent 嵌套启动时,两个变量会同时存在,这时按 agent 登记顺序取 Claude Code 的变量。
 
+会话变量名单只来自 agent 描述的 `sessionIdEnv`,只读会话来源(DeepSeek)不在里面:DeepSeek 注入的 `DSH_SESSION_ID` 没被认出,它的提交当成人手动提交——不过门禁、不归属会话(2026-11-08 查明)。
+
 ## Context
 
 hook 时代,普通 CLI 进程和 git 钩子没有 stdin payload,只能读宿主注入的环境变量;时间线事件则由 hook 从 payload 拿。hook 退役后,事件侧的会话 id 改从会话文件行内取(补录解析),环境变量只剩提交归属、门禁与提示三处消费方。
@@ -64,6 +68,7 @@ hook 时代,普通 CLI 进程和 git 钩子没有 stdin payload,只能读宿主�
 - 2026-10-15 在 CodeBuddy 2.167.0 里实测:
   - Bash 子进程环境里有 `CODEBUDDY_SESSION_ID`,值等于会话文件行内的 session_id(注意:子 agent 文件行内是**独立子会话编号**,与主会话不同;时间线按文件布局把子 agent 事实归主会话,见「开发时间线工具事件契约」)。
   - CodeBuddy 还会把 `CLAUDE_SESSION_ID` 设成同一个值。注意它不是 `CLAUDE_CODE_SESSION_ID`,cgraphx 不读它。
+- 2026-11-08 查明(读 DeepSeek Harness 源码,未实测取值):DeepSeek 的每次 shell 调用都带 `DSH_SESSION_ID`(它的 `shell-env` 包把它列为保留的内置变量)。2.0.15 里 DeepSeek 在副本里自己跑了 8 次 `git commit`,提交记录全是未归属、没过门禁。值和会话文件编号(`session-…`)是否一致还没核对。
 - 用户在自己的终端里运行命令或 commit 时,两个变量都没有。
 - 在 Claude Code 会话的 Bash 里启动 CodeBuddy 时,CodeBuddy 会继承 Claude 的 `CLAUDE_CODE_SESSION_ID`,这时两个变量同时存在。
 - 补录侧的归属不用会话 id:会话文件按 start_cwd(开始目录)认项目,认过缓存在 `~/.cgraphx/sessions.db` 的 `start_dirs`,与 session_id 无关。
@@ -92,3 +97,4 @@ hook 时代,普通 CLI 进程和 git 钩子没有 stdin payload,只能读宿主�
 
 - `claude --resume` 恢复会话后,session_id 和这个环境变量是否沿用原值,还没有实测。CodeBuddy 的 `--resume` 同样没有实测。
 - 两个 agent 嵌套启动时按登记顺序取值,会取到外层 Claude Code 的会话。如果以后需要正确识别内层 agent,要另找判别依据。
+- `DSH_SESSION_ID` 的值和 DeepSeek 会话文件编号是否同一写法,接进门禁前要实测。
