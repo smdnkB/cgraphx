@@ -53,8 +53,6 @@ export interface AgentProfile {
   readonly sessionsDirEnv: string | null;
   /** 会话文件读取器标识。 */
   readonly sessionReader: SessionReaderId;
-  /** 用于 PATH 检测的 CLI 命令名。 */
-  readonly cliCommands: readonly string[];
   readonly capabilities: {
     readonly statusLine: boolean;
     readonly contextMonitor: boolean;

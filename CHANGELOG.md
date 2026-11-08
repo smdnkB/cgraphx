@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added — board shows versions and filters by version
+
+Tasks on the board now show the version they belong to: merged versions display
+as `2.0.14`, unreleased ones as `2.0.15 未发`, a version planned from a replica's
+base branch as `计划 2.0.15`, and one that never made it as
+`计划 2.0.14 · 没赶上`. A version dropdown in the header filters the task list
+and shows how many tasks each version has; when a version is selected, tasks
+with no local sessions are listed too. Versions are computed from merge records
+in each version branch and from replica base branches — no new records are
+written.
+
 ### Changed — install keeps only the selected agents
 
 `cgraphx install` now leaves exactly the agents you selected. An agent that

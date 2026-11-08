@@ -8,6 +8,18 @@ export const VERSION_BRANCH_PATTERN: RegExp = /^dev\/[0-9]+\.[0-9]+\.[0-9]+$/;
 /** 提交拦截片段每行都带的标记:重装时按它先删旧行,卸载时按它删行。 */
 export const RELEASE_GUARD_MARKER = '# cgraphx-release-guard';
 
+/** 版本 tag(spec K17、D16):`v<主版本>.<次版本>.<修订号>`,如 v2.0.14。 */
+export const VERSION_TAG_PATTERN: RegExp = /^v[0-9]+\.[0-9]+\.[0-9]+$/;
+
+/**
+ * 合入说明(spec D17):`合入需求：<标题>` / `合入需求：<标题>(第 N 次)`。冒号是全角「：」,括号是半角,
+ * 与 dev-merge 数「第 N 次」用的 grep 一致;第一组即标题。
+ */
+export const MERGE_SUBJECT_PATTERN: RegExp = /^合入需求：(.+?)(?:\(第 [0-9]+ 次\))?$/;
+
+/** 读版本历史的 git 输出上限:schema 可能上万条提交,execFileSync 默认 1MB 不够(C-6)。 */
+export const VERSION_HISTORY_MAX_BUFFER = 64 * 1024 * 1024;
+
 /**
  * commit-msg 钩子片段(spec D12),三行逐字,紧跟钩子文件的 shebang 插入。
  *
