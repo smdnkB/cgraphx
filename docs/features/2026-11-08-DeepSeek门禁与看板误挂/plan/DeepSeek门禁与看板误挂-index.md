@@ -115,6 +115,7 @@ spec 没有标 🔒 的难回头决策(删掉子会话映射后),这里只核对
 - `git-commit-hook-env.test.ts` 的 `installGateSnippet` 假片段改成含 `${CLAUDE_CODE_SESSION_ID:-}` 的一行;`isGateSkipped` 调用传 `SessionFromEnv` 或 null。
 - `deepseek-session.test.ts` A3 断言子会话 facts 里没有 `session_title`,工具 / 会话头仍归 parent。
 - `board/match.test.ts` C5 的 Skill 参数改成以名字开头(`订单导出 按 spec 写计划`);不新增用例。
+- 会自己造 `~/.dsh` 会话文件的测试(`__tests__/core/timeline/ingest-sources.test.ts`)把 `DSH_HOME` 指到临时 HOME 的 `.dsh` 并在 `afterEach` 还原;否则在 DeepSeek 会话里跑测试会读真实 `~/.dsh`、B1/B9 全空。
 - 不新增测试文件 / 用例;新行为验收归 `/unit-spec` → `/unit-code`。
 
 ### C-9 文档(T-6)
@@ -167,13 +168,14 @@ spec 没有标 🔒 的难回头决策(删掉子会话映射后),这里只核对
 
 全部任务完成后,在仓库根目录跑:
 
-1. `npm test` — 期望所有测试文件通过,没有失败;重点看 `__tests__/core/board/match.test.ts`、`__tests__/core/timeline/deepseek-session.test.ts`、`__tests__/core/timeline/session-titles.test.ts`、`__tests__/core/timeline/git-commit-hook-env.test.ts`、`__tests__/core/session-notices.test.ts`、`__tests__/cli/installer/deepseek-zero-change.test.ts`。
-2. `npm run build` — `tsc` 通过,`node scripts/copy-assets.cjs` 正常,退出码 0。
+1. `npm run build` — 先构建:`tsc` 通过,`node scripts/copy-assets.cjs` 正常,退出码 0;`__tests__/core/dbquery/cli.test.ts` 等要 spawn `dist/cli/index.js`,没有 dist 会整组红。
+2. `npm test` — 期望所有测试文件通过,没有失败;重点看 `__tests__/core/board/match.test.ts`、`__tests__/core/timeline/deepseek-session.test.ts`、`__tests__/core/timeline/session-titles.test.ts`、`__tests__/core/timeline/git-commit-hook-env.test.ts`、`__tests__/core/session-notices.test.ts`、`__tests__/cli/installer/deepseek-zero-change.test.ts`。
 3. `cgraphx docs validate docs/knowledge/会话id来源约束.md` — 输出合法 / valid。
 4. `cgraphx docs validate docs/knowledge/agent适配.md` — 同上。
 5. `cgraphx docs validate docs/knowledge/开发时间线工具事件契约.md` — 同上。
-6. `cgraphx docs index` — 重建本地知识库索引,退出码 0。
-7. `git status --short` — 只剩本次改动;任务提交后应干净。
+6. `cgraphx docs validate docs/knowledge/版本分支.md` — 同上。
+7. `cgraphx docs index` — 重建本地知识库索引,退出码 0。
+8. `git status --short` — 只剩本次改动;任务提交后应干净。
 
 ## 允许局部适配
 
