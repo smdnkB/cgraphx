@@ -78,32 +78,44 @@ function parseFormattedCommits(output: string | null): FormattedCommit[] {
   return commits;
 }
 
+/** readSegment 的结果:ok 为 false 是 git 命令失败(整份历史按空返回);segment 为 null 是和主干没有共同历史。 */
+type SegmentRead = { ok: true; segment: VersionSegment | null } | { ok: false };
+
 /**
  * 读一个版本分支自己那一段(D16、D17):从末端沿第一父往回走,遇到第一个主干第一父链上的提交 B 停下
  * (B 不算进这一段);走过的是 firstParent,`rev-list <分支> ^B` 是这一段的全部提交(D18 用),
  * 段内第一父链上「合入需求：」的合并说明取出标题、去重保留首次出现顺序。
  *
- * 和主干没有共同历史(一路没遇到主干上的提交)→ null,这个分支不出 segment。
+ * 和主干没有共同历史(一路没遇到主干上的提交)→ segment 为 null,这个分支不出 segment;任一 git
+ * 命令失败 → ok 为 false,调用方按 C-1 返回空历史。
  */
 function readSegment(
   dir: string,
   branch: string,
   mainFirstParent: ReadonlySet<string>,
-): VersionSegment | null {
+): SegmentRead {
+  const walked = runGit(dir, ['rev-list', '--first-parent', branch]);
+  if (walked === null) return { ok: false };
   let base: string | null = null;
-  for (const hash of outputLines(runGit(dir, ['rev-list', '--first-parent', branch]))) {
+  for (const hash of outputLines(walked)) {
     if (mainFirstParent.has(hash)) {
       base = hash;
       break;
     }
   }
-  if (base === null) return null;
+  if (base === null) return { ok: true, segment: null };
 
-  const formatted = parseFormattedCommits(
-    runGit(dir, ['rev-list', '--first-parent', '--format=%H %P%x09%s', branch, `^${base}`]),
+  const formattedOutput = runGit(
+    dir,
+    ['rev-list', '--first-parent', '--format=%H %P%x09%s', branch, `^${base}`],
   );
+  if (formattedOutput === null) return { ok: false };
+  const formatted = parseFormattedCommits(formattedOutput);
+
+  const commitsOutput = runGit(dir, ['rev-list', branch, `^${base}`]);
+  if (commitsOutput === null) return { ok: false };
   const firstParent = new Set(formatted.map((commit) => commit.hash));
-  const commits = new Set(outputLines(runGit(dir, ['rev-list', branch, `^${base}`])));
+  const commits = new Set(outputLines(commitsOutput));
 
   const mergedTitles: string[] = [];
   const seenTitles = new Set<string>();
@@ -116,11 +128,14 @@ function readSegment(
   }
 
   return {
-    version: branch.slice('dev/'.length),
-    branch,
-    firstParent,
-    commits,
-    mergedTitles,
+    ok: true,
+    segment: {
+      version: branch.slice('dev/'.length),
+      branch,
+      firstParent,
+      commits,
+      mergedTitles,
+    },
   };
 }
 
@@ -134,23 +149,25 @@ export function readVersionHistory(dir: string): VersionHistory {
   const main = mainRef(dir);
   if (main === null) return { segments: [], releasedVersions: [] };
 
-  const mainFirstParent = new Set(
-    outputLines(runGit(dir, ['rev-list', '--first-parent', main])),
-  );
+  const mainOutput = runGit(dir, ['rev-list', '--first-parent', main]);
+  if (mainOutput === null) return { segments: [], releasedVersions: [] };
+  const mainFirstParent = new Set(outputLines(mainOutput));
   if (mainFirstParent.size === 0) return { segments: [], releasedVersions: [] };
 
+  const branchesOutput = runGit(dir, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/dev/']);
+  if (branchesOutput === null) return { segments: [], releasedVersions: [] };
+
   const segments: VersionSegment[] = [];
-  for (const branch of outputLines(
-    runGit(dir, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/dev/']),
-  )) {
+  for (const branch of outputLines(branchesOutput)) {
     if (!VERSION_BRANCH_PATTERN.test(branch)) continue;
-    const segment = readSegment(dir, branch, mainFirstParent);
-    if (segment !== null) segments.push(segment);
+    const result = readSegment(dir, branch, mainFirstParent);
+    if (!result.ok) return { segments: [], releasedVersions: [] }; // C-1:任一 git 失败 → 空历史
+    if (result.segment !== null) segments.push(result.segment);
   }
 
-  const releasedVersions = outputLines(
-    runGit(dir, ['for-each-ref', '--format=%(refname:short)', 'refs/tags/']),
-  )
+  const tagsOutput = runGit(dir, ['for-each-ref', '--format=%(refname:short)', 'refs/tags/']);
+  if (tagsOutput === null) return { segments: [], releasedVersions: [] };
+  const releasedVersions = outputLines(tagsOutput)
     .filter((tag) => VERSION_TAG_PATTERN.test(tag))
     .map((tag) => tag.slice(1));
 
