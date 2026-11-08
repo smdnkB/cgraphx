@@ -25,8 +25,12 @@ function frame(lines: unknown[]): Buffer {
 describe.skipIf(process.platform === 'win32')('DeepSeek read-only source through ingestion (spec D12, D13)', () => {
   let root: string;
   let dataDir: string;
+  /** 测试可能跑在 DeepSeek 会话里(DSH_HOME 指向真实 ~/.dsh):本文件只动临时 HOME 下的 .dsh。 */
+  let savedDshHome: string | undefined;
 
   beforeEach(() => {
+    savedDshHome = process.env.DSH_HOME;
+    process.env.DSH_HOME = path.join(os.homedir(), '.dsh');
     fs.rmSync(path.join(os.homedir(), '.cgraphx'), { recursive: true, force: true });
     fs.rmSync(path.join(os.homedir(), '.dsh'), { recursive: true, force: true });
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cgx-ds-ingest-')));
@@ -38,6 +42,8 @@ describe.skipIf(process.platform === 'win32')('DeepSeek read-only source through
   });
 
   afterEach(() => {
+    if (savedDshHome === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = savedDshHome;
     fs.rmSync(root, { recursive: true, force: true });
   });
 
