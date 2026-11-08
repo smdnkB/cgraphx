@@ -1,13 +1,15 @@
 /**
  * 看板数据装配(2026-11-06-agent看板 plan C-9、C-10、C-12、C-13;spec D5、D6、D7、D10)
  *
- * 只经 project、timeline、features、replica、agents 五个门面与基础层取数(D1 🔒)。三件事:
+ * 只经 project、timeline、features、replica、agents、release 六个门面与基础层取数(D1 🔒、D15)。
+ * 四件事:
  *
  * - enumerateBoardGroups:project 门面 listProjects 按项目名分组(C-9),目录取还在的根经 replicaLinkOf
  *   换成主目录后去重(「在用主目录」= 组的 dirs;在副本里启动和在主目录启动看到的一样);
  * - syncProjects:逐组串行补录(C-9 取第一个在用主目录传 ensureTimelineUpToDate),供 CLI 启动与刷新共用;
- * - computeBoardData:纯读装配——任务认定(K1、K13)、认任务(C-11 的 match.ts)、时间窗与列表口径
- *   (K2、K3、K6、K12、K14)、标题(K5)、fileExists(D10)、C-13 提示映射与排序,产出 C-6 的 BoardData。
+ * - computeBoardData:纯读装配——任务认定(K1、K13)、认任务(C-11 的 match.ts)、认版本(versions.ts,
+ *   同一目录只读一次 D20)、时间窗与列表口径(K2、K3、K6、K12、K14、K21、D21)、标题(K5)、
+ *   fileExists(D10)、C-13 提示映射与排序,产出 C-6 的 BoardData。
  *
  * 看板除补录外不写任何东西:项目库按 dataDir 只读打开(board-read),sessions.db 存在才只读打开。
  */
@@ -18,6 +20,7 @@ import * as path from 'node:path';
 import { listSessionSources } from '../agents';
 import { listFeatureFiles, listFeatures, parseFeatureId } from '../features';
 import { listProjects } from '../project';
+import { readVersionHistory, resolveBranchTips, type VersionHistory } from '../release';
 import { listReplicas, replicaLinkOf, type ReplicaEntry } from '../replica';
 import { createRootMatcher } from '../root-match';
 import { DatabaseConnection } from '../db';
@@ -45,6 +48,7 @@ import type {
   BoardTask,
   TaskSessionMatch,
 } from './types';
+import { assignTaskVersions } from './versions';
 
 // ─── 项目枚举与分组(C-9、K12)──────────────────────────────────────────────
 
@@ -241,6 +245,54 @@ function collectTasks(group: BoardProjectGroup): { tasks: TaskDef[]; replicas: R
 
 // ─── 装配(C-6、C-12)────────────────────────────────────────────────────────
 
+/** D20:同一个目录(realpath)的版本历史与需求分支末端只读一次,指向同一目录的几个项目组共用。 */
+interface VersionInfo {
+  history: VersionHistory;
+  branchTips: Map<string, string>;
+  /** 已经查过的分支名(不管查没查到);同键的组只补查新出现的 */
+  lookedUp: Set<string>;
+}
+
+/** 空的版本历史(目录全不在、不是 git 仓库或 git 读不出来时用)。 */
+function emptyVersionHistory(): VersionHistory {
+  return { segments: [], releasedVersions: [] };
+}
+
+/**
+ * D20:按项目组第一个在用主目录的 realpath 缓存版本历史与分支末端。第一次遇到这个键读一次版本历史、
+ * 查一次这一组的全部分支名;后面同键的组只把还没查过的分支名补查一次,结果并进缓存。dirs 为空
+ * (目录全不在)的组不读 git。
+ */
+function versionInfoFor(
+  group: BoardProjectGroup,
+  replicas: readonly ReplicaEntry[],
+  cache: Map<string, VersionInfo>,
+): { history: VersionHistory; branchTips: ReadonlyMap<string, string> } {
+  const dir = group.dirs[0];
+  if (dir === undefined) return { history: emptyVersionHistory(), branchTips: new Map() };
+  let key: string;
+  try {
+    key = fs.realpathSync(dir);
+  } catch {
+    key = dir;
+  }
+
+  let info = cache.get(key);
+  if (info === undefined) {
+    info = { history: readVersionHistory(dir), branchTips: new Map(), lookedUp: new Set() };
+    cache.set(key, info);
+  }
+
+  const fresh = [...new Set(replicas.map((replica) => replica.branch))].filter(
+    (branch) => !info.lookedUp.has(branch),
+  );
+  if (fresh.length > 0) {
+    for (const branch of fresh) info.lookedUp.add(branch);
+    for (const [branch, tip] of resolveBranchTips(dir, fresh)) info.branchTips.set(branch, tip);
+  }
+  return { history: info.history, branchTips: info.branchTips };
+}
+
 /** 来源 id → 显示名与顺序(agents 门面的登记顺序:claude-code、codebuddy、deepseek)。 */
 interface AgentDisplayTable {
   names: Map<string, string>;
@@ -327,17 +379,22 @@ export function computeBoardData(syncs?: readonly BoardSyncItem[]): BoardData {
     syncs ?? enumerateBoardGroups().map((group) => ({ group, outcome: null }));
   const fileExists = readSessionFileExistence();
   const table = agentDisplayTable();
-  const projects = items.map(({ group, outcome }) => assembleProject(group, outcome, fileExists, table));
+  // D20:同一目录的几个项目组共用一份版本历史与分支末端
+  const versionCache = new Map<string, VersionInfo>();
+  const projects = items.map(({ group, outcome }) =>
+    assembleProject(group, outcome, fileExists, table, versionCache),
+  );
   projects.sort(byProjectActivityDesc);
   return { projects };
 }
 
-/** 一个项目组的装配:读数据 → 认任务 → 时间窗与列表口径 → 出 BoardProject(C-6 的形状)。 */
+/** 一个项目组的装配:读数据 → 认任务 → 认版本 → 时间窗与列表口径 → 出 BoardProject(C-6 的形状)。 */
 function assembleProject(
   group: BoardProjectGroup,
   outcome: TimelineSyncOutcome | null,
   fileExists: Map<string, boolean>,
   table: AgentDisplayTable,
+  versionCache: Map<string, VersionInfo>,
 ): BoardProject {
   // F1 ④⑤:目录全不在用 C-9 那句(C-13);其余按补录状态映射(C-13),没补录过为 null
   const notice =
@@ -350,8 +407,25 @@ function assembleProject(
   const data = mergeBoardTimelineData(group.dataDirs);
   const { tasks, replicas } = collectTasks(group);
   if (tasks.length === 0 && data.sessions.length === 0) {
-    return { name: group.name, dirs: group.dirs, notice, tasks: [], older: [], unsorted: [] };
+    return {
+      name: group.name,
+      dirs: group.dirs,
+      notice,
+      tasks: [],
+      older: [],
+      unsorted: [],
+      noSession: [],
+    };
   }
+
+  // F5、D21:全部 K1 任务都认版本(和会话有没有挂上无关);本机没挂上会话但有版本的进 noSession
+  const versionInfo = versionInfoFor(group, replicas, versionCache);
+  const versionsByTask = assignTaskVersions({
+    tasks: tasks.map((task) => ({ featureId: task.featureId, title: task.title })),
+    replicas,
+    history: versionInfo.history,
+    branchTips: versionInfo.branchTips,
+  });
 
   const match = matchSessionsToTasks({
     data,
@@ -410,9 +484,27 @@ function assembleProject(
   // 定挂优先、没有定挂取可能相关;最近活动在 30 天内进 tasks,其余进 older(页面点「全部」才显示)
   const now = Date.now();
   const allTasks: BoardTask[] = [];
+  const noSession: BoardTask[] = [];
   for (const def of tasks) {
     const hits = match.byTask.get(def.featureId) ?? [];
-    if (hits.length === 0) continue;
+    const versions = versionsByTask.get(def.featureId) ?? [];
+    if (hits.length === 0) {
+      // K23、D21:本机没挂上会话又有版本的任务单独放;没会话又无版本的照旧不要
+      if (versions.length === 0) continue;
+      noSession.push({
+        featureId: def.featureId,
+        title: def.title,
+        stage: def.stage,
+        fixedCount: 0,
+        maybeCount: 0,
+        agents: [],
+        lastActiveAt: null,
+        fixed: [],
+        maybe: [],
+        versions,
+      });
+      continue;
+    }
     const fixed = hits.filter((h) => h.fixed).sort(hitsByToDesc);
     const maybe = hits.filter((h) => !h.fixed).sort(hitsByToDesc);
     let lastActiveAt: string | null = null;
@@ -429,8 +521,10 @@ function assembleProject(
       lastActiveAt,
       fixed: fixed.map(toSession),
       maybe: maybe.map(toSession),
+      versions,
     });
   }
+  noSession.sort((a, b) => a.title.localeCompare(b.title, 'zh'));
   const cutoff = now - TASK_ACTIVE_WINDOW_MS;
   const tasks30d: BoardTask[] = [];
   const older: BoardTask[] = [];
@@ -461,5 +555,5 @@ function assembleProject(
     })
     .sort(sessionsByToDesc);
 
-  return { name: group.name, dirs: group.dirs, notice, tasks: tasks30d, older, unsorted };
+  return { name: group.name, dirs: group.dirs, notice, tasks: tasks30d, older, unsorted, noSession };
 }

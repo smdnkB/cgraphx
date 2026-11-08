@@ -4,7 +4,8 @@
   布局与交互照需求目录的 agent看板-线框-v2.html:左右分栏(左任务右会话),默认选中全局最近活动的任务,
   点左栏行右栏即换;「全部/收起」切换超过 30 天的任务;「刷新」重补录一次。
   一屏高、左右栏各自滚动;项目头可折叠(状态记在本浏览器 localStorage,读写失败照常显示);
-  右栏顶部是任务摘要卡(阶段、最近活动、会话数、来源),会话按卡片列出。 -->
+  右栏顶部是任务摘要卡(阶段、最近活动、会话数、来源),会话按卡片列出。
+  页头版本下拉与过滤(带任务数、记住选择),对应 spec D22–D24。 -->
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -20,6 +21,7 @@
   header { flex: none; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 16px; background: #fff; border-bottom: 1px solid #d0d7de; }
   header h1 { font-size: 15px; margin: 0; }
   .actions { display: flex; gap: 8px; }
+  select { font: inherit; font-size: 13px; padding: 2px 6px; border: 1px solid #8c959f; background: #fff; color: #24292f; border-radius: 6px; }
   button { font: inherit; font-size: 13px; padding: 3px 12px; border: 1px solid #8c959f; background: #fff; color: #24292f; border-radius: 6px; cursor: pointer; }
   button:hover:not(:disabled) { background: #f3f4f6; }
   button:disabled { color: #8c959f; cursor: default; }
@@ -63,6 +65,10 @@
   .stage.s1 { color: #0550ae; background: #ddf4ff; }
   .stage.s2 { color: #8250df; background: #fbefff; }
   .stage.s3 { color: #1a7f37; background: #dafbe1; }
+  /* 版本标签(D22):与阶段色块同尺寸;已发灰、未发/计划蓝、没赶上红 */
+  .ver { display: inline-block; font-size: 12px; line-height: 18px; padding: 0 7px; border-radius: 4px; font-weight: 600; color: #57606a; background: #eaeef2; white-space: nowrap; }
+  .ver.open { color: #0550ae; background: #ddf4ff; }
+  .ver.missed { color: #cf222e; background: #ffebe9; }
   .agent { display: inline-block; font-size: 12px; line-height: 18px; padding: 0 7px; border-radius: 4px; font-weight: 600; color: #57606a; background: #eaeef2; white-space: nowrap; }
   .agent.a-claude { color: #bc4c00; background: #fff1e5; }
   .agent.a-deepseek { color: #0550ae; background: #ddf4ff; }
@@ -81,7 +87,7 @@
   .fact { border: 1px solid #d0d7de; border-radius: 6px; padding: 4px 10px; min-width: 96px; }
   .fact .k { display: block; font-size: 12px; color: #57606a; }
   .fact .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .fact .v .stage, .fact .v .agent { font-size: 13px; }
+  .fact .v .stage, .fact .v .agent, .fact .v .ver { font-size: 13px; }
   .fact .v .sub { font-size: 12px; font-weight: 400; color: #57606a; }
   .dbody { padding: 4px 16px 14px; }
   .group { margin: 14px 0 6px; font-weight: 600; color: #24292f; }
@@ -114,6 +120,7 @@
 <header>
   <h1>agent看板</h1>
   <div class="actions">
+    <select id="ver-filter" aria-label="按版本过滤"></select>
     <button id="all-toggle" type="button">全部</button>
     <button id="refresh" type="button">刷新</button>
   </div>
@@ -147,6 +154,10 @@ try {
 function saveFolded() {
   try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch (e) { /* 存不了只影响下次打开 */ }
 }
+// 版本过滤(K25):'' 全部版本 / 'v:<版本号>' / 'none'(无版本);记在本浏览器,读写失败照常显示
+var VERSION_KEY = 'cgraphx-board-version', versionFilter = '';
+try { versionFilter = localStorage.getItem(VERSION_KEY) || ''; } catch (e) { versionFilter = ''; }
+function saveVersionFilter() { try { localStorage.setItem(VERSION_KEY, versionFilter); } catch (e) { /* 存不了只影响下次打开 */ } }
 
 var TOKEN = '';
 try {
@@ -158,6 +169,7 @@ var $right = document.getElementById('right');
 var $split = document.getElementById('split');
 var $noprojects = document.getElementById('noprojects');
 var $note = document.getElementById('refresh-note');
+var $verFilter = document.getElementById('ver-filter');
 var $allBtn = document.getElementById('all-toggle');
 var $refreshBtn = document.getElementById('refresh');
 
@@ -221,9 +233,82 @@ function findProject(name) {
   }
   return null;
 }
+function findTask(p, key) {
+  var i, ns = p.noSession || [];
+  for (i = 0; i < p.tasks.length; i++) if (p.tasks[i].featureId === key) return { task: p.tasks[i], noSession: false };
+  for (i = 0; i < p.older.length; i++) if (p.older[i].featureId === key) return { task: p.older[i], noSession: false };
+  for (i = 0; i < ns.length; i++) if (ns[i].featureId === key) return { task: ns[i], noSession: true };
+  return null;
+}
+// ─── 版本(D22):文案、倒序比较、过滤与下拉选项 ─────────────────────────────
+// 版本号逐段按数字比,大的在前(C-5;2.0.10 在 2.0.9 前)
+function cmpVersionDesc(a, b) {
+  var x = a.split('.'), y = b.split('.');
+  for (var i = 0; i < 3; i++) { var d = (+x[i] || 0) - (+y[i] || 0); if (d !== 0) return d > 0 ? -1 : 1; }
+  return 0;
+}
+function versionLabel(v) { return v.merged ? (v.released ? v.version : v.version + ' 未发') : (v.released ? '计划 ' + v.version + ' · 没赶上' : '计划 ' + v.version); }
+function versionTag(v) { return '<span class="ver' + (v.merged && v.released ? '' : v.released ? ' missed' : ' open') + '">' + esc(versionLabel(v)) + '</span>'; }
+function versionTags(t) { var vs = t.versions || []; return vs.length ? '<span class="vers">' + vs.map(versionTag).join('、') + '</span>' : ''; }
+// 过滤值 K25:'' 全部版本 / 'v:<版本号>' / 'none'
+function matchesFilter(t, value) {
+  if (value === '') return true;
+  var vs = t.versions || [];
+  if (value === 'none') return vs.length === 0;
+  for (var i = 0; i < vs.length; i++) if (vs[i].version === value.slice(2)) return true;
+  return false;
+}
+function byActiveDesc(a, b) {
+  var av = a.lastActiveAt || '', bv = b.lastActiveAt || '';
+  return av !== bv ? (av > bv ? -1 : 1) : a.featureId < b.featureId ? -1 : a.featureId > b.featureId ? 1 : 0;
+}
+// 具体版本:有会话的按最近活动倒序,noSession 排后面(数据里已按标题排好);无版本:不列 noSession
+function filteredTasks(p) {
+  var out = [], i, ns = p.noSession || [];
+  for (i = 0; i < p.tasks.length; i++) if (matchesFilter(p.tasks[i], versionFilter)) out.push(p.tasks[i]);
+  for (i = 0; i < p.older.length; i++) if (matchesFilter(p.older[i], versionFilter)) out.push(p.older[i]);
+  out.sort(byActiveDesc);
+  if (versionFilter !== 'none') for (i = 0; i < ns.length; i++) if (matchesFilter(ns[i], versionFilter)) out.push(ns[i]);
+  return out;
+}
+function countTasks(p, value) {
+  var n = 0, i, ns = p.noSession || [];
+  for (i = 0; i < p.tasks.length; i++) if (matchesFilter(p.tasks[i], value)) n++;
+  for (i = 0; i < p.older.length; i++) if (matchesFilter(p.older[i], value)) n++;
+  if (value !== 'none') for (i = 0; i < ns.length; i++) if (matchesFilter(ns[i], value)) n++;
+  return n;
+}
+// 下拉(K21、K22):全部版本 → 各版本倒序(带个数)→ 无版本;个数为 0 的版本不列
+function rebuildVersionOptions() {
+  var stats = {}, projects = data ? data.projects : [], pi;
+  for (pi = 0; pi < projects.length; pi++) projects[pi].tasks.concat(projects[pi].older, projects[pi].noSession || []).forEach(function (t) {
+    (t.versions || []).forEach(function (v) { var cur = stats[v.version]; stats[v.version] = { released: (cur !== undefined && cur.released) || v.released }; });
+  });
+  var html = '<option value="">全部版本</option>', versions = Object.keys(stats).sort(cmpVersionDesc);
+  for (pi = 0; pi < versions.length; pi++) {
+    var count = 0, version = versions[pi];
+    for (var j = 0; j < projects.length; j++) count += countTasks(projects[j], 'v:' + version);
+    if (count === 0) continue;
+    html += '<option value="v:' + esc(version) + '">' + esc(version + (stats[version].released ? '' : ' 未发') + '(' + count + ')') + '</option>';
+  }
+  var noneCount = 0;
+  for (pi = 0; pi < projects.length; pi++) noneCount += countTasks(projects[pi], 'none');
+  if (noneCount > 0) html += '<option value="none">无版本(' + noneCount + ')</option>';
+  $verFilter.innerHTML = html;
+  // 记下的版本已经没有任务 → 回全部版本并写回(K25)
+  if (versionFilter !== '' && (versionFilter === 'none' ? noneCount === 0 : stats[versionFilter.slice(2)] === undefined)) { versionFilter = ''; saveVersionFilter(); }
+  $verFilter.value = versionFilter;
+}
 
 // ─── 选中(默认全局最近活动的任务;项目与任务都已按活动降序排好,仍逐组比对 lastActiveAt)───
 function defaultSelection() {
+  if (versionFilter !== '') { // 具体版本 / 无版本(K24):过滤结果里第一个显示的项目的第一个任务
+    for (var vi = 0; vi < data.projects.length; vi++) {
+      var list = filteredTasks(data.projects[vi]);
+      if (list.length) return { proj: data.projects[vi].name, kind: 'task', key: list[0].featureId };
+    }
+    return null;
+  }
   var best = null;
   for (var pi = 0; pi < data.projects.length; pi++) {
     var t = data.projects[pi].tasks[0];
@@ -242,6 +327,12 @@ function selectionExists(s) {
   if (s === null || !data) return false;
   var p = findProject(s.proj);
   if (p === null) return false;
+  if (versionFilter !== '') {
+    if (s.kind === 'unsorted') return false; // 只在当前过滤结果里找;未归类一律无效(具体版本含 noSession)
+    var list = filteredTasks(p);
+    for (var fi = 0; fi < list.length; fi++) if (list[fi].featureId === s.key) return true;
+    return false;
+  }
   if (s.kind === 'unsorted') return p.unsorted.length > 0;
   var i;
   for (i = 0; i < p.tasks.length; i++) { if (p.tasks[i].featureId === s.key) return true; }
@@ -250,6 +341,7 @@ function selectionExists(s) {
   return false;
 }
 function applyData() {
+  rebuildVersionOptions(); // 先定过滤值(K25),再判选中还有效?
   if (!selectionExists(sel)) sel = defaultSelection();
   render();
 }
@@ -264,32 +356,37 @@ function taskRow(p, t, kind) {
   var last = t.lastActiveAt ? fmtTime(t.lastActiveAt) : '-';
   return '<div class="task' + (cur ? ' cur' : '') + (kind === 'older' ? ' old' : '') + '" data-proj="' + esc(p.name) + '" data-kind="task" data-key="' + esc(t.featureId) + '">'
     + '<div class="t1"><b>' + esc(t.title) + '</b><span class="when">' + esc(last) + '</span></div>'
-    + '<div class="t2">' + stageBadge(t.stage) + '<span>' + esc(count) + '</span>' + dots + '</div></div>';
+    + '<div class="t2">' + stageBadge(t.stage) + versionTags(t) + '<span>' + esc(count) + '</span>' + dots + '</div></div>';
 }
 function unsortedRow(p) {
   var cur = sel !== null && sel.proj === p.name && sel.kind === 'unsorted';
   return '<div class="task' + (cur ? ' cur' : '') + '" data-proj="' + esc(p.name) + '" data-kind="unsorted" data-key="' + UNSORTED_KEY + '"><div class="t1"><b>未归类(' + p.unsorted.length + ')</b></div></div>';
 }
-// 折叠:用户点过按记下的;没点过的,第一个项目(最近活动)与选中所在项目展开,其余收起
-function isFolded(p, pi) {
+// 折叠:用户点过按记下的;没点过的,第一个显示的项目的与选中所在项目展开,其余收起
+// 序号按过滤后实际显示的项目算(K23:整组不画的项目不占序号)
+function isFolded(p, shownIndex) {
   if (Object.prototype.hasOwnProperty.call(folded, p.name)) return folded[p.name] === true;
-  return pi !== 0 && !(sel !== null && sel.proj === p.name);
+  return shownIndex !== 0 && !(sel !== null && sel.proj === p.name);
 }
 function renderLeft() {
   if (data === null) { $left.innerHTML = ''; return; }
   if (data.projects.length === 0) { $left.innerHTML = ''; return; }
-  var h = '';
+  var h = '', shown = 0;
   for (var pi = 0; pi < data.projects.length; pi++) {
     var p = data.projects[pi];
-    var fold = isFolded(p, pi);
-    var pill = (showAll ? p.tasks.length + p.older.length : p.tasks.length) + ' 个任务';
+    var list = versionFilter === '' ? null : filteredTasks(p);
+    if (list !== null && list.length === 0) continue; // 一个匹配任务都没有的项目整组不画
+    var fold = isFolded(p, shown++);
+    var pill = (list !== null ? list.length : (showAll ? p.tasks.length + p.older.length : p.tasks.length)) + ' 个任务';
     h += '<div class="pblock' + (fold ? ' folded' : '') + '">';
     h += '<button type="button" class="phead" data-fold="' + esc(p.name) + '" aria-expanded="' + (fold ? 'false' : 'true') + '">'
       + '<span class="caret">' + (fold ? '▶' : '▼') + '</span><span class="pname" title="' + esc(p.name) + '">' + esc(p.name) + '</span><span class="pill">' + esc(pill) + '</span></button>';
     h += '<div class="pdirs">' + p.dirs.map(esc).join('<br>') + '</div>';
     if (p.notice) h += '<div class="note" style="margin:4px 0 8px">' + esc(p.notice) + '</div>';
     h += '<div class="tasks">';
-    if (p.tasks.length === 0) {
+    if (list !== null) {
+      for (var li = 0; li < list.length; li++) h += taskRow(p, list[li], 'task');
+    } else if (p.tasks.length === 0) {
       // 项目无任务:空态文案;older 非空时补一句提示(C-14)
       h += '<div class="empty">还没有挂上会话的任务'
         + (p.older.length ? '<br>还有 ' + p.older.length + ' 个超过 30 天,点「全部」看' : '')
@@ -302,7 +399,7 @@ function renderLeft() {
         h += '<p class="tag" style="margin:4px 8px">还有 ' + p.older.length + ' 个超过 30 天,点「全部」看</p>';
       }
     }
-    if (p.unsorted.length) h += unsortedRow(p);
+    if (list === null && p.unsorted.length) h += unsortedRow(p);
     h += '</div></div>';
   }
   $left.innerHTML = h;
@@ -353,27 +450,28 @@ function renderRight() {
       ? p.unsorted.map(function (s) { return sessionRow(s, 'unsorted'); }).join('')
       : '<div class="empty">没有未归类的会话</div>';
   } else {
-    var t = null;
-    for (var i = 0; i < p.tasks.length; i++) { if (p.tasks[i].featureId === sel.key) t = p.tasks[i]; }
-    if (t === null) {
-      // 选中的任务只在 older 里(如「全部」收起后):去 older 找
-      for (var j = 0; j < p.older.length; j++) { if (p.older[j].featureId === sel.key) t = p.older[j]; }
-    }
-    if (t === null) { $right.innerHTML = ''; return; }
+    var found = findTask(p, sel.key);
+    if (found === null) { $right.innerHTML = ''; return; }
+    var t = found.task;
     var sessions = '<span class="sub">定挂</span> ' + t.fixed.length
       + (t.maybe.length ? ' <span class="sub">· 可能相关</span> ' + t.maybe.length : '');
     h = '<div class="dhead"><div class="crumb">' + esc(p.name) + '</div><h2>' + esc(t.title) + '</h2>'
       + '<div class="fid">' + esc(t.featureId) + '</div><div class="facts">'
       + fact('阶段', stageBadge(t.stage))
+      + fact('版本', t.versions && t.versions.length ? versionTags(t) : '无版本')
       + fact('最近活动', esc(t.lastActiveAt ? fmtTime(t.lastActiveAt) : '-'))
       + fact('会话', sessions)
       + fact('来源', t.agents.length ? t.agents.map(agentBadge).join(' ') : '-')
       + '</div></div><div class="dbody">';
-    h += '<div class="group">定挂(' + t.fixed.length + ')</div>';
-    h += t.fixed.length ? t.fixed.map(function (s) { return sessionRow(s, 'fixed'); }).join('') : '<div class="empty">没有定挂的会话</div>';
-    if (t.maybe.length) {
-      h += '<div class="group">可能相关(' + t.maybe.length + ')</div>';
-      h += t.maybe.map(function (s) { return sessionRow(s, 'maybe'); }).join('');
+    if (found.noSession) {
+      h += '<div class="empty">本机没有挂上的会话</div>'; // F7 ②:不画「定挂(0)」组
+    } else {
+      h += '<div class="group">定挂(' + t.fixed.length + ')</div>';
+      h += t.fixed.length ? t.fixed.map(function (s) { return sessionRow(s, 'fixed'); }).join('') : '<div class="empty">没有定挂的会话</div>';
+      if (t.maybe.length) {
+        h += '<div class="group">可能相关(' + t.maybe.length + ')</div>';
+        h += t.maybe.map(function (s) { return sessionRow(s, 'maybe'); }).join('');
+      }
     }
   }
   h += FALLBACK + COPY_HINT + '</div>';
@@ -385,6 +483,8 @@ function render() {
   var empty = data !== null && data.projects.length === 0;
   $split.hidden = empty;
   $noprojects.hidden = !empty;
+  // 选了具体版本 / 无版本时「全部 / 收起」不起作用(F7)
+  $allBtn.disabled = versionFilter !== '';
   renderLeft();
   renderRight();
   var key = sel === null ? '' : sel.proj + '\n' + sel.kind + '\n' + sel.key;
@@ -441,10 +541,14 @@ function doCopy(btn) {
 }
 
 $allBtn.addEventListener('click', function () {
+  if (versionFilter !== '') return;
   showAll = !showAll;
   $allBtn.textContent = showAll ? '收起' : '全部';
   renderLeft();
 });
+
+// 版本下拉(K23–K25):切过滤值 → 记下 → 重判选中(K24)
+$verFilter.addEventListener('change', function () { versionFilter = $verFilter.value; saveVersionFilter(); applyData(); });
 
 function showNote(text) { $note.textContent = text; $note.hidden = false; }
 function hideNote() { $note.hidden = true; }
@@ -484,8 +588,7 @@ fetch('/api/board?t=' + encodeURIComponent(TOKEN), { cache: 'no-store' })
   })
   .then(function (fresh) {
     data = fresh;
-    sel = defaultSelection();
-    render();
+    applyData();
     var cur = $left.querySelector('.task.cur');
     if (cur !== null && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
   })
