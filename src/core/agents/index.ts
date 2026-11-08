@@ -5,6 +5,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AGENT_PROFILES } from './profiles';
+import { listSessionSources } from './sources';
 import type { AgentId, AgentProfile, SessionFromEnv } from './types';
 
 export { AGENT_IDS, SESSION_READER_IDS } from './types';
@@ -109,14 +110,21 @@ export function applyAssetReplacements(content: string, profile: AgentProfile): 
   return out;
 }
 
-/** 按登记顺序从环境变量取会话 id;都没有返回 null。 */
+/** 按会话来源的登记顺序从环境变量取会话 id;都没有返回 null。只读来源(deepseek)也认。 */
 export function resolveSessionIdFromEnv(env: NodeJS.ProcessEnv = process.env): SessionFromEnv | null {
-  for (const profile of AGENT_PROFILES) {
-    if (profile.sessionIdEnv === null) continue;
-    const value = env[profile.sessionIdEnv]?.trim();
-    if (value) return { sessionId: value, agent: profile.id };
+  for (const source of listSessionSources()) {
+    if (source.sessionIdEnv === null) continue;
+    const value = env[source.sessionIdEnv]?.trim();
+    if (value) return { sessionId: value, agent: source.id, sessionIdEnv: source.sessionIdEnv };
   }
   return null;
+}
+
+/** 全部会话来源的会话变量名(按登记顺序,过滤掉不提供变量的来源);提交门禁片段的探针名单按它生成。 */
+export function listSessionIdEnvNames(): string[] {
+  return listSessionSources()
+    .map((source) => source.sessionIdEnv)
+    .filter((name): name is string => name !== null);
 }
 
 /** 读取文件文本;不存在或读取失败返回 null。 */

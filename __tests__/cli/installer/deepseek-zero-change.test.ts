@@ -19,10 +19,22 @@ describe('deepseek read-only source changes nothing else (spec D12, acceptance #
     expect(listSessionSources().map((s) => s.id)).toEqual(['claude-code', 'codebuddy', 'deepseek']);
   });
 
-  it('G1: DSH_SESSION_ID does not resolve as a session id (commit gate never triggers for DeepSeek)', () => {
-    expect(resolveSessionIdFromEnv({ DSH_SESSION_ID: 'session-abc' })).toBeNull();
+  it('G1: DSH_SESSION_ID resolves as a DeepSeek session; Claude Code still wins when both are set', () => {
+    expect(resolveSessionIdFromEnv({ DSH_SESSION_ID: 'session-abc' })).toEqual({
+      sessionId: 'session-abc',
+      agent: 'deepseek',
+      sessionIdEnv: 'DSH_SESSION_ID',
+    });
     // 两家已登记的照旧认(基线不回退)
-    expect(resolveSessionIdFromEnv({ CLAUDE_CODE_SESSION_ID: 'cc' })).toMatchObject({ sessionId: 'cc', agent: 'claude-code' });
+    expect(resolveSessionIdFromEnv({ CLAUDE_CODE_SESSION_ID: 'cc' })).toEqual({
+      sessionId: 'cc',
+      agent: 'claude-code',
+      sessionIdEnv: 'CLAUDE_CODE_SESSION_ID',
+    });
+    // 两个变量同时存在按登记顺序取 Claude Code
+    expect(
+      resolveSessionIdFromEnv({ DSH_SESSION_ID: 'session-abc', CLAUDE_CODE_SESSION_ID: 'cc' }),
+    ).toMatchObject({ sessionId: 'cc', agent: 'claude-code' });
   });
 
   // 完整的「install -t all 在真实项目里不部署 .dsh/」与「开副本不带 .dsh/」属安装器/副本的既有

@@ -14,7 +14,7 @@ import * as os from 'node:os';
 import { CGRAPHX_SECTION_START } from '../../src/core/agents';
 import { emitSessionNotices } from '../../src/core/session-notices';
 
-const SESSION_VARS = ['CLAUDE_CODE_SESSION_ID', 'CODEBUDDY_SESSION_ID'];
+const SESSION_VARS = ['CLAUDE_CODE_SESSION_ID', 'CODEBUDDY_SESSION_ID', 'DSH_SESSION_ID'];
 
 let tmp: string;
 let savedEnv: Record<string, string | undefined>;
