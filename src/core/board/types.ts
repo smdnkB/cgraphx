@@ -27,6 +27,18 @@ export interface BoardProject {
   older: BoardTask[];
   /** 未归类会话(K3) */
   unsorted: BoardSession[];
+  /** 本机没挂上会话、但有版本的任务(K23、D21);按标题升序,页面选了具体版本才显示 */
+  noSession: BoardTask[];
+}
+
+/** 任务挂的一个版本(D19;版本标签与过滤按它现算)。 */
+export interface TaskVersion {
+  /** 版本号,如 '2.0.14' */
+  version: string;
+  /** 有 tag v<version>,算已发(K17) */
+  released: boolean;
+  /** true 合入过这个版本分支;false 是计划版本(K16–K19) */
+  merged: boolean;
 }
 
 /** 左栏的一行任务(F1;K1、K2、K13、K14)。 */
@@ -44,6 +56,8 @@ export interface BoardTask {
   lastActiveAt: string | null;
   fixed: BoardSession[];
   maybe: BoardSession[];
+  /** 挂的版本(D19):版本号倒序;空数组 = 无版本(K20) */
+  versions: TaskVersion[];
 }
 
 /** 右栏的一行会话(F2;K4、K5、K6、K7、F2 ①)。 */
@@ -99,6 +113,10 @@ export interface ReplicaRef {
   featureId: string;
   /** 需求分支,如 feat/订单导出 */
   branch: string;
+  /** 开副本时主目录所在的分支(K18:过版本分支模式就是计划版本) */
+  baseBranch: string;
+  /** 开副本时间 ISO 8601(K18:同一需求开过几次副本取最近一次) */
+  createdAt: string;
   /** 已删为非 null;K9①、K8、dirLabel 含已删都算 */
   removedAt: string | null;
 }
