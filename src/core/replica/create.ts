@@ -3,6 +3,7 @@
  *
  * 前置检查全过才动手(任一不过就抛对应 code,什么都不改)→ 在主目录旁 `git worktree add` 出副本 →
  * 在副本里建自己的数据目录(D5)→ 带上 agent 配置与 `.worktreeinclude` 里的文件并对 git 隐藏(D2~D4)→
+ * 在副本里建好这个需求的需求目录(2026-11-07-开副本建好需求目录 K1、K2)→
  * 把主目录这个需求目录下没被跟踪的文件拷进副本(K6)→ 写登记 → 补钩子片段(D8)。
  *
  * add 之后任一步失败:删 worktree、删这次新建的分支、删已写的登记,再抛原错误——主目录不动,接上的旧分支
@@ -270,6 +271,24 @@ function prepareDataDir(target: string, mainRoot: string): void {
   fs.symlinkSync(fs.realpathSync(getCodeGraphDir(mainRoot)), path.join(local, SHARED_LINK_NAME), 'dir');
 }
 
+// ---------- 建需求目录 ----------
+
+/**
+ * 在副本里建好这个需求的需求目录(2026-11-07-开副本建好需求目录 K1、K2):主目录没有讨论稿时,worktree 里
+ * 也不会带过来;不建的话副本里的 /dev-clarify 看不到目录,会按描述另起一个名字,产物和登记对不上。
+ * 名字就用登记里的 feature-id;已存在(带过来的文件、接上的旧分支)不动。建不出来抛错,由调用方回滚整次
+ * 开副本——不留下「副本开好了、需求目录还是没有」。
+ */
+function ensureFeatureDir(target: string, featureId: string): void {
+  try {
+    fs.mkdirSync(featureDirOf(target, featureId), { recursive: true });
+  } catch (err) {
+    throw new Error(
+      `在副本里建需求目录 ${FEATURES_DIR_POSIX}/${featureId}/ 失败:${errorMessage(err)};没有留下副本,主目录没动`,
+    );
+  }
+}
+
 /**
  * ⑧ 失败回滚:先删 worktree(删不掉就整个目录删掉再 prune),再删这次新建的分支(接上的分支留着),
  * 最后删已写的登记文件。清理失败不盖过原错误。
@@ -397,6 +416,7 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
   try {
     prepareDataDir(target, mainRoot); // D5
     warnings.push(...carryIntoReplica(mainRoot, target).warnings); // D2~D4、K4、K16
+    ensureFeatureDir(target, opts.featureId); // 2026-11-07-开副本建好需求目录 K1、K2
     copied = copyFeatureFiles(mainRoot, target, opts.featureId); // K6
     entry = {
       name,
