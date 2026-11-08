@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { execFileSync, execSync } from 'node:child_process';
 
+import type { SessionFromEnv } from '../../../src/core/agents';
 import { COMMIT_GATE_MARKER } from '../../../src/core/commit-gate';
 import { clearRepoLocalGitEnv } from '../../../src/core/git-hooks';
 import { identityOfRoot } from '../../../src/core/project-identity';
@@ -42,6 +43,7 @@ const TOUCHED_ENV = [
   COMMIT_BRANCH_ENV,
   CHERRY_PICK_ENV,
   REBASE_ENV,
+  'DSH_SESSION_ID',
 ];
 
 function makeRepo(dir: string, origin: string): string {
@@ -61,8 +63,16 @@ function commitFile(repo: string, file: string, message: string): void {
 
 function installGateSnippet(repo: string): void {
   const hook = path.join(repo, '.git', 'hooks', 'commit-msg');
-  fs.writeFileSync(hook, `#!/bin/sh\ntrue ${COMMIT_GATE_MARKER}\n`, { mode: 0o755 });
+  // 一行假片段:marker + Claude 来源的探针(片段说明行与探针行都带 marker,必须看带探针那行)
+  fs.writeFileSync(hook, `#!/bin/sh\ntrue ${COMMIT_GATE_MARKER} \${CLAUDE_CODE_SESSION_ID:-}\n`, { mode: 0o755 });
 }
+
+/** isGateSkipped 的会话参数:Claude 来源;人手动提交传 null。 */
+const CLAUDE_SESSION: SessionFromEnv = {
+  sessionId: 's',
+  agent: 'claude-code',
+  sessionIdEnv: 'CLAUDE_CODE_SESSION_ID',
+};
 
 function infoOf(repo: string) {
   const original = process.cwd();
@@ -163,45 +173,45 @@ describe('isGateSkipped', () => {
   });
 
   it('marks an agent commit with no gate mark as skipped (--no-verify)', () => {
-    expect(isGateSkipped(infoOf(repo), true)).toBe(true);
+    expect(isGateSkipped(infoOf(repo), CLAUDE_SESSION)).toBe(true);
   });
 
   it('marks an agent commit whose tree differs from the gate mark as skipped', () => {
     process.env[GATE_TREE_ENV] = '0'.repeat(40);
-    expect(isGateSkipped(infoOf(repo), true)).toBe(true);
+    expect(isGateSkipped(infoOf(repo), CLAUDE_SESSION)).toBe(true);
   });
 
   it('does not mark an agent commit whose tree matches the gate mark', () => {
     const info = infoOf(repo);
     process.env[GATE_TREE_ENV] = `${info.tree}\n`;
-    expect(isGateSkipped(info, true)).toBe(false);
+    expect(isGateSkipped(info, CLAUDE_SESSION)).toBe(false);
   });
 
   it('does not mark a manual commit', () => {
-    expect(isGateSkipped(infoOf(repo), false)).toBe(false);
+    expect(isGateSkipped(infoOf(repo), null)).toBe(false);
   });
 
   it('does not mark when the commit-msg hook has no gate snippet', () => {
     fs.rmSync(path.join(repo, '.git', 'hooks', 'commit-msg'));
-    expect(isGateSkipped(infoOf(repo), true)).toBe(false);
+    expect(isGateSkipped(infoOf(repo), CLAUDE_SESSION)).toBe(false);
   });
 
   it('does not mark commits recorded by post-merge', () => {
     process.env[COMMIT_HOOK_ENV] = 'post-merge';
-    expect(isGateSkipped(infoOf(repo), true)).toBe(false);
+    expect(isGateSkipped(infoOf(repo), CLAUDE_SESSION)).toBe(false);
   });
 
   it('does not mark commits made during cherry-pick or rebase', () => {
     process.env[CHERRY_PICK_ENV] = '1';
-    expect(isGateSkipped(infoOf(repo), true)).toBe(false);
+    expect(isGateSkipped(infoOf(repo), CLAUDE_SESSION)).toBe(false);
     delete process.env[CHERRY_PICK_ENV];
     process.env[REBASE_ENV] = '1';
-    expect(isGateSkipped(infoOf(repo), true)).toBe(false);
+    expect(isGateSkipped(infoOf(repo), CLAUDE_SESSION)).toBe(false);
   });
 
   it('does not mark a revert commit', () => {
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
     execFileSync('git', ['revert', '--no-edit', head], { cwd: repo, stdio: 'ignore' });
-    expect(isGateSkipped(infoOf(repo), true)).toBe(false);
+    expect(isGateSkipped(infoOf(repo), CLAUDE_SESSION)).toBe(false);
   });
 });
