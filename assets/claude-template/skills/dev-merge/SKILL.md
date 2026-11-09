@@ -53,9 +53,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
    有冲突 → 就地和用户一起解决:`git -c core.quotePath=false diff --name-only --diff-filter=U` 列出冲突文件,逐个说清两边各改了什么、合起来怎么写,用户确认后改好、`git add`;全部解决后 `git commit --no-edit`(说明沿用「同步 dev/2.0.11」)。git 提交门禁(commit-msg 钩子)拦下时,按提示自查,说明不改,带 `CGRAPHX_PRECOMMIT_REVIEWED=1` 重试。
 
-4. **知识文件**:`git -c core.quotePath=false diff --name-only "HEAD^1" HEAD -- docs/knowledge/` 有输出 → 问一句要不要在副本里跑 `cgraphx docs index`;没问过不跑。合并显示 `Already up to date.`(没有新东西)就跳过这步。
-
-5. **提示**:「可以合入了：到主目录的会话里输入 /dev-merge 订单导出」——标题 = 本副本的 feature-id 去掉日期段(`cgraphx replica list --json` 里 `name` 等于当前目录名的那条)。
+4. **提示**:「可以合入了：到主目录的会话里输入 /dev-merge 订单导出」——标题 = 本副本的 feature-id 去掉日期段(`cgraphx replica list --json` 里 `name` 等于当前目录名的那条)。
 
 ### 在主目录:合入
 
@@ -142,9 +140,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
    开了版本:「已合入：3 个提交，改了 7 个文件;副本留到发版后清理」。没开版本:「已合入：3 个提交，改了 7 个文件」。
 
-10. **知识文件**:`git -c core.quotePath=false diff --name-only "HEAD^1" HEAD -- docs/knowledge/` 有输出 → 问一句要不要在主目录跑 `cgraphx docs index`;没问过不跑。
-
-11. **没开版本就问删不删**:「cgraphx@订单导出 已合入,可以删;删掉这个副本吗?」;用户说删 → `cgraphx replica remove cgraphx@订单导出 --json`,结果照「删副本」第 2 步处理。
+10. **没开版本就问删不删**:「cgraphx@订单导出 已合入,可以删;删掉这个副本吗?」;用户说删 → `cgraphx replica remove cgraphx@订单导出 --json`,结果照「删副本」第 2 步处理。
 
 ### 删副本
 
@@ -202,7 +198,6 @@ $ git rev-list --count --no-merges "HEAD^1..HEAD^2"
 3
 $ git -c core.quotePath=false diff --name-only "HEAD^1" HEAD | wc -l
 7
-$ git -c core.quotePath=false diff --name-only "HEAD^1" HEAD -- docs/knowledge/
 ```
 
 回给用户:
@@ -247,17 +242,10 @@ CONFLICT (content): Merge conflict in src/order/routes.ts
 Automatic merge failed; fix conflicts and then commit the result.
 ```
 
-和用户一起改好 src/order/routes.ts,`git add src/order/routes.ts`、`git commit --no-edit` 之后:
+和用户一起改好 src/order/routes.ts,`git add src/order/routes.ts`、`git commit --no-edit` 之后,回给用户:
 
 ```text
-$ git -c core.quotePath=false diff --name-only "HEAD^1" HEAD -- docs/knowledge/
-docs/knowledge/积分流水.md
-```
-
-回给用户:
-
-```text
-已同步 dev/2.0.11,src/order/routes.ts 的冲突已解决并提交。同步带进了 docs/knowledge/积分流水.md,要在副本里跑 cgraphx docs index 重建知识库索引吗?
+已同步 dev/2.0.11,src/order/routes.ts 的冲突已解决并提交。
 
 可以合入了：到主目录的会话里输入 /dev-merge 订单导出
 ```
@@ -298,7 +286,6 @@ $ cgraphx replica remove cgraphx@订单导出 --json
 | 主目录:有改了没提交的已跟踪文件 | 停下,提示先提交或收好 |
 | 主目录:副本里有没提交的改动 | 停下,提示先在副本里提交 |
 | 主目录:预演有冲突 | 分支不动,列出冲突文件和撞上的需求,提示到副本里同步 |
-| 合入、同步带进 `docs/knowledge/` | 问要不要跑 `cgraphx docs index` |
 | 没开版本,合完 | 问删不删这个副本 |
 | 删副本时差提交 | 照实说差几个、提交留在分支上,问过再删 |
 | 删副本:还没有提交,或有没提交的改动 | 还没有提交照实说,问过再删;有没提交的改动不删 |
@@ -310,4 +297,3 @@ $ cgraphx replica remove cgraphx@订单导出 --json
 2. ❌ 预演有冲突不合,不在主目录解决冲突。
 3. ❌ 版本分支上只做合并,不改代码。
 4. ❌ 删副本前必须问;有没提交的改动的不删。
-5. ❌ 没问过不跑 `cgraphx docs index`。

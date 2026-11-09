@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import type { Command } from 'commander';
 
 import { DocumentNotFoundError, ProjectNotInitializedError } from './errors';
-import { indexMarkdownKnowledgeBase } from './indexer';
+import { ensureKnowledgeIndexFresh, indexMarkdownKnowledgeBase } from './indexer';
 import { parseFrontmatter, stripFrontmatter } from './frontmatter-parser';
 import { validateFrontmatter } from './validator';
 import { MarkdownQuery } from './query';
@@ -110,7 +110,7 @@ export function registerDocsCommands(program: Command): void {
         try {
           const sort = (options.sort ?? 'doc-count') as 'doc-count' | 'name';
           const limit = options.limit; // may be undefined → no limit
-          const rows = withQuery(projectRoot, q => q.listConcepts({ sort, limit }));
+          const rows = await withFreshQuery(projectRoot, q => q.listConcepts({ sort, limit }));
           if (options.json) {
             process.stdout.write(JSON.stringify(rows, null, 2) + '\n');
           } else {
@@ -178,7 +178,7 @@ export function registerDocsCommands(program: Command): void {
         };
 
         try {
-          const results = withQuery(projectRoot, q => q.find(filter));
+          const results = await withFreshQuery(projectRoot, q => q.find(filter));
           if (options.json) {
             process.stdout.write(JSON.stringify(results, null, 2) + '\n');
           } else {
@@ -205,7 +205,7 @@ export function registerDocsCommands(program: Command): void {
         const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
         try {
           const docRef = normalizeDocRef(docIdOrPath, projectRoot);
-          const view = withQuery(projectRoot, q => q.getReferences(docRef));
+          const view = await withFreshQuery(projectRoot, q => q.getReferences(docRef));
           if (options.json) {
             process.stdout.write(JSON.stringify(view, null, 2) + '\n');
           } else {
@@ -237,7 +237,7 @@ export function registerDocsCommands(program: Command): void {
           .map(s => s.trim())
           .filter(s => s.length > 0);
         try {
-          const resp = withQuery(projectRoot, q => q.checkConceptDedup(names));
+          const resp = await withFreshQuery(projectRoot, q => q.checkConceptDedup(names));
           if (options.json) {
             process.stdout.write(JSON.stringify(resp, null, 2) + '\n');
           } else {
@@ -340,7 +340,7 @@ export function registerDocsCommands(program: Command): void {
         const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
         try {
           const docRef = normalizeDocRef(docIdOrPath, projectRoot);
-          const detail = withQuery(projectRoot, q => q.getDocumentDetail(docRef));
+          const detail = await withFreshQuery(projectRoot, q => q.getDocumentDetail(docRef));
           if (detail === null) {
             process.stderr.write(`Document not found: ${docIdOrPath}\n`);
             process.exitCode = 1;
@@ -428,6 +428,25 @@ function writeDocumentBody(
 }
 
 /**
+ * 查询前先刷新索引:docs/knowledge/ 变了就全量重建,再查。刷新失败只往 stderr 提示一句、按上次的索引查;
+ * 本地库不在照旧抛 ProjectNotInitializedError(由 handleQueryError 提示先 install)。
+ */
+async function withFreshQuery<T>(projectRoot: string, fn: (q: MarkdownQuery) => T): Promise<T> {
+  try {
+    const { report } = await ensureKnowledgeIndexFresh(projectRoot);
+    if (report?.error) {
+      process.stderr.write(`知识库索引没刷新上:${report.error};按上次的索引查\n`);
+    }
+  } catch (err) {
+    if (err instanceof ProjectNotInitializedError) throw err;
+    process.stderr.write(
+      `知识库索引没刷新上:${err instanceof Error ? err.message : String(err)};按上次的索引查\n`,
+    );
+  }
+  return withQuery(projectRoot, fn);
+}
+
+/**
  * Open the DB, ensure markdown schema, run a query, close.
  *
  * Single connection per command — matches cgraphx's main CLI pattern.
@@ -471,7 +490,7 @@ function registerListCommand<T>(
     .action(async (pathArg: string | undefined, options: { json?: boolean }) => {
       const projectRoot = pathArg ? path.resolve(pathArg) : resolveProjectRoot(process.cwd());
       try {
-        const rows = withQuery(projectRoot, run);
+        const rows = await withFreshQuery(projectRoot, run);
         if (options.json) {
           process.stdout.write(JSON.stringify(rows, null, 2) + '\n');
         } else {

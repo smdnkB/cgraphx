@@ -122,3 +122,15 @@ CREATE INDEX IF NOT EXISTS idx_entry_names_norm ON markdown_explored_entry_names
 
 INSERT OR IGNORE INTO markdown_schema_versions (version, applied_at, description)
 VALUES (2, strftime('%s', 'now') * 1000, 'knowledge-init migration: entry name dedup table');
+
+-- ============================================================
+-- 知识库索引的文件指纹:查询前比对 docs/knowledge/ 的指纹,变了才重建。
+-- 只加表、不升版本号:版本号升了,旧版 cgraphx 读这个库会按「库比程序新」报错。
+-- 一个库一行(id 固定 1),全量重建在同一事务里写;wipeAll 不清它。
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS markdown_index_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    fingerprint TEXT NOT NULL,
+    indexed_at INTEGER NOT NULL
+);

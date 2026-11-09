@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Changed — knowledge base index refreshes itself before queries
+
+`cgraphx docs concepts / domains / tags / find / refs / dedup / show` now check
+the files under `docs/knowledge/` (path, size, modification time, plus the
+cgraphx version) before querying, and rebuild the index when anything changed.
+Writing a knowledge file, merging a requirement or pulling a branch no longer
+needs a manual `cgraphx docs index`; the skills that asked for one
+(dev-start, dev-merge, knowledge-write, knowledge-migrate, knowledge-recall)
+no longer do. `docs index` still rebuilds on demand and prints the skip
+report. A failed refresh only prints a note to stderr and queries the previous
+index. The fingerprint lives in a new `markdown_index_state` table in the local
+`.cgraphx/cgraphx.db`; the markdown schema version is unchanged, so an older
+cgraphx can still read the database.
+
 ### Fixed — DeepSeek commits pass the gate and are recorded to their session
 
 DeepSeek Harness exports `DSH_SESSION_ID`, and the commit-msg gate snippet now

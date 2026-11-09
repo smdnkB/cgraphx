@@ -100,11 +100,11 @@ cgraphx docs find --concept=<concept-name> --json
 建议:如果这是一个值得沉淀的业务概念,可以主动探索后使用 knowledge-write skill 记录。
 ```
 
-**知识库未索引时**(docs concepts 返回空或报错):
+**知识库为空时**(docs concepts 返回空或报错):
 
 ```
-知识库未索引。项目还没跑过 `cgraphx docs index`,无法召回概念。
-建议主 agent 告知用户先跑 `cgraphx docs index` 建立知识库。
+知识库没有可召回的概念:docs/knowledge/ 下还没有合法的知识文件,或本目录没装过 cgraphx(报错里提示 `cgraphx install`)。
+建议主 agent 告知用户:前者用 knowledge-write 沉淀,后者先跑 `cgraphx install`。
 ```
 
 ## 约束

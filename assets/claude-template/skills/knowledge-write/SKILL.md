@@ -19,7 +19,6 @@ description: 维护可供 cgraphx docs 索引的 Markdown 知识文件(docs/know
 4. **写 frontmatter**(见「Frontmatter 规范」)+ 正文必含 `## Summary`——唯一进索引的章节。
 5. **Write 后立刻 `cgraphx docs validate <file>`**:非法 → 修 frontmatter 再 Write 再校验,直到合法才告知用户已保存(非法文件 index 时整个跳过,校验前置不是可选)。
 6. **合并检查**:三条件全满足才提示用户(见「维护」)。
-7. **询问是否触发扫描**;未经确认不跑 `cgraphx docs index`(全量覆盖式重建,事务性:失败回滚,不坏旧索引)。
 
 ## 双层结构:实体条目与流程条目
 
@@ -89,9 +88,9 @@ updated: 2026-04-28
 
 ## CLI
 
-- **查已有词汇**:`cgraphx docs concepts`(concept + 关联文档数 + domain)/ `docs domains` / `docs tags`;查特定:`find --q=<词>`(整串 LIKE,title+Summary)/ `find --concept=<名>`(精确过滤,也是实体反查入口)。索引未建 → `grep -rl "concepts:" docs/knowledge/ --include="*.md"`。
+- **查已有词汇**:`cgraphx docs concepts`(concept + 关联文档数 + domain)/ `docs domains` / `docs tags`;查特定:`find --q=<词>`(整串 LIKE,title+Summary)/ `find --concept=<名>`(精确过滤,也是实体反查入口)。报没装过(`cgraphx install` first)→ `grep -rl "concepts:" docs/knowledge/ --include="*.md"`。
 - **校验**:`docs validate <file>`(exit 0 合法 / 2 非法;`--json` 出 {valid, skipReason, detail})。
-- **扫描**:`docs index`——全量覆盖式重建,事务性(任一步失败回滚,旧索引不坏)。
+- **索引**:查询命令查之前自动刷新,知识文件变了就重建,写完不用跑 `docs index`。
 
 ## 质量规则
 
@@ -118,8 +117,7 @@ updated: 2026-04-28
 
 1. ❌ **知识文件不出 `docs/knowledge/`**。
 2. ❌ **不跳过校验 Write**——修到 validate 合法才告知已保存。
-3. ❌ **未经用户确认不跑 `docs index`**。
-4. ❌ **不造重复 concept**——先查词汇,替代名走 aliases。
-5. ❌ **不写行号 / 步骤时序 / 代码复述**——索引层只存定位与指针。
-6. ❌ **不手动维护"参与业务"全量清单**——`find --concept` 反查派生。
-7. ❌ **不硬翻中文概念为英文**——用项目实际话语。
+3. ❌ **不造重复 concept**——先查词汇,替代名走 aliases。
+4. ❌ **不写行号 / 步骤时序 / 代码复述**——索引层只存定位与指针。
+5. ❌ **不手动维护"参与业务"全量清单**——`find --concept` 反查派生。
+6. ❌ **不硬翻中文概念为英文**——用项目实际话语。

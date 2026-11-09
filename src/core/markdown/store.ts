@@ -196,6 +196,26 @@ export class MarkdownStore {
       .run(runId, entry.path, entry.reason, entry.detail ?? null);
   }
 
+  // ----- index fingerprint --------------------------------------------------
+
+  /** 上次全量重建时 docs/knowledge/ 的指纹;从没建过返回 null。 */
+  getIndexFingerprint(): string | null {
+    const row = this.db
+      .prepare('SELECT fingerprint FROM markdown_index_state WHERE id = 1')
+      .get() as { fingerprint: string } | undefined;
+    return row?.fingerprint ?? null;
+  }
+
+  /** 记下这次全量重建的指纹(和重建在同一事务里写)。 */
+  setIndexFingerprint(fingerprint: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO markdown_index_state (id, fingerprint, indexed_at) VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint, indexed_at = excluded.indexed_at`,
+      )
+      .run(fingerprint, Date.now());
+  }
+
   // ----- bulk wipe (for cover-the-table rebuild) ---------------------------
 
   /**

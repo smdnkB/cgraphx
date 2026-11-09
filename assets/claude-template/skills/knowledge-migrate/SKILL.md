@@ -127,9 +127,8 @@ ls "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$enc/memory/"
 
    `document_type` 按内容取 decision / rule / lesson / mechanism;`source_type` 一律 `work_context`;`owners` 取 `git config user.name`。Summary 写结论和什么时候该召回,带上召回时的口语词(如「写汇报、对外文档」);Context 写 Why,Reuse Guidance 写 How to apply;Evidence 那一行照格式写,重跑时靠它认「已迁过」。
 2. 每个文件跑 `cgraphx docs validate <文件>`,不合法就改到合法。
-3. `cgraphx docs index`。
-4. **项目约定**:写进当前目录的项目根目录 `CLAUDE.md`——有「## 项目约定」节就加在节末,没有就在文件末尾新建这一节,文件没有就新建。一条一行:`- 提交前先跑 npm test——CI 只跑构建,测试挂了合进去才发现`。
-5. **个人设置**:追加到 `${CLAUDE_CONFIG_DIR:-~/.claude}/CLAUDE.md` 末尾,文件没有就新建。一条一行:`- 回复用中文,长任务中途也不漂成英文——连续工具调用后回复漂成过英文`。
+3. **项目约定**:写进当前目录的项目根目录 `CLAUDE.md`——有「## 项目约定」节就加在节末,没有就在文件末尾新建这一节,文件没有就新建。一条一行:`- 提交前先跑 npm test——CI 只跑构建,测试挂了合进去才发现`。
+4. **个人设置**:追加到 `${CLAUDE_CONFIG_DIR:-~/.claude}/CLAUDE.md` 末尾,文件没有就新建。一条一行:`- 回复用中文,长任务中途也不漂成英文——连续工具调用后回复漂成过英文`。
 
 ### 5. 关自动记忆
 
@@ -175,7 +174,7 @@ git commit -m "chore(release): Claude Code 记忆迁进知识库" -- docs/knowle
 
 中途停下时:
 
-> 写到建索引停下了:`cgraphx docs index` 报 database is locked。两个知识库条目已写好、校验通过;自动记忆还开着,处理好后再跑一次 /knowledge-migrate,已写的会标「已迁过」。
+> 写到项目约定停下了:项目根的 `CLAUDE.md` 是只读的,写不进去。两个知识库条目已写好、校验通过;自动记忆还开着,处理好后再跑一次 /knowledge-migrate,已写的会标「已迁过」。
 
 ## 红线(绝对不能做)
 

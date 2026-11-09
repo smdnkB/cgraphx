@@ -30,5 +30,4 @@ description: 从项目 markdown 知识库召回业务概念 — 当用户聊业�
 - 按概念反查文档:`cgraphx docs find --concept=<名>`
 - 关键词查:`cgraphx docs find --q=<关键词>`(只匹配 title 和 Summary)
 - 读正文:`cgraphx docs show <path> --body`。读知识库正文一律用它,不用 cat、Read,这样读过的条目才会记为本次任务的参考;提示 `unknown option '--body'` 说明全局 cgraphx 太旧,先 `npm i -g cgraphx` 升级
-- 建索引:`cgraphx docs index`(写了或改了知识文件的 frontmatter、Summary 之后跑;全量重建)
 - 以上命令都支持 `--json`

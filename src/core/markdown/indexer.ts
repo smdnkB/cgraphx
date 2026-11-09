@@ -26,6 +26,7 @@ import { KNOWLEDGE_DIR, ACCEPTED_EXTENSIONS } from './constants';
 import { extractFromFile } from './extractor';
 import { MarkdownStore, vocabIdFromName as idForName } from './store';
 import { openMarkdownDb } from './schema-bootstrap';
+import { getCliVersion } from '../skill-version';
 import type {
   IndexReport,
   ParsedMarkdownFile,
@@ -97,8 +98,9 @@ export async function indexMarkdownKnowledgeBase(
     };
   }
 
-  // Phase 1: scan
+  // Phase 1: scan(指纹在读内容之前取:读的过程中文件又变了,下次查询指纹对不上,会再建一次)
   const filePaths = collectMarkdownFiles(knowledgeDir);
+  const fingerprint = fingerprintOf(projectRoot, filePaths);
   options.onProgress?.(`Found ${filePaths.length} file(s) under ${KNOWLEDGE_DIR}/`);
 
   // Phase 2: extract
@@ -201,6 +203,8 @@ export async function indexMarkdownKnowledgeBase(
         store.insertSkipLog(runId, entry);
       }
 
+      store.setIndexFingerprint(fingerprint);
+
       // Compose report
       const skipBreakdown = { ...EMPTY_SKIP_BREAKDOWN };
       for (const entry of skipLog) {
@@ -234,6 +238,54 @@ export async function indexMarkdownKnowledgeBase(
   );
 
   return report;
+}
+
+/** ensureKnowledgeIndexFresh 的结果:refreshed 为 true 时带这次重建的报告。 */
+export interface FreshnessResult {
+  refreshed: boolean;
+  report?: IndexReport;
+}
+
+/**
+ * 查询前调:docs/knowledge/ 的指纹和上次重建时记下的不一样就全量重建,一样就什么都不做。
+ *
+ * 指纹 = cgraphx 版本号 + 每个知识文件的相对路径、大小、修改时间;升级 cgraphx 后第一次查询重建一次
+ * (解析规则可能变了)。没有 docs/knowledge/ 不动索引。本地库不在照旧抛 ProjectNotInitializedError。
+ */
+export async function ensureKnowledgeIndexFresh(projectRoot: string): Promise<FreshnessResult> {
+  const knowledgeDir = path.join(projectRoot, KNOWLEDGE_DIR);
+  if (!fs.existsSync(knowledgeDir)) return { refreshed: false };
+
+  const fingerprint = fingerprintOf(projectRoot, collectMarkdownFiles(knowledgeDir));
+  const connection = openMarkdownDb(projectRoot);
+  let stored: string | null;
+  try {
+    stored = new MarkdownStore(connection.getDb()).getIndexFingerprint();
+  } finally {
+    connection.close();
+  }
+  if (stored === fingerprint) return { refreshed: false };
+
+  const report = await indexMarkdownKnowledgeBase(projectRoot);
+  return { refreshed: true, report };
+}
+
+/** 文件列表(已排序)的指纹;stat 失败的文件记成 `?`,下次能 stat 了指纹就变。 */
+function fingerprintOf(projectRoot: string, filePaths: string[]): string {
+  const hash = crypto.createHash('sha256');
+  hash.update(`cgraphx ${getCliVersion() ?? '?'}\n`);
+  for (const absPath of filePaths) {
+    const rel = path.relative(projectRoot, absPath).split(path.sep).join('/');
+    let stat = '?';
+    try {
+      const st = fs.statSync(absPath);
+      stat = `${st.size}\t${st.mtimeMs}`;
+    } catch {
+      // 读不到:按 `?` 记
+    }
+    hash.update(`${rel}\t${stat}\n`);
+  }
+  return hash.digest('hex');
 }
 
 /**

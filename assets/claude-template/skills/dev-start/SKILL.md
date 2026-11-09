@@ -1,6 +1,6 @@
 ---
 name: dev-start
-description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,先按 dev-spec 的命名规则定好需求目录名,再用 git worktree 在主目录旁边开出副本 <主目录名>@<文件前缀>(只带 agent 配置和 .worktreeinclude 清单里写的文件,依赖默认不带),副本里从主目录当前所在的分支拉出 feat/<文件前缀>(bug 修复用 fix/)并登记到主目录——副本里的会话和提交和主目录记进同一个项目的数据;接着建好副本自己的知识库索引和「我的需求」索引,给出到副本开新会话的启动语。只在主目录执行,不在副本里开副本。Use when 开副本、开需求副本、在副本里做、并行做需求、dev-start。
+description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,先按 dev-spec 的命名规则定好需求目录名,再用 git worktree 在主目录旁边开出副本 <主目录名>@<文件前缀>(只带 agent 配置和 .worktreeinclude 清单里写的文件,依赖默认不带),副本里从主目录当前所在的分支拉出 feat/<文件前缀>(bug 修复用 fix/)并登记到主目录——副本里的会话和提交和主目录记进同一个项目的数据;接着建好副本自己的「我的需求」索引,给出到副本开新会话的启动语。只在主目录执行,不在副本里开副本。Use when 开副本、开需求副本、在副本里做、并行做需求、dev-start。
 ---
 
 # 开需求副本 (dev-start)
@@ -9,7 +9,7 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
 
 - 一个需求只开一个副本:要几个会话并行,先把需求按功能点拆成几个需求目录(各自写讨论稿),再各开各的副本;做完、/code-review 过了,在主目录 /dev-merge 合入。
 - 副本从主目录当前所在的分支拉:开了版本是 dev/<版本号>,没开就是 main——副本单独也能用,不用先 /release-start。
-- 副本里的会话和提交和主目录记进同一个项目的数据;知识库索引和「我的需求」索引副本自己建。副本是 git worktree,只带 agent 配置和清单里写的文件;依赖和构建产物不带,第一次要在副本里安装、构建一次;几个副本共用一份 stash,副本里别用 `git stash`。
+- 副本里的会话和提交和主目录记进同一个项目的数据;知识库索引和「我的需求」索引副本自己一份(知识库索引查询前自动刷新)。副本是 git worktree,只带 agent 配置和清单里写的文件;依赖和构建产物不带,第一次要在副本里安装、构建一次;几个副本共用一份 stash,副本里别用 `git stash`。
 - 只在主目录执行。同一个需求换会话,在副本里直接开新会话,不开新副本。
 - 说法:**在副本里** = 项目根下 `.cgraphx/shared` 是符号链接;只有经 `cgraphx replica create` 开出、登记过的 git worktree 才算副本,自己 `git worktree add` 开的、`cp` 复制的都不算。
 
@@ -41,10 +41,9 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
    | `"code": "feature_has_replica"` | 需求已有在用副本:停下,转告返回的 `message` |
    | 其余 `code` | 把 `message` 原样告诉用户,停下 |
 
-4. **建副本自己的两份索引**:
+4. **建副本自己的「我的需求」索引**:
 
    ```bash
-   cgraphx docs index /Users/smdnk/objects/ai/cgraphx@订单导出
    cgraphx features sync /Users/smdnk/objects/ai/cgraphx@订单导出
    ```
 
@@ -99,7 +98,6 @@ $ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch 
   "warnings": [],
   "reattached": false
 }
-$ cgraphx docs index /Users/smdnk/objects/ai/cgraphx@订单导出
 $ cgraphx features sync /Users/smdnk/objects/ai/cgraphx@订单导出
 ```
 

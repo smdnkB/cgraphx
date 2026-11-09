@@ -227,7 +227,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
   // ⑤ docs 索引
   if (chosen.includes('docs')) {
     if (!cgraphxExists) {
-      clack.log.info('.cgraphx/ 不存在 — 文档子系统跳过(在真实项目目录内重跑 `cgraphx install`,再 `cgraphx docs index`)');
+      clack.log.info('.cgraphx/ 不存在 — 文档子系统跳过(在真实项目目录内重跑 `cgraphx install`)');
     } else if (docsHasMd) {
       const s = clack.spinner();
       s.start('索引文档知识库...');
@@ -240,7 +240,7 @@ export async function runInstallerWithOptions(opts: RunInstallerOptions): Promis
         clack.log.warn(`docs index 失败:${err instanceof Error ? err.message : String(err)}(可稍后手动跑 \`cgraphx docs index\`)`);
       }
     } else {
-      clack.log.info('docs/knowledge/ 不存在或为空 — 文档子系统跳过(后续可创建文档后跑 `cgraphx docs index`)');
+      clack.log.info('docs/knowledge/ 不存在或为空 — 文档子系统跳过(写了知识文件后,查询时自动建索引)');
     }
   }
 
