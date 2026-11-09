@@ -14,7 +14,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { COMMIT_GATE_MARKER, installCommitGate } from '../../../src/core/commit-gate';
 
 // 测试进程本身可能跑在 agent 会话里:提交时去掉会话变量,当成人手动提交
-const SESSION_VARS = ['CLAUDE_CODE_SESSION_ID', 'CODEBUDDY_SESSION_ID'];
+const SESSION_VARS = ['CLAUDE_CODE_SESSION_ID', 'CODEBUDDY_SESSION_ID', 'DSH_SESSION_ID'];
 function envWithout(names: readonly string[], extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
   for (const name of names) delete env[name];
@@ -68,7 +68,7 @@ describe('commit-msg gate snippet', () => {
 
     const run = spawnSync('sh', [hook, msg], {
       cwd: repo,
-      env: envWithout(['CODEBUDDY_SESSION_ID'], { CLAUDE_CODE_SESSION_ID: 's1', PATH: `${bin}:${process.env.PATH ?? ''}` }),
+      env: envWithout(['CODEBUDDY_SESSION_ID', 'DSH_SESSION_ID'], { CLAUDE_CODE_SESSION_ID: 's1', PATH: `${bin}:${process.env.PATH ?? ''}` }),
       encoding: 'utf8',
     });
     expect(run.status).toBe(1);

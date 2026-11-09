@@ -19,7 +19,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { listAgentProfiles } from '../agents';
+import { listSessionIdEnvNames } from '../agents';
 import {
   hookNotice,
   hookRemoveNotice,
@@ -233,14 +233,15 @@ function writePassMark(cwd: string): void {
 // ---------- commit-msg 片段与装卸(C-5、C-6) ----------
 
 /**
- * 门禁的 commit-msg 片段:先看会话变量(名单来自 agents 描述的 sessionIdEnv)—— 一个都没设就是
- * 人手动提交,不起 node(人每次提交多等约 90ms 是 spec 明确不要的);有才经 PATH 调隐藏命令,输出
- * 收进变量、只有退出码 3 才回显打回原文并 exit 1(command not found、旧版报未知命令、任何异常都
- * 放行)。命令替换后接 `|| 赋值`:钩子是 `#!/bin/sh -e` 这类写法时命令失败不会让整个钩子提前
- * 退出,同现有片段;会话变量探针带 `:-` 默认值,`set -u` 下也不炸。没有任何已登记变量时探针串
- * 为空,`[ -n "" ]` 恒假,node 永远不起。每行带 marker,重装按 marker 先删旧行(基础层负责)——
- * 所以一行片段里不能有真的换行:shell 里的 `\n` 要写成 `\\n`,否则拆成两行、只有后一行带 marker,
- * 重装删不掉前一行,留下半句 shell,钩子语法错误、每次提交都失败。
+ * 门禁的 commit-msg 片段:先看会话变量(名单来自 agents 门面的全部会话来源,含只读来源 DeepSeek,
+ * 不是 agent 描述)—— 一个都没设就是人手动提交,不起 node(人每次提交多等约 90ms 是 spec 明确
+ * 不要的);有才经 PATH 调隐藏命令,输出收进变量、只有退出码 3 才回显打回原文并 exit 1
+ * (command not found、旧版报未知命令、任何异常都放行)。命令替换后接 `|| 赋值`:钩子是
+ * `#!/bin/sh -e` 这类写法时命令失败不会让整个钩子提前退出,同现有片段;会话变量探针带 `:-`
+ * 默认值,`set -u` 下也不炸。没有任何会话来源变量时探针串为空,`[ -n "" ]` 恒假,node 永远不起。
+ * 每行带 marker,重装按 marker 先删旧行(基础层负责)—— 所以一行片段里不能有真的换行:shell 里的
+ * `\n` 要写成 `\\n`,否则拆成两行、只有后一行带 marker,重装删不掉前一行,留下半句 shell,钩子
+ * 语法错误、每次提交都失败。
  */
 function commitGateSnippetLines(sessionVars: readonly string[]): string[] {
   const probe = sessionVars.map((name) => `\${${name}:-}`).join('');
@@ -259,10 +260,7 @@ export function installCommitGate(cwd: string): CommitGateInstallResult {
   if (resolveHooksDir(cwd) === null) {
     throw new CommitGateError('not_git_repo', `${path.resolve(cwd)} 不在 git 仓库里,装不了提交门禁`);
   }
-  const sessionVars = listAgentProfiles()
-    .map((profile) => profile.sessionIdEnv)
-    .filter((name): name is string => name !== null);
-  const snippet = installHookSnippet(cwd, COMMIT_GATE_HOOK, COMMIT_GATE_MARKER, commitGateSnippetLines(sessionVars));
+  const snippet = installHookSnippet(cwd, COMMIT_GATE_HOOK, COMMIT_GATE_MARKER, commitGateSnippetLines(listSessionIdEnvNames()));
   if (snippet === null) throw new CommitGateError('not_git_repo');
   if (snippet.status !== 'unsupported') return { ...snippet };
   const notice = hookNotice(snippet, '没装上提交门禁');

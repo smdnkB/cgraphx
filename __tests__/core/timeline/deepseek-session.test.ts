@@ -106,7 +106,7 @@ describe('readDeepSeekSessionFacts (spec D13)', () => {
     expect(prompts[0]).toMatchObject({ text: '第二轮' });
   });
 
-  it('A3: subagent facts (incl. title) are attributed to the root session, head keeps own cwd', async () => {
+  it('A3: subagent facts are attributed to the root session, head keeps own cwd, no title (D9)', async () => {
     const parent = 'session-a3p-0000-4000-8000-000000000003';
     const child = 'session-a3c-0000-4000-8000-000000000004';
     writeSession(parent, [frame([header(parent), userMessage(8, 1793100000200, '主会话', 'u1')])]);
@@ -124,7 +124,8 @@ describe('readDeepSeekSessionFacts (spec D13)', () => {
     // 全部事实归根主会话(K4/D13);会话头的 startCwd 取子会话自己的文件头
     for (const fact of facts) expect(fact.sessionId).toBe(parent);
     expect(facts.find((f) => f.kind === 'session_head')).toMatchObject({ startCwd: `${PROJ}/sub` });
-    expect(facts.find((f) => f.kind === 'session_title')).toMatchObject({ sessionId: parent });
+    // D9:子会话文件里的标题行不产事实(标题只归主会话自己的文件),工具事实仍归 parent
+    expect(facts.some((f) => f.kind === 'session_title')).toBe(false);
     expect(facts.find((f) => f.kind === 'tool')).toMatchObject({ sessionId: parent, toolName: 'Write' });
   });
 
