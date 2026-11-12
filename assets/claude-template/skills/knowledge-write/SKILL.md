@@ -23,10 +23,11 @@ description: 维护可供 cgraphx docs 索引的 Markdown 知识文件(docs/know
 ## 双层结构:实体条目与流程条目
 
 - **实体主条目**(`document_type: business-entity`):业务实体 = 能用名词指代、有属性和生命周期、被多个流程引用(商品 / 礼包 / 订单)。按 [template-concept.md](template-concept.md) 写——只做定位与指引(定义 / 黑话 / 跨文件约束 / 代码入口),行为细节留给代码。
-- **流程条目的正向引用**:必须在 `concepts:` 声明所涉实体(规范实体名);漏标 → 该流程从实体视图消失。
+- **术语主条目**(同样 `document_type: business-entity`,`tags` 加 `术语`):术语 = 对话里常出现、但没有生命周期的业务词——黑话、分类/口径词(本网 / 异网)、类型标签(新企)、阶段名(预提交)。满足任一就建:口径容易说错、一词多义、有口语变体或缩写、新人听不懂。写法同实体模板,多义词与 Summary 写法见 [template-concept.md](template-concept.md)「术语条目」。一词一篇,不建大术语表。
+- **流程条目的正向引用**:必须在 `concepts:` 声明所涉实体和术语(规范名);漏标 → 该流程从实体/术语视图消失。
 - **反查 = 派生的"参与业务"视图**:`find --concept=<实体>` 返回所有引用该实体的文档。**任何条目里都不手动维护全量清单**——手动维护必陈旧,反查永远最新。
 - **同名严格性**:流程条目里的实体名与实体条目的规范 concept 名逐字一致;建条目前先 `docs concepts` 查名,错一个名反查就断。
-- **不是所有概念都配主条目**:机制概念(Scene 分发机制、准三层)、动作概念(礼包续订)留作 tag;只有业务实体升级。
+- **不是所有概念都配主条目**:机制概念(Scene 分发机制、准三层)、动作概念(礼包续订)留作 tag;只有业务实体和术语升级。
 - **沉淀时机**:功能交付完成时最佳(理解最新鲜);dev-impl 和 dev-impl-subagent 收尾会提示识别实体;只从一两个流程抽出的条目用 `status: draft` + Open Questions 标记未补全。
 
 ## Frontmatter 规范
@@ -65,6 +66,7 @@ updated: 2026-04-28
 - **`document_type` 枚举(7)**:business-entity 业务实体(业务对象主条目)· business-flow 业务流程 · mechanism 技术机制(含架构)· decision 决策 · rule 规则 · lesson 教训 · guide 指南(含运维手册/教程/安装/FAQ/API 文档)。
 - **`source_type` 枚举(5)**:work_context 工作上下文(需求/任务流中沉淀)· batch_exploration 批量探索(init-knowledge 式项目探索)· review 评审(代码/架构评审中发现)· debugging 调查排障(问题调查中发现)· manual 手工(人工主动整理)。
 - **`status` 枚举(4)**:draft · active · superseded · deprecated。
+- **`inject`(可选,只对术语条目有意义)**:术语条目默认会按提问精确匹配后自动注入上下文;人人都懂、出现太频繁的常用词写 `inject: false`,只建条目不注入。
 
 ## Summary 章节(唯一进索引)
 
@@ -81,7 +83,8 @@ updated: 2026-04-28
 ## 命名与语言
 
 - **concept**:一个概念一个规范名,优先复用已索引名(`docs concepts` 查);不造翻译重复项(Redis / redis server / Redis Installation 算重复);替代名(译名 + 同义词 + 缩写)进 `aliases`。
-- **命名由检索机制决定**:`find --q` 是整串 LIKE,**只匹配 title + Summary**(concept 名不参与)→ 黑话/口语变体要在 Summary 出现一次才可被 `--q` 命中;`find --concept` 是精确过滤、召回子 agent 用 concept 名做语义匹配 → 规范名用项目实际用词;aliases 只归一,不参与搜索。
+- **命名由检索机制决定**:`find --q` 是整串 LIKE,**只匹配 title + Summary**(concept 名不参与)→ 黑话/口语变体要在 Summary 出现一次才可被 `--q` 命中;`find --concept` 是精确过滤、召回子 agent 用 concept 名做语义匹配 → 规范名用项目实际用词;aliases 不参与 `find` 搜索。
+- **aliases 会被精确匹配**:术语条目的 title 和 aliases 会拿去和用户提问逐字比对,命中就注入该条目。所以 aliases 只放**专指这个词**的说法(英文标识符、缩写、口语变体、错别字);太泛的词、在别处另有含义的词不放。反例:把「批次编号」放进「批次号」的 aliases,而用户说「批次编号」时指的是批次编码,结果误注入。
 - **语言**:中文概念不硬翻英文——代码标识符/协议/产品名保留真实形式(Redis / SqliteStore / FTS5),业务/流程概念用项目语言(本地开发环境、任务办理流程);正文用中文,术语/标识符/路径保留英文;Summary 标题保留英文。
 - **domain**:语义为**业务域**——项目的业务领域(合约 / 商品 / 礼包 / 宽带 / 订单),稳定有界;**自由词表,程序不校验枚举**,靠填写引导与召回反馈收敛。服务/模块信息(so-service / order-service)放 **tags** 不放 domains。示例:✗ `domains: [so-service]` → ✓ `domains: [商品]` + `tags: [so-service]`。**tags**:松散分组,不替代 concepts/domains。
 - **文件名**:主题 slug 跟项目实际叫法(常说"流程"就用"流程",常说 redis 就用 redis),不二次翻译;不进索引、不参与检索,中文名不影响命中。
