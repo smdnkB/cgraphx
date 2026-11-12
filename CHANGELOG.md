@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Changed — clarify and plan reviews are narrower and no longer block
+
+In a real requirement the dev-clarify adversarial review took about 16
+minutes and the dev-plan review about 19, mostly re-verifying facts the main
+agent had already read. Every real problem they found sat in a claim that
+looked verified but was inferred, or in something a deterministic check could
+have caught.
+
+- dev-clarify: each row of the reality-constraint list is marked verified or
+  inferred (verified = the deciding line of code, library source included, or
+  the data was read), and the draft lists high-risk assertions. The review
+  runs in the background right after consolidation while the user reads the
+  draft, skips verified rows, chases inferred rows and assertions, and stops
+  at 30 tool calls, listing what it did not finish. Clarify ends only after
+  its findings are settled.
+- dev-plan: a new pre-write self-check step, recorded in the index — run every
+  unified-verification command on the baseline, check each repository's
+  staged and untracked files, list callers of changed shared methods and
+  whether their results leak into API responses, put everything the
+  dev-impl-subagent main session needs into the four index sections it reads,
+  and spell out how fix commits are numbered. The plan review now runs only
+  for large requirements, trusts the self-check, focuses on spec alignment
+  and cross-task contracts, and stops at 30 tool calls.
+- dev-impl-subagent: fix commits follow the fix-commit format in the index's
+  commit section, falling back to `fix(<scope>): ...` only when it says none.
+- dev-spec: re-checks inferred rows and high-risk assertions it depends on.
+
 ### Changed — knowledge base index refreshes itself before queries
 
 `cgraphx docs concepts / domains / tags / find / refs / dedup / show` now check
