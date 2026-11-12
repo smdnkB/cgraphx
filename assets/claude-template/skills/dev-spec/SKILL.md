@@ -23,7 +23,7 @@ description: 用户要求基于已确认的需求、功能方案、业务边界�
 
 0. **命名先行**(写内容前必须落定):① 业务 ID——有无工单号/需求单号?允许留空但**必须显式确认**;② 标题语言——中/英/混合,用户选定,**禁止擅自中文转英文 slug**;③ 负责人——默认 `git config user.name`,向用户展示确认;必须和负责人本人的 `git config user.name` 一字不差,写成显示名,`features list --mine` 就找不到;写入头部 `> 负责人:`(「我的需求」检索以此为准);④ 规范里的段——有 `docs/guides/feature-standards.md`「需求目录命名」一节 → 确认 `格式:` 行里除 `YYYY-MM-DD` 外的每个占位段:有取值表的段(如模块)先按要改的代码目录给出建议值再确认;需求跨多个模块而规范没写怎么取 → 列出涉及的模块,问用户取哪个;改动不在模块表里而规范没写怎么取 → 列出改动的目录,问用户取哪个模块名,并提醒把它补进模块表。没有规范 → 命名和现在一样。用户已给 feature-id,或目录已由 clarify 讨论稿、`/dev-start` 建立 → 直接复用。
 1. **收录功能方案**:原样写成第一节——收 clarify 讨论稿(`<前缀>-功能方案-v<N>.md`)人终确认的那一版 `---` 以上的正文:一句话、功能清单、各功能点那一节(图或行为链、口径表、体验决策)。`---` 以下不收:「必须在 spec 前解决的问题」不是「无」的,先列给用户,定完(回 `/dev-clarify` 出下一版)再写;现实约束清单、留给 spec 的细节决策在第 2、3 步用。没有讨论稿的(小需求、bug 修复直接来写 spec)按讨论稿同样的格式补写,先给用户确认。
-   图:spec 第一节随讨论稿进 PlantUML 图;spec 自己新写的活动/时序/状态/类图默认 PlantUML;时间线等不擅长的用表或编号步骤。画法照 dev-clarify 的 `references/功能点配图.md`(各图种的样式头、样例和框数,图里可以写对外接口名、服务名),标黄标绿等通用画法见同目录 `泳道图画法.md`。
+   图:spec 第一节随讨论稿原样收图(泳道图是 PlantUML,状态图、时序图、数据流图是 Mermaid);spec 自己新写的图照同一分工——有泳道的活动图用 PlantUML,时序、状态、类图、数据流图用 Mermaid;时间线等不擅长的用表或编号步骤。画法照 dev-clarify 的 `references/功能点配图.md`(各图种的样式头、样例和框数,图里可以写对外接口名、服务名),标黄标绿等通用画法见同目录 `泳道图画法.md`。
 2. **读代码**:读设计要用的代码事实——既有机制怎么实现、能不能复用、调用方有哪些(grep/Read 查代码与调用关系;`db-query` 查 DDL,本地 `docs/schema-knowledge/` 优先;`knowledge-recall` 查历史决策),调用前告知用户。讨论稿 `---` 以下「现实约束清单」里标「已核实」的不重复查;标「推断」的和「高风险断言」,设计要依赖它时先核实。
 3. **定细节方案**:每个功能点一节——设计决策表;这个功能点有接口、持久化数据、迁移、对外文案时,在表后写接口契约、数据格式、迁移与兼容、文案的技术包装。被体验决策锁定的选项直接引用不重开;口径在决策表里落成具体查询条件(字段、状态值、时间边界),几处用到同一口径的收在一处实现,不各写一遍;schema 变更标注走 `docs/guides/data-standards.md`「Schema 变更约定」。
 4. **写全局约束、设计验收、待确认项**:全局约束只写跨功能点的(不能改的旧行为、必须复用的机制、零变化要求);设计验收只写功能方案里看不到的检查;待确认只留设计类。
@@ -130,30 +130,24 @@ stop
 
 行为链:运营从站内通知或「我的导出」进来 → 列出本人近 30 天的导出 K5,新的在前,每条显示状态 → 点「可下载」的那条,下载文件。
 
-```plantuml
-@startuml
-skinparam backgroundColor #FFFFFF
-skinparam state {
-  BackgroundColor #F1F1F1
-  BorderColor #181818
-  FontColor #000000
-  ArrowColor #181818
-}
-hide empty description
-state "生成中" as S1 #FFF3B0
-state "可下载" as S2 #FFF3B0
-state "已过期" as S3 #FFF3B0
-S3 : 显示「已过期,请重新导出」
-state "无数据" as S4 #FFF3B0
-S4 : ② 显示「无数据」,没有下载
-[*] --> S1 : F1 运营点「导出」
-S1 --> S2 : 生成完 发站内通知
-S1 --> S4 : 近 90 天没有订单 K1、K2
-S2 --> S3 : ① 满 7 天 K6
-S2 --> S2 : 运营下载
-S4 --> [*]
-S3 --> [*]
-@enduml
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#F1F1F1","primaryBorderColor":"#181818","primaryTextColor":"#000000","lineColor":"#181818","edgeLabelBackground":"#FFFFFF","actorBkg":"#F1F1F1","actorBorder":"#181818","signalColor":"#181818"}}}%%
+stateDiagram-v2
+  classDef new fill:#FFF3B0,stroke:#181818
+  state "生成中" as S1
+  state "可下载" as S2
+  state "已过期" as S3
+  S3 : 显示「已过期,请重新导出」
+  state "无数据" as S4
+  S4 : ② 显示「无数据」,没有下载
+  class S1, S2, S3, S4 new
+  [*] --> S1 : F1 运营点「导出」
+  S1 --> S2 : 生成完 发站内通知
+  S1 --> S4 : 近 90 天没有订单 K1、K2
+  S2 --> S3 : ① 满 7 天 K6
+  S2 --> S2 : 运营下载
+  S4 --> [*]
+  S3 --> [*]
 ```
 
 | 编号 | 哪一步 | 怎么判定 | 算 / 不算(例子) | 依据 |
