@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added — Codex project installation and session ingestion
+
+- `install -t codex` installs project skills under `.agents/skills/` and maintains a marked block in the root `AGENTS.md`.
+- Codex rollout JSONL is ingested into the timeline, including tool calls from subagents when parent metadata is available. `CODEX_THREAD_ID` participates in commit attribution and the Git commit gate.
+- Codex session formats and environment variables vary by runtime; archived sessions and Codex session titles are not yet imported.
+
+### Fixed — Codex desktop sessions missing from the board
+
+Read user prompts recorded as response items, deduplicate paired prompt events, and backfill previously indexed Codex sessions that have no recorded prompts.
+
 ### Changed — clarify and plan reviews are narrower and no longer block
 
 In a real requirement the dev-clarify adversarial review took about 16

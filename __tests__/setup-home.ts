@@ -13,13 +13,17 @@ import { afterAll } from 'vitest';
 
 const originalHome = process.env.HOME;
 const originalUserProfile = process.env.USERPROFILE;
+const originalCodexThreadId = process.env.CODEX_THREAD_ID;
+const originalCodexHome = process.env.CODEX_HOME;
+delete process.env.CODEX_THREAD_ID;
+delete process.env.CODEX_HOME;
 
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cgx-home-'));
 // os.homedir() 在 POSIX 上读 HOME,在 Windows 上读 USERPROFILE
 process.env.HOME = tempHome;
 process.env.USERPROFILE = tempHome;
 
-function restoreEnv(key: 'HOME' | 'USERPROFILE', value: string | undefined): void {
+function restoreEnv(key: 'HOME' | 'USERPROFILE' | 'CODEX_THREAD_ID' | 'CODEX_HOME', value: string | undefined): void {
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
 }
@@ -27,5 +31,7 @@ function restoreEnv(key: 'HOME' | 'USERPROFILE', value: string | undefined): voi
 afterAll(() => {
   restoreEnv('HOME', originalHome);
   restoreEnv('USERPROFILE', originalUserProfile);
+  restoreEnv('CODEX_THREAD_ID', originalCodexThreadId);
+  restoreEnv('CODEX_HOME', originalCodexHome);
   fs.rmSync(tempHome, { recursive: true, force: true });
 });

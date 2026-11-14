@@ -53,6 +53,8 @@ updated: 2026-11-08
 
 # agent 适配
 
+> 2026-11-14 Codex 补充:Codex 已加入完整安装目标。项目 skill 在 `.agents/skills/`,指引块在根目录 `AGENTS.md`;会话来源读取 `$CODEX_HOME/sessions/`(默认 `~/.codex/sessions/`),`CODEX_THREAD_ID` 用于提交归属和门禁。读取器在 `timeline/ingest/codex-session.ts`,按 rollout 的父会话信息归集子 agent 工具与提交。下文两家完整接入和三家来源的数量描述是 Codex 接入前的历史记录。当前不读取归档会话和 Codex 会话标题;父子关系缺失时不能归集到主会话。
+
 ## Summary
 
 cgraphx 可以装给多个 AI 编码 agent,目前是 Claude Code(`claude-code`)和 CodeBuddy(`codebuddy`),同一项目里可以同时装。各 agent 的差异只集中在一处:`src/core/agents/` 的「agent 描述」(AgentProfile)。差异包括配置目录、指引文件、settings、项目根和会话 id 的环境变量、**会话文件根目录(`sessionsDir` + `sessionsDirEnv`)与读取器标识(`sessionReader`)**、命令名、能力开关、资产替换规则。timeline、安装器、门禁、会话提示都只经 agents 门面取值,不写死 `.claude`。

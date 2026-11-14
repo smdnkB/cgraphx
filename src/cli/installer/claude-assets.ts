@@ -40,6 +40,8 @@ const TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
 
 /** 该 agent 不具备对应能力时不部署的模板子目录(相对配置目录)。 */
 function isExcludedByCapability(rel: string, profile: AgentProfile): boolean {
+  if (profile.assetTopLevel && !profile.assetTopLevel.includes(rel.split('/')[0] ?? '')) return true;
+  if (profile.excludedAssetPaths?.some(prefix => rel === prefix || rel.startsWith(`${prefix}/`))) return true;
   if (!profile.capabilities.statusLine && rel.startsWith('plugins/claude-hud/')) return true;
   if (!profile.capabilities.contextMonitor && rel.startsWith('hooks/context-monitor/')) return true;
   return false;
@@ -47,7 +49,7 @@ function isExcludedByCapability(rel: string, profile: AgentProfile): boolean {
 
 /** 复制单个资产:无替换规则或非文本扩展名逐字节复制,否则 utf8 读入替换后写出。 */
 function copyAsset(srcFile: string, destFile: string, profile: AgentProfile): void {
-  if (profile.assetReplacements.length === 0 || !TEXT_EXTENSIONS.has(path.extname(srcFile))) {
+  if ((profile.assetReplacements.length === 0 && !profile.transformAssetText) || !TEXT_EXTENSIONS.has(path.extname(srcFile))) {
     fs.copyFileSync(srcFile, destFile); // copyFileSync 默认覆盖
     return;
   }
@@ -78,7 +80,7 @@ export interface ClaudeAssetChange {
  * a build, or a stripped-down distribution). Callers should treat this as
  * "no assets to deploy" rather than failing the install.
  */
-function resolveTemplateDir(): string | null {
+export function resolveTemplateDir(): string | null {
   // dist/cli/installer/claude-assets.js → dist/.claude-template/
   // (installer/ → cli/ → dist/, then .claude-template/ = TWO levels up)
   const candidate = path.join(__dirname, '..', '..', '.claude-template');
@@ -126,8 +128,9 @@ function walkFiles(root: string): string[] {
 export function deployClaudeAssets(
   targetClaudeDir: string,
   profile: AgentProfile = defaultAgentProfile(),
+  overrideTemplateDir?: string,
 ): ClaudeAssetChange[] {
-  const templateDir = resolveTemplateDir();
+  const templateDir = overrideTemplateDir ?? resolveTemplateDir();
   if (!templateDir) {
     return [{ path: '', action: 'not-found' }];
   }
@@ -282,7 +285,14 @@ export function removeClaudeAssets(
     return changes;
   }
 
+  for (const name of profile.managedRootAssets ?? []) {
+    if (!fs.existsSync(path.join(templateDir, name)) || !fs.existsSync(path.join(targetClaudeDir, name))) continue;
+    fs.rmSync(path.join(targetClaudeDir, name), { force: true });
+    changes.push({ path: `${profile.configDirName}/${name}`, action: 'removed' });
+  }
+
   for (const category of categories) {
+    if (profile.assetTopLevel && !profile.assetTopLevel.includes(category.name)) continue;
     if (category.name === 'node_modules' || category.name === '.DS_Store') continue;
     if (category.name.startsWith('.')) continue;
     if (category.name === 'CLAUDE.md') continue; // marker-block owned, not an asset dir
@@ -298,6 +308,7 @@ export function removeClaudeAssets(
     for (const child of children) {
       if (child.name === '.DS_Store' || child.name.startsWith('.')) continue;
       const rel = `${category.name}/${child.name}`;
+      if (isExcludedByCapability(`${rel}/`, profile)) continue;
       const dest = path.join(targetClaudeDir, rel);
       if (!fs.existsSync(dest)) continue;
       try {

@@ -27,6 +27,7 @@ import {
   isAgentDetected,
   isAgentInstalled,
   type AgentProfile,
+  type AgentInstallInput,
 } from '../../../core/agents';
 import type {
   AgentTarget,
@@ -112,7 +113,7 @@ class GenericAgentTarget implements AgentTarget {
   readonly displayName: string;
   private readonly commands: AgentCommands;
 
-  constructor(readonly profile: AgentProfile) {
+  constructor(readonly profile: AgentProfile, private readonly projectRoot?: string, private readonly input?: AgentInstallInput) {
     this.id = profile.id;
     this.displayName = profile.displayName;
     this.commands = commandsFor(profile);
@@ -120,7 +121,7 @@ class GenericAgentTarget implements AgentTarget {
 
   /** 项目根仍取 process.cwd()(2.0 只支持项目本地安装)。 */
   private root(): string {
-    return process.cwd();
+    return this.projectRoot ?? process.cwd();
   }
 
   private settingsPath(): string {
@@ -154,7 +155,7 @@ class GenericAgentTarget implements AgentTarget {
 
     // 2. 清理已移除子命令 / 已废弃脚本留下的死 hook,升级即自愈;有移除才上报。已下掉的 hook 被移除时
     //    多一行 note(平台同步、开发任务一批;时间线与提交门禁一批)
-    const hookCleanup = this.cleanupDeadHooks();
+    const hookCleanup = this.profile.settingsFormat === 'none' ? { file: { path: this.settingsPath(), action: 'unchanged' as const }, notes: [] } : this.cleanupDeadHooks();
     if (hookCleanup.file.action === 'removed') files.push(hookCleanup.file);
     notes.push(...hookCleanup.notes);
 
@@ -164,7 +165,9 @@ class GenericAgentTarget implements AgentTarget {
 
     // 4. 部署模板资产到该 agent 的配置目录(同名无条件覆盖,用户自加文件保留)
     if (loc === 'local') {
-      const assetChanges = deployClaudeAssets(agentConfigDir(this.root(), this.profile), this.profile);
+      const assetChanges = this.input?.assetsDir === null
+        ? []
+        : deployClaudeAssets(agentConfigDir(this.root(), this.profile), this.profile, this.input?.assetsDir);
       let deployed = false;
       for (const change of assetChanges) {
         if (change.action === 'not-found') continue; // 未内置模板
@@ -174,7 +177,7 @@ class GenericAgentTarget implements AgentTarget {
 
       // 5. 资产部署成功后写版本记录;没有内置模板或读不到本机版本时不写。
       //    记录文件不进文件变更列表,只多一行 note,安装输出只多这一行(skill版本落后提示 spec D2)
-      const version = deployed ? getCliVersion() : null;
+      const version = deployed ? (this.input === undefined ? getCliVersion() : this.input.version) : null;
       if (version !== null) {
         writeSkillVersion(this.root(), this.profile, version);
         notes.push(`项目 skill 已对齐到 ${version}`);
@@ -189,10 +192,10 @@ class GenericAgentTarget implements AgentTarget {
     const notes: string[] = [];
 
     // 1. 精确移除 cgraphx hook 命令;statusLine 仅当指向 claude-hud 时移除
-    files.push(this.removeCgraphxSettings());
+    if (this.profile.settingsFormat !== 'none') files.push(this.removeCgraphxSettings());
 
     // 2. 死 hook 清扫(与 install 自愈共用);已下掉的 hook 被移除时同样回传 note
-    const hookCleanup = this.cleanupDeadHooks();
+    const hookCleanup = this.profile.settingsFormat === 'none' ? { file: { path: this.settingsPath(), action: 'unchanged' as const }, notes: [] } : this.cleanupDeadHooks();
     if (hookCleanup.file.action === 'removed') files.push(hookCleanup.file);
     notes.push(...hookCleanup.notes);
 
@@ -201,7 +204,9 @@ class GenericAgentTarget implements AgentTarget {
     files.push({ path: file, action: removeMarkedSection(file, CGRAPHX_SECTION_START, CGRAPHX_SECTION_END) });
 
     // 4. 按模板清单移除包自带资产;清单外的用户文件保留
-    const assetChanges = removeClaudeAssets(agentConfigDir(this.root(), this.profile), undefined, this.profile);
+    const assetChanges = this.input?.assetsDir === null
+      ? []
+      : removeClaudeAssets(agentConfigDir(this.root(), this.profile), this.input?.assetsDir, this.profile);
     for (const change of assetChanges) {
       if (change.action === 'not-found') continue;
       files.push(change);
@@ -422,7 +427,7 @@ class GenericAgentTarget implements AgentTarget {
    */
   private writeInstructionsEntry(): FileChange {
     const file = agentInstructionsPath(this.root(), this.profile);
-    const content = readTemplateClaudeMd();
+    const content = this.input === undefined ? readTemplateClaudeMd() : this.input.instructions;
     if (content === null) {
       return { path: file, action: 'kept' };
     }
@@ -474,6 +479,6 @@ function isTimelineRemovalCommand(command: unknown): boolean {
 }
 
 /** 由 agent 描述生成 target。 */
-export function createAgentTarget(profile: AgentProfile): AgentTarget {
-  return new GenericAgentTarget(profile);
+export function createAgentTarget(profile: AgentProfile, projectRoot?: string, input?: AgentInstallInput): AgentTarget {
+  return new GenericAgentTarget(profile, projectRoot, input);
 }

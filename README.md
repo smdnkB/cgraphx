@@ -1,6 +1,6 @@
 # cgraphx
 
-> 给 Claude Code 的本地研发辅助系统——20+ 个 skill 定义研发流程,四个项目本地能力在背后支撑。
+> 给 Claude Code、CodeBuddy 和 Codex 的本地研发辅助系统——20+ 个 skill 定义研发流程,项目本地能力在背后支撑。
 
 一条 `cgraphx install`,把「需求澄清 → 规格 → 实现 → 测试 → 知识沉淀」的完整研发流程装进你的项目。全程**项目本地、离线运行、数据不出仓库**。
 
@@ -83,6 +83,8 @@ cgraphx install           # 部署 skills → .claude/ + 接入 hooks + 初始�
 
 重启 Claude Code 即可。
 
+Codex CLI 或桌面端可在项目中执行 `cgraphx install -t codex`:skill 部署到 `.agents/skills/`,工作指引写入项目根 `AGENTS.md` 的 cgraphx 标记块;开始新会话后可使用 `$dev-clarify` 等 skill。时间线读取 Codex 本地会话文件,并尝试按父子关系归集子 agent 的工具事件。Codex 特有的会话格式可能随版本变化。
+
 | 命令 | 作用 |
 |---|---|
 | `cgraphx install` | 项目内一条命令接入全部能力 |
@@ -121,11 +123,11 @@ cgraphx 有两个知识积累闭环,用得越多越值钱:
 
 ## 要求
 
-- **Claude Code**(skill 部署、hooks、timeline 均依赖其机制)
+- **Claude Code、CodeBuddy 或 Codex**(选择对应安装目标)
 - **Node.js** `>=22.5 <27`(内置 `node:sqlite`,无原生依赖、无 wasm)
 - 项目本地、离线运行
 
-> `docs` 与 `db` 两个 CLI 能力本身与 agent 无关,可独立调用;但作为一套研发系统(skills + hooks + timeline),cgraphx 面向 Claude Code。
+> `docs` 与 `db` 两个 CLI 能力本身与 agent 无关,可独立调用。时间线从支持的 agent 会话文件读取,提交记录和门禁使用项目 Git 钩子。
 
 ## 关于名字
 

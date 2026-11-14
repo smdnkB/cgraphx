@@ -28,7 +28,8 @@ import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { resolveSessionIdFromEnv, type SessionFromEnv } from '../agents';
+import { listSessionSources, resolveSessionIdFromEnv, type SessionFromEnv } from '../agents';
+import { sessionAdapterContext, sessionAdapterFor } from './ingest/adapters';
 import { COMMIT_GATE_MARKER } from '../commit-gate';
 import { locateDataAtRoot } from '../data-location';
 import { clearRepoLocalGitEnv, hookNotice, repairHookSnippets, resolveHooksDir } from '../git-hooks';
@@ -108,7 +109,14 @@ export async function gitCommitHook(): Promise<void> {
 
   // 归属会话与来源 agent 取自会话环境变量;终端手动提交时两者均为 null。
   const fromEnv = resolveSessionIdFromEnv();
-  const session_id = fromEnv?.sessionId ?? null;
+  let session_id = fromEnv?.sessionId ?? null;
+  if (fromEnv) {
+    try {
+      const source = listSessionSources().find(item => item.id === fromEnv.agent);
+      if (source) session_id = await sessionAdapterFor(source.sessionReader)
+        .resolveRootSessionId(sessionAdapterContext(info.cwd), fromEnv.sessionId) ?? fromEnv.sessionId;
+    } catch { /* 保留原始会话编号 */ }
+  }
   const agent = fromEnv?.agent ?? null;
 
   // K16 判「跳过门禁」(spec D14):先于记提交单独算,任何一步读不出只当没跳过,绝不影响提交记录。
@@ -127,7 +135,9 @@ export async function gitCommitHook(): Promise<void> {
         commit_insertions: share.insertions,
         commit_deletions: share.deletions,
         cwd: info.cwd,
-        metadata: commitMetadata(info, share.merge, gateSkipped),
+        metadata: fromEnv && session_id !== fromEnv.sessionId
+          ? { ...commitMetadata(info, share.merge, gateSkipped), subagent: { id: fromEnv.sessionId } }
+          : commitMetadata(info, share.merge, gateSkipped),
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

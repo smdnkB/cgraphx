@@ -33,7 +33,7 @@ export const PLAN_DISCUSSION_FILE_PATTERN = /-功能方案-v[^/]*\.md$/;
 export const SPEC_FILE_PATTERN = /(^|-)spec\.md$/;
 
 /** K9⑤:流程命令的形状(`/dev-merge 订单导出`),捕获组是命令参数。 */
-export const FLOW_COMMAND_PATTERN = /^\/[a-z][\w-]*\s+(.+)/;
+export const FLOW_COMMAND_PATTERN = /^[/$][a-z][\w-]*\s+(.+)/;
 
 // ─── K9 / K10 依据文案(页面用「、」连接)───────────────────────────────────
 

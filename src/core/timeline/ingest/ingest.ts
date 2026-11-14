@@ -47,6 +47,7 @@ import { TimelineStore, upsertSessionTitle, type SessionTitleUpsert } from '../s
 import type { TimelineEventInput } from '../types';
 import { rebuildTimeline } from './rebuild';
 import { sessionFactsReader } from './reader';
+import { sessionAdapterContext, sessionAdapterFor } from './adapters';
 import type { SessionFact, SessionFactTs, SessionFactsReader, SessionFileReadResult } from './types';
 
 // ─── 结果形状(plan C-4)──────────────────────────────────────────────────────
@@ -92,8 +93,9 @@ export async function ensureTimelineUpToDate(start: string): Promise<TimelineSyn
     // D10 已有标题重算:老补录把 DeepSeek 子会话标题也归给了主会话,读取器改完后按新规则重算一次;
     // 同样拿不到锁静默下次再来,失败的提示随本次结果一起出
     const refreshNotices = await refreshDeepSeekSessionTitles(start);
+    const codexNotices = await backfillCodexPrompts(start);
     const outcome = await ingestIncremental(start);
-    const merged = { ...outcome, notices: [...backfillNotices, ...refreshNotices, ...outcome.notices] };
+    const merged = { ...outcome, notices: [...backfillNotices, ...refreshNotices, ...codexNotices, ...outcome.notices] };
     if (rebuilt === null || rebuilt.status === 'mark-only') return merged;
     // 重建的汇总在前(F6 图「记下重建过了、输出重建了多少」);增量紧随其后几乎总是空趟(偏移刚推进
     // 到位),就算有也是重建期间新追加的内容,数字直接相加
@@ -153,6 +155,54 @@ export function readMetaValue(db: SqliteDatabase, key: string): string | null {
 /** timeline_meta 写一个键(值取当前时间;键已在我们这条链上定义)。 */
 export function writeMetaNow(db: SqliteDatabase, key: string): void {
   db.prepare('INSERT OR REPLACE INTO timeline_meta (key, value) VALUES (?, ?)').run(key, new Date().toISOString());
+}
+
+/** 回填旧读取器遗漏的 Codex 用户消息,不改会话文件的增量偏移。 */
+async function backfillCodexPrompts(start: string): Promise<string[]> {
+  const root = findProjectRoot(start);
+  if (root === null) return [];
+  const loc = locateDataAtRoot(root);
+  if (loc.mode !== 'project' || loc.dataDir === null || loc.projectDirName === null || loc.identity === null) return [];
+  const dataDir = loc.dataDir;
+  const dbPath = path.join(dataDir, DATABASE_FILENAME);
+  if (!fs.existsSync(dbPath)) return [];
+  const source = listSessionSources().find(item => item.id === 'codex');
+  if (!source) return [];
+  const index = openSessionIndex();
+  let conn: DatabaseConnection | null = null;
+  try {
+    if (!acquireIngestLock(dataDir)) return [];
+    conn = DatabaseConnection.open(dbPath);
+    const db = conn.getDb();
+    ensureTimelineSchema(db);
+    const marker = 'codex_prompt_backfill_v1';
+    if (readMetaValue(db, marker) !== null) return [];
+    const removedAt = index.removedProjectAt(loc.identity);
+    const removedMs = removedAt === null ? NaN : Date.parse(removedAt);
+    const ctx: FactMappingContext = { projectDb: () => db, removedAtMs: Number.isFinite(removedMs) ? removedMs : null, sessionsWritten: new Set() };
+    const hasPrompts = db.prepare("SELECT 1 FROM timeline_events WHERE agent = 'codex' AND event_type = 'user_prompt' AND session_id = ? LIMIT 1");
+    const eligible = new Map<string, boolean>();
+    const store = new TimelineStore(db);
+    for (const row of index.listSessionFiles('codex')) {
+      if (row.project_dir !== loc.projectDirName || !row.start_cwd || !fs.existsSync(row.path)) continue;
+      const result = await sessionFactsReader(source.sessionReader)(row.path, 0);
+      const prompts = result.facts.filter(fact => {
+        if (fact.kind !== 'prompt') return false;
+        if (!eligible.has(fact.sessionId)) eligible.set(fact.sessionId, hasPrompts.get(fact.sessionId) === undefined);
+        return eligible.get(fact.sessionId) === true;
+      });
+      const events = mapFacts(prompts, source, row.start_cwd, ctx);
+      db.transaction(() => { for (const event of events) store.insert(event); })();
+    }
+    writeMetaNow(db, marker);
+    return [];
+  } catch (err) {
+    return [`Codex 会话提问回填失败:${shortReason(err)},下一趟会重试`];
+  } finally {
+    try { conn?.close(); } catch { /* 尽力关闭 */ }
+    releaseIngestLock(dataDir);
+    index.close();
+  }
 }
 
 /**
@@ -432,15 +482,16 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
     const pending: Array<{ source: SessionSource; file: string; stat: FileStat }> = [];
     let unavailableNotice: string | null = null;
     for (const source of listSessionSources()) {
-      const sessionsRoot = source.sessionsRoot();
-      if (sessionsRoot === null) continue;
-      const reason = source.unavailableReason();
+      const adapter = sessionAdapterFor(source.sessionReader);
+      const context = sessionAdapterContext(root);
+      const reason = adapter.unavailableReason(context);
       if (reason !== null) {
         unavailableNotice ??= reason;
         continue;
       }
       for (const row of sessionIndex.listSessionFiles(source.id)) rows.set(row.path, row);
-      for (const file of source.listFiles(sessionsRoot)) {
+      const files = await adapter.listSessionFiles(context);
+      for (const file of files) {
         const stat = statOrNull(file);
         if (stat === null) continue; // 文件没了(F1 ⑤):已记进时间线的留着,这里跳过
         const known = rows.get(file);
@@ -550,7 +601,7 @@ async function processFile(
   // subagents/ 下的文件跟主会话(spec D2 表注,claude/codebuddy 布局;deepseek 路径没有这一段,
   // subagentMainPath 自然返回 null,会话头读自己文件里的开始目录):主会话文件的 start_cwd 已认出
   // 就用它的(本轮先处理主文件,rows 里是最新值);主文件不在 / 没认出时退回自己读头
-  const mainPath = subagentMainPath(file);
+  const mainPath = sessionAdapterFor(source.sessionReader).parentSessionFile(file);
   if (startCwd === null && mainPath !== null) {
     const mainRow = ctx.rows.get(mainPath) ?? ctx.sessionIndex.getSessionFile(mainPath);
     if (mainRow !== null) {
@@ -692,8 +743,7 @@ export function rowSessionId(
   facts: readonly SessionFact[],
   fallback: string | null,
 ): string | null {
-  if (source.sessionReader !== 'deepseek-session') return sessionFileId(file);
-  return facts[0]?.sessionId ?? fallback;
+  return sessionAdapterFor(source.sessionReader).sessionIdForFile(file, facts, fallback);
 }
 
 /** 子 agent 文件 → 同目录(项目子目录)下不带 subagents/ 段的主会话文件路径;主文件 → null。 */

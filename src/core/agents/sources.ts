@@ -1,8 +1,8 @@
 /**
  * 只读会话来源(sources 层,plan D12):「有哪些 agent 的会话文件可以读」的统一登记处。
  *
- * 前两项由 AGENT_PROFILES 的已登记 agent 派生(claude-code、codebuddy),第三项 deepseek 是
- * 独立的只读来源——只读它的会话文件进时间线,不进安装器 / 副本;会话 id 进提交归属、门禁与会话
+ * 完整安装来源由 AGENT_PROFILES 派生,deepseek 是独立的只读来源——只读它的会话文件进时间线,
+ * 不进安装器 / 副本;会话 id 进提交归属、门禁与会话
  * 提示,所以没有 AgentProfile、AGENT_PROFILES 一行不动。补录与重建(timeline/ingest/)只经
  * listSessionSources() 枚举会话文件,不再各自拼「描述 + 根目录 + 列举」;claude/codebuddy 的目录
  * 布局列举(含 subagents/ 递归)也搬到了这里——agents 不再伸手进 timeline 的内部模块。
@@ -12,17 +12,31 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import { AGENT_PROFILES } from './profiles';
 import type { AgentProfile, SessionSource } from './types';
+import type { AgentSessionEnvironmentAdapter } from './adapter';
+
+function sessionEnvironment(name: string | null): AgentSessionEnvironmentAdapter {
+  const names = name ? [name] : [];
+  return {
+    sessionIdEnvNames: names,
+    sessionFromEnvironment(context) {
+      for (const envName of names) {
+        const sessionId = context.env[envName]?.trim();
+        if (sessionId) return { sessionId, envName };
+      }
+      return null;
+    },
+  };
+}
 
 /**
  * 会话文件根目录(如 `~/.claude/projects`):`sessionsDirEnv` 的环境变量设了(非空)以它为根拼 `sessionsDir`,
  * 否则家目录拼;`sessionsDir` 为 null(agent 会话文件不在固定位置)→ null。
  */
-export function agentSessionsRoot(profile: AgentProfile, env: NodeJS.ProcessEnv = process.env): string | null {
+export function agentSessionsRoot(profile: AgentProfile, env: Readonly<NodeJS.ProcessEnv> = process.env, userHome: string = os.homedir()): string | null {
   if (profile.sessionsDir === null) return null;
   const override = profile.sessionsDirEnv !== null ? env[profile.sessionsDirEnv]?.trim() : undefined;
-  return path.join(override ? override : os.homedir(), ...profile.sessionsDir);
+  return path.join(override ? override : userHome, ...profile.sessionsDir);
 }
 
 // ─── claude / codebuddy 目录布局列举(自 timeline/ingest/reader.ts 整体移入)─────────
@@ -128,12 +142,13 @@ function listDeepSeekSessionFiles(root: string): string[] {
 }
 
 /** deepseek 来源实例(单例;读取器在 timeline/ingest/deepseek-session.ts)。 */
-const DEEPSEEK_SOURCE: SessionSource = {
+export const DEEPSEEK_SOURCE: SessionSource = {
+  ...sessionEnvironment('DSH_SESSION_ID'),
   id: 'deepseek',
   displayName: 'DeepSeek',
-  sessionsRoot: () => {
-    const override = process.env[DEEPSEEK_HOME_ENV]?.trim();
-    return override ? path.join(override, 'sessions') : path.join(os.homedir(), '.dsh', 'sessions');
+  sessionsRoot: (env = process.env, userHome = os.homedir()) => {
+    const override = env[DEEPSEEK_HOME_ENV]?.trim();
+    return override ? path.join(override, 'sessions') : path.join(userHome, '.dsh', 'sessions');
   },
   listFiles: listDeepSeekSessionFiles,
   sessionIdEnv: 'DSH_SESSION_ID',
@@ -146,19 +161,22 @@ const DEEPSEEK_SOURCE: SessionSource = {
 // ─── 登记 ────────────────────────────────────────────────────────────────────
 
 /** 已登记 agent 的会话来源(sessionsRoot 即 agentSessionsRoot 语义,含环境变量覆盖)。 */
-function profileSource(profile: AgentProfile): SessionSource {
+export function profileSource(profile: AgentProfile): SessionSource {
   return {
+    ...sessionEnvironment(profile.sessionIdEnv),
     id: profile.id,
     displayName: profile.displayName,
-    sessionsRoot: () => agentSessionsRoot(profile),
-    listFiles: listSessionFiles,
+    sessionsRoot: (env = process.env, userHome = os.homedir()) => profile.sessionRoot
+      ? profile.sessionRoot(env, userHome) : agentSessionsRoot(profile, env, userHome),
+    listFiles: profile.sessionFileLayout === 'recursive-jsonl' ? listCodexFiles : listSessionFiles,
     sessionIdEnv: profile.sessionIdEnv,
     sessionReader: profile.sessionReader,
     unavailableReason: () => null,
   };
 }
 
-/** 全部会话来源(登记顺序:claude-code、codebuddy、deepseek;补录与重建的枚举入口)。 */
-export function listSessionSources(): readonly SessionSource[] {
-  return [...AGENT_PROFILES.map(profileSource), DEEPSEEK_SOURCE];
+function listCodexFiles(root: string): string[] {
+  const files: string[] = [];
+  listJsonlRecursive(root, files);
+  return files.sort();
 }

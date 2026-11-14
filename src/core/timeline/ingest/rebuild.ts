@@ -54,7 +54,6 @@ import {
   SESSION_TITLES_AT_KEY,
   SESSION_TITLES_REFRESH_AT_KEY,
   statOrNull,
-  subagentMainPath,
   titleUpserts,
   unparsedNotices,
   upsertRoot,
@@ -67,6 +66,7 @@ import {
   type UnparsedMap,
 } from './ingest';
 import { sessionFactsReader } from './reader';
+import { sessionAdapterContext, sessionAdapterFor } from './adapters';
 import type { SessionFact, SessionFileReadResult } from './types';
 
 /** 重建结果;rebuildTimeline 返回 null 表示不用重建(已重建过 / 这个目录没有项目库)。 */
@@ -166,12 +166,13 @@ function firstSessionHead(facts: readonly SessionFact[]): Extract<SessionFact, {
  */
 function knownStartCwd(
   file: string,
+  source: SessionSource,
   recorded: SessionFileRow | null,
   sessionIndex: SessionIndex,
   parsedStartCwd: Map<string, string>,
 ): string | null {
   if (recorded !== null && recorded.start_cwd !== null) return recorded.start_cwd;
-  const main = subagentMainPath(file);
+  const main = sessionAdapterFor(source.sessionReader).parentSessionFile(file);
   if (main !== null) {
     const own = parsedStartCwd.get(main);
     if (own !== undefined) return own;
@@ -364,11 +365,12 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
     const parsedStartCwd = new Map<string, string>();
 
     for (const source of listSessionSources()) {
-      const sourceRoot = source.sessionsRoot();
-      if (sourceRoot === null) continue;
+      const adapter = sessionAdapterFor(source.sessionReader);
+      const context = sessionAdapterContext(root);
       // 读不了的来源(如 Node 没有 zstd API 的 deepseek)不解析;提示由紧随其后的增量那一趟加(D12)
-      if (source.unavailableReason() !== null) continue;
-      for (const file of source.listFiles(sourceRoot)) {
+      if (adapter.unavailableReason(context) !== null) continue;
+      const files = await adapter.listSessionFiles(context);
+      for (const file of files) {
         const stat = statOrNull(file);
         if (stat === null) continue; // 文件没了(F1 ⑤):已记进时间线的留着
         // 单文件隔离:读取器抛错(坏帧、读不出会话头等)只丢这一个文件,不卡住排序在后的文件、
@@ -386,7 +388,7 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
           ) {
             continue;
           }
-          let startCwd = knownStartCwd(file, recorded, sessionIndex, parsedStartCwd);
+          let startCwd = knownStartCwd(file, source, recorded, sessionIndex, parsedStartCwd);
           let result: SessionFileReadResult | null = null;
           if (startCwd === null) {
             result = await sessionFactsReader(source.sessionReader)(file, 0);

@@ -3,14 +3,37 @@
  * 本模块不依赖任何其它 core 子系统,也不依赖 cli / web。
  */
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
-import { AGENT_PROFILES } from './profiles';
-import { listSessionSources } from './sources';
+import { AGENT_PROFILES, AGENT_REGISTRATIONS, listSessionSources } from './profiles';
 import type { AgentId, AgentProfile, SessionFromEnv } from './types';
 
-export { AGENT_IDS, SESSION_READER_IDS } from './types';
+export { AGENT_IDS, SESSION_READER_IDS } from './profiles';
 export type { AgentId, AgentProfile, SessionFromEnv, SessionReaderId, SessionSource, SessionSourceId } from './types';
-export { agentSessionsRoot, DEEPSEEK_SESSION_FILENAME, listSessionSources } from './sources';
+export type {
+  AgentAdapter, AgentAdapterContext, AgentFileChange, AgentHostCapabilities, AgentInstallationAdapter,
+  AgentInstallationResult, AgentInstallationState, AgentInstallInput, AgentSessionAdapter,
+  AgentSessionEnvironmentAdapter, AgentSessionFromEnvironment, AgentSessionReadResult,
+} from './adapter';
+export { agentSessionsRoot, DEEPSEEK_SESSION_FILENAME, listSessionFiles } from './sources';
+export { AGENT_REGISTRATIONS, listSessionSources, sessionAdapterFor } from './profiles';
+export { readClaudeSessionFacts } from './session/claude-transcript';
+export { readCodebuddySessionFacts } from './session/codebuddy-transcript';
+export { readDeepSeekSessionFacts } from './session/deepseek-session';
+export { codexRootSessionId, readCodexSessionFacts } from './session/codex-session';
+export { classifyAutoMessage } from './session/auto-message';
+export type { AutoMessageSource } from './session/auto-message';
+export { readJsonlLinesFrom } from './session/jsonl-lines';
+export type { JsonlLine } from './session/jsonl-lines';
+export type { SessionFact, SessionFactTs, PromptFact, PromptSource, ToolFact, TurnEndFact, SessionHeadFact, SessionTitleFact, SessionFileReadResult, SessionFactsReader } from './session/types';
+
+/** 已存在的项目级 agent 配置,仅提供相对路径。 */
+export function agentReplicaPaths(projectRoot: string, profile: AgentProfile): string[] {
+  const custom = AGENT_REGISTRATIONS.find(item => item.profile?.id === profile.id)?.installation;
+  if (custom) return [...custom.replicaPaths({ projectRoot, userHome: os.homedir(), env: process.env })];
+  return [profile.configDirName, profile.instructionsFileName, ...profile.extraConfigFiles]
+    .filter(rel => fs.existsSync(path.join(projectRoot, rel)));
+}
 
 export const DEFAULT_AGENT_ID: AgentId = 'claude-code';
 export const AGENT_OPTION_FLAG = '--agent' as const;
@@ -98,7 +121,7 @@ export function agentSettingsPath(projectRoot: string, profile: AgentProfile): s
 }
 
 export function agentInstructionsPath(projectRoot: string, profile: AgentProfile): string {
-  return path.join(agentConfigDir(projectRoot, profile), profile.instructionsFileName);
+  return path.join(profile.instructionsAtRoot ? path.resolve(projectRoot) : agentConfigDir(projectRoot, profile), profile.instructionsFileName);
 }
 
 /** 按规则顺序做字面全量替换;空规则原样返回。 */
@@ -107,24 +130,21 @@ export function applyAssetReplacements(content: string, profile: AgentProfile): 
   for (const [from, to] of profile.assetReplacements) {
     out = out.split(from).join(to);
   }
-  return out;
+  return profile.transformAssetText?.(out) ?? out;
 }
 
 /** 按会话来源的登记顺序从环境变量取会话 id;都没有返回 null。只读来源(deepseek)也认。 */
 export function resolveSessionIdFromEnv(env: NodeJS.ProcessEnv = process.env): SessionFromEnv | null {
   for (const source of listSessionSources()) {
-    if (source.sessionIdEnv === null) continue;
-    const value = env[source.sessionIdEnv]?.trim();
-    if (value) return { sessionId: value, agent: source.id, sessionIdEnv: source.sessionIdEnv };
+    const found = source.sessionFromEnvironment({ projectRoot: process.cwd(), userHome: os.homedir(), env });
+    if (found) return { sessionId: found.sessionId, agent: source.id, sessionIdEnv: found.envName };
   }
   return null;
 }
 
 /** 全部会话来源的会话变量名(按登记顺序,过滤掉不提供变量的来源);提交门禁片段的探针名单按它生成。 */
 export function listSessionIdEnvNames(): string[] {
-  return listSessionSources()
-    .map((source) => source.sessionIdEnv)
-    .filter((name): name is string => name !== null);
+  return listSessionSources().flatMap(source => [...source.sessionIdEnvNames]);
 }
 
 /** 读取文件文本;不存在或读取失败返回 null。 */
@@ -167,6 +187,8 @@ function settingsHasCgraphxMarker(settings: unknown): boolean {
 
 /** 已装:settings 有 cgraphx hook / statusLine,或指引文件含 cgraphx 块标记。失败一律 false。 */
 export function isAgentInstalled(projectRoot: string, profile: AgentProfile): boolean {
+  const custom = AGENT_REGISTRATIONS.find(item => item.profile?.id === profile.id)?.installation;
+  if (custom) return custom.detect({ projectRoot, userHome: os.homedir(), env: process.env }).installed;
   const settingsText = readTextOrNull(agentSettingsPath(projectRoot, profile));
   if (settingsText !== null) {
     try {
@@ -181,6 +203,8 @@ export function isAgentInstalled(projectRoot: string, profile: AgentProfile): bo
 
 /** 检测到:项目内存在该 agent 的配置目录。CLI 装在机器上不算——那会导致交互安装默认全选、误装项目没用过的 agent(spec:2026-11-07-安装默认勾选已配置的agent K1)。 */
 export function isAgentDetected(projectRoot: string, profile: AgentProfile): boolean {
+  const custom = AGENT_REGISTRATIONS.find(item => item.profile?.id === profile.id)?.installation;
+  if (custom) return custom.detect({ projectRoot, userHome: os.homedir(), env: process.env }).detected;
   try {
     return fs.existsSync(agentConfigDir(projectRoot, profile));
   } catch {

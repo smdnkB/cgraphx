@@ -11,12 +11,12 @@ import { listAgentProfiles, listSessionSources, parseAgentList, resolveSessionId
 
 describe('deepseek read-only source changes nothing else (spec D12, acceptance #2)', () => {
   it('G2: AGENT_PROFILES stays exactly claude-code + codebuddy; deepseek only enters as a read-only session source', () => {
-    expect(listAgentProfiles().map((p) => p.id)).toEqual(['claude-code', 'codebuddy']);
-    expect(parseAgentList('all').map((p) => p.id)).toEqual(['claude-code', 'codebuddy']); // install -t all 的目标集
+    expect(listAgentProfiles().map((p) => p.id)).toEqual(['claude-code', 'codebuddy', 'codex']);
+    expect(parseAgentList('all').map((p) => p.id)).toEqual(['claude-code', 'codebuddy', 'codex']); // install -t all 的目标集
     // deepseek 不进任何 agent 配置目录名 → install/副本永远不带 .dsh/
     for (const profile of listAgentProfiles()) expect(profile.configDirName).not.toBe('.dsh');
     // 但会话来源里有它(只读第三家)
-    expect(listSessionSources().map((s) => s.id)).toEqual(['claude-code', 'codebuddy', 'deepseek']);
+    expect(listSessionSources().map((s) => s.id)).toEqual(['claude-code', 'codebuddy', 'codex', 'deepseek']);
   });
 
   it('G1: DSH_SESSION_ID resolves as a DeepSeek session; Claude Code still wins when both are set', () => {

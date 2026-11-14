@@ -18,7 +18,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { listAgentProfiles } from '../agents';
+import { agentReplicaPaths, listAgentProfiles } from '../agents';
 import { codeGraphDirName, getCodeGraphDir } from '../directory';
 import { gitPathPattern } from '../git-hooks';
 import { listWorktreeRoots } from '../repo-projects';
@@ -52,12 +52,10 @@ function stripTrailingSlash(rel: string): string {
 }
 
 /** 要带的 agent 配置:各家的配置目录、指引文件、额外配置文件,去重。 */
-function agentConfigPaths(): string[] {
+function agentConfigPaths(mainRoot: string): string[] {
   const paths = new Set<string>();
   for (const profile of listAgentProfiles()) {
-    paths.add(profile.configDirName);
-    paths.add(profile.instructionsFileName);
-    for (const file of profile.extraConfigFiles) paths.add(file);
+    for (const file of agentReplicaPaths(mainRoot, profile)) paths.add(file);
   }
   return [...paths];
 }
@@ -111,7 +109,9 @@ function copyInto(mainRoot: string, target: string, rel: string, skip: Set<strin
 /** K4:带上没被跟踪的 agent 配置;返回实际拷过的相对路径。 */
 function carryAgentConfigs(mainRoot: string, target: string): string[] {
   // 不加 --exclude-standard:被忽略的配置(`.env`、`.claude/`)也要带,只看「没被跟踪」
-  const listed = nulList(gitOrThrow(mainRoot, ['ls-files', '-z', '--others', '--directory', '--', ...agentConfigPaths()]));
+  const paths = agentConfigPaths(mainRoot);
+  if (paths.length === 0) return [];
+  const listed = nulList(gitOrThrow(mainRoot, ['ls-files', '-z', '--others', '--directory', '--', ...paths]));
   const skip = worktreeRootReals(mainRoot);
   const carried: string[] = [];
   for (const item of listed) {

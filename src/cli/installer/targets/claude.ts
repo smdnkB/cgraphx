@@ -1,10 +1,8 @@
-/**
- * 兼容导出:Claude Code target 由通用 agent target 生成(既有测试与调用方经此引用)。
- */
-
+/** Claude Code 兼容导出,实现由统一适配器生成。 */
 import { defaultAgentProfile } from '../../../core/agents';
-import { createAgentTarget } from './agent-target';
-import type { AgentTarget } from './types';
+import { createAdapterTarget, createAgentAdapter } from './adapter-target';
 
-export const claudeTarget: AgentTarget = createAgentTarget(defaultAgentProfile());
+const profile = defaultAgentProfile();
+export const claudeAdapter = createAgentAdapter(profile);
+export const claudeTarget = createAdapterTarget(profile);
 export { createAgentTarget } from './agent-target';

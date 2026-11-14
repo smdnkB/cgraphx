@@ -1,14 +1,18 @@
 /**
- * 安装器 target 注册表:每个已登记的 agent 描述生成一个 target(登记顺序,claude-code 第一)。
- * 新增 agent 只需在 `src/core/agents/profiles.ts` 登记描述,本文件无需改动。
+ * 安装器 target 注册表:从统一适配器列表生成,只读会话来源没有安装 target。
  */
 
-import { getAgentProfile, listAgentProfiles, parseAgentList } from '../../../core/agents';
+import { getAgentProfile, parseAgentList } from '../../../core/agents';
 import type { AgentTarget, Location, TargetId } from './types';
-import { createAgentTarget } from './agent-target';
+import { createAdapterTarget, listAgentAdapters } from './adapter-target';
 
 export const ALL_TARGETS: readonly AgentTarget[] = Object.freeze(
-  listAgentProfiles().map(createAgentTarget),
+  listAgentAdapters().flatMap((adapter) => {
+    if (adapter.installation === null) return [];
+    const profile = getAgentProfile(adapter.id);
+    if (!profile) throw new Error(`agent ${adapter.id} 缺少安装描述`);
+    return [createAdapterTarget(profile, adapter)];
+  }),
 );
 
 /** 按 id 或 legacy 别名(如 `claude`)取 target。 */
