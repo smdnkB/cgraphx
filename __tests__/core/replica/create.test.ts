@@ -8,6 +8,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DatabaseConnection, getLocalDatabasePath } from '../../../src/core/db';
 import { createDirectory } from '../../../src/core/directory';
 import { createReplica, ReplicaError, removeReplica } from '../../../src/core/replica';
+import { replicaProjectDir, replicaTarget } from '../../../src/core/replica/paths';
+import { replicaLinkOf } from '../../../src/core/replica/main-dir';
+import { syncMyFeatures } from '../../../src/core/features/sync';
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], {
@@ -82,6 +85,70 @@ describe('createReplica:重复开副本与留下的分支', () => {
     expect(git(again.path, 'rev-parse', 'HEAD')).toBe(tip);
   });
 
+  it('新副本在独立目录，可识别并安全删除', () => {
+    const created = createReplica(main, opts);
+    expect(created.path).toBe(replicaTarget(main, created.name));
+    expect(created.path).toContain(path.join('.cgraphx', 'worktrees'));
+    expect(replicaLinkOf(created.path)).toMatchObject({ state: 'replica', mainRoot: main });
+    expect(removeReplica(main, created.name).state).toBe('removed');
+    expect(fs.existsSync(main)).toBe(true);
+  });
+
+  it('主目录的需求索引链接到实际副本中的 spec', () => {
+    const created = createReplica(main, opts);
+    const spec = path.join(created.path, 'docs', 'features', feature, '订单导出-spec.md');
+    fs.writeFileSync(spec, '> 负责人: 张三\n');
+    const result = syncMyFeatures(main, '张三');
+    const content = fs.readFileSync(result.file, 'utf8');
+    const rel = path.relative(path.dirname(result.file), spec).split(path.sep).join('/');
+    expect(content).toContain(`<${rel}>`);
+  });
+
+  it('旧版同级副本仍可识别和删除', () => {
+    const created = createReplica(main, opts);
+    const oldPath = path.join(base, created.name);
+    git(main, 'worktree', 'move', created.path, oldPath);
+    git(oldPath, 'config', '--worktree', 'core.excludesFile', path.join(oldPath, '.cgraphx', 'replica-exclude'));
+    const file = path.join(main, '.cgraphx', 'replicas', `${created.name}.json`);
+    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    fs.writeFileSync(file, JSON.stringify({ ...entry, path: oldPath }));
+    expect(replicaLinkOf(oldPath)).toMatchObject({ state: 'replica', mainRoot: main });
+    expect(removeReplica(main, created.name).state).toBe('removed');
+  });
+
+  it('登记路径被改为其他 worktree 时拒绝删除', () => {
+    const created = createReplica(main, opts);
+    const foreign = path.join(base, 'elsewhere', created.name);
+    fs.mkdirSync(path.dirname(foreign));
+    git(main, 'worktree', 'move', created.path, foreign);
+    const file = path.join(main, '.cgraphx', 'replicas', `${created.name}.json`);
+    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    fs.writeFileSync(file, JSON.stringify({ ...entry, path: foreign }));
+    expect(replicaErrorOf(() => removeReplica(main, created.name)).code).toBe('unsafe_target');
+    expect(fs.existsSync(foreign)).toBe(true);
+  });
+
+  it('长中文项目名截断后仍可创建目录，且同名仓库保持隔离', () => {
+    const label = '项目'.repeat(30);
+    const first = path.join(base, 'first', label);
+    const second = path.join(base, 'second', label);
+    fs.mkdirSync(first, { recursive: true });
+    fs.mkdirSync(second, { recursive: true });
+    const firstDir = replicaProjectDir(first);
+    const secondDir = replicaProjectDir(second);
+    expect(firstDir).not.toBe(secondDir);
+    expect(Buffer.byteLength(path.basename(firstDir), 'utf8')).toBeLessThanOrEqual(137);
+    expect(path.basename(firstDir)).toMatch(/^(?:项目)+-[a-f0-9]{16}$/);
+    fs.mkdirSync(firstDir, { recursive: true });
+    expect(fs.statSync(firstDir).isDirectory()).toBe(true);
+  });
+
+  it('同名仓库的副本位置不同', () => {
+    const other = path.join(base, 'other', 'app');
+    fs.mkdirSync(other, { recursive: true });
+    expect(replicaTarget(main, 'app@需求')).not.toBe(replicaTarget(other, 'app@需求'));
+  });
+
   it('同名分支是别的需求的,报原提示,不接上', () => {
     createReplica(main, opts);
 
@@ -91,7 +158,7 @@ describe('createReplica:重复开副本与留下的分支', () => {
 
     expect(err.code).toBe('invalid_args');
     expect(err.message).toContain(`主目录已有本地分支 ${opts.branch}`);
-    expect(fs.existsSync(path.join(base, 'app@积分发放'))).toBe(false);
+    expect(fs.existsSync(replicaTarget(main, 'app@积分发放'))).toBe(false);
   });
 });
 
@@ -148,7 +215,7 @@ describe('createReplica: feature directory in the replica', () => {
 
     expect(git(main, 'branch', '--list')).toBe(branches);
     expect(git(main, 'worktree', 'list')).not.toContain('app@订单导出');
-    expect(fs.existsSync(path.join(base, 'app@订单导出'))).toBe(false);
+    expect(fs.existsSync(replicaTarget(main, 'app@订单导出'))).toBe(false);
     expect(fs.existsSync(path.join(main, '.cgraphx', 'replicas', 'app@订单导出.json'))).toBe(false);
     expect(fs.readFileSync(path.join(main, 'docs', 'features'), 'utf8')).toBe('not a directory\n');
     expect(git(main, 'status', '--porcelain', '--untracked-files=no')).toBe('');

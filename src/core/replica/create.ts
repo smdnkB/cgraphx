@@ -1,7 +1,7 @@
 /**
  * 开副本(spec:2026-11-06-副本改用worktree F1、D1~D9)。
  *
- * 前置检查全过才动手(任一不过就抛对应 code,什么都不改)→ 在主目录旁 `git worktree add` 出副本 →
+ * 前置检查全过才动手(任一不过就抛对应 code,什么都不改)→ 在用户目录 `git worktree add` 出副本 →
  * 在副本里建自己的数据目录(D5)→ 带上 agent 配置与 `.worktreeinclude` 里的文件并对 git 隐藏(D2~D4)→
  * 在副本里建好这个需求的需求目录(2026-11-07-开副本建好需求目录 K1、K2)→
  * 把主目录这个需求目录下没被跟踪的文件拷进副本(K6)→ 写登记 → 补钩子片段(D8)。
@@ -9,7 +9,7 @@
  * add 之后任一步失败:删 worktree、删这次新建的分支、删已写的登记,再抛原错误——主目录不动,接上的旧分支
  * 留着(D6)。最后删主目录那份需求文件,删不掉只记进 warnings,不回滚。
  *
- * 路径都按主目录的 realpath 算:副本放在它的上级目录,名为 `<主目录名>@<文件前缀>`(plan C-10)。
+ * 路径按主目录的 realpath 算:副本放在用户目录下的独立 worktrees 目录。
  */
 
 import * as fs from 'node:fs';
@@ -33,6 +33,7 @@ import {
 } from './constants';
 import { ReplicaError } from './errors';
 import { replicaLinkOf } from './main-dir';
+import { replicaProjectDir, replicaTarget } from './paths';
 import { markRemoved, writeEntry } from './registry';
 import { featureDirOf, isDirectory, listReplicas, realpathOr, relativeInside } from './roots';
 import { firstLine, gitValue, runGit, trackedChanges, untrackedFiles } from './status';
@@ -389,7 +390,7 @@ function filesToMove(mainRoot: string, copied: readonly string[]): string[] {
 // ---------- 入口 ----------
 
 /**
- * 在主目录旁开出需求副本并登记。同一个 feature-id 已有在用副本(present)→ 报 feature_has_replica,
+ * 在独立目录开出需求副本并登记。同一个 feature-id 已有在用副本(present)→ 报 feature_has_replica,
  * 不开第二个(spec:2026-11-05-下掉web与平台同步 D13,一个需求只开一个副本);已删、目录已不在的照常另开。
  */
 export function createReplica(projectRoot: string, opts: CreateReplicaOptions): CreateReplicaResult {
@@ -403,10 +404,11 @@ export function createReplica(projectRoot: string, opts: CreateReplicaOptions): 
   assertFeatureHasNoReplica(mainRoot, opts.featureId);
   const plan = planBranch(mainRoot, opts); // ③、K15、D7
   const name = `${path.basename(realRoot)}${REPLICA_NAME_SEPARATOR}${opts.prefix}`;
-  const target = path.join(path.dirname(realRoot), name);
+  const target = replicaTarget(realRoot, name);
   assertNameFree(mainRoot, name, opts.featureId);
   assertTargetFree(mainRoot, target);
 
+  fs.mkdirSync(replicaProjectDir(mainRoot), { recursive: true, mode: 0o700 });
   const baseCommit = addWorktree(mainRoot, target, opts, plan);
   const reattached = plan.reattached !== null;
 

@@ -173,12 +173,12 @@ function printRemove(r: RemoveReplicaResult): void {
 export function registerReplicaCommands(program: Command): void {
   const replica = program
     .command('replica')
-    .description('需求副本 — 在主目录旁开、列、删 git worktree 副本,登记在主目录 .cgraphx/replicas/');
+    .description('需求副本 — 在用户目录开、列、删 git worktree 副本,登记在主目录 .cgraphx/replicas/');
 
   replica
     .command('create <feature-id>')
     .description(
-      '开副本 <主目录名>@<文件前缀>:在主目录旁开 git worktree,带上 agent 配置与 .worktreeinclude 里的文件,副本里接上需求分支并登记(只在主目录执行)',
+      '开副本 <主目录名>@<文件前缀>:在用户目录开 git worktree,带上 agent 配置与 .worktreeinclude 里的文件,副本里接上需求分支并登记(只在主目录执行)',
     )
     .option('--prefix <prefix>', '文件前缀(必填):feature-id 去掉日期段,如 订单导出')
     .option('--branch <branch>', '需求分支(必填):feat/<文件前缀>,bug 修复用 fix/<文件前缀>')

@@ -510,7 +510,7 @@ knowledge-recall(自动召回)
     <p style="color:var(--color-text-secondary);font-size:14px;margin:0 0 16px;"><strong>可选</strong>——按版本发版、每个需求在自己的副本里做时用;不用就照旧在当前分支上开发。</p>
     <ul class="phase-list">
       <li><code>/release-start</code> 开版本:在主干上拉出版本分支 <code>dev/&lt;下个版本号&gt;</code>、装上提交拦截 <em>—— 要按版本开发下一个版本时跑</em></li>
-      <li><code>/dev-start</code> 开副本:在主目录旁边开出 worktree 副本 <code>&lt;主目录名&gt;@&lt;文件前缀&gt;</code>(只带 agent 配置和 <code>.worktreeinclude</code> 清单里写的文件,依赖默认不带),拉好需求分支、建好需求目录,给出到副本开新会话的启动语 <em>—— 开始做一个需求时跑,开了版本时每个需求都要</em></li>
+      <li><code>/dev-start</code> 开副本:在用户目录的 worktrees 下开出 worktree 副本 <code>&lt;主目录名&gt;@&lt;文件前缀&gt;</code>(只带 agent 配置和 <code>.worktreeinclude</code> 清单里写的文件,依赖默认不带),拉好需求分支、建好需求目录,给出到副本开新会话的启动语 <em>—— 开始做一个需求时跑,开了版本时每个需求都要</em></li>
       <li><code>/dev-merge</code> 合入:副本里跑,先同步主目录当前分支、就地解决冲突;主目录里跑 <code>/dev-merge &lt;需求&gt;</code>,预演没冲突就以「合入需求：&lt;标题&gt;」合入当前分支 <em>—— 需求做完、<code>/code-review</code> 过了之后</em></li>
       <li><code>/release-review</code> 发版审核:出 <code>docs/releases/v&lt;版本号&gt;-发版审核.md</code> 并提交,你说「发」再合入主干、在合并提交上打 tag、退出版本流程、列出可以清理的副本 <em>—— 发版那天改好版本号之后</em></li>
     </ul>

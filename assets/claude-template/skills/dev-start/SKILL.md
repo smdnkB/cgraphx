@@ -1,6 +1,6 @@
 ---
 name: dev-start
-description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,先按 dev-spec 的命名规则定好需求目录名,再用 git worktree 在主目录旁边开出副本 <主目录名>@<文件前缀>(只带 agent 配置和 .worktreeinclude 清单里写的文件,依赖默认不带),副本里从主目录当前所在的分支拉出 feat/<文件前缀>(bug 修复用 fix/)并登记到主目录——副本里的会话和提交和主目录记进同一个项目的数据;接着建好副本自己的「我的需求」索引,给出到副本开新会话的启动语。只在主目录执行,不在副本里开副本。Use when 开副本、开需求副本、在副本里做、并行做需求、dev-start。
+description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,先按 dev-spec 的命名规则定好需求目录名,再用 git worktree 在 `~/.cgraphx/worktrees/<项目标识>/` 下开出副本 <主目录名>@<文件前缀>(只带 agent 配置和 .worktreeinclude 清单里写的文件,依赖默认不带),副本里从主目录当前所在的分支拉出 feat/<文件前缀>(bug 修复用 fix/)并登记到主目录——副本里的会话和提交和主目录记进同一个项目的数据;接着建好副本自己的「我的需求」索引,给出到副本开新会话的启动语。只在主目录执行,不在副本里开副本。Use when 开副本、开需求副本、在副本里做、并行做需求、dev-start。
 ---
 
 # 开需求副本 (dev-start)
@@ -22,7 +22,7 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
 2. **定名字**,一次问齐,用户确认后再开(见范例):
    - feature-id:`docs/features/` 下已有这个需求的目录就复用;没有就按 dev-spec 第 0 步和「产物位置与命名」新建,业务 ID、标题语言及规范里的其他段由用户确认,不把中文转成英文 slug
    - 文件前缀 = feature-id 去掉日期段 `YYYY-MM-DD`:`2026-10-27-订单导出` → `订单导出`
-   - 分支 `feat/<文件前缀>`,bug 修复用 `fix/<文件前缀>`;副本目录 `<主目录名>@<文件前缀>`,放在主目录的上级目录
+   - 分支 `feat/<文件前缀>`,bug 修复用 `fix/<文件前缀>`;副本目录 `<主目录名>@<文件前缀>`,放在 `~/.cgraphx/worktrees/<项目标识>/` 下,以命令返回的实际路径为准
 
 3. **开副本**:
 
@@ -44,7 +44,7 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
 4. **建副本自己的「我的需求」索引**:
 
    ```bash
-   cgraphx features sync /Users/smdnk/objects/ai/cgraphx@订单导出
+   cgraphx features sync /Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@订单导出
    ```
 
 5. **转告**:`warnings` 逐条转告用户(可能是「主目录有 3 个文件没提交,没带进副本」「清单里的 X 主目录没有,没带」「主目录里的 X 没删掉……手动删掉主目录这份」「钩子片段没补上……」);`movedFiles` 不为空时,说一句这些文件已移进副本。
@@ -52,7 +52,7 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
 6. **给启动语**:
 
    ```text
-   在 /Users/smdnk/objects/ai/cgraphx@订单导出 开新会话，输入 /dev-clarify
+   在 /Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@订单导出 开新会话，输入 /dev-clarify
    ```
 
    已经澄清过、需求目录里有终确认的讨论稿 → `/dev-clarify` 换成 `/dev-spec`,新会话的 /dev-spec 直接复用这个需求目录;讨论稿还带「写稿中」那一行的(旧版是「审卡中」),照旧 `/dev-clarify`,新会话接着写。一次开了几个需求、需求之间有依赖时,说明各开一个副本、都从当前分支拉;被依赖的需求合入后,在依赖方的副本会话里输入 /dev-merge 同步一次再联调。
@@ -73,7 +73,7 @@ description: 开需求副本:在主目录的会话里输入 /dev-start <需求>,
 主目录在 dev/2.0.11 上,刚在这个会话里澄清完「订单导出」,讨论稿 v2 已终确认。用户输入 /dev-start 订单导出:
 
 ```text
-需求目录名 2026-10-27-订单导出(没有业务 ID,标题用中文);副本 /Users/smdnk/objects/ai/cgraphx@订单导出,从当前的 dev/2.0.11 拉出 feat/订单导出。这样开吗?
+需求目录名 2026-10-27-订单导出(没有业务 ID,标题用中文);副本 /Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@订单导出,从当前的 dev/2.0.11 拉出 feat/订单导出。这样开吗?
 ```
 
 用户说开:
@@ -84,7 +84,7 @@ $ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch 
 {
   "ok": true,
   "name": "cgraphx@订单导出",
-  "path": "/Users/smdnk/objects/ai/cgraphx@订单导出",
+  "path": "/Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@订单导出",
   "featureId": "2026-10-27-订单导出",
   "branch": "feat/订单导出",
   "baseBranch": "dev/2.0.11",
@@ -98,15 +98,15 @@ $ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch 
   "warnings": [],
   "reattached": false
 }
-$ cgraphx features sync /Users/smdnk/objects/ai/cgraphx@订单导出
+$ cgraphx features sync /Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@订单导出
 ```
 
 回给用户:
 
 ```text
-副本开好了:/Users/smdnk/objects/ai/cgraphx@订单导出,分支 feat/订单导出(从 dev/2.0.11 拉);讨论稿 v1、v2 已移进副本。副本里的会话和提交和主目录记进同一个项目的数据;做完、/code-review 过了,在主目录输入 /dev-merge 订单导出 合入。
+副本开好了:/Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@订单导出,分支 feat/订单导出(从 dev/2.0.11 拉);讨论稿 v1、v2 已移进副本。副本里的会话和提交和主目录记进同一个项目的数据;做完、/code-review 过了,在主目录输入 /dev-merge 订单导出 合入。
 
-在 /Users/smdnk/objects/ai/cgraphx@订单导出 开新会话，输入 /dev-spec
+在 /Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@订单导出 开新会话，输入 /dev-spec
 
 依赖和构建产物没带过来,第一次要在副本里安装、构建一次
 启动要用的本地配置写进主目录的 .worktreeinclude(gitignore 语法,一行一个路径,可以用通配),下次开副本自动带
@@ -163,8 +163,8 @@ $ cgraphx replica create 2026-10-27-订单导出 --prefix 订单导出 --branch 
 ```text
 积分兑换 要用 积分发放 写的流水:两个副本都从 dev/2.0.11 拉;积分发放 合入后,在 积分兑换 的副本会话里输入 /dev-merge 同步一次再联调。
 
-在 /Users/smdnk/objects/ai/cgraphx@积分发放 开新会话，输入 /dev-clarify
-在 /Users/smdnk/objects/ai/cgraphx@积分兑换 开新会话，输入 /dev-clarify
+在 /Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@积分发放 开新会话，输入 /dev-clarify
+在 /Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@积分兑换 开新会话，输入 /dev-clarify
 
 副本里同步主目录的分支只用 /dev-merge,不要 git pull、git merge——快进同步过,合没合入就判断不准了
 ```

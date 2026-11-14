@@ -305,7 +305,7 @@ footer p { margin: 0 0 6px; }
 <dt>什么时候用</dt><dd>开始做一个需求,不想和别的需求挤在同一个分支上;开了版本时每个需求都先开副本,没开版本也能单独用。</dd>
 <dt>怎么用</dt><dd>在主目录的会话里敲 <code>/dev-start 订单导出</code>,再照给出的启动语到副本目录开新会话。</dd>
 <dt>要你拍板</dt><dd>需求目录名(业务 ID、标题);带哪些本地文件写进 <code>.worktreeinclude</code>(gitignore 语法,依赖默认不带,第一次在副本里安装、构建)。</dd>
-<dt>产出</dt><dd>主目录旁边的 worktree 副本 <code>&lt;主目录名&gt;@&lt;文件前缀&gt;</code>(是 worktree,依赖和构建产物没带过来,第一次要在这里安装、构建):从主目录当前分支拉好 <code>feat/&lt;文件前缀&gt;</code>(bug 修复用 <code>fix/</code>)、建好需求目录,这个需求还没提交的讨论稿移进去;外加一句启动语「在 &lt;副本路径&gt; 开新会话，输入 /dev-clarify」(已经澄清过的输入 /dev-spec)。副本里的会话和提交和主目录记进同一个项目的数据。</dd>
+<dt>产出</dt><dd>用户目录 worktrees 下的副本 <code>&lt;主目录名&gt;@&lt;文件前缀&gt;</code>(是 worktree,依赖和构建产物没带过来,第一次要在这里安装、构建):从主目录当前分支拉好 <code>feat/&lt;文件前缀&gt;</code>(bug 修复用 <code>fix/</code>)、建好需求目录,这个需求还没提交的讨论稿移进去;外加一句启动语「在 &lt;副本路径&gt; 开新会话，输入 /dev-clarify」(已经澄清过的输入 /dev-spec)。副本里的会话和提交和主目录记进同一个项目的数据。</dd>
 <dt>前后</dt><dd>开了版本时在 <code>/release-start</code> 之后;副本里照常 <code>/dev-clarify</code> 到 <code>/code-review</code>,做完 <code>/dev-merge</code>。</dd>
 </dl></div>
 </details>

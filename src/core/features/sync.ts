@@ -44,17 +44,14 @@ interface IndexRow {
   mainSpec: string | null;
 }
 
-/**
- * 链接目标:相对 .cgraphx/ 下的索引文件写 `../<项目相对路径>`,包进尖括号,
- * 目录名带空格、括号也能点开;`< > \` 加反斜杠兜底(spec D1)。
- * 副本里的需求:副本在主目录旁边,写 `../../<副本目录名>/<项目相对路径>`(spec D30)。
- */
-function linkTarget(projectRelPath: string, replicaName?: string): string {
-  const target =
-    replicaName === undefined
-      ? `../${projectRelPath}`
-      : `../../${replicaName}/${projectRelPath}`;
-  return `<${target.replace(/[<>\\]/g, '\\$&')}>`;
+/** 链接从索引目录指向主目录或登记的副本，兼容新旧副本位置。 */
+function linkTarget(projectRoot: string, projectRelPath: string, replicaPath?: string): string {
+  const target = path.relative(
+    path.join(projectRoot, '.cgraphx'),
+    path.join(replicaPath ?? projectRoot, projectRelPath),
+  ).split(path.sep).join('/');
+  const suffix = projectRelPath.endsWith('/') ? '/' : '';
+  return `<${(target + suffix).replace(/[<>\\]/g, '\\$&')}>`;
 }
 
 /** 链接文字:只转义会截断链接文字的 `\ [ ]`(spec D3)。 */
@@ -66,14 +63,14 @@ function linkText(s: string): string {
  * 需求单元格:需求名链到主 spec;没有主 spec 时链到目录,后面标「（还没有 spec）」。
  * 副本里的需求链到副本里的文件,链接后标「(在副本 <副本目录名>)」(spec D30)。
  */
-function requirementCell({ entry, mainSpec }: IndexRow): string {
+function requirementCell({ entry, mainSpec }: IndexRow, projectRoot: string): string {
   const replicaName = entry.replica?.name;
-  const link = `[${linkText(entry.title)}](${linkTarget(mainSpec ?? `${entry.path}/`, replicaName)})`;
+  const link = `[${linkText(entry.title)}](${linkTarget(projectRoot, mainSpec ?? `${entry.path}/`, entry.replica?.path)})`;
   const where = replicaName === undefined ? '' : `(在副本 ${replicaName})`;
   return mainSpec === null ? `${link}${where}（还没有 spec）` : `${link}${where}`;
 }
 
-function renderMarkdownIndex(owner: string, rows: IndexRow[]): string {
+function renderMarkdownIndex(owner: string, rows: IndexRow[], projectRoot: string): string {
   const lines: string[] = [
     '# 我的需求索引(自动生成,勿手改)',
     '',
@@ -84,7 +81,7 @@ function renderMarkdownIndex(owner: string, rows: IndexRow[]): string {
   ];
   for (const r of rows) {
     lines.push(
-      `| ${mdCell(r.entry.date ?? '-')} | ${mdCell(r.entry.stage ?? '-')} | ${mdCell(requirementCell(r))} |`,
+      `| ${mdCell(r.entry.date ?? '-')} | ${mdCell(r.entry.stage ?? '-')} | ${mdCell(requirementCell(r, projectRoot))} |`,
     );
   }
   if (rows.length === 0) {
@@ -130,6 +127,6 @@ export function syncMyFeatures(
     fs.writeFileSync(gitignore, '*\n', 'utf-8');
   }
   const file = path.join(cgraphxDir, MY_FEATURES_FILENAME);
-  fs.writeFileSync(file, renderMarkdownIndex(who, rows), 'utf-8');
+  fs.writeFileSync(file, renderMarkdownIndex(who, rows, projectRoot), 'utf-8');
   return { file, count: rows.length, owner: who };
 }

@@ -32,7 +32,7 @@ description: 需求合入与副本清理:需求在副本里做完、/code-review
 
 ### 在副本里:同步
 
-以副本 /Users/smdnk/objects/ai/cgraphx@订单导出 为例。
+以副本 /Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@订单导出 为例。
 
 1. **主目录和它当前的分支**:
 
@@ -171,7 +171,7 @@ $ cgraphx replica list --json
   "replicas": [
     {
       "name": "cgraphx@订单导出",
-      "path": "/Users/smdnk/objects/ai/cgraphx@订单导出",
+      "path": "/Users/smdnk/.cgraphx/worktrees/cgraphx-示例标识/cgraphx@订单导出",
       "featureId": "2026-10-27-订单导出",
       "branch": "feat/订单导出",
       "baseBranch": "dev/2.0.11",

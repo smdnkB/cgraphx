@@ -2,7 +2,7 @@
  * 删副本(spec:2026-11-06-副本改用worktree F3、D12~D14)。
  *
  * 删除不可恢复,登记文件的 path 被改错就可能删到别处,所以逐条核对全过才删:登记过且没删;副本目录(按 D22
- * 在主目录的上级、名为登记的副本目录名)就是登记的 path;它不是主目录、也不是主目录的上级;目录名以
+ * 在独立 worktrees 目录或旧版主目录的上级、名为登记的副本目录名)就是登记的 path;它不是主目录、也不是主目录的上级;目录名以
  * `<主目录名>@` 开头;目录里的 `.cgraphx/shared` 指回本主目录的 `.cgraphx/`;目录在 `git worktree list`
  * 里(旧版整仓复制出来的副本不是 worktree,停在这条);K9 没有改动。
  *
@@ -20,6 +20,7 @@ import { listWorktreeRoots } from '../repo-projects';
 import { REPLICA_NAME_SEPARATOR } from './constants';
 import { formatFileList, ReplicaError } from './errors';
 import { replicaLinkOf } from './main-dir';
+import { replicaTarget } from './paths';
 import { entryFilePath, markRemoved } from './registry';
 import { isDirectory, listReplicas, realpathOr, relativeInside } from './roots';
 import { firstLine, gitValue, mergeStateOf, runGit, uncommittedFiles } from './status';
@@ -56,9 +57,12 @@ function verifyTarget(mainRoot: string, entry: ReplicaEntry): string {
   const realDir = realpathOr(entry.path);
 
   // 1. 副本目录就是登记的 path
-  const expected = path.join(path.dirname(realMain), entry.name);
-  if (realpathOr(expected) !== realDir) {
-    throw unsafeTarget(mainRoot, entry, `副本目录应是 ${expected},登记的 path 是 ${entry.path},两者不是同一个目录`);
+  if (path.basename(entry.name) !== entry.name || entry.name === '..' || entry.name === '.') {
+    throw unsafeTarget(mainRoot, entry, `副本目录名 ${entry.name} 不合法`);
+  }
+  const expected = [replicaTarget(realMain, entry.name), path.join(path.dirname(realMain), entry.name)];
+  if (!expected.some((candidate) => realpathOr(candidate) === realDir)) {
+    throw unsafeTarget(mainRoot, entry, `登记的 path ${entry.path} 不在本项目的副本位置`);
   }
   // 2. 不是主目录,也不是主目录的上级
   if (relativeInside(realDir, realMain, true) !== null) {
