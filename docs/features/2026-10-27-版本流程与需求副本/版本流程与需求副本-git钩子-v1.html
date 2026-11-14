@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>git 钩子图解</title>
+<style>
+/* 版式与配色照 visual-explain 范例;只用系统字体,断网也能打开 */
+:root {
+  --bg: #F1F4ED;
+  --surface: #FBFCF8;
+  --surface-2: #F2F5EC;
+  --ink: #15211B;
+  --ink-2: #4C5B52;
+  --ink-3: #75837A;
+  --line: #DCE3D8;
+  --accent: #1D6B4F;
+  --accent-ink: #163B2F;
+  --accent-tint: #E1EFE6;
+  --hard: #B14E22;
+  --hard-tint: #F7E7DC;
+  --human: #2F5D8A;
+  --human-tint: #E3ECF5;
+  --hint: #56625B;
+  --hint-tint: #E9EDE5;
+  --chg: #B4521C;
+  --chg-tint: #FBE9DD;
+  --del: #8A948E;
+  --del-tint: #ECEFEA;
+  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1512; --surface: #161F1A; --surface-2: #1C2721;
+    --ink: #E4ECE6; --ink-2: #A7B5AB; --ink-3: #7F8D84; --line: #2A3730;
+    --accent: #5DBB94; --accent-ink: #9AD9BC; --accent-tint: #173328;
+    --hard: #E8916A; --hard-tint: #3A2117;
+    --human: #8FB8E3; --human-tint: #1A2B3C;
+    --hint: #A3AFA7; --hint-tint: #202A24;
+    --chg: #EFA06F; --chg-tint: #3A2417;
+    --del: #7F8D84; --del-tint: #1E2621;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1512; --surface: #161F1A; --surface-2: #1C2721;
+  --ink: #E4ECE6; --ink-2: #A7B5AB; --ink-3: #7F8D84; --line: #2A3730;
+  --accent: #5DBB94; --accent-ink: #9AD9BC; --accent-tint: #173328;
+  --hard: #E8916A; --hard-tint: #3A2117;
+  --human: #8FB8E3; --human-tint: #1A2B3C;
+  --hint: #A3AFA7; --hint-tint: #202A24;
+  --chg: #EFA06F; --chg-tint: #3A2417;
+  --del: #7F8D84; --del-tint: #1E2621;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 40px 16px 72px;
+  display: grid;
+  gap: 44px;
+}
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+ul, ol { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--ink-3); }
+
+/* 开头 */
+.hero { display: grid; gap: 14px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.06em; color: var(--ink-3); }
+.hero h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.25; font-weight: 700; }
+.lede { font-size: 17px; color: var(--ink-2); max-width: 66ch; }
+.facts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: grid; gap: 2px; min-width: 0; }
+.fact b { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--accent-ink); }
+.fact span { font-size: 13px; color: var(--ink-2); }
+
+/* 目录 */
+.toc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.toc a { text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+.toc .sep { color: var(--ink-3); }
+
+/* 通用区块 */
+.sec { display: grid; gap: 14px; }
+.sec > h2 { font-size: 23px; font-weight: 700; }
+.sec > p { color: var(--ink-2); max-width: 72ch; }
+.sub { display: grid; gap: 14px; }
+.sub > h3 { font-size: 18px; font-weight: 700; }
+.sub > p { color: var(--ink-2); max-width: 72ch; }
+
+/* 标记 */
+.badge { display: inline-block; font-size: 12px; line-height: 1; padding: 4px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; vertical-align: 1px; }
+.badge.new { color: var(--accent); background: var(--accent-tint); border-color: transparent; }
+.badge.chg { color: var(--chg); }
+.badge.same { color: var(--ink-3); }
+.gt { display: inline-block; font-size: 12px; font-weight: 500; line-height: 1; padding: 4px 7px; border-radius: 4px; white-space: nowrap; }
+.gt.ok { background: var(--accent-tint); color: var(--accent); }
+.gt.human { background: var(--human-tint); color: var(--human); }
+.gt.hard { background: transparent; color: var(--hard); box-shadow: inset 0 0 0 1px var(--hard); }
+.gt.hint { background: var(--hint-tint); color: var(--hint); }
+.num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--ink-3); color: var(--surface); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; vertical-align: -5px; margin-right: 4px; }
+.num.ok { background: var(--accent); }
+.num.done { background: var(--hint); }
+.num.wait { background: var(--human); }
+
+/* 图例 */
+.legend { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+.legend h3 { font-size: 15px; font-weight: 700; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.legend-row > span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* 表格:窄屏时每行变成一张卡片 */
+.table-box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font-weight: 700; color: var(--ink-2); background: var(--surface-2); font-size: 13px; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 700; color: var(--ink); min-width: 9em; }
+td.ex { color: var(--ink-2); }
+td .gt { margin-bottom: 4px; }
+@media (max-width: 680px) {
+  table, thead, tbody, tr, td { display: block; width: 100%; }
+  thead { display: none; }
+  tr { border-bottom: 1px solid var(--line); padding: 10px 14px; display: grid; gap: 4px; }
+  tr:last-child { border-bottom: 0; }
+  td { border: 0; padding: 0; }
+  td.k { font-size: 15px; min-width: 0; }
+  td[data-label]:not(.k)::before { content: attr(data-label); display: block; font-size: 12px; color: var(--ink-3); }
+}
+
+/* 一次提交的步骤 */
+.col { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.col.after { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.flow { list-style: none; padding: 0; display: grid; gap: 0; }
+.flow li { position: relative; padding: 0 0 16px 30px; display: grid; gap: 4px; min-width: 0; }
+.flow li::before { content: ""; position: absolute; left: 9px; top: 22px; bottom: 0; width: 2px; background: var(--line); }
+.flow li:last-child { padding-bottom: 0; }
+.flow li:last-child::before { display: none; }
+.flow .n { position: absolute; left: 0; top: 2px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--surface); font-size: 12px; font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.flow .t { font-size: 14px; color: var(--ink); }
+.flow .t .badge { margin-left: 4px; }
+.flow .d { font-size: 13px; color: var(--ink-2); }
+.flow li.plain .n { background: var(--ink-3); }
+.flow .gate { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); }
+
+/* 横条 */
+.band { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; background: var(--accent-tint); color: var(--accent-ink); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.band b { font-weight: 700; }
+.band.soft { background: var(--hint-tint); color: var(--ink-2); }
+
+/* 卡片和清单 */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card.pick { border-color: var(--human); box-shadow: inset 0 0 0 1px var(--human); }
+.card h4 { margin: 0; font-size: 15px; font-weight: 700; }
+.card p { font-size: 14px; color: var(--ink-2); }
+.card .note { font-size: 13px; color: var(--ink-3); }
+.items { list-style: none; padding: 0; display: grid; gap: 6px; }
+.items li { font-size: 14px; color: var(--ink); padding-left: 14px; position: relative; }
+.items li::before { content: ""; position: absolute; left: 2px; top: 0.72em; width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); }
+pre { margin: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.65; color: var(--ink); }
+pre .ln { display: block; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; margin: 0 -6px; border-radius: 4px; }
+pre .ln.ins { background: var(--accent-tint); color: var(--accent-ink); }
+pre .ln.cm { color: var(--ink-3); }
+
+/* 钩子文件在哪:判断树 */
+.split { display: grid; gap: 10px; justify-items: start; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 14px; max-width: 100%; }
+.box.q { border-color: var(--human); }
+.down { color: var(--ink-3); font-size: 13px; padding-left: 18px; }
+.branches { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; width: 100%; }
+.branch { border-left: 3px solid var(--line); padding: 4px 0 4px 12px; display: grid; gap: 6px; font-size: 14px; align-content: start; min-width: 0; }
+.branch.ok { border-left-color: var(--accent); }
+.branch.done { border-left-color: var(--hint); }
+.branch.wait { border-left-color: var(--human); }
+.branch.go { border-left-color: var(--chg); }
+.branch > b { font-size: 13px; }
+.branch .d { font-size: 13px; color: var(--ink-2); }
+
+/* 两列对照 */
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+
+footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">cgraphx · 版本流程与需求副本 · 审查第 1、3 条的背景 · 2026-10-28</p>
+  <h1>git 钩子是什么,cgraphx 拿它做什么</h1>
+  <p class="lede">git 钩子是放在钩子目录里的普通脚本文件,文件名就是触发的时刻,比如 <code>commit-msg</code>、<code>post-commit</code>;git 到了这个时刻就自动执行它。cgraphx 往钩子文件里插几行,做两件事:每次提交后记一条提交记录,给日报、任务归属和平台上报用;在版本分支上提交时检查提交说明,挡住直接改代码的提交。默认的钩子目录是 <code>.git/hooks</code>,只属于你这台机器,插几行不影响任何人。麻烦在于钩子文件也可能在别处:在全机共用的目录里(第 1 条,已定),是仓库里跟着提交给全组的文件,或者是指向别处的链接(第 3 条)。这时候插几行,影响就超出了本项目、本机。</p>
+  <div class="facts">
+    <div class="fact"><b>2 件事</b><span>cgraphx 用钩子做的事:记提交、拦提交</span></div>
+    <div class="fact"><b>3 个钩子</b><span>post-commit、post-merge、commit-msg</span></div>
+    <div class="fact"><b>5 种情况</b><span>钩子文件可能在的地方</span></div>
+    <div class="fact"><b>1 处等你定</b><span>第 3 条:仓库里被跟踪的钩子文件</span></div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="目录">
+  <a href="#basics">钩子是什么</a><span class="sep">·</span>
+  <a href="#commit">一次提交经过哪些钩子</a><span class="sep">·</span>
+  <a href="#snippet">插进去的几行长什么样</a><span class="sep">·</span>
+  <a href="#where">钩子文件在哪</a><span class="sep">·</span>
+  <a href="#cases">五种情况各会怎样</a><span class="sep">·</span>
+  <a href="#exclude">exclude 是什么</a><span class="sep">·</span>
+  <a href="#decide">第 3 条要你定的</a>
+</nav>
+
+<section class="sec" id="basics" aria-labelledby="basics-h">
+  <h2 id="basics-h">钩子是什么</h2>
+  <p>记住四点就够了。</p>
+  <div class="grid2">
+    <div class="card">
+      <h4>是一个文件,名字决定什么时候跑</h4>
+      <p>钩子目录里放一个可执行脚本,git 到了和文件名同名的时刻就执行它。</p>
+      <p class="note">例:<code>.git/hooks/commit-msg</code> 在每次提交、写完提交说明之后执行;<code>.git/hooks/post-commit</code> 在提交生成之后执行。</p>
+    </div>
+    <div class="card">
+      <h4>「提交前」的钩子能挡下提交</h4>
+      <p>commit-msg 以非 0 退出,这次提交就不生效。post-commit 这类「提交后」的钩子挡不了,只能做记录。</p>
+      <p class="note">例:commitlint 就是在 commit-msg 里检查提交说明的格式,不合格就挡下。</p>
+    </div>
+    <div class="card">
+      <h4>一个时刻只有一个文件</h4>
+      <p>git 只认一个钩子目录,每个时刻只执行一个文件。别的工具也要用 commit-msg 时,大家挤在同一个文件里。</p>
+      <p class="note">所以 cgraphx 只往文件里插几行,不整个覆盖,免得把 commitlint 那行冲掉。</p>
+    </div>
+    <div class="card">
+      <h4>默认在 <code>.git</code> 里,只属于这台机器</h4>
+      <p><code>.git/</code> 里的东西不跟着仓库提交;别人 clone 下来,钩子目录是空的。</p>
+      <p class="note">配置项 <code>core.hooksPath</code> 可以把钩子目录改到别处。husky 这类工具就是靠它,把钩子放进仓库、提交给全组共用。</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="commit" aria-labelledby="commit-h">
+  <h2 id="commit-h">一次提交经过哪些钩子</h2>
+  <p>沿着一次提交走一遍,cgraphx 插的几行分别在第 2、4、5 步起作用。</p>
+
+  <div class="legend">
+    <h3>怎么读</h3>
+    <div class="legend-row">
+      <span><span class="badge new">新增</span>这个需求新加的</span>
+      <span><span class="badge same">原来就有</span>这个需求之前就有</span>
+      <span><span class="badge chg">改动</span>原来就有,做法变了</span>
+    </div>
+    <div class="legend-row">
+      <span><span class="gt hard">程序拦</span>钩子挡下这次提交</span>
+      <span><span class="gt ok">照写</span>cgraphx 照常插几行</span>
+      <span><span class="gt hint">已定</span>第 1 条已经定下的做法</span>
+      <span><span class="gt human">等你定</span>第 3 条要你拍板</span>
+    </div>
+  </div>
+
+  <div class="col after">
+    <ol class="flow">
+      <li class="plain"><span class="n">1</span><p class="t">你敲 <code>git commit -m "修复导出"</code></p></li>
+      <li><span class="n">2</span><p class="t">git 执行 <code>commit-msg</code>,把提交说明交给它 <span class="badge new">新增</span></p>
+        <p class="d">cgraphx 的提交拦截在这里:当前分支是版本分支(如 <code>dev/2.0.11</code>),这次不是合并提交,说明也不以 <code>chore(release):</code> 开头 → 打一行提示,挡下这次提交。不在版本分支上时什么都不做。由 <code>/release-start</code> 装上。</p>
+        <p class="gate"><span class="gt hard">程序拦</span>提示:「dev/2.0.11 是版本分支:需求改动到副本里做(/dev-start &lt;需求&gt;)……」</p></li>
+      <li class="plain"><span class="n">3</span><p class="t">提交生成</p></li>
+      <li><span class="n">4</span><p class="t">git 执行 <code>post-commit</code> <span class="badge same">原来就有</span></p>
+        <p class="d">cgraphx 的提交记录在这里:在后台起 <code>cgraphx timeline-git-commit-hook</code>,把这次提交的 hash、说明、改了哪些文件写进 <code>.cgraphx/cgraphx.db</code>;放在后台,不拖慢提交。由 <code>cgraphx install</code> 装上。</p></li>
+      <li><span class="n">5</span><p class="t">合并时:<code>git merge</code> 生成合并提交,git 执行 <code>post-merge</code> <span class="badge new">新增</span></p>
+        <p class="d">同样记一条,标成合并提交(spec D32)。快进不产生新提交,不记。</p></li>
+    </ol>
+  </div>
+  <div class="band"><b>记下来的提交给谁用</b><span><code>/doc-report</code> 出日报周报;<code>cgraphx task show &lt;需求&gt;</code> 列出这个需求有哪些提交;平台上报。</span></div>
+  <p>下文说的「装拦截」「装提交记录」,都是指往对应的钩子文件里插这几行。</p>
+</section>
+
+<section class="sec" id="snippet" aria-labelledby="snippet-h">
+  <h2 id="snippet-h">插进去的几行长什么样</h2>
+  <p>以 husky 项目的 <code>.husky/commit-msg</code> 为例:原来里面跑 commitlint;<code>/release-start</code> 装拦截后,第一行后面多了 3 行(高亮的部分,第 3 行的判断条件简化了写法)。</p>
+  <pre><span class="ln">#!/usr/bin/env sh</span><span class="ln ins"># cgraphx-release-guard — 版本分支只收合并提交和 chore(release): 开头的提交</span><span class="ln ins">__cgx_rb=$(git symbolic-ref --short -q HEAD 2&gt;/dev/null || true) # cgraphx-release-guard</span><span class="ln ins">if &lt;是版本分支&gt; &amp;&amp; &lt;不是合并&gt; &amp;&amp; &lt;说明不以 chore(release): 开头&gt;; then echo "…" &gt;&amp;2; exit 1; fi # cgraphx-release-guard</span><span class="ln">. "$(dirname -- "$0")/_/husky.sh"</span><span class="ln"> </span><span class="ln">npx --no -- commitlint --edit ${1}</span></pre>
+  <div class="grid2">
+    <div class="card">
+      <h4>插在第一行后面</h4>
+      <p>第一行(shebang)说明用什么程序执行这个文件。插在它后面,原钩子最后就算是 <code>exec …</code>,插的几行也照样会执行;插在文件末尾就可能永远跑不到。</p>
+    </div>
+    <div class="card">
+      <h4>每行带标记</h4>
+      <p>每行末尾都有 <code># cgraphx-release-guard</code>(提交记录是 <code># cgraphx-timeline-hook</code>)。重装时先按标记删掉旧行再插,卸载时按标记删,不碰原有内容。</p>
+    </div>
+    <div class="card">
+      <h4>不是 shell 脚本就不插</h4>
+      <p>插进去的是 shell 命令。钩子文件第一行是 <code>#!/usr/bin/env node</code> 这类时,插进去会让钩子报错、每次提交都失败,所以不插,只提示。</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="where" aria-labelledby="where-h">
+  <h2 id="where-h">钩子文件在哪</h2>
+  <p>这个需求之前,cgraphx 固定往 <code>.git/hooks/</code> 里写;设了 <code>core.hooksPath</code> 的项目,git 不执行那里的钩子,提交记录悄悄失效。这个需求改成写进 git 实际执行的那个目录(spec D33) <span class="badge chg">改动</span>,于是会碰到下面 ② 到 ⑤ 这几种情况。</p>
+  <div class="card">
+    <div class="split">
+      <div class="box q">git 先看:设了 <code>core.hooksPath</code> 吗?</div>
+      <div class="branches">
+        <div class="branch ok">
+          <b>没设</b>
+          <span><span class="num ok">1</span><code>.git/hooks/</code>,只在这台机器上</span>
+          <span><span class="gt ok">照写</span></span>
+        </div>
+        <div class="branch go">
+          <b>设了,指向哪?</b>
+          <div class="split">
+            <div class="branches">
+              <div class="branch done">
+                <b>仓库外的目录</b>
+                <span><span class="num done">2</span>如 <code>~/.githooks</code>,全机所有仓库共用</span>
+                <span><span class="gt hint">第 1 条 · 已定:不写</span></span>
+              </div>
+              <div class="branch go">
+                <b>仓库里的目录</b>
+                <span class="d">如 husky 的 <code>.husky/</code>。要改的那个钩子文件:</span>
+                <span><span class="num wait">3</span>跟着仓库提交了(被 git 跟踪)<br><span class="gt human">第 3 条 · 等你定</span></span>
+                <span><span class="num">4</span>还不存在,要新建<br><span class="gt hint">第 3 条 · A、B 都写进 exclude</span></span>
+                <span class="d">在被忽略的目录里(如 husky 9 的 <code>.husky/_</code>)→ 同 ①,照写</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="band soft"><b>另外,不管在哪</b><span><span class="num">5</span>钩子文件本身是一个链接(快捷方式),指向别的文件</span><span class="gt hint">第 3 条 · A、B 都不写</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="cases" aria-labelledby="cases-h">
+  <h2 id="cases-h">五种情况各会怎样</h2>
+  <p>「照现在写」指不加任何判断,直接往钩子文件里插几行。</p>
+  <div class="table-box">
+    <table>
+      <thead><tr><th>情况</th><th>例子</th><th>照现在写会怎样</th><th>怎么处理</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="k"><span class="num ok">1</span><code>.git/hooks/</code></td>
+          <td class="ex" data-label="例子">没设 <code>core.hooksPath</code> 的项目</td>
+          <td data-label="照现在写会怎样">没问题:只在这台机器上,不进 git,不影响别的仓库</td>
+          <td data-label="怎么处理"><span class="gt ok">照写</span></td>
+        </tr>
+        <tr>
+          <td class="k"><span class="num done">2</span>仓库外的共用目录</td>
+          <td class="ex" data-label="例子">全局配置里设了 <code>core.hooksPath = ~/.githooks</code>(公司统一下发提交检查,或者用 dotfiles 管钩子)</td>
+          <td data-label="照现在写会怎样">全机所有仓库都受影响:每次提交都在后台起一个 cgraphx 进程;分支叫 <code>dev/x.y.z</code> 的提交都被拦;在项目 A 卸载,会把项目 B 在用的那几行也删掉</td>
+          <td data-label="怎么处理"><span class="gt hint">第 1 条 · 已定</span><br>不写,提示「core.hooksPath 指向仓库外的共用目录 ~/.githooks,没装」;卸载也不碰</td>
+        </tr>
+        <tr>
+          <td class="k"><span class="num wait">3</span>被 git 跟踪的钩子文件</td>
+          <td class="ex" data-label="例子">husky 5~8:<code>.husky/commit-msg</code> 跟着仓库提交,里面跑 commitlint</td>
+          <td data-label="照现在写会怎样"><code>/release-start</code> 插进拦截后,主目录多了一个「改了没提交的文件」:<code>/dev-start</code> 报 <code>dirty_main</code>,不开副本;主目录的 <code>/dev-merge</code> 也停下。想把它提交掉,又被刚装的拦截挡住(除非说明以 <code>chore(release):</code> 开头)。真提交了,拦截就跟着仓库发给了全组</td>
+          <td data-label="怎么处理"><span class="gt human">第 3 条 · 等你定</span><br>A 或 B,见最后一节</td>
+        </tr>
+        <tr>
+          <td class="k"><span class="num">4</span>cgraphx 新建的钩子文件</td>
+          <td class="ex" data-label="例子"><code>.husky/</code> 里没有 post-commit,<code>cgraphx install</code> 新建了 <code>.husky/post-commit</code></td>
+          <td data-label="照现在写会怎样">git status 里冒出一个没被跟踪的文件,一次 <code>git add -A</code> 就提交给了全组。开副本时没被跟踪的文件不带过去,副本里没有这个钩子,副本里的提交进不了时间线</td>
+          <td data-label="怎么处理"><span class="gt hint">第 3 条 · A、B 都一样</span><br>新建后把路径写进 <code>.git/info/exclude</code>(下一节)</td>
+        </tr>
+        <tr>
+          <td class="k"><span class="num">5</span>钩子文件是链接</td>
+          <td class="ex" data-label="例子"><code>.git/hooks/commit-msg</code> 是指向 <code>../../scripts/commit-msg</code> 的链接</td>
+          <td data-label="照现在写会怎样">写入会顺着链接改到目标文件:目标是仓库里被跟踪的文件,就和 ③ 一样;目标是别的仓库也在用的脚本,就和 ② 一样</td>
+          <td data-label="怎么处理"><span class="gt hint">第 3 条 · A、B 都一样</span><br>不写,告诉你文件路径和要加的几行</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="sec" id="exclude" aria-labelledby="exclude-h">
+  <h2 id="exclude-h"><code>.git/info/exclude</code> 是什么</h2>
+  <p>它和 <code>.gitignore</code> 一样,写的是「哪些文件 git 当作没看见」;区别只在谁能看到这份清单。</p>
+  <div class="compare">
+    <div class="card">
+      <h4><code>.gitignore</code></h4>
+      <p>放在仓库里,跟着提交,全组共用同一份。</p>
+    </div>
+    <div class="card">
+      <h4><code>.git/info/exclude</code></h4>
+      <p>放在 <code>.git/</code> 里,不提交,只在这台机器上生效。</p>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h4>例:新建两个钩子文件后,exclude 里多出两行</h4>
+<pre><span class="ln cm"># .git/info/exclude</span><span class="ln ins">/.husky/post-commit</span><span class="ln ins">/.husky/post-merge</span></pre>
+    </div>
+    <div class="card">
+      <h4>写进去以后</h4>
+      <ul class="items">
+        <li>git status 里看不到它,<code>git add -A</code> 也不会把它加进去</li>
+        <li>开副本时按被忽略的文件保留(副本本来就保留被忽略的文件,比如 <code>node_modules</code>),副本里照样记提交</li>
+        <li>删副本前核对「有没有没提交的改动」时不算它</li>
+        <li>卸载删掉这个钩子文件时,exclude 里对应的那一行一起删</li>
+      </ul>
+    </div>
+  </div>
+  <p class="muted">副本已经在用这个机制:开副本时把 <code>.claude/</code>、<code>.cgraphx/</code> 写进副本的 exclude(spec D21),第 4 条要讨论的就是它写多大范围。</p>
+</section>
+
+<section class="sec" id="decide" aria-labelledby="decide-h">
+  <h2 id="decide-h">第 3 条要你定的:被 git 跟踪的钩子文件</h2>
+  <p>④ 和 ⑤ 两种做法都一样,只有 ③ 要你选。以 husky 5~8 的 <code>.husky/commit-msg</code> 为例:</p>
+  <div class="table-box">
+    <table>
+      <thead><tr><th></th><th>A. 不写</th><th>B. 先问再写,并提交</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="k">cgraphx 做什么</td>
+          <td data-label="A. 不写">不改这个文件,告诉你文件路径和要加的 3 行</td>
+          <td data-label="B. 先问再写,并提交"><code>/release-start</code> 先问:「.husky/commit-msg 在仓库里,装拦截要改它并提交,合入主干后全组生效,装吗?」同意就写入,以 <code>chore(release): 装版本分支提交拦截</code> 提交;不同意就不装</td>
+        </tr>
+        <tr>
+          <td class="k">拦截对谁生效</td>
+          <td data-label="A. 不写">没装上,谁都不拦;<code>/release-start</code> 告诉你没装上的原因</td>
+          <td data-label="B. 先问再写,并提交">合入主干后全组生效,包括不用 cgraphx 的同事:他们在 <code>dev/x.y.z</code> 上直接提交会被拦,而提示里让他们跑的 <code>/dev-start</code>,他们并没有</td>
+        </tr>
+        <tr>
+          <td class="k">想让全组都拦</td>
+          <td data-label="A. 不写">你自己把这 3 行加进去,以 <code>chore(release):</code> 开头提交</td>
+          <td data-label="B. 先问再写,并提交">回答「装」就行</td>
+        </tr>
+        <tr>
+          <td class="k">提交记录那几行</td>
+          <td data-label="A. 不写">不写</td>
+          <td data-label="B. 先问再写,并提交">也不写:<code>cgraphx install</code> 没法问人,也不该替全组装上 cgraphx 的调用</td>
+        </tr>
+        <tr>
+          <td class="k">版本流程会不会卡住</td>
+          <td data-label="A. 不写">不会,主目录没有改动</td>
+          <td data-label="B. 先问再写,并提交">不会,改动已经提交</td>
+        </tr>
+        <tr>
+          <td class="k">和 spec 现在的口径</td>
+          <td data-label="A. 不写">一致:拦截只在本机生效,钩子和 <code>cgraphx.releaseGuard</code> 记号都在本地</td>
+          <td data-label="B. 先问再写,并提交">变了:拦截变成全组的规则</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card pick">
+    <h4>倾向 A</h4>
+    <p>拦截一直只在本机生效;把它变成全组的规则,是团队层面的决定,留给用户自己做更合适,A 里也告诉了用户怎么做。B 省一步,代价是不用 cgraphx 的同事也会被拦。</p>
+  </div>
+
+  <div class="sub">
+    <h3>跟着改的地方(选 A 时)</h3>
+    <div class="table-box">
+      <table>
+        <thead><tr><th>位置</th><th>改什么</th></tr></thead>
+        <tbody>
+          <tr><td class="k">spec D33</td><td data-label="改什么">「钩子目录被 git 跟踪时输出提示」换成:钩子文件被 git 跟踪或是符号链接时不写,输出要加的几行;在工作区里新建的钩子文件写进 <code>.git/info/exclude</code>,卸载删掉文件时一并删掉这一行</td></tr>
+          <tr><td class="k"><code>cgraphx release guard --json</code></td><td data-label="改什么">去掉 <code>hooksDirTracked</code>;没写的情况都返回 <code>unsupported</code>,加 <code>reason</code> 说明原因,并带上要加的几行。reason 有四个值:<code>not_shell</code>(不是 shell 脚本)、<code>outside_repo</code>(仓库外的共用目录,即第 1 条)、<code>tracked</code>(被 git 跟踪)、<code>symlink</code>(是链接)</td></tr>
+          <tr><td class="k"><code>/release-start</code></td><td data-label="改什么">按 reason 说没装上的原因;去掉「钩子目录由 git 跟踪,改动会出现在 git status 里」那句提醒</td></tr>
+          <tr><td class="k"><code>cgraphx install</code></td><td data-label="改什么">提交记录那几行没写时,同样按这四种原因提示</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>依据:spec D12、D21、D32、D33、D36;<code>src/core/git-hooks.ts</code>(钩子目录取法、插入位置、不是 shell 不写)、<code>src/core/release/constants.ts</code>(拦截的 3 行)、<code>src/core/timeline/installer.ts</code>(提交记录的几行)、<code>src/core/replica/create.ts</code> 与 <code>status.ts</code>(开副本时去掉没被跟踪的文件、主目录有改动时报 dirty_main、删副本前的核对);本次审查第 1、3 条的讨论。</p>
+  <p>讨论稿,不是契约;看完不再维护。</p>
+</footer>
+
+</main>
+</body>
+</html>

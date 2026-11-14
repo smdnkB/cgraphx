@@ -463,6 +463,17 @@ footer p { margin: 0 0 6px; }
 </dl></div>
 </details>
 
+<details class="skill" id="knowledge-refine">
+<summary><span class="name">/knowledge-refine</span><span class="oneline">定期给知识库体检,出整理清单,勾选后执行</span><span class="how how-cmd">敲命令</span></summary>
+<div class="body"><dl>
+<dt>什么时候用</dt><dd>每月或攒了几个需求之后;觉得知识库词乱、该有的条目没有、条目跟不上代码时。</dd>
+<dt>怎么用</dt><dd>敲 <code>/knowledge-refine</code>(或只跑几项:<code>/knowledge-refine 腐烂 需求口径</code>),在清单里勾要做的项,再敲 <code>/knowledge-refine 执行</code> 或直接说「做 A1 B2」。</dd>
+<dt>要你拍板</dt><dd>每一项做不做;两个概念是不是同一个;需求文档和条目口径冲突时以哪个为准;常用术语要不要关掉自动注入。</dd>
+<dt>产出</dt><dd><code>docs/knowledge/.refine/&lt;日期&gt;-整理清单.md</code>(带证据和执行结果);勾选后改动的知识条目。体检这一轮不改知识文档。</dd>
+<dt>前后</dt><dd>条目写法照 <code>/knowledge-write</code>;执行完重建索引,提醒你提交。</dd>
+</dl></div>
+</details>
+
 <details class="skill" id="db-query">
 <summary><span class="name">db-query</span><span class="oneline">查数据、看表结构,优先读本地 DDL</span><span class="how how-auto">自动</span></summary>
 <div class="body"><dl>

@@ -550,6 +550,7 @@ knowledge-recall(自动召回)
       <li><code>knowledge-recall</code> 做需求前自动召回相关概念、对齐术语,精确查询也走它 <em>—— agent 自动触发</em></li>
       <li><code>/init-knowledge</code> 接手陌生项目时批量探索建档 <em>—— 可选,只跑一次</em></li>
       <li><code>/knowledge-migrate</code> 把 Claude Code 自动记忆按去向迁进知识库、项目根目录 <code>CLAUDE.md</code> 或本人 <code>~/.claude/CLAUDE.md</code>,再关掉本人的自动记忆 <em>—— 用过自动记忆的项目,每人跑一次</em></li>
+      <li><code>/knowledge-refine</code> 定期给知识库体检:概念归一、补实体/术语条目、收进需求文档定过的口径、查失效和过期条目、看提问里的新词和口语变体;出整理清单(<code>docs/knowledge/.refine/</code>),你勾选后才改 <em>—— 每月或攒了几个需求后跑一次</em></li>
     </ul>
 
     <p style="font-weight:600;font-size:14.5px;margin:16px 0 8px;">数据模型(导出 → 探索 → 回写)</p>
@@ -633,7 +634,7 @@ knowledge-recall(自动召回)
 │       └── &lt;前缀&gt;-发布记录.md         <span class="skill">/dev-end</span>              <span class="opt">可选</span>  <span class="ann">已上线时</span>
 │
 ├── <b>knowledge/</b>   业务知识库(跨需求共享)
-│   └── *.md                          <span class="skill">/knowledge-write</span> <span class="ann">沉淀</span>  <span class="skill">/init-knowledge</span> <span class="ann">批量建档</span>  <span class="skill">/knowledge-migrate</span> <span class="ann">迁入记忆</span>
+│   └── *.md                          <span class="skill">/knowledge-write</span> <span class="ann">沉淀</span>  <span class="skill">/init-knowledge</span> <span class="ann">批量建档</span>  <span class="skill">/knowledge-migrate</span> <span class="ann">迁入记忆</span>  <span class="skill">/knowledge-refine</span> <span class="ann">定期整理</span>
 │
 ├── <b>bruno/</b>   接口测试(bruno app 可直接打开)
 │   ├── bruno.json

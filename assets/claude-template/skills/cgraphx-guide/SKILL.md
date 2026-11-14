@@ -72,6 +72,7 @@ cgraphx 是本地优先的 AI agent 研发工具,把**markdown 知识库 + 数�
 | `/knowledge-write` | 把业务决策、概念、坑沉淀到 `docs/knowledge/` |
 | `/init-knowledge` | 接手陌生项目,派子 agent 批量探索、建业务知识库 |
 | `/knowledge-migrate` | 用过 Claude Code 自动记忆的项目跑一次:记忆按去向迁进知识库、项目根目录 `CLAUDE.md`、本人 `~/.claude/CLAUDE.md`,再关掉本人的自动记忆 |
+| `/knowledge-refine` | 定期给知识库体检:词表归一、补实体/术语主条目、吸收需求文档口径、查腐烂、会话线索,出整理清单,勾选后执行 |
 | `/init-ddl` | 按工程批量导出 DDL 基线(一表一文件) |
 | `/init-guides` | 生成 `docs/guides/` 五份项目规范 |
 | `/doc-delivery` | 发布后按需写需求文档、设计文档、接口文档(运行时选) |

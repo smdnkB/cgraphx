@@ -176,6 +176,7 @@ knowledge-recall(自动召回)
 - `knowledge-recall` 做需求前自动召回相关概念、对齐术语,精确查询也走它——agent 自动触发,你不用管
 - `/init-knowledge` 接手陌生项目时批量探索建档——可选,只跑一次
 - `/knowledge-migrate` 用过 Claude Code 自动记忆的项目,每人跑一次:记忆按去向迁进知识库、项目根目录 `CLAUDE.md` 或本人 `~/.claude/CLAUDE.md`,再关掉本人的自动记忆——之后你说「以后都这样做」,agent 先问记到哪
+- `/knowledge-refine` 隔一段时间(每月或攒了几个需求后)给知识库体检:类名式/近义概念归一、被多篇引用却没条目的词补实体或术语条目、需求文档里定过的口径和延期方案收进知识库、失效路径和跟不上代码的条目、你提问里的新词和口语变体;出一份整理清单(`docs/knowledge/.refine/`),你勾选后才改
 
 > 产物落在 `docs/knowledge/*.md`。写文件前必须过 `cgraphx docs validate` 校验,非法文件会被索引跳过。闭环:沉淀 → 召回 → 新概念再沉淀,知识库越厚,agent 越懂你的项目。
 
@@ -242,7 +243,7 @@ docs/
 │       └── <前缀>-发布记录.md         /dev-end              可选  已上线时
 │
 ├── knowledge/   业务知识库(跨需求共享)
-│   └── *.md                          /knowledge-write 沉淀  /init-knowledge 批量建档  /knowledge-migrate 迁入记忆
+│   └── *.md                          /knowledge-write 沉淀  /init-knowledge 批量建档  /knowledge-migrate 迁入记忆  /knowledge-refine 定期整理
 │
 ├── bruno/   接口测试(bruno app 可直接打开)
 │   ├── bruno.json

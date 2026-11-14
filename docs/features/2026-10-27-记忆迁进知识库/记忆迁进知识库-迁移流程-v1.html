@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>记忆迁进知识库</title>
+<style>
+/* 版式与配色照 visual-explain 范例;只用系统字体,断网也能打开 */
+:root {
+  --bg: #F1F4ED;
+  --surface: #FBFCF8;
+  --surface-2: #F2F5EC;
+  --ink: #15211B;
+  --ink-2: #4C5B52;
+  --ink-3: #75837A;
+  --line: #DCE3D8;
+  --accent: #1D6B4F;
+  --accent-ink: #163B2F;
+  --accent-tint: #E1EFE6;
+  --hard: #B14E22;
+  --hard-tint: #F7E7DC;
+  --human: #2F5D8A;
+  --human-tint: #E3ECF5;
+  --hint: #56625B;
+  --hint-tint: #E9EDE5;
+  --chg: #B4521C;
+  --chg-tint: #FBE9DD;
+  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1512; --surface: #161F1A; --surface-2: #1C2721;
+    --ink: #E4ECE6; --ink-2: #A7B5AB; --ink-3: #7F8D84; --line: #2A3730;
+    --accent: #5DBB94; --accent-ink: #9AD9BC; --accent-tint: #173328;
+    --hard: #E8916A; --hard-tint: #3A2117;
+    --human: #8FB8E3; --human-tint: #1A2B3C;
+    --hint: #A3AFA7; --hint-tint: #202A24;
+    --chg: #EFA06F; --chg-tint: #3A2417;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1512; --surface: #161F1A; --surface-2: #1C2721;
+  --ink: #E4ECE6; --ink-2: #A7B5AB; --ink-3: #7F8D84; --line: #2A3730;
+  --accent: #5DBB94; --accent-ink: #9AD9BC; --accent-tint: #173328;
+  --hard: #E8916A; --hard-tint: #3A2117;
+  --human: #8FB8E3; --human-tint: #1A2B3C;
+  --hint: #A3AFA7; --hint-tint: #202A24;
+  --chg: #EFA06F; --chg-tint: #3A2417;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 40px 16px 72px;
+  display: grid;
+  gap: 44px;
+}
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+ul, ol { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 开头 */
+.hero { display: grid; gap: 14px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.06em; color: var(--ink-3); }
+.hero h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.25; font-weight: 700; }
+.lede { font-size: 17px; color: var(--ink-2); max-width: 66ch; }
+.facts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: grid; gap: 2px; min-width: 0; max-width: 100%; }
+.fact b { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--accent-ink); }
+.fact span { font-size: 13px; color: var(--ink-2); }
+
+/* 目录 */
+.toc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.toc a { text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+.toc .sep { color: var(--ink-3); }
+
+/* 通用区块 */
+.sec { display: grid; gap: 14px; }
+.sec > h2 { font-size: 23px; font-weight: 700; }
+.sec > p { color: var(--ink-2); max-width: 72ch; }
+.sub { display: grid; gap: 14px; }
+.sub > h3 { font-size: 18px; font-weight: 700; }
+.sub > p { color: var(--ink-2); max-width: 72ch; }
+
+/* 标记 */
+.badge { display: inline-block; font-size: 12px; line-height: 1; padding: 4px 7px; border-radius: 999px; white-space: nowrap; vertical-align: 1px; }
+.badge.new { color: var(--accent); background: var(--accent-tint); }
+.gt { display: inline-block; font-size: 12px; font-weight: 500; line-height: 1; padding: 4px 7px; border-radius: 4px; white-space: nowrap; }
+.gt.human { background: var(--human-tint); color: var(--human); }
+.gt.stop { background: var(--hard-tint); color: var(--hard); }
+.gt.hard { background: transparent; color: var(--hard); box-shadow: inset 0 0 0 1px var(--hard); }
+.gt.hint { background: var(--hint-tint); color: var(--hint); }
+
+/* 图例 */
+.legend { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+.legend h3 { font-size: 15px; font-weight: 700; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.legend-row > span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); }
+.swatch.kb { background: var(--accent); }
+.swatch.proj { background: var(--human); }
+.swatch.me { background: var(--chg); }
+
+/* 表格:窄屏时每行变成一张卡片 */
+.table-box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font-weight: 700; color: var(--ink-2); background: var(--surface-2); font-size: 13px; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 700; color: var(--ink); }
+td.ex { color: var(--ink-2); }
+@media (max-width: 680px) {
+  table, thead, tbody, tr, td { display: block; width: 100%; }
+  thead { display: none; }
+  tr { border-bottom: 1px solid var(--line); padding: 10px 14px; display: grid; gap: 4px; }
+  tr:last-child { border-bottom: 0; }
+  td { border: 0; padding: 0; }
+  td.k { font-size: 15px; }
+  td[data-label]:not(.k)::before { content: attr(data-label); display: block; font-size: 12px; color: var(--ink-3); }
+}
+
+/* 全局流程 */
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.col { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.col.after { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.col-h { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.col-h b { font-size: 17px; }
+.col-h span { font-size: 13px; color: var(--ink-3); }
+.flow { list-style: none; padding: 0; display: grid; gap: 0; }
+.flow li { position: relative; padding: 0 0 16px 30px; display: grid; gap: 5px; min-width: 0; }
+.flow li::before { content: ""; position: absolute; left: 9px; top: 22px; bottom: 0; width: 2px; background: var(--line); }
+.flow li:last-child { padding-bottom: 0; }
+.flow li:last-child::before { display: none; }
+.flow .n { position: absolute; left: 0; top: 2px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--surface); font-size: 12px; font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.flow .t { font-size: 15px; color: var(--ink); font-weight: 600; }
+.flow .t .gt, .flow .t .badge { margin-left: 4px; font-weight: 500; }
+.flow .d { font-size: 13.5px; color: var(--ink-2); }
+.flow li.wait .n { background: var(--human); }
+.flow li.plain .n { background: var(--ink-3); }
+.col.before .flow .n { background: var(--ink-3); }
+.dest { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.dest div { background: var(--surface-2); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px; padding: 6px 10px; font-size: 13px; display: grid; gap: 2px; min-width: 0; }
+.dest div b { font-size: 13.5px; }
+.dest div span { color: var(--ink-2); }
+.dest .proj { border-left-color: var(--human); }
+.dest .me { border-left-color: var(--chg); }
+.gate-line { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; font-size: 13.5px; color: var(--ink-2); }
+
+/* 横条 */
+.band { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; background: var(--accent-tint); color: var(--accent-ink); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.band b { font-weight: 700; }
+
+/* 卡片和清单 */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card h4 { margin: 0; font-size: 15px; font-weight: 700; }
+.card .note { font-size: 13px; color: var(--ink-3); }
+.items { list-style: none; padding: 0; display: grid; gap: 8px; }
+.items li { font-size: 14px; color: var(--ink); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.items li .why { font-size: 13px; color: var(--ink-2); flex-basis: 100%; }
+pre { margin: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.65; color: var(--ink); }
+pre.wrap-text { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-body); font-size: 13.5px; }
+pre.wrap-code { white-space: pre-wrap; overflow-wrap: anywhere; }
+td.nw { white-space: nowrap; }
+@media (max-width: 680px) { td.nw { white-space: normal; } }
+
+/* 分去三处 */
+.split { display: grid; gap: 10px; justify-items: start; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 14px; max-width: 100%; }
+.box.q { border-color: var(--human); }
+.down { color: var(--ink-3); font-size: 13px; padding-left: 18px; }
+.branches { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; width: 100%; }
+.branch { border-left: 4px solid var(--accent); padding: 4px 0 4px 12px; display: grid; gap: 4px; font-size: 14px; min-width: 0; }
+.branch.proj { border-left-color: var(--human); }
+.branch.me { border-left-color: var(--chg); }
+.branch b { font-size: 14px; }
+.branch .to { font-size: 13px; color: var(--ink-2); }
+.branch .eg { font-size: 13px; color: var(--ink-2); }
+
+/* 一次运行的步骤 */
+.line { display: grid; }
+.stage { position: relative; padding-left: 44px; padding-bottom: 22px; display: grid; gap: 10px; }
+.stage::before { content: ""; position: absolute; left: 15px; top: 34px; bottom: 0; width: 2px; background: var(--line); }
+.stage:last-child::before { display: none; }
+.stage:last-child { padding-bottom: 0; }
+.stage-h { position: relative; display: grid; gap: 4px; }
+.stage-h .dot { position: absolute; left: -44px; top: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--surface); font-weight: 700; font-size: 15px; display: grid; place-items: center; }
+.stage-h h4 { margin: 0; font-size: 17px; line-height: 32px; font-weight: 700; }
+.stage-h p { color: var(--ink-2); font-size: 14px; max-width: 70ch; }
+.gates { list-style: none; padding: 0; display: grid; gap: 6px; }
+.gates li { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; font-size: 13.5px; color: var(--ink-2); }
+.gates li .gt { margin-top: 2px; }
+.examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.example { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.example p { font-size: 13px; color: var(--ink-2); }
+
+footer { color: var(--ink-3); font-size: 13px; display: grid; gap: 4px; }
+
+@media (max-width: 560px) {
+  .stage { padding-left: 34px; }
+  .stage::before { left: 11px; }
+  .stage-h .dot { left: -34px; width: 24px; height: 24px; font-size: 12px; top: 4px; }
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">cgraphx · 记忆迁进知识库 · 迁移流程图解 v1 · 2026-10-27</p>
+  <h1>记忆迁进知识库</h1>
+  <p class="lede">原来 Claude Code 的自动记忆存在项目外的 <code>~/.claude/projects/&lt;编码&gt;/memory/</code>,只有你本人、只有这一个目录读得到:换个副本、换个队友就没了,知识库也召回不到。现在敲一次 <code>/knowledge-migrate</code>:读出主目录和各副本的记忆,按讲的内容分去三处——知识库、项目根目录 <code>CLAUDE.md</code>、你自己的 <code>~/.claude/CLAUDE.md</code>;你看过清单、说「迁」才写;写完关掉你在这个项目里的自动记忆。之后你说「以后都这样做」,agent 先问记到哪。</p>
+  <div class="facts">
+    <div class="fact"><b>3 处</b><span>记忆的去向:知识库、项目 CLAUDE.md、个人 CLAUDE.md</span></div>
+    <div class="fact"><b>3 条</b><span>本项目的记忆:2 条进知识库,1 条进个人 CLAUDE.md</span></div>
+    <div class="fact"><b>每人 1 次</b><span>每个项目跑一次,主目录、副本里都行</span></div>
+    <div class="fact"><b>0 个</b><span>新增的 cgraphx 命令:全用现成工具</span></div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="目录">
+  <a href="#global">全局</a><span class="sep">·</span>
+  <a href="#read">从哪读记忆</a><span class="sep">·</span>
+  <a href="#where">每条去哪</a><span class="sep">·</span>
+  <a href="#list">迁移清单</a><span class="sep">·</span>
+  <a href="#write">说「迁」以后</a><span class="sep">·</span>
+  <a href="#off">关自动记忆</a><span class="sep">·</span>
+  <a href="#commit">什么时候提交</a><span class="sep">·</span>
+  <a href="#after">之后怎么记</a><span class="sep">·</span>
+  <a href="#files">跟着改的地方</a>
+</nav>
+
+<section class="sec" id="global" aria-labelledby="global-h">
+  <h2 id="global-h">全局:敲一次 <code>/knowledge-migrate</code></h2>
+  <p>整条链都是这次新增的。蓝色的关口停下来等你;写入时任何一步失败,就停在关记忆之前。</p>
+
+  <div class="legend">
+    <h3>怎么读</h3>
+    <div class="legend-row">
+      <span><span class="gt human">等你确认</span>停下来等你拍板</span>
+      <span><span class="gt stop">停下</span>出了问题,不往下走</span>
+      <span><span class="gt hard">程序拦</span>程序检查挡住,改对才能过</span>
+      <span><span class="gt hint">看情况</span>只在某些情况下发生</span>
+    </div>
+    <div class="legend-row">
+      <span><span class="swatch kb"></span>去知识库</span>
+      <span><span class="swatch proj"></span>去项目根目录 CLAUDE.md(随仓库共享)</span>
+      <span><span class="swatch me"></span>去你自己的 ~/.claude/CLAUDE.md</span>
+    </div>
+  </div>
+
+  <div class="col after">
+    <div class="col-h"><b>一次迁移</b><span>以本项目为例</span></div>
+    <ol class="flow">
+      <li><span class="n">1</span><p class="t">列目录:主目录 + 全部副本</p><p class="d"><code>cgraphx replica list --all --json</code> 列出副本;在副本里跑时,经 <code>.cgraphx/shared</code> 链接认出主目录;还没有 replica 命令就只读主目录</p></li>
+      <li><span class="n">2</span><p class="t">算记忆目录、读记忆</p><p class="d">按 Claude Code 的规则把目录路径编码,读 <code>memory/</code> 下的条目文件,跳过索引 <code>MEMORY.md</code>;本项目读到 3 条</p></li>
+      <li class="wait"><span class="n">3</span><p class="t">出迁移清单 <span class="gt human">等你确认</span></p><p class="d">每条定好去向,标出已迁过、可能过期、同一件事、说法矛盾;你可以改去向、划掉,说「迁」才往下走</p></li>
+      <li><span class="n">4</span><p class="t">写入三处</p>
+        <div class="dest">
+          <div><b>知识库</b><span>按 /knowledge-write 写条目</span></div>
+          <div class="proj"><b>项目根目录 CLAUDE.md</b><span>加进「## 项目约定」节</span></div>
+          <div class="me"><b>~/.claude/CLAUDE.md</b><span>追加到文件末尾</span></div>
+        </div>
+        <p class="gate-line"><span class="gt hard">程序拦</span><span>知识库条目过了 <code>cgraphx docs validate</code> 才算写完</span></p>
+        <p class="gate-line"><span class="gt stop">停下</span><span>任何一步失败就停在这里,自动记忆保持开着</span></p>
+      </li>
+      <li><span class="n">5</span><p class="t">关自动记忆</p><p class="d">主目录和还在的副本:在本人的 <code>.claude/settings.local.json</code> 写 <code>"autoMemoryEnabled": false</code></p></li>
+      <li class="plain"><span class="n">6</span><p class="t">提交 <span class="gt hint">看情况</span></p><p class="d">只在主目录、而且在版本分支(如 dev/2.0.11)上,以 <code>chore(release):</code> 提交;其余情况不提交</p></li>
+      <li><span class="n">7</span><p class="t">回报</p><p class="d">迁了几条、各去哪,自动记忆已关,原来的记忆文件留在原处</p></li>
+    </ol>
+  </div>
+  <div class="band"><b>之后每个会话</b><span>会话开始多一行提示 → 你说「以后都这样做」→ agent 先问记到哪:知识库 / 项目约定 / 你个人的设置</span></div>
+</section>
+
+<section class="sec" id="read" aria-labelledby="read-h">
+  <h2 id="read-h">局部:从哪读记忆(第 1、2 步)</h2>
+  <p>要读的目录 = 主目录 + <code>replica list</code> 里的全部副本,删了的也算:副本目录删了,Claude Code 那边的记忆目录还在。每个目录的记忆目录,是把它的 git 根路径里每个不是字母数字的字符换成 <code>-</code>。</p>
+  <div class="table-box">
+    <table>
+      <thead><tr><th>目录</th><th>编码后的项目目录</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td class="k"><code>/Users/smdnk/objects/ai/cgraphx</code></td><td data-label="编码后"><code>-Users-smdnk-objects-ai-cgraphx</code></td><td class="ex" data-label="说明">本项目的主目录:3 条记忆 + <code>MEMORY.md</code>(实测)</td></tr>
+        <tr><td class="k"><code>…/cgraphx@订单导出</code></td><td data-label="编码后"><code>-Users-smdnk-objects-ai-cgraphx-----</code></td><td class="ex" data-label="说明"><code>@</code> 和 4 个汉字各变一个 <code>-</code></td></tr>
+        <tr><td class="k"><code>…/cgraphx@积分发放</code></td><td data-label="编码后"><code>-Users-smdnk-objects-ai-cgraphx-----</code></td><td class="ex" data-label="说明">和上一行字数相同,撞到同一个目录 → 只读一次,「在哪」两个都写</td></tr>
+        <tr><td class="k"><code>…/cgraphx-server</code></td><td data-label="编码后"><code>-Users-smdnk-objects-ai-cgraphx-server</code></td><td class="ex" data-label="说明">本机另一个项目,所以不按 <code>cgraphx-*</code> 通配找副本,只认 replica 登记</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h4>skill 里的算法(一个目录)</h4>
+<pre class="wrap-code">root=$(git -C "$d" rev-parse --path-format=absolute --git-common-dir) &amp;&amp; root=$(dirname "$root") || root=$d
+enc=$(node -e 'console.log(process.argv[1].replace(/[^a-zA-Z0-9]/g, "-"))' "$root")
+ls ~/.claude/projects/$enc/memory/</pre>
+      <p class="note">和 Claude Code 2.1.204 同一算法。编码超过 200 个字符时 Claude Code 会截断再接哈希,改按前 200 个字符的前缀找;配了 <code>autoMemoryDirectory</code> 的读那个目录。</p>
+    </div>
+    <div class="card">
+      <h4>每条记忆读什么</h4>
+      <ul class="items">
+        <li><code>name</code>、<code>description</code>、<code>metadata.type</code><span class="why">本项目 1 条 project 类、2 条 feedback 类</span></li>
+        <li>正文的结论 + <b>Why:</b> + <b>How to apply:</b><span class="why">分别写进知识条目的 Summary、Context、Reuse Guidance</span></li>
+        <li><code>originSessionId</code>、<code>modified</code> 不迁<span class="why">协作元信息,不是知识</span></li>
+        <li>记忆文件只读<span class="why">不删、不改、不挪,<code>MEMORY.md</code> 也不动</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="where" aria-labelledby="where-h">
+  <h2 id="where-h">局部:每条记忆去哪(第 3 步的去向)</h2>
+  <p>按记忆讲的内容分三处。知识库是开工时按需召回的,每轮都要守的规则放进去会时灵时不灵;<code>.claude/CLAUDE.md</code> 里的 cgraphx 托管块升级时整块重写,所以不往那里写。</p>
+  <div class="card">
+    <div class="split">
+      <div class="box q">这条记忆讲的是什么?</div>
+      <div class="branches">
+        <div class="branch"><b>项目里的决策、规则、教训</b><span class="to">→ 知识库 <code>docs/knowledge/</code></span><span class="eg">「code-subsystem 分支不并入 main」→ 决策<br>「正式材料不写防御性措辞」→ 规则,写汇报、对外文档时召回</span></div>
+        <div class="branch proj"><b>每轮都要守的项目约定</b><span class="to">→ 项目根目录 <code>CLAUDE.md</code>,随仓库给队友</span><span class="eg">「提交前先跑 npm test」</span></div>
+        <div class="branch me"><b>只关于你本人的偏好</b><span class="to">→ 你的 <code>~/.claude/CLAUDE.md</code></span><span class="eg">「回复用中文」</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="list" aria-labelledby="list-h">
+  <h2 id="list-h">局部:迁移清单(第 3 步)</h2>
+  <p>清单在对话里给。抬头先说读了哪些目录:「读了 1 个目录的记忆:主目录 → <code>~/.claude/projects/-Users-smdnk-objects-ai-cgraphx/memory/</code>(3 条)」。</p>
+  <div class="table-box">
+    <table>
+      <thead><tr><th>#</th><th>记忆</th><th>在哪</th><th>去向</th><th>怎么写</th><th>备注</th></tr></thead>
+      <tbody>
+        <tr><td class="k">1</td><td data-label="记忆">code-subsystem 分支不并入 main</td><td class="nw" data-label="在哪">主目录</td><td class="nw" data-label="去向">知识库 · 决策</td><td data-label="怎么写">新建 <code>docs/knowledge/code-subsystem分支不并入main.md</code></td><td data-label="备注">—</td></tr>
+        <tr><td class="k">2</td><td data-label="记忆">正式材料不写防御性措辞</td><td class="nw" data-label="在哪">主目录</td><td class="nw" data-label="去向">知识库 · 规则</td><td data-label="怎么写">新建 <code>docs/knowledge/正式材料不写防御性措辞.md</code></td><td data-label="备注">写汇报、对外文档时召回</td></tr>
+        <tr><td class="k">3</td><td data-label="记忆">回复用中文</td><td class="nw" data-label="在哪">主目录</td><td class="nw" data-label="去向">你个人的设置</td><td data-label="怎么写">追加到 <code>~/.claude/CLAUDE.md</code> 末尾(文件还没有,新建)</td><td data-label="备注">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h4>「备注」里的标记</h4>
+      <ul class="items">
+        <li><span class="gt hint">已迁过,默认不迁</span><span class="why">知识库里找得到「迁自 Claude Code 自动记忆 <code>code-subsystem-branch-kept-unmerged</code>」这一行</span></li>
+        <li><span class="gt hint">可能过期,默认不迁</span><span class="why">记忆提到的分支、文件已经不在了;按意思认,「code-subsystem 分支」指的是 feat/code-subsystem</span></li>
+        <li><span class="gt hint">合进已有条目</span><span class="why">知识库里已有讲同一件事的条目:「怎么写」填「合进 <code>&lt;已有条目&gt;</code>」,不新建</span></li>
+        <li><span class="gt human">说法矛盾,待你定</span><span class="why">和已有条目说的相反:清单下面摆出两段原文,问以哪个为准</span></li>
+        <li><span class="gt hint">已有同义一条,不重复写</span><span class="why">两处 CLAUDE.md 里已经写过同一个意思</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>你怎么改</h4>
+<pre class="wrap-text">3 改成项目约定
+划掉 2
+迁</pre>
+      <p class="note">改了就按改后的重出清单;说「迁」才往下走,「迁」同时算作重建知识库索引的确认。</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="write" aria-labelledby="write-h">
+  <h2 id="write-h">局部:说「迁」以后(第 4 步)</h2>
+  <p>顺序固定。知识库先写、先校验、先建索引,两处 CLAUDE.md 后写;全部成功才进第 5 步关记忆。</p>
+  <div class="line">
+    <section class="stage">
+      <div class="stage-h"><span class="dot">1</span><h4>写知识库条目</h4><p>一条记忆一个条目,按 /knowledge-write 的 frontmatter、Summary、合并规则写;<code>source_type</code> 一律 <code>work_context</code>,<code>owners</code> 取 git 用户名。Summary 写结论和什么时候该召回,带上召回时的口语词。</p></div>
+      <ul class="gates">
+        <li><span class="gt hard">程序拦</span><span>每个文件跑 <code>cgraphx docs validate</code>,不合法就改到合法</span></li>
+      </ul>
+    </section>
+    <section class="stage">
+      <div class="stage-h"><span class="dot">2</span><h4>建索引</h4><p><code>cgraphx docs index</code>;你说的「迁」已经算确认,不再问。</p></div>
+    </section>
+    <section class="stage">
+      <div class="stage-h"><span class="dot">3</span><h4>写项目约定</h4><p>项目根目录 <code>CLAUDE.md</code>:有「## 项目约定」节就加在节末,没有就在文件末尾新建这一节。一条一行:<code>- 提交前先跑 npm test——CI 只跑构建,测试挂了合进去才发现</code>。</p></div>
+    </section>
+    <section class="stage">
+      <div class="stage-h"><span class="dot">4</span><h4>写个人设置</h4><p>追加到 <code>~/.claude/CLAUDE.md</code> 末尾,文件没有就新建:<code>- 回复用中文,长任务中途也不漂成英文——连续工具调用后回复漂成过英文</code>。</p></div>
+      <ul class="gates">
+        <li><span class="gt stop">停下</span><span>上面任何一步失败:回报写了哪些、没写哪些,自动记忆保持开着;修好再跑一次,已写的会标「已迁过」</span></li>
+      </ul>
+    </section>
+  </div>
+  <div class="examples">
+    <div class="example">
+      <p>迁进知识库的条目(第 1 条记忆,节选)</p>
+<pre class="wrap-code">---
+title: code-subsystem 分支不并入 main
+document_type: decision
+concepts:
+  - code-subsystem 分支
+source_type: work_context
+owners:
+  - liulongfei
+---
+
+## Summary
+feat/code-subsystem 保留分支、不并入 main;被要求
+「把分支都合进 main」时默认跳过并说明,用户点名要合才合。
+
+## Context
+带原生可选依赖,和「无原生依赖」的定位冲突……
+
+## Evidence
+迁自 Claude Code 自动记忆 `code-subsystem-branch-kept-unmerged`(2026-10-27)。</pre>
+    </div>
+    <div class="example">
+      <p>中途失败时的回报</p>
+<pre class="wrap-text">写到建索引停下了:cgraphx docs index 报 database is locked。两个知识库条目已写好、校验通过;自动记忆还开着,处理好后再跑一次 /knowledge-migrate,已写的会标「已迁过」。</pre>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="off" aria-labelledby="off-h">
+  <h2 id="off-h">局部:关自动记忆(第 5 步)</h2>
+  <p>只写你本人的 <code>.claude/settings.local.json</code>(不签入),主目录和每个还在的副本各写一份;之后开的副本会把这个被忽略的文件一起复制过去,不用再关。已经开着的会话不撤回已加载的记忆,新开的会话起不再加载。</p>
+  <div class="table-box">
+    <table>
+      <thead><tr><th>情况</th><th>结果(临时仓库实测)</th></tr></thead>
+      <tbody>
+        <tr><td class="k">没有设置文件,也没被 git 忽略</td><td data-label="结果">新建 <code>{ "autoMemoryEnabled": false }</code>,把它加进 <code>.git/info/exclude</code>,<code>git status</code> 干净</td></tr>
+        <tr><td class="k">已有 env、permissions 等字段</td><td data-label="结果">原样保留,只加一个字段;再跑一次不改文件</td></tr>
+        <tr><td class="k">JSON 坏了</td><td data-label="结果">报错,不动文件,回报写明是哪个文件</td></tr>
+        <tr><td class="k">被仓库跟踪</td><td data-label="结果">不写:写进去一提交,队友的记忆也关了;提示先 <code>git rm --cached</code> 它再跑</td></tr>
+        <tr><td class="k">已经被项目 .gitignore 忽略</td><td data-label="结果">只写设置,不重复加忽略</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h4>为什么只写这一个文件</h4>
+    <ul class="items">
+      <li>不写签入的 <code>.claude/settings.json</code><span class="why">会把队友的记忆也关掉;只关本人的,队友各迁各关</span></li>
+      <li>不写 <code>~/.claude/settings.json</code><span class="why">会关掉你所有项目的自动记忆</span></li>
+      <li>不改项目 <code>.gitignore</code><span class="why">那是被跟踪的改动,会拦下开副本、合入需求</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec" id="commit" aria-labelledby="commit-h">
+  <h2 id="commit-h">局部:什么时候提交(第 6 步)</h2>
+  <div class="card">
+    <div class="split">
+      <div class="box q">在主目录,而且当前分支形如 dev/2.0.11?</div>
+      <div class="branches">
+        <div class="branch"><b>是</b><span class="eg">只提交本次写的知识库文件和项目根目录 <code>CLAUDE.md</code>,说明 <code>chore(release): Claude Code 记忆迁进知识库</code>。版本分支上只放行这种开头的整版改动</span></div>
+        <div class="branch me"><b>不是(在 main 上,或在副本里)</b><span class="eg">不提交,回报列出改了哪些文件。副本里的改动随需求自己的提交合入</span></div>
+      </div>
+      <p class="note">个人 <code>~/.claude/CLAUDE.md</code> 和本地设置不在仓库里,不进任何提交。</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="after" aria-labelledby="after-h">
+  <h2 id="after-h">局部:之后怎么记</h2>
+  <div class="compare">
+    <div class="col before">
+      <div class="col-h"><b>原来</b><span>自动记忆开着</span></div>
+      <ol class="flow">
+        <li><span class="n">1</span><p class="t">你说「记住」「以后都这样做」</p></li>
+        <li><span class="n">2</span><p class="t">写进自动记忆</p><p class="d">存在项目外,只有你、只有这个目录读得到</p></li>
+      </ol>
+    </div>
+    <div class="col after">
+      <div class="col-h"><b>迁完以后</b><span>自动记忆关了</span></div>
+      <ol class="flow">
+        <li><span class="n">1</span><p class="t">会话开始多一行提示 <span class="badge new">新增</span></p><p class="d">只在本地设置里 <code>autoMemoryEnabled</code> 为 false 时出现;没关的项目、CodeBuddy 输出一字不变</p></li>
+        <li><span class="n">2</span><p class="t">你说「以后都这样做」</p></li>
+        <li class="wait"><span class="n">3</span><p class="t">agent 先问记到哪 <span class="gt human">等你确认</span></p><p class="d">知识库(走 /knowledge-write)/ 项目约定 / 你个人的设置</p></li>
+      </ol>
+    </div>
+  </div>
+  <div class="example">
+    <p>会话开始注入的那一行(接在会话 id 后面)</p>
+<pre class="wrap-text">本项目已关 Claude Code 自动记忆:用户要你以后都照某个做法来时,先问记到哪——知识库(项目里的决策、规则、教训,走 /knowledge-write)/ 项目约定(每轮都要守的,写进项目根目录 CLAUDE.md)/ 你个人的设置(只关于本人的偏好,写进 ~/.claude/CLAUDE.md)。</pre>
+  </div>
+</section>
+
+<section class="sec" id="files" aria-labelledby="files-h">
+  <h2 id="files-h">跟着改的地方</h2>
+  <p>都在提交 <code>eaeccb5</code> 里。没有新增 cgraphx 命令,程序只改了两处。</p>
+  <div class="table-box">
+    <table>
+      <thead><tr><th>位置</th><th>改什么</th></tr></thead>
+      <tbody>
+        <tr><td class="k">knowledge-migrate skill</td><td data-label="改什么">新建,只能手敲触发;当前 agent 不是 Claude Code 就停下</td></tr>
+        <tr><td class="k">task 的 SessionStart</td><td data-label="改什么">本地设置关了自动记忆时,在会话 id 后多注入一行去向提示</td></tr>
+        <tr><td class="k">deprecated-assets.json</td><td data-label="改什么">撤下 10-19 废弃的旧 <code>skills/knowledge-migrate</code>:清理在部署之后跑,留着会把新 skill 一装上就删掉</td></tr>
+        <tr><td class="k">FLOW-MAP、cgraphx-guide、CLAUDE.md、CHANGELOG</td><td data-label="改什么">加上 <code>/knowledge-migrate</code>;skill 26 → 27 个</td></tr>
+        <tr><td class="k">知识库</td><td data-label="改什么">skill-invocation轴、知识库分类体系两条补一句:这个名字从 2026-10-27 起改作记忆迁移</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <p>v1:迁移流程图解。</p>
+  <p>依据:<code>记忆迁进知识库-spec.md</code>、<code>assets/claude-template/skills/knowledge-migrate/SKILL.md</code>、提交 <code>eaeccb5</code>,以及实现时在临时仓库里的验证。讨论稿,不是契约;以 spec 为准,本页不再维护。</p>
+</footer>
+
+</main>
+</body>
+</html>
