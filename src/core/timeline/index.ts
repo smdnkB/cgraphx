@@ -12,6 +12,9 @@ export {
   getEventStats,
   getSessionStats,
   resolveTimeBound,
+  // 历史查询分页(spec:2026-11-16-Codex历史会话补录 D9):首页 + 续页,输出 {events,next_cursor}
+  queryEventsFirstPage,
+  queryEventsNextPage,
 } from './indexer';
 // 项目在本机出现过的根、按目录的汇总、受影响的根下的事件数(spec D10、D11、D19、D32、D33)
 export { listTimelineRoots, readTimelineSummary, countEventsUnderRoots } from './roots';
@@ -50,6 +53,10 @@ export type {
   TimelineQueryFilter,
   TimelineStats,
   StatsGroupBy,
+  // 历史查询分页(spec D9)
+  TimelinePagePosition,
+  PagedQueryFilter,
+  TimelinePagedResult,
 } from './types';
 export {
   TimelineError,
