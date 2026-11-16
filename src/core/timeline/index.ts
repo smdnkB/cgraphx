@@ -33,9 +33,9 @@ export { createTimelineMerger, maxTimelineEventId } from './merge';
 export type { TimelineMergeStats, TimelineMerger } from './types';
 export { ensureTimelineSchema } from './schema-bootstrap';
 export { installTimelineHooks, uninstallTimelineHooks } from './installer';
-// 查询前补录(spec F1,plan C-4):会话文件解析进项目库 + 人读提示渲染;开关独立成 kill-switch.ts
+// 查询前补录(spec F1,plan C-4;覆盖判定 D4 是 T-1 加的可选字段):会话文件解析进项目库 + 人读提示渲染;开关独立成 kill-switch.ts
 export { ensureTimelineUpToDate, describeSyncOutcome } from './ingest/ingest';
-export type { TimelineSyncOutcome, TimelineSyncStatus } from './ingest/ingest';
+export type { TimelineSyncOutcome, TimelineSyncStatus, TimelineCoverage } from './ingest/ingest';
 export { isKillSwitchOn } from './kill-switch';
 export { claudeSessionAdapter } from './ingest/claude-adapter';
 export { sessionAdapterFor } from './ingest/adapters';

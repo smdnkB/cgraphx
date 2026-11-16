@@ -167,10 +167,15 @@ function exitCodeForError(err: unknown): number {
  * 查询前自动补录(spec F1):四个查询命令在查询之前调,会话文件里新增的部分先解析进库。
  * 补录的任何失败只写 stderr——不碰查询的退出码与 stdout,`--json` 的结果不混提示
  * (ensureTimelineUpToDate 自己不抛,这里再兜一层)。
+ * 补录完成后先出一行覆盖状态(D4 补录状态契约,doc-backfill 捕获的就是它),具体原因沿用
+ * 后面的 describeSyncOutcome 提示;git 提交钩子不走这里,保持原来的静默。
  */
 async function backfillBeforeQuery(): Promise<void> {
   try {
     const outcome = await ensureTimelineUpToDate(process.cwd());
+    if (outcome.coverage !== undefined) {
+      process.stderr.write(`[timeline] 补录状态: ${outcome.coverage}\n`);
+    }
     for (const line of describeSyncOutcome(outcome)) process.stderr.write(`[timeline] ${line}\n`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
