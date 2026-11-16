@@ -94,7 +94,7 @@ export interface IngestContext extends ClassificationContext, FactMappingContext
   readonly unparsed: UnparsedMap;
   /** 读取器抛错的文件(坏帧、读不出会话头等),按来源显示名 + 原因计数;偏移不推进,下一趟重试 */
   readonly readFailed: ReadFailedMap;
-  /** 认不出项目归属的文件(K2),按来源显示名计数;已记空行不重试,只作 K4 的覆盖提示 */
+  /** 认不出项目归属的文件(K2),按来源显示名计数;每趟重新认定并提示覆盖缺口 */
   readonly unattributed: UnattributedMap;
 }
 

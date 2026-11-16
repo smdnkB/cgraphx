@@ -96,12 +96,12 @@ cgraphx timeline query --limit 1
 |---|---|---|
 | 单元测试规格 | `<前缀>-单元测试-spec.md` | `/unit-spec` |
 | 单元测试报告 | `<前缀>-单元测试报告.md` | `/unit-code`(依赖规格;规格刚补完接着跑;报告只写真实执行结果) |
-| 收口档案 | `收口档案.md` 或 `<前缀>-收口档案.md` | `/dev-end`(传入需求标识、主 spec 路径、提交范围、已知说明、补录结果;历时与会话留痕由它内部调 task-history 算) |
+| 收口档案 | `收口档案.md` 或 `<前缀>-收口档案.md` | `/dev-end`(传入需求标识、主 spec 路径、提交线索、已知说明、补录结果;历时与会话留痕由它内部调 task-history 算) |
 
 每条待办是独立任务,补全重活不进主上下文——**派 filler 子 agent**:
 
 - 范围内产物全齐(只缺过头部)→ 不派 filler,该需求改动仅头部,直接走小步提交
-- 有缺失 → Read `./filler-prompt.md` + 拼任务三件套(需求 / 缺失产物 / 上下文——含第 7 步补录结果与该需求的提交范围)→ Agent tool 派 `general-purpose`,在隔离上下文按依赖顺序补全(规格 → 报告 → 档案)
+- 有缺失 → Read `./filler-prompt.md` + 拼任务三件套(需求 / 缺失产物 / 上下文——含第 7 步补录结果与该需求的提交线索)→ Agent tool 派 `general-purpose`,在隔离上下文按依赖顺序补全(规格 → 报告 → 档案)
 - **串行**:一需求一子 agent,跑完一个再派下一个(git index 与测试运行是共享资源,不并行)
 - **status 协议**:DONE → sanity check → 提交;DONE_WITH_CONCERNS → 辨因处理(correctness/scope 先解决,observation 记录);NEEDS_CONTEXT → 补 context 重派;BLOCKED → 记「受阻」进下一条(补账任务相互独立,一个卡住不拖其他)
 - **sanity check(主 agent,每需求)**:声称补出的产物真实存在 + git status 只含该需求的文件;不过 → 派修或记录,不提交
@@ -127,8 +127,8 @@ cgraphx timeline query --limit 1
 
 Read 模板 + 拼任务三件套成 prompt,派 `general-purpose`:
 
-- `./filler-prompt.md` —— 每条有缺失产物的待办派一次;三件套 = ① 需求(feature-id + 目录 + 文件前缀)② 缺失产物清单 ③ 上下文(git 用户名、对该需求的已知说明、提交范围、补录结果)
-  - **提交范围**:`git log --format='%h %ad %s' --date=short -- docs/features/<目录>` 的输出——文档目录的提交是需求收尾痕迹,收口的时间窗由此起算
+- `./filler-prompt.md` —— 每条有缺失产物的待办派一次;三件套 = ① 需求(feature-id + 目录 + 文件前缀)② 缺失产物清单 ③ 上下文(git 用户名、对该需求的已知说明、提交线索、补录结果)
+  - **提交线索**:同时收集需求目录提交、按需求标识或标题检索到的提交及相关代码文件提交;把候选提交和依据传给 filler,由 task-history 结合会话核实需求实际首末边界。需求目录的首末提交只作线索,不能单独作为收口时间窗;无法可靠确定边界时扩大检索,不猜造 SHA 范围
   - **补录结果**:第 7 步捕获的状态与原因;勾选范围含收口档案时必传,没触发或没捕到就写「覆盖不足」
 
 ## 不做的事

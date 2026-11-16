@@ -14,7 +14,7 @@ description: 从 cgraphx 时间线反查一个需求的开发历史与实际投�
 ## 输入(缺了自己先补)
 
 - 目标需求:feature-id / 编号 / 名称
-- git 仓路径 + SHA 范围(或时间窗);缺时间窗先用 `git log` 按需求目录/关键词推出
+- git 仓路径 + SHA 范围(或时间窗);缺时间窗先结合需求目录、提交关键词、相关代码及会话证据确定候选范围;不得仅按需求目录的提交限制时间窗
 
 ## 核心认知:时间线不认识「需求」
 
@@ -63,11 +63,11 @@ while True:
 json.dump(events, sys.stdout, ensure_ascii=False)
 ```
 
-**补录状态进报告**:`complete` 才算时间线完整;`partial`(单文件失败/无来源/无法归属)或 `blocked`(锁竞争/采集关闭/旧库未合并/库不可用)→ 时间线可能缺事件,但已成功部分仍是有限证据——事件够算就照算、在「局限」里注明原因,不够算走「覆盖不足」。具体原因沿用状态行后面的 stderr 提示,一并带回。
+**补录状态进报告**:`complete` 才算时间线完整;`partial`(单文件失败/无来源/无法归属)或 `blocked`(锁竞争/采集关闭/旧库未合并/库不可用)→ 时间线可能缺事件,但已成功部分仍是有限证据——事件够算就照算、在「覆盖」里注明原因,不够算走「覆盖不足」。具体原因沿用状态行后面的 stderr 提示,一并带回。
 
 ## 三步还原
 
-1. **commit 定骨架**:git 侧 `git log --all -i --grep="<需求编号或关键字>" --format="%h author=%aI %s"`(优先看 author date——批量 rebase 会改写 commit date);时间线侧分页拉 `--type=git_commit` 对时间戳。
+1. **commit 定骨架**:git 侧 `git log --all -i --grep="<需求编号或关键字>" --format="%h author=%aI %s"`,结合需求目录、独占代码文件提交及会话证据核对首末边界(优先看 author date——批量 rebase 会改写 commit date);不要仅以需求目录提交的首末日期截断开发过程。时间线侧分页拉 `--type=git_commit` 对时间戳；候选边界不能可靠确定时扩大检索,以证据筛选,不编造提交范围。
 2. **特征文件扩展**:对骨架 commit 的核心改动文件逐个判独占/共享;独占的用 `--file=<文件>` 分页反查所有动过它的会话。
 3. **prompt 关键词补纯讨论会话**:分页拉 `--type=user_prompt`,按需求特有词搜 `prompt_text` 聚合 `session_id`——澄清/探索/被中断的分支没有提交,只有这步捞得到。
 
@@ -94,11 +94,10 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 events = json.load(open(sys.argv[1], encoding='utf-8'))
-local = datetime.now().astimezone().tzinfo
 
 def parse(t):
     try:
-        return datetime.fromisoformat(str(t).replace('Z', '+00:00')).astimezone(local)
+        return datetime.fromisoformat(str(t).replace('Z', '+00:00')).astimezone()
     except ValueError:
         return None
 
@@ -153,10 +152,10 @@ print(f"合计 {total.total_seconds()/3600:.1f}h")
 - 实际投入: 约 <下界>h ~ <上界>h ≈ <Z> 工作日
   - 口径: 下界=明确归属事件 · 上界=含混合会话候选事件 · <timeline 实测 | 非 timeline 实测(会话回退) | 无法估算>
 - 补录状态: <complete|partial|blocked> · <一句原因>
-- 局限: <缺哪段数据 / 哪些归属是推断,逐条列;没有就写「无」>
+- 覆盖: <缺失数据及回退原因;没有就写「完整」>
 ```
 
-其后按需给细节:commit 骨架(SHA + author date + 一句改动,时间序)、会话列表(短码 + 首末时间 + 独占/混合(混了什么))、逐日活跃段、归属判断依据(用了哪些锚点、置信度)。该需求已有收口档案时,加一节「与既有档案的差异」。
+其后按需给细节:commit 骨架(SHA + author date + 一句改动,时间序)、会话列表(短码 + 首末时间 + 独占/混合(混了什么))、逐日活跃段、归属判断依据(用了哪些锚点)。该需求已有收口档案时,加一节「与既有档案的差异」。
 
 ## 约束
 

@@ -47,7 +47,7 @@ export async function queryEvents(projectRoot: string, filter: TimelineQueryFilt
  * 分页读取一页:首页(carry 空)在同一只读连接上取快照上界(最大事件 id)与库文件身份,
  * 再取数据;续页(carry 是游标)沿用游标里的上界、身份与过滤,从上一页末尾继续——不重取
  * 身份,整轮翻页都绑在首页那份库上。表不在(旧库还没写过 timeline_events)按没有事件处理,
- * 与 readEvents 的空态一致。取满一页才发下一页游标,空页/末页 nextCursor 为 null。
+ * 与 readEvents 的空态一致。多取一条判断是否存在后续记录,空页/末页 nextCursor 为 null。
  */
 function pagedRead(start: string, filter: PagedQueryFilter, carry?: PageCursor): TimelinePagedResult {
   const conn = openTimelineDbForRead(start);
@@ -58,8 +58,10 @@ function pagedRead(start: string, filter: PagedQueryFilter, carry?: PageCursor):
     const snapshotMaxId = carry !== undefined ? carry.snapshot_max_id : store.maxEventId();
     const dbIdentity = carry !== undefined ? carry.db : statDbIdentity(conn.getPath());
     const after = carry !== undefined ? { ts: carry.last_ts, id: carry.last_id } : undefined;
-    const events = store.queryPage(filter, snapshotMaxId, after);
-    if (events.length < filter.limit) return { events, nextCursor: null };
+    // 多取一条以区分满页的末页和确有后续记录的页。
+    const rows = store.queryPage({ ...filter, limit: filter.limit + 1 }, snapshotMaxId, after);
+    const events = rows.slice(0, filter.limit);
+    if (rows.length <= filter.limit) return { events, nextCursor: null };
     const last = events[events.length - 1]!;
     return {
       events,

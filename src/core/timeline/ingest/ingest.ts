@@ -375,7 +375,7 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
         const stat = statOrNull(file);
         if (stat === null) continue; // 文件没了(F1 ⑤):已记进时间线的留着,这里跳过
         const known = rows.get(file);
-        if (known !== undefined && known.size === stat.size && known.mtime_ms === stat.mtimeMs) continue;
+        if (known !== undefined && known.project_dir !== null && known.size === stat.size && known.mtime_ms === stat.mtimeMs) continue;
         pending.push({ source, file, stat });
       }
     }
@@ -437,7 +437,7 @@ async function ingestIncremental(start: string): Promise<TimelineSyncOutcome> {
         const fresh = sessionIndex.getSessionFile(item.file);
         if (fresh !== null) {
           rows.set(item.file, fresh);
-          if (fresh.size === item.stat.size && fresh.mtime_ms === item.stat.mtimeMs) continue;
+          if (fresh.project_dir !== null && fresh.size === item.stat.size && fresh.mtime_ms === item.stat.mtimeMs) continue;
         }
         // 单文件隔离:读取器抛错(坏帧、读不出会话头等)只丢这一个文件,不卡住排序在后的文件、
         // 不拖垮整趟;偏移不推进(saveRow 没执行),文件修复或删除后下一趟自动重试
