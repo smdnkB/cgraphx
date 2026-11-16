@@ -17,6 +17,7 @@ import * as os from 'node:os';
 import { removeClaudeAssets, cleanDeprecatedAssets, deployClaudeAssets } from '../../../src/cli/installer/claude-assets';
 import { ensureProjectInitialized } from '../../../src/cli/installer/index';
 import { DatabaseConnection } from '../../../src/core/db';
+import { getAgentProfile } from '../../../src/core/agents';
 
 function tmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -222,17 +223,37 @@ describe('cleanDeprecatedAssets with the shipped deprecated-assets.json', () => 
     fs.rmSync(claudeDir, { recursive: true, force: true });
   });
 
-  it('removes the task-history agent file and the dev-handoff skill deployed by 2.0.13', () => {
+  it('upgrades task-history to the skill wrapper and removes the deprecated dev-handoff skill', () => {
     fs.mkdirSync(path.join(claudeDir, 'agents'), { recursive: true });
     fs.writeFileSync(path.join(claudeDir, 'agents', 'task-history.md'), 'old agent');
     fs.writeFileSync(path.join(claudeDir, 'agents', 'knowledge-recall.md'), 'current agent');
     fs.mkdirSync(path.join(claudeDir, 'skills', 'dev-handoff'), { recursive: true });
     fs.writeFileSync(path.join(claudeDir, 'skills', 'dev-handoff', 'SKILL.md'), 'old skill');
 
-    cleanDeprecatedAssets(claudeDir, shippedTemplate);
+    deployClaudeAssets(claudeDir, undefined, shippedTemplate);
 
-    expect(fs.existsSync(path.join(claudeDir, 'agents', 'task-history.md'))).toBe(false);
+    const taskHistoryAgent = fs.readFileSync(path.join(claudeDir, 'agents', 'task-history.md'), 'utf8');
+    expect(taskHistoryAgent).toContain('.claude/skills/task-history/SKILL.md');
+    expect(taskHistoryAgent).not.toBe('old agent');
+    expect(fs.existsSync(path.join(claudeDir, 'skills', 'task-history', 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(claudeDir, 'skills', 'dev-handoff'))).toBe(false);
     expect(fs.existsSync(path.join(claudeDir, 'agents', 'knowledge-recall.md'))).toBe(true);
   });
+
+  it('deploys the wrapper for CodeBuddy and the shared skill for Codex', () => {
+    const codebuddy = getAgentProfile('codebuddy');
+    const codex = getAgentProfile('codex');
+    expect(codebuddy).toBeDefined();
+    expect(codex).toBeDefined();
+    const buddyDir = path.join(claudeDir, 'buddy');
+    const codexDir = path.join(claudeDir, 'codex');
+    deployClaudeAssets(buddyDir, codebuddy!, shippedTemplate);
+    deployClaudeAssets(codexDir, codex!, shippedTemplate);
+    expect(fs.readFileSync(path.join(buddyDir, 'agents', 'task-history.md'), 'utf8'))
+      .toContain('.codebuddy/skills/task-history/SKILL.md');
+    expect(fs.existsSync(path.join(buddyDir, 'skills', 'task-history', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(codexDir, 'skills', 'task-history', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(codexDir, 'agents', 'task-history.md'))).toBe(false);
+  });
+
 });
