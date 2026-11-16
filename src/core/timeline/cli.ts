@@ -22,16 +22,18 @@
 
 import type { Command } from 'commander';
 
-import { queryEvents, getEventById, getEventStats } from './indexer';
+import { queryEvents, getEventById, getEventStats, queryEventsFirstPage, queryEventsNextPage } from './indexer';
 import { ensureTimelineUpToDate, describeSyncOutcome } from './ingest/ingest';
 import { installTimelineHooks, uninstallTimelineHooks, type InstallReport } from './installer';
 import { locateData } from '../data-location';
 import { resolveProjectRoot } from '../directory';
 import { hookNotice } from '../git-hooks';
+import { getDatabasePath } from '../db';
 import { TimelineSchemaError, StoreQueryError } from './errors';
 import { GIT_COMMIT_SUBCOMMAND } from './constants';
+import { checkPageCursor } from './page-cursor';
 import { describeEvent, truncate } from './describe';
-import type { EventType, TimelineEvent, TimelineStats } from './types';
+import type { EventType, TimelineEvent, TimelinePagedResult, TimelineQueryFilter, TimelineStats } from './types';
 import { gitCommitHook } from './git-commit';
 
 // 摘要逻辑已移至 describe.ts(门面同源导出);此处保留再导出,兼容既有直接引用。
@@ -59,6 +61,55 @@ function assertEventType(s: string): EventType | null {
 const EVENT_TYPES_HELP = 'user_prompt | auto_message | pre_tool_use | post_tool_use | stop | git_commit | session_start | session_end';
 
 class ArgError extends Error {}
+
+/** `timeline query` 的命令行选项(--paged / --cursor 分页见 spec:2026-11-16-Codex历史会话补录 D9)。 */
+interface QueryOptions {
+  since?: string;
+  until?: string;
+  type?: string;
+  tool?: string;
+  file?: string;
+  session?: string;
+  turn?: string;
+  limit?: number;
+  format?: string;
+  paged?: boolean;
+  cursor?: string;
+}
+
+/** 由命令行选项组装过滤(--type 的校验在 parseType)。分页与不分页共用同一份语义。 */
+function buildQueryFilter(opts: QueryOptions): TimelineQueryFilter {
+  return {
+    since: opts.since,
+    until: opts.until,
+    type: parseType(opts.type),
+    tool: opts.tool,
+    file: opts.file,
+    session: opts.session,
+    turn: opts.turn,
+    limit: opts.limit,
+  };
+}
+
+/** 续页(--cursor)不得再带的参数:条件随游标,带了就改了翻页语义(spec D9)。 */
+const CONTINUATION_BANNED_OPTIONS = ['since', 'until', 'type', 'tool', 'file', 'session', 'turn', 'limit'] as const;
+
+/**
+ * 分页续页(spec D9):游标已封首页过滤、页大小与快照上界,续页不能再带筛选或改页大小;
+ * 游标要解得开、且指向的还是首页那份库文件(dev:ino 没变,校验在 page-cursor)。违反都
+ * 是参数错误(ArgError → 退出码 3),诊断只写 stderr。
+ */
+async function continuePagedQuery(projectRoot: string, token: string, opts: QueryOptions): Promise<TimelinePagedResult> {
+  const given = CONTINUATION_BANNED_OPTIONS.filter((key) => opts[key] !== undefined);
+  if (given.length > 0) {
+    throw new ArgError(
+      `--cursor 续页不能再用 ${given.map((k) => `--${k}`).join(', ')}(条件随游标),请去掉后重试`,
+    );
+  }
+  const check = checkPageCursor(token, getDatabasePath(projectRoot));
+  if (!check.ok) throw new ArgError(check.reason);
+  return queryEventsNextPage(projectRoot, check.cursor);
+}
 
 /**
  * Format an ISO 8601 (UTC) timestamp as a local 'YYYY-MM-DD HH:MM:SS' string
@@ -167,10 +218,15 @@ function exitCodeForError(err: unknown): number {
  * 查询前自动补录(spec F1):四个查询命令在查询之前调,会话文件里新增的部分先解析进库。
  * 补录的任何失败只写 stderr——不碰查询的退出码与 stdout,`--json` 的结果不混提示
  * (ensureTimelineUpToDate 自己不抛,这里再兜一层)。
+ * 补录完成后先出一行覆盖状态(D4 补录状态契约,doc-backfill 捕获的就是它),具体原因沿用
+ * 后面的 describeSyncOutcome 提示;git 提交钩子不走这里,保持原来的静默。
  */
 async function backfillBeforeQuery(): Promise<void> {
   try {
     const outcome = await ensureTimelineUpToDate(process.cwd());
+    if (outcome.coverage !== undefined) {
+      process.stderr.write(`[timeline] 补录状态: ${outcome.coverage}\n`);
+    }
     for (const line of describeSyncOutcome(outcome)) process.stderr.write(`[timeline] ${line}\n`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -206,33 +262,29 @@ export function registerTimelineCommands(program: Command): void {
     .option('--turn <id>', 'Exact turn_id (UUID) match')
     .option('--limit <n>', 'Max results (1-10000; default 100)', v => parseInt(v, 10))
     .option('--format <format>', 'json (default) | table', 'json')
-    .action(async (opts: {
-      since?: string;
-      until?: string;
-      type?: string;
-      tool?: string;
-      file?: string;
-      session?: string;
-      turn?: string;
-      limit?: number;
-      format?: string;
-    }) => {
+    .option('--paged', '完整历史分页:输出 {events,next_cursor},按 (ts,id) 升序;须 --format json')
+    .option('--cursor <token>', '分页续页游标(上一页的 next_cursor;不能再带筛选参数与 --limit)')
+    .action(async (opts: QueryOptions) => {
       await backfillBeforeQuery();
       // 项目根向上回溯(spec 2026-08-13):从子目录运行也能找到根库。
       const projectRoot = resolveProjectRoot(process.cwd());
       try {
         const format = opts.format === 'table' ? 'table' : 'json';
-        const filter = {
-          since: opts.since,
-          until: opts.until,
-          type: parseType(opts.type),
-          tool: opts.tool,
-          file: opts.file,
-          session: opts.session,
-          turn: opts.turn,
-          limit: opts.limit,
-        };
-        const events = await queryEvents(projectRoot, filter);
+        if (opts.paged === true) {
+          // 分页输出固定 JSON 对象(spec D9):{events,next_cursor};table 形态不支持分页。
+          if (format !== 'json') {
+            throw new ArgError('--paged 只支持 --format json(分页输出 {events,next_cursor})');
+          }
+          const result = opts.cursor !== undefined
+            ? await continuePagedQuery(projectRoot, opts.cursor, opts)
+            : await queryEventsFirstPage(projectRoot, buildQueryFilter(opts));
+          process.stdout.write(
+            JSON.stringify({ events: result.events, next_cursor: result.nextCursor }, null, 2) + '\n',
+          );
+          return;
+        }
+        if (opts.cursor !== undefined) throw new ArgError('--cursor 只能与 --paged 一起使用');
+        const events = await queryEvents(projectRoot, buildQueryFilter(opts));
         if (format === 'table') {
           process.stdout.write(renderEventsTable(events) + '\n');
         } else {

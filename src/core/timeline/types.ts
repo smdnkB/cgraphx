@@ -76,6 +76,35 @@ export interface TimelineQueryFilter {
   limit?: number; // default 100, max 10000
 }
 
+// ─── 历史查询分页(spec:2026-11-16-Codex历史会话补录 D9)──────────────────────
+
+/** 分页位置:一条事件的 (ts,id)。升序分页的续页边界,同 ts 靠 id 分先后(不漏不重)。 */
+export interface TimelinePagePosition {
+  ts: string;
+  id: number;
+}
+
+/**
+ * 分页查询的已规范化过滤:时间界已解析成 ISO UTC(无界为 null),其余过滤没有的为 null,
+ * limit 是夹紧后的页大小(1..10000)。首页算好即封进游标,续页原样恢复——翻页期间条件不变。
+ */
+export interface PagedQueryFilter {
+  since: string | null;
+  until: string | null;
+  type: EventType | null;
+  tool: string | null;
+  file: string | null;
+  session: string | null;
+  turn: string | null;
+  limit: number;
+}
+
+/** 分页查询的一页:事件按 (ts,id) 升序;取满一页才有 nextCursor(下一页游标),空页/末页为 null。 */
+export interface TimelinePagedResult {
+  events: TimelineEvent[];
+  nextCursor: string | null;
+}
+
 export interface TimelineStats {
   totalEvents: number;
   byType: Record<EventType, number>;
