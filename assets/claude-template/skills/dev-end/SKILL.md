@@ -16,8 +16,15 @@ description: 需求做完收口——对一个做完的需求正向合成收口�
 | 需求标识(feature-id) | 调用方给;或 `cgraphx features list` 找 | 问人 |
 | 目标 git 仓路径 + 提交范围或线索 | 调用方给;缺少明确范围时结合需求文档、相关代码提交和会话交由 task-history 核实,不得仅以需求目录提交限定时间窗 | 无法确认时如实说明,不猜范围 |
 | 实际测试报告 | 调用方给(`$unit-code` 单测报告 / `$api-run` 接口报告 / 人工测试结果,格式不限、语义读) | 没有就如实标 `cannot_verify`,不编 pass |
-| 补录状态(timeline) | 时间线查询 stderr 的 `[timeline] 补录状态: complete|partial|blocked` 一行 + 原因;doc-backfill 链路由 filler 传入 | 缺状态或查询命令失败 → 按覆盖不足处理 |
+| 补录状态(timeline) | 时间线查询 stderr 的 `[timeline] 补录状态: complete|partial|blocked` 一行 + 原因;iboc-check 链路由 filler 传入 | 缺状态或查询命令失败 → 按覆盖不足处理 |
 | 历史结果(工作量结论) | `$task-history`(本 skill 调用,见「历时」) | — |
+
+## 历史分析 skill 调用（唯一规则来源）
+
+- 历史分析完整规则只在当前项目 `.claude/skills/task-history/SKILL.md`；其他宿主由安装时的目录替换映射到对应配置目录。本 skill 不复制其算法，也不调用同名 agent。
+- 调用 `$task-history` skill，传入需求标识、项目绝对路径、主 spec 路径（已有时）、提交及代码线索、经核实的范围或时间窗、补录状态及原因、关注点「工作量/活跃时长」。
+- 直接遵循该 skill 的规则取得「工作量结论」，不为历史分析再注册或派发同名 agent。补账 filler 可在自身上下文里继续执行这个 skill，只将浓缩结果交还主 agent。
+- 定义不可读或必要工具不可用时，报告「历史分析执行受阻」及原因，收口如实记录缺失结论；filler 返回 `BLOCKED` 或 `DONE_WITH_CONCERNS` 交主 agent 处理。不得将调用失败冒充已核查的「无法估算」或已算出的投入。
 
 ## 历时(两层,缺一不可)
 
@@ -109,4 +116,4 @@ git_range: "<首SHA>..<末SHA>"
 ## 和其他 skill 的关系
 
 - **`$task-history`**:历时数据来源,由本 skill 调用;口径以它的「工作量结论」为准。
-- **doc-backfill**:补账链的 filler 子 agent 调用本 skill,补录状态作为上下文传入;单测规格/报告由 `$unit-spec` / `$unit-code` 补,测试结果以真实执行为准。
+- **iboc-check**:补账链的 filler 子 agent 调用本 skill,补录状态作为上下文传入;单测规格/报告由 `$unit-spec` / `$unit-code` 补,测试结果以真实执行为准。
