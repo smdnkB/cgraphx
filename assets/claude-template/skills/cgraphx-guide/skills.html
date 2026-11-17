@@ -526,21 +526,21 @@ footer p { margin: 0 0 6px; }
 <summary><span class="name">/dev-end</span><span class="oneline">需求做完写收口档案,上线后补发布记录</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
 <dt>什么时候用</dt><dd>需求做完收口;上线以后再跑一次,补发布记录。</dd>
-<dt>怎么用</dt><dd>敲 <code>/dev-end</code>,给出 git 仓、提交范围(或时间窗)和测试报告。</dd>
+<dt>怎么用</dt><dd>调用 <code>/dev-end</code> skill,给出 git 仓、提交范围(或时间窗)和测试报告；内部由唯一的 <code>task-history</code> skill 分析历时。</dd>
 <dt>要你拍板</dt><dd>上线没有;上线了的话,版本号或 tag、上线时间由你给。</dd>
 <dt>产出</dt><dd><code>docs/features/&lt;需求目录&gt;/&lt;前缀&gt;-收口档案.md</code>,实际投入时长取自开发时间线;已上线时加 <code>&lt;前缀&gt;-发布记录.md</code>。</dd>
 <dt>前后</dt><dd>之前实现和测试都已完成。</dd>
 </dl></div>
 </details>
 
-<details class="skill" id="doc-backfill">
-<summary><span class="name">/doc-backfill</span><span class="oneline">老需求补头部、补单测产物和收口档案</span><span class="how how-cmd">敲命令</span></summary>
+<details class="skill" id="iboc-check">
+<summary><span class="name">/iboc-check</span><span class="oneline">IBOC 送检前自查，确认后补齐文档缺项</span><span class="how how-cmd">敲命令</span></summary>
 <div class="body"><dl>
-<dt>什么时候用</dt><dd>规范建立前做完的老需求,文档参差不齐时。</dd>
-<dt>怎么用</dt><dd>敲 <code>/doc-backfill</code>。</dd>
+<dt>什么时候用</dt><dd>IBOC 送检前按现有文档规范自查，发现缺项后经确认补齐。</dd>
+<dt>怎么用</dt><dd>敲 <code>/iboc-check</code>。</dd>
 <dt>要你拍板</dt><dd>这次补哪些产物(单元测试规格、单元测试报告、收口档案);不齐全的需求清单由你确认。</dd>
 <dt>产出</dt><dd>补好头部的主 spec,加上勾选范围内缺的产物;已经齐全的需求直接跳过。</dd>
-<dt>前后</dt><dd>一次性补账,之后的需求照常走流程。</dd>
+<dt>前后</dt><dd>送检前按需自查；日常需求继续走既有开发流程。</dd>
 </dl></div>
 </details>
 
@@ -601,14 +601,6 @@ footer p { margin: 0 0 6px; }
 </dl></div>
 </details>
 
-<details class="skill" id="my-query">
-<summary><span class="name">/my-query</span><span class="oneline">开工前评估要不要先查知识库、数据库补上下文</span><span class="how how-cmd">敲命令</span></summary>
-<div class="body"><dl>
-<dt>什么时候用</dt><dd>开始一个任务前,不确定 agent 手里的上下文够不够。</dd>
-<dt>怎么用</dt><dd>敲 <code>/my-query</code>。</dd>
-<dt>产出</dt><dd>对话里的判断:该先用 knowledge-recall、db-query 补哪些上下文。</dd>
-</dl></div>
-</details>
 </section>
 
 <p class="empty" id="empty" hidden>没有匹配的 skill,换个词试试</p>

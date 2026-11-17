@@ -39,10 +39,13 @@
     "skills/write-docs",
     "skills/write-workload",
     "skills/developer-timeline",
-    "skills/iboc-check",
     "skills/visual-explain",
     "skills/dev-handoff",
     "commands/end.md",
-    "hooks/precommit-check"
+    "hooks/precommit-check",
+    "skills/doc-backfill",
+    "commands/dev-end.md",
+    "commands/my-query.md",
+    "agents/task-history.md"
   ]
 }
