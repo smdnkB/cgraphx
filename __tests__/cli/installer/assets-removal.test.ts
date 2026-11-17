@@ -223,24 +223,29 @@ describe('cleanDeprecatedAssets with the shipped deprecated-assets.json', () => 
     fs.rmSync(claudeDir, { recursive: true, force: true });
   });
 
-  it('upgrades task-history to the skill wrapper and removes the deprecated dev-handoff skill', () => {
+  it('升级为唯一历史分析skill并清理旧agent和commands', () => {
     fs.mkdirSync(path.join(claudeDir, 'agents'), { recursive: true });
     fs.writeFileSync(path.join(claudeDir, 'agents', 'task-history.md'), 'old agent');
     fs.writeFileSync(path.join(claudeDir, 'agents', 'knowledge-recall.md'), 'current agent');
     fs.mkdirSync(path.join(claudeDir, 'skills', 'dev-handoff'), { recursive: true });
     fs.writeFileSync(path.join(claudeDir, 'skills', 'dev-handoff', 'SKILL.md'), 'old skill');
 
+    fs.mkdirSync(path.join(claudeDir, 'commands'), { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'commands', 'dev-end.md'), 'old command');
+    fs.writeFileSync(path.join(claudeDir, 'commands', 'my-query.md'), 'old command');
+
     deployClaudeAssets(claudeDir, undefined, shippedTemplate);
 
-    const taskHistoryAgent = fs.readFileSync(path.join(claudeDir, 'agents', 'task-history.md'), 'utf8');
-    expect(taskHistoryAgent).toContain('.claude/skills/task-history/SKILL.md');
-    expect(taskHistoryAgent).not.toBe('old agent');
-    expect(fs.existsSync(path.join(claudeDir, 'skills', 'task-history', 'SKILL.md'))).toBe(true);
+    const taskHistorySkill = fs.readFileSync(path.join(claudeDir, 'skills', 'task-history', 'SKILL.md'), 'utf8');
+    expect(taskHistorySkill).toContain('## 活跃时长(下界/上界各算一遍)');
+    expect(fs.existsSync(path.join(claudeDir, 'agents', 'task-history.md'))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, 'commands', 'dev-end.md'))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, 'commands', 'my-query.md'))).toBe(false);
     expect(fs.existsSync(path.join(claudeDir, 'skills', 'dev-handoff'))).toBe(false);
     expect(fs.existsSync(path.join(claudeDir, 'agents', 'knowledge-recall.md'))).toBe(true);
   });
 
-  it('deploys the wrapper for CodeBuddy and the shared skill for Codex', () => {
+  it('为CodeBuddy和Codex部署唯一历史分析skill', () => {
     const codebuddy = getAgentProfile('codebuddy');
     const codex = getAgentProfile('codex');
     expect(codebuddy).toBeDefined();
@@ -249,9 +254,9 @@ describe('cleanDeprecatedAssets with the shipped deprecated-assets.json', () => 
     const codexDir = path.join(claudeDir, 'codex');
     deployClaudeAssets(buddyDir, codebuddy!, shippedTemplate);
     deployClaudeAssets(codexDir, codex!, shippedTemplate);
-    expect(fs.readFileSync(path.join(buddyDir, 'agents', 'task-history.md'), 'utf8'))
-      .toContain('.codebuddy/skills/task-history/SKILL.md');
-    expect(fs.existsSync(path.join(buddyDir, 'skills', 'task-history', 'SKILL.md'))).toBe(true);
+    expect(fs.readFileSync(path.join(buddyDir, 'skills', 'task-history', 'SKILL.md'), 'utf8'))
+      .toContain('## 活跃时长(下界/上界各算一遍)');
+    expect(fs.existsSync(path.join(buddyDir, 'agents', 'task-history.md'))).toBe(false);
     expect(fs.existsSync(path.join(codexDir, 'skills', 'task-history', 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(codexDir, 'agents', 'task-history.md'))).toBe(false);
   });
