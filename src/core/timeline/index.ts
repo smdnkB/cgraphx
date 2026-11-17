@@ -12,6 +12,9 @@ export {
   getEventStats,
   getSessionStats,
   resolveTimeBound,
+  // 历史查询分页(spec:2026-11-16-Codex历史会话补录 D9):首页 + 续页,输出 {events,next_cursor}
+  queryEventsFirstPage,
+  queryEventsNextPage,
 } from './indexer';
 // 项目在本机出现过的根、按目录的汇总、受影响的根下的事件数(spec D10、D11、D19、D32、D33)
 export { listTimelineRoots, readTimelineSummary, countEventsUnderRoots } from './roots';
@@ -33,9 +36,9 @@ export { createTimelineMerger, maxTimelineEventId } from './merge';
 export type { TimelineMergeStats, TimelineMerger } from './types';
 export { ensureTimelineSchema } from './schema-bootstrap';
 export { installTimelineHooks, uninstallTimelineHooks } from './installer';
-// 查询前补录(spec F1,plan C-4):会话文件解析进项目库 + 人读提示渲染;开关独立成 kill-switch.ts
+// 查询前补录(spec F1,plan C-4;覆盖判定 D4 是 T-1 加的可选字段):会话文件解析进项目库 + 人读提示渲染;开关独立成 kill-switch.ts
 export { ensureTimelineUpToDate, describeSyncOutcome } from './ingest/ingest';
-export type { TimelineSyncOutcome, TimelineSyncStatus } from './ingest/ingest';
+export type { TimelineSyncOutcome, TimelineSyncStatus, TimelineCoverage } from './ingest/ingest';
 export { isKillSwitchOn } from './kill-switch';
 export { claudeSessionAdapter } from './ingest/claude-adapter';
 export { sessionAdapterFor } from './ingest/adapters';
@@ -50,6 +53,10 @@ export type {
   TimelineQueryFilter,
   TimelineStats,
   StatsGroupBy,
+  // 历史查询分页(spec D9)
+  TimelinePagePosition,
+  PagedQueryFilter,
+  TimelinePagedResult,
 } from './types';
 export {
   TimelineError,

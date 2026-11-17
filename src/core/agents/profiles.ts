@@ -69,7 +69,7 @@ const CODEX: AgentProfile = {
   assetTopLevel: ['skills', 'FLOW-MAP.md'],
   excludedAssetPaths: ['skills/knowledge-migrate'],
   managedRootAssets: ['FLOW-MAP.md'],
-  transformAssetText: content => content.replace(/(^|[\s`（(：:])\/(dev|init|release|api|ui|unit|doc|knowledge|code|audit|db|cgraphx)-([\w-]+)/gm, '$1$$$2-$3'),
+  transformAssetText: content => content.replace(/(^|[\s`（(：:])\/(dev|init|release|api|ui|unit|doc|iboc|knowledge|code|audit|db|cgraphx)-([\w-]+)/gm, '$1$$$2-$3'),
   assetReplacements: [['.claude/CLAUDE.md', 'AGENTS.md'], ['.claude/', '.agents/'], ['CLAUDE.md', 'AGENTS.md'],
     ['`FLOW-MAP.md`', '`.agents/FLOW-MAP.md`'],
     ['CLAUDE_PROJECT_DIR', 'PWD'], ['CLAUDE_CODE_SESSION_ID', 'CODEX_THREAD_ID'],

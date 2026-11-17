@@ -9,7 +9,14 @@
 import { hasTable, EVENTS_TABLE } from './roots';
 import { openTimelineDbForRead } from './schema-bootstrap';
 import { TimelineStore, resolveTimeBound } from './store';
-import type { TimelineEvent, TimelineQueryFilter, TimelineStats } from './types';
+import { encodePageCursor, normalizePagedFilter, statDbIdentity, type PageCursor } from './page-cursor';
+import type {
+  TimelineEvent,
+  TimelineQueryFilter,
+  TimelinePagedResult,
+  TimelineStats,
+  PagedQueryFilter,
+} from './types';
 
 type SessionStats = {
   event_count: number;
@@ -32,6 +39,60 @@ function readEvents<T>(start: string, empty: () => T, read: (store: TimelineStor
 
 export async function queryEvents(projectRoot: string, filter: TimelineQueryFilter): Promise<TimelineEvent[]> {
   return readEvents<TimelineEvent[]>(projectRoot, () => [], (store) => store.query(filter));
+}
+
+// ─── 历史查询分页(spec:2026-11-16-Codex历史会话补录 D9)────────────────────────
+
+/**
+ * 分页读取一页:首页(carry 空)在同一只读连接上取快照上界(最大事件 id)与库文件身份,
+ * 再取数据;续页(carry 是游标)沿用游标里的上界、身份与过滤,从上一页末尾继续——不重取
+ * 身份,整轮翻页都绑在首页那份库上。表不在(旧库还没写过 timeline_events)按没有事件处理,
+ * 与 readEvents 的空态一致。多取一条判断是否存在后续记录,空页/末页 nextCursor 为 null。
+ */
+function pagedRead(start: string, filter: PagedQueryFilter, carry?: PageCursor): TimelinePagedResult {
+  const conn = openTimelineDbForRead(start);
+  try {
+    const db = conn.getDb();
+    if (!hasTable(db, EVENTS_TABLE)) return { events: [], nextCursor: null };
+    const store = new TimelineStore(db);
+    const snapshotMaxId = carry !== undefined ? carry.snapshot_max_id : store.maxEventId();
+    const dbIdentity = carry !== undefined ? carry.db : statDbIdentity(conn.getPath());
+    const after = carry !== undefined ? { ts: carry.last_ts, id: carry.last_id } : undefined;
+    // 多取一条以区分满页的末页和确有后续记录的页。
+    const rows = store.queryPage({ ...filter, limit: filter.limit + 1 }, snapshotMaxId, after);
+    const events = rows.slice(0, filter.limit);
+    if (rows.length <= filter.limit) return { events, nextCursor: null };
+    const last = events[events.length - 1]!;
+    return {
+      events,
+      nextCursor: encodePageCursor({
+        v: 1,
+        last_ts: last.ts,
+        last_id: last.id,
+        snapshot_max_id: snapshotMaxId,
+        db: dbIdentity,
+        filter,
+      }),
+    };
+  } finally {
+    conn.close();
+  }
+}
+
+/** 分页首页(spec D9):过滤在此规范化后连同快照上界封进游标;首页与数据同一连接取。 */
+export async function queryEventsFirstPage(
+  start: string,
+  filter: TimelineQueryFilter,
+): Promise<TimelinePagedResult> {
+  return pagedRead(start, normalizePagedFilter(filter));
+}
+
+/** 分页续页(spec D9):过滤、页大小、快照上界全部来自游标;调用方先过 page-cursor 的校验。 */
+export async function queryEventsNextPage(
+  start: string,
+  cursor: PageCursor,
+): Promise<TimelinePagedResult> {
+  return pagedRead(start, cursor.filter, cursor);
 }
 
 export async function getEventById(projectRoot: string, id: number): Promise<TimelineEvent | null> {

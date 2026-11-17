@@ -68,10 +68,13 @@ import {
 import { sessionFactsReader } from './reader';
 import { sessionAdapterContext, sessionAdapterFor } from './adapters';
 import type { SessionFact, SessionFileReadResult } from './types';
+import type { TimelineCoverage } from './coverage';
 
 /** 重建结果;rebuildTimeline 返回 null 表示不用重建(已重建过 / 这个目录没有项目库)。 */
 export interface RebuildOutcome {
   status: 'rebuilt' | 'mark-only' | 'busy' | 'failed';
+  /** 本次覆盖判定(D4):busy / failed → blocked;mark-only(删过数据,不补回是有意的)→ complete;rebuilt 看缺口信号 */
+  coverage?: TimelineCoverage;
   /** 重建写进项目库的会话数 */
   sessions?: number;
   /** 重建写进项目库的事件数 */
@@ -301,6 +304,7 @@ function commitRebuild(
  *   busy      拿不到 ingest.lock;下次重来
  *   failed    任何一步失败(时间线还是旧的,下次能重来)
  *   null      不用重建:已重建过(含等锁期间别的进程刚重建完),或这个目录没有项目库(同增量的静默分支)
+ * coverage 按 D4:busy / failed → blocked,mark-only → complete,rebuilt 看读取失败 / 解析不出的缺口。
  */
 export async function rebuildTimeline(start: string): Promise<RebuildOutcome | null> {
   const root = findProjectRoot(start);
@@ -311,7 +315,8 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
     return null;
   }
   const dataDir = loc.dataDir;
-  if (!acquireIngestLock(dataDir)) return { status: 'busy', notices: [] };
+  // D4:锁竞争 → blocked(时间线还是旧的,下次重来)
+  if (!acquireIngestLock(dataDir)) return { status: 'busy', coverage: 'blocked', notices: [] };
 
   const sessionIndex = openSessionIndex();
   let projectConn: DatabaseConnection | null = null;
@@ -331,7 +336,8 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
       writeRebuiltAt(projectDb);
       writeMetaNow(projectDb, SESSION_TITLES_AT_KEY);
       writeMetaNow(projectDb, SESSION_TITLES_REFRESH_AT_KEY);
-      return { status: 'mark-only', notices: [] };
+      // 删过数据不补回是有意的(K1 删除边界),不是覆盖缺口
+      return { status: 'mark-only', coverage: 'complete', notices: [] };
     }
 
     // ④ 全量解析写临时库:先删残留再建(上一次重建中途死掉的);解析期间不碰项目库
@@ -433,13 +439,15 @@ export async function rebuildTimeline(start: string): Promise<RebuildOutcome | n
     }
     return {
       status: 'rebuilt',
+      // D4:重建过但有文件读取失败 / 解析不出 → partial,不称完整(认不出归属的由随后的增量记)
+      coverage: readFailed.size > 0 || unparsed.size > 0 ? 'partial' : 'complete',
       sessions: counts.sessions,
       events: counts.events,
       notices: [...unparsedNotices(unparsed), ...readFailedNotices(readFailed)],
     };
   } catch (err) {
-    // 清和写在短事务里一起撤销过,时间线还是旧的;临时库在 finally 里删
-    return { status: 'failed', reason: errorMessage(err), notices: [] };
+    // 清和写在短事务里一起撤销过,时间线还是旧的;临时库在 finally 里删。D4:全局失败 → blocked
+    return { status: 'failed', coverage: 'blocked', reason: errorMessage(err), notices: [] };
   } finally {
     closeQuietly(tmpConn); // 先关再删(Windows 上开着的文件删不掉)
     removeTmpFiles(tmpPath);

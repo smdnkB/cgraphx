@@ -30,6 +30,8 @@ import {
   type EventType,
   type TimelineEvent,
   type TimelineEventInput,
+  type PagedQueryFilter,
+  type TimelinePagePosition,
   type TimelineQueryFilter,
   type TimelineStats,
 } from './types';
@@ -271,6 +273,59 @@ export class TimelineStore {
     } catch (err) {
       throw new StoreQueryError(
         `Timeline query failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /** 库里最大的事件 id,空表为 0;分页首页的快照上界取自它(spec:2026-11-16-Codex历史会话补录 D9)。 */
+  maxEventId(): number {
+    try {
+      const row = this.db
+        .prepare('SELECT COALESCE(MAX(id), 0) AS id FROM timeline_events')
+        .get() as { id: number | bigint };
+      return Number(row.id);
+    } catch (err) {
+      throw new StoreQueryError(
+        `Timeline maxEventId failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * 分页查询一页(spec:2026-11-16-Codex历史会话补录 D9):按 (ts,id) 升序,快照上界
+   * `id <= snapshotMaxId`——轮读期间新增的事件(含更早时间戳的)id 更大,天然排除;
+   * after 非空时取 (ts,id) 严格大于它的行,同 timestamp 靠 id 分先后,不漏不重。filter
+   * 是首页已规范化的过滤(续页从游标恢复,不再收原始参数)。取满 filter.limit 条可能还有
+   * 下一页(游标由调用方发),取不满即末页。倒序 query() 维持原样,互不影响。
+   */
+  queryPage(filter: PagedQueryFilter, snapshotMaxId: number, after?: TimelinePagePosition): TimelineEvent[] {
+    const clauses: string[] = ['id <= ?'];
+    const params: Array<string | number> = [snapshotMaxId];
+    if (after !== undefined) {
+      clauses.push('(ts > ? OR (ts = ? AND id > ?))');
+      params.push(after.ts, after.ts, after.id);
+    }
+    if (filter.since !== null) { clauses.push('ts >= ?'); params.push(filter.since); }
+    if (filter.until !== null) { clauses.push('ts <= ?'); params.push(filter.until); }
+    if (filter.type !== null) { clauses.push('event_type = ?'); params.push(filter.type); }
+    if (filter.tool !== null) { clauses.push('tool_name = ?'); params.push(filter.tool); }
+    if (filter.session !== null) { clauses.push('session_id = ?'); params.push(filter.session); }
+    if (filter.turn !== null) { clauses.push('turn_id = ?'); params.push(filter.turn); }
+    if (filter.file !== null) {
+      // 与倒序 query 同一处子串过滤:tool_args(Edit/Write/Read 的 file_path)+ commit_files JSON。
+      clauses.push('(tool_args LIKE ? OR commit_files LIKE ?)');
+      const needle = `%${filter.file}%`;
+      params.push(needle, needle);
+    }
+    const sql = `SELECT * FROM timeline_events WHERE ${clauses.join(' AND ')} ORDER BY ts ASC, id ASC LIMIT ?`;
+    params.push(filter.limit);
+
+    try {
+      const rows = this.db.prepare(sql).all(...params) as EventRow[];
+      return rows.map(rowToEvent);
+    } catch (err) {
+      throw new StoreQueryError(
+        `Timeline paged query failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

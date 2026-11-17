@@ -499,7 +499,7 @@ knowledge-recall(自动召回)
       <li><strong style="color:var(--color-primary);">核心</strong> <code>/dev-spec</code> 环节二:唯一契约<em>(第一节原样收录功能方案,主体写怎么实现:每个功能点出设计决策表——机制选型/数据模型/接口契约,🔒 难回头的等你确认)</em></li>
       <li><strong style="color:var(--color-primary);">大需求必走</strong> <code>/dev-plan</code><em>(小需求可跳过)</em>:拆执行计划,不重新选型(以 spec 设计决策表为准,缺口回 spec);index 加一个任务一个文件,先按任务类型拆,一个任务预估超过 15 个文件再按并行度拆;大需求给一句 <code>/dev-impl-subagent</code> 启动语</li>
       <li><strong style="color:var(--color-primary);">必经</strong> <code>/dev-impl</code>(小需求)或 <code>/dev-impl-subagent</code>(大需求):大需求在一个会话里按任务派子 agent,主会话按提交点提交,全部做完统一验证、修复,最后提示跑 <code>/code-review</code>;判据是需求规模(预估变更文件 ≥10,且跨 ≥3 个相互独立的模块),不是任务量</li>
-      <li><span class="opt">收尾</span> 沉淀知识 → <code>/knowledge-write</code>;需求环节缺口提醒;需求做完 <code>/dev-end</code> 写收口档案,已上线时写发布记录</li>
+      <li><span class="opt">收尾</span> 沉淀知识 → <code>/knowledge-write</code>;需求环节缺口提醒;需求做完 <code>/dev-end</code> 写收口档案,已上线时写发布记录；历时由 <code>task-history</code> skill 分析；IBOC 送检前可运行 <code>/iboc-check</code> 自查，确认后补齐文档缺项</li>
     </ul>
     <div class="highlight">
       <p>日常默认 2 步:澄清 + 实现。spec 是唯一契约——「没有任何业务义务存在于 spec 之外」,变更时只改 spec 一处,下游重新派生。</p>
